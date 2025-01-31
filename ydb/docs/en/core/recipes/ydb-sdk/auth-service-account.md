@@ -104,7 +104,7 @@ Below are examples of the code for authentication using a service account file i
         doWork(connection);
       }
 
-      // Option saKeyFile can be added to JDBC URL directly
+      // Option saKeyFile can be added to a JDBC URL directly
       try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?saKeyFile=~/keys/sa_key.json")) {
         doWork(connection);
       }

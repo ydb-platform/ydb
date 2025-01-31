@@ -120,14 +120,14 @@ Below are examples of the code for authentication using a token in different {{ 
 
   ```java
   public void work() {
-      // Connect with specified token value
+      // Connect with the specified token value
       Properties props1 = new Properties();
       props1.setProperty("token", "AQAD-XXXXXXXXXXXXXXXXXXXX");
       try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props1)) {
         doWork(connection);
       }
 
-      // Connect with path to file with token value
+      // Connect with the token value read from the specified file path
       Properties props2 = new Properties();
       props2.setProperty("tokenFile", "~/.ydb_token");
       try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props2)) {

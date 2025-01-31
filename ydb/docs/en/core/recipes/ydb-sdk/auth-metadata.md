@@ -100,7 +100,7 @@ Below are examples of the code for authentication using environment variables in
         doWork(connection);
       }
 
-      // Option useMetadata can be added to JDBC URL directly
+      // Option useMetadata can be added to a JDBC URL directly
       try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?useMetadata=true")) {
         doWork(connection);
       }

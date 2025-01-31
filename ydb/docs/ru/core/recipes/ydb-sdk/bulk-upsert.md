@@ -93,10 +93,10 @@
         String connectionString = args[0];
 
         try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(NopAuthProvider.INSTANCE) // use anonymous credentials
+                .withAuthProvider(NopAuthProvider.INSTANCE) // анонимная аутентификация 
                 .build()) {
 
-            // For bulk upsert we have to use full path to table;
+            // Для bulk upsert необходимо использовать полный путь к таблице
             String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
             try (TableClient tableClient = TableClient.newClient(transport).build()) {
                 SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
@@ -106,7 +106,7 @@
     }
 
     public static void execute(SessionRetryContext retryCtx, String tablePath) {
-        // description of table
+        // описание таблицы
         StructType structType = StructType.of(
             "app", PrimitiveType.Text,
             "timestamp", PrimitiveType.Timestamp,
@@ -115,10 +115,10 @@
             "message", PrimitiveType.Text
         );
 
-        // generate batch of records
+        // генерация пакета записей
         List<Value<?>> list = new ArrayList<>(50);
         for (int i = 0; i < BATCH_SIZE; i += 1) {
-            // add a new row as struct value
+            // добавление новой строки в виде значения-структуры
             list.add(structType.newValue(
                 "app", PrimitiveValue.newText("App_" + String.valueOf(i / 256)),
                 "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),

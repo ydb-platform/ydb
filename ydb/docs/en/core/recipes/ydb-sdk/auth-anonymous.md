@@ -95,7 +95,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
 
   ```java
   public void work() {
-      // Without additional properties driver uses anonymous credentials
+      // Without additional properties, the driver uses anonymous authentication
       try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
         doWork(connection);
       }

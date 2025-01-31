@@ -97,7 +97,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
                 .withAuthProvider(NopAuthProvider.INSTANCE) // use anonymous credentials
                 .build()) {
 
-            // For bulk upsert we have to use full path to table;
+            // For bulk upsert, the full table path needs to be specified
             String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
             try (TableClient tableClient = TableClient.newClient(transport).build()) {
                 SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
@@ -107,7 +107,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
     }
 
     public static void execute(SessionRetryContext retryCtx, String tablePath) {
-        // description of table
+        // table description
         StructType structType = StructType.of(
             "app", PrimitiveType.Text,
             "timestamp", PrimitiveType.Timestamp,
@@ -119,7 +119,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
         // generate batch of records
         List<Value<?>> list = new ArrayList<>(50);
         for (int i = 0; i < BATCH_SIZE; i += 1) {
-            // add a new row as struct value
+            // add a new row as a struct value
             list.add(structType.newValue(
                 "app", PrimitiveValue.newText("App_" + String.valueOf(i / 256)),
                 "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),

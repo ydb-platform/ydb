@@ -18,6 +18,7 @@ public:
     void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& expectedStatus = Ydb::StatusIds::SUCCESS) const;
 
     virtual std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui64 tsStepUs = 1) const = 0;
+    virtual ~THelperSchemaless() = default;
 };
 
 class THelper: public THelperSchemaless {

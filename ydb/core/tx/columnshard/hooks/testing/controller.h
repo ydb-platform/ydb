@@ -44,6 +44,8 @@ private:
     TMutex ActiveTabletsMutex;
     std::set<ui64> ActiveTablets;
 
+    THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> ExternalLocks;
+
     class TBlobInfo {
     private:
         const NOlap::TUnifiedBlobId BlobId;
@@ -218,6 +220,11 @@ protected:
         SharingIds.emplace(sessionId);
     }
 
+    virtual THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> GetExternalDataLocks() const override {
+        TGuard<TMutex> g(Mutex);
+        return ExternalLocks;
+    }
+
 public:
     virtual bool CheckPortionsToMergeOnCompaction(const ui64 /*memoryAfterAdd*/, const ui32 currentSubsetsCount) override {
         return currentSubsetsCount > 1;
@@ -266,6 +273,16 @@ public:
         CompactionControl = value;
     }
 
+    void RegisterLock(const TString& name, const std::shared_ptr<NOlap::NDataLocks::ILock>& lock) {
+        TGuard<TMutex> g(Mutex);
+        AFL_VERIFY(ExternalLocks.emplace(name, lock).second)("name", name);
+    }
+
+    void UnregisterLock(const TString& name) {
+        TGuard<TMutex> g(Mutex);
+        AFL_VERIFY(ExternalLocks.erase(name))("name", name);
+    }
+
     bool HasPKSortingOnly() const;
 
     void OnSwitchToWork(const ui64 tabletId) override {
@@ -292,8 +309,8 @@ public:
         RestartOnLocalDbTxCommitted = std::move(txInfo);
     }
 
-    virtual void OnAfterLocalTxCommitted(const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;
-
+    virtual void OnAfterLocalTxCommitted(
+        const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;
 };
 
 }

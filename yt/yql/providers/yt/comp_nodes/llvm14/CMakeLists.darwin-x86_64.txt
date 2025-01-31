@@ -45,6 +45,7 @@ target_link_libraries(yt-comp_nodes-llvm14 PUBLIC
   providers-common-mkql
   providers-yt-codec
   providers-yt-expr_nodes
+  yt-lib-errors
 )
 
 target_sources(yt-comp_nodes-llvm14 PRIVATE

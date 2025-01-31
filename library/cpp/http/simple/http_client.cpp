@@ -327,9 +327,18 @@ void TRedirectableHttpClient::ProcessResponse(const TStringBuf relativeUrl, THtt
             TStringBuf schemeHostPort = GetSchemeHostAndPort(i->Value());
             TStringBuf scheme("http://");
             TStringBuf host("unknown");
-            ui16 port = 80;
+            ui16 port = 0;
             GetSchemeHostAndPort(schemeHostPort, scheme, host, port);
             TStringBuf body = GetPathAndQuery(i->Value(), false);
+            if (port == 0) {
+                if (scheme.StartsWith("https")) {
+                    port = 443;
+                } else if (scheme.StartsWith("http")) {
+                    port = 80;
+                } else {
+                    port = 80;
+                }
+            }
 
             auto opts = Opts;
             opts.Host(TString(scheme) + TString(host));

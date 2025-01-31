@@ -752,10 +752,12 @@ protected:
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
 
-        options.AddLongOption("verbose", "Common verbose level (max level 2)")
+        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(TYdbSetupSettings::EVerbose::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(1)
-            .StoreResult(&RunnerOptions.YdbSettings.VerboseLevel);
+            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EVerbose::Info))
+            .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.VerboseLevel, [](ui8 value) {
+                return static_cast<TYdbSetupSettings::EVerbose>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EVerbose::Max)));
+            });
 
         TChoices<TAsyncQueriesSettings::EVerbose> verbose({
             {"each-query", TAsyncQueriesSettings::EVerbose::EachQuery},
@@ -857,10 +859,17 @@ protected:
             .NoArgument()
             .SetFlag(&EmulateYt);
 
-        options.AddLongOption('H', "health-check", "Level of health check before start (max level 2)")
+        options.AddLongOption('H', "health-check", TStringBuilder() << "Level of health check before start (max level " << static_cast<ui32>(TYdbSetupSettings::EHealthCheck::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(1)
-            .StoreResult(&RunnerOptions.YdbSettings.HealthCheckLevel);
+            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EHealthCheck::NodesCount))
+            .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.HealthCheckLevel, [](ui8 value) {
+                return static_cast<TYdbSetupSettings::EHealthCheck>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EHealthCheck::Max)));
+            });
+
+        options.AddLongOption("health-check-timeout", "Health check timeout in seconds")
+            .RequiredArgument("uint")
+            .DefaultValue(10)
+            .StoreMappedResultT<ui64>(&RunnerOptions.YdbSettings.HealthCheckTimeout, &TDuration::Seconds<ui64>);
 
         options.AddLongOption("domain", "Test cluster domain name")
             .RequiredArgument("name")
@@ -879,7 +888,7 @@ protected:
             .RequiredArgument("path")
             .InsertTo(&RunnerOptions.YdbSettings.ServerlessTenants);
 
-        options.AddLongOption("storage-size", "Domain storage size in gigabytes (32 GiB by default)")
+        options.AddLongOption("storage-size", TStringBuilder() << "Domain storage size in gigabytes (" << NKikimr::NBlobDepot::FormatByteSize(DEFAULT_STORAGE_SIZE) << " by default)")
             .RequiredArgument("uint")
             .StoreMappedResultT<ui32>(&RunnerOptions.YdbSettings.DiskSize, [](ui32 diskSize) {
                 return static_cast<ui64>(diskSize) << 30;

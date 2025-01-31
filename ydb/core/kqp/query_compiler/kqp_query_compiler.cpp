@@ -1201,6 +1201,7 @@ private:
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
                 settingsProto.SetInconsistentTx(true);
             }
+            settingsProto.SetAllowStreamWrite(true);
             settingsProto.SetIsOlap(settings.TableType().Cast().StringValue() == "olap");
             settingsProto.SetPriority(FromString<i64>(settings.Priority().Cast().StringValue()));
 

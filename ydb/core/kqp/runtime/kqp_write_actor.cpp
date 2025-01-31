@@ -291,7 +291,8 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumnsMetadata,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& columnsMetadata,
         std::vector<ui32>&& writeIndexes,
-        i64 priority) {
+        i64 priority,
+        bool allowStreamWrite) {
         YQL_ENSURE(!Closed);
         auto token = ShardedWriteController->Open(
             TableId,
@@ -299,7 +300,8 @@ public:
             std::move(keyColumnsMetadata),
             std::move(columnsMetadata),
             std::move(writeIndexes),
-            priority);
+            priority,
+            allowStreamWrite);
         CA_LOG_D("Open: token=" << token);
         return token;
     }
@@ -1218,7 +1220,8 @@ public:
                 std::move(keyColumnsMetadata),
                 std::move(columnsMetadata),
                 std::move(writeIndex),
-                Settings.GetPriority());
+                Settings.GetPriority(),
+                Settings.GetAllowStreamWrite());
             WaitingForTableActor = true;
         } catch (...) {
             RuntimeError(
@@ -1421,6 +1424,7 @@ struct TWriteSettings {
     std::vector<ui32> WriteIndex;
     TTransactionSettings TransactionSettings;
     i64 Priority;
+    bool AllowStreamWrite;
     bool IsOlap;
 };
 
@@ -1565,7 +1569,8 @@ public:
                 std::move(settings.KeyColumns),
                 std::move(settings.Columns),
                 std::move(settings.WriteIndex),
-                settings.Priority);
+                settings.Priority,
+                settings.AllowStreamWrite);
             token = TWriteToken{settings.TableId, cookie};
         } else {
             token = *ev->Get()->Token;
@@ -2688,6 +2693,7 @@ private:
                     .LockMode = Settings.GetLockMode(),
                 },
                 .Priority = Settings.GetPriority(),
+                .AllowStreamWrite = Settings.GetAllowStreamWrite(),
                 .IsOlap = Settings.GetIsOlap(),
             };
         }

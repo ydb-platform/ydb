@@ -10,6 +10,11 @@ $check = ($arg) -> {
         rdayofmonth:        DateTime::GetDayOfMonth($arg),
         rdayofweek:         DateTime::GetDayOfWeek($arg),
         rdayofweekname:     DateTime::GetDayOfWeekName($arg),
+        rhour:              DateTime::GetHour($arg),
+        rminute:            DateTime::GetMinute($arg),
+        rsecond:            DateTime::GetSecond($arg),
+        rmsec:              DateTime::GetMillisecondOfSecond($arg),
+        rusec:              DateTime::GetMicrosecondOfSecond($arg),
         rtz:                DateTime::GetTimezoneId($arg),
         rtzname:            DateTime::GetTimezoneName($arg),
     |>

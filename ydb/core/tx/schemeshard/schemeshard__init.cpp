@@ -4464,16 +4464,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         item.Metadata = NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
                     }
 
-                    if (rowset.HaveValue<Schema::ImportItems::Changefeeds>() && rowset.HaveValue<Schema::ImportItems::Topics>()) {
-                        const ui64 count = rowset.GetValue<Schema::ImportItems::Changefeeds>().size();
+                    if (rowset.HaveValue<Schema::ImportItems::Changefeeds>()) {
+                        const auto& importTableChangefeeds = rowset.GetValue<Schema::ImportItems::Changefeeds>();
+                        const int count = importTableChangefeeds.GetChangefeedDescriptions().size();
+                        Y_ASSERT(importTableChangefeeds.GetTopics().size() == count);
+
                         TVector<TImportInfo::TChangefeedImportDescriptions> changefeeds;
                         changefeeds.reserve(count);
-                        for (ui64 i = 0; i < count; ++i) {
-                            Ydb::Table::ChangefeedDescription changefeed;
-                            Ydb::Topic::DescribeTopicResult topic;
-                            Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(changefeed, rowset.GetValue<Schema::ImportItems::Changefeeds>()[i] ));
-                            Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(topic, rowset.GetValue<Schema::ImportItems::Topics>()[i] ));
-                            changefeeds.emplace_back(changefeed, topic);
+
+                        for (int i = 0; i < count; ++i) {
+                            const Ydb::Table::ChangefeedDescription& changefeedImport = importTableChangefeeds.GetChangefeedDescriptions()[i];
+                            const Ydb::Topic::DescribeTopicResult& topicImport = importTableChangefeeds.GetTopics()[i];
+                            changefeeds.emplace_back(changefeedImport, topicImport);
                         }
                         item.Changefeeds = std::move(changefeeds);
                     }

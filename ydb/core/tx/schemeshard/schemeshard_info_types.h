@@ -2884,7 +2884,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         static bool IsDone(const TItem& item);
     };
-
+    
     ui64 Id;  // TxId from the original TEvCreateImportRequest
     TString Uid;
     EKind Kind;

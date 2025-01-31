@@ -20,6 +20,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     ui32 itemIdx
 );
 
+TVector<THolder<TEvSchemeShard::TEvModifySchemeTransaction>> CreateChangefeedsProposes(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo::TItem& item
+);
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     TSchemeShard* ss,
     TTxId txId,

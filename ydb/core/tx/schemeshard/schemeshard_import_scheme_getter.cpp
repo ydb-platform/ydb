@@ -59,42 +59,6 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         return TStringBuilder() << changefeedPrefix << "/topic_description.pb";
     }
 
-    void ListObjects(const TString& prefix) {
-        auto request = Model::ListObjectsRequest()
-            .WithPrefix(prefix);
-
-        Send(Client, new TEvExternalStorage::TEvListObjectsRequest(request));
-    }
-
-    void HandleChangefeeds(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {
-        const auto& result = ev.Get()->Get()->Result;
-
-        LOG_D("HandleChangefeeds TEvExternalStorage::TEvListObjectResponse"
-            << ": self# " << SelfId()
-            << ", result# " << result);
-
-        if (!CheckResult(result, "ListObject")) {
-            return;
-        }
-
-        const auto& objects = result.GetResult().GetContents();
-        ChangefeedsKeys.reserve(objects.size());
-
-        for (const auto& obj : objects) {
-            const TFsPath& path = obj.GetKey();
-            if (path.GetName() == "changefeed_description.pb") {
-                ChangefeedsKeys.push_back(path.Dirname());
-            }
-        }
-
-        if (!ChangefeedsKeys.empty()) {
-            HeadObject(ChangefeedDescriptionKey(ChangefeedsKeys[0]));
-        } else {
-            Reply();
-        }
-
-    }
-
     void HeadObject(const TString& key) {
         auto request = Model::HeadObjectRequest()
             .WithKey(key);
@@ -424,6 +388,42 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }        
     }
 
+    void ListObjects(const TString& prefix) {
+        auto request = Model::ListObjectsRequest()
+            .WithPrefix(prefix);
+
+        Send(Client, new TEvExternalStorage::TEvListObjectsRequest(request));
+    }
+
+    void HandleChangefeeds(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {
+        const auto& result = ev.Get()->Get()->Result;
+
+        LOG_D("HandleChangefeeds TEvExternalStorage::TEvListObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "ListObject")) {
+            return;
+        }
+
+        const auto& objects = result.GetResult().GetContents();
+        ChangefeedsKeys.reserve(objects.size());
+
+        for (const auto& obj : objects) {
+            const TFsPath& path = obj.GetKey();
+            if (path.GetName() == "changefeed_description.pb") {
+                ChangefeedsKeys.push_back(path.Dirname());
+            }
+        }
+
+        if (!ChangefeedsKeys.empty()) {
+            HeadObject(ChangefeedDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));
+        } else {
+            Reply();
+        }
+
+    }
+
     template <typename TResult>
     bool CheckResult(const TResult& result, const TStringBuf marker) {
         if (result.IsSuccess()) {
@@ -462,20 +462,20 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         TActor::PassAway();
     }
 
-    void DownloadCommon() {
+    void CreateClient() {
         if (Client) {
             Send(Client, new TEvents::TEvPoisonPill());
         }
         Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
     }
 
-    void DownloadWithoutKey() {
-        DownloadCommon();
+    void ListingChangefeeds() {
+        CreateClient();
         ListObjects(ImportInfo->Settings.items(ItemIdx).source_prefix());
     }
 
     void Download(const TString& key) {
-        DownloadCommon();
+        CreateClient();
         HeadObject(key);
     }
 
@@ -496,7 +496,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void DownloadChangefeeds() {
-        DownloadWithoutKey();
+        ListingChangefeeds();
     }
 
     void ResetRetries() {
@@ -586,6 +586,16 @@ public:
             hFunc(TEvExternalStorage::TEvListObjectsResponse, HandleChangefeeds);
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChangefeed);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleChangefeed);
+
+            sFunc(TEvents::TEvWakeup, DownloadChangefeeds);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
+    STATEFN(StateDownloadTopics) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleTopic);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleTopic);
 
             sFunc(TEvents::TEvWakeup, DownloadChangefeeds);
             sFunc(TEvents::TEvPoisonPill, PassAway);

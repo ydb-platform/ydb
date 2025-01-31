@@ -189,22 +189,16 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.Metadata.Serialize())
     );
-    const ui64 count = item.Changefeeds.size();
-    TVector<TString> jsonChangefeeds;
-    TVector<TString> jsonTopics;
-    jsonChangefeeds.reserve(count);
-    jsonTopics.reserve(count);
+    
+    NKikimrSchemeOp::TImportTableChangefeeds changefeeds;
 
     for (const auto& [changefeed, topic] : item.Changefeeds) {
-        jsonChangefeeds.push_back(changefeed.SerializeAsString());
-        jsonTopics.push_back(topic.SerializeAsString());
+        *changefeeds.MutableChangefeedDescriptions()->Add() = changefeed;
+        *changefeeds.MutableTopics()->Add() = topic;
     }
 
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
-        NIceDb::TUpdate<Schema::ImportItems::Changefeeds>(jsonChangefeeds)
-    );
-    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
-        NIceDb::TUpdate<Schema::ImportItems::Topics>(jsonTopics)
+        NIceDb::TUpdate<Schema::ImportItems::Changefeeds>(changefeeds)
     );
 }
 

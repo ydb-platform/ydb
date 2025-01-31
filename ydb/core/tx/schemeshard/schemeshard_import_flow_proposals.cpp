@@ -8,23 +8,6 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-bool CreateChangefeedsPropose(THolder<TEvSchemeShard::TEvModifySchemeTransaction>& propose, const TImportInfo::TItem& item, TString& error) {
-    auto& record = propose->Record;
-    const auto& changefeeds = item.Changefeeds;
-    
-    for (const auto& [changefeed, topic]: changefeeds) {
-        auto& modifyScheme = *record.AddTransaction();
-        auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
-        Ydb::StatusIds::StatusCode status;
-        auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
-        if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
-            return false;
-        }
-        cdcStream.SetRetentionPeriodSeconds(topic.Getretention_period().seconds());
-    }
-    return true;
-}
-
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -90,8 +73,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         return nullptr;
     }
 
-    CreateChangefeedsPropose(propose, item, error);
-
     return propose;
 }
 
@@ -103,6 +84,30 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 ) {
     TString unused;
     return CreateTablePropose(ss, txId, importInfo, itemIdx, unused);
+}
+
+TVector<THolder<TEvSchemeShard::TEvModifySchemeTransaction>> CreateChangefeedsProposes( TSchemeShard* ss, TTxId txId, const TImportInfo::TItem& item) {
+    const auto& changefeeds = item.Changefeeds;
+    TVector<THolder<TEvSchemeShard::TEvModifySchemeTransaction>> result;
+    result.reserve(changefeeds.size());
+
+    for (const auto& [changefeed, topic]: changefeeds) {
+        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+        auto& record = propose->Record;
+        auto& modifyScheme = *record.AddTransaction();
+        auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
+
+        TString error;
+        Ydb::StatusIds::StatusCode status;
+
+        auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
+
+        Y_ABORT_UNLESS(FillChangefeedDescription(cdcStreamDescription, changefeed, status, error));
+            
+        cdcStream.SetRetentionPeriodSeconds(topic.Getretention_period().seconds());
+        result.push_back(std::move(propose));
+    }
+    return result;
 }
 
 static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) {

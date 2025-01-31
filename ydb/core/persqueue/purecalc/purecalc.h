@@ -7,8 +7,17 @@ namespace NYdb::NTopic::NPurecalc {
 using namespace NYql::NPureCalc;
 
 struct TMessage {
-    NYql::NUdf::TUnboxedValue Data;
-    NYql::NUdf::TUnboxedValue Offset;
+    TMessage(const TString& data)
+        : Data(data) {
+    }
+
+    TMessage& WithOffset(ui64 offset) {
+        Offset = offset;
+        return *this;
+    }
+
+    const TString& Data;
+    ui64 Offset = 0;
 };
 
 class TMessageInputSpec: public TInputSpecBase {

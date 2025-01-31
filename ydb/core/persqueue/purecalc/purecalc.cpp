@@ -2,8 +2,8 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/yql_panic.h>
-
 
 namespace NYdb::NTopic::NPurecalc {
 
@@ -50,6 +50,18 @@ NYT::TNode CreateMessageScheme() {
 
 static const TVector<NYT::TNode> InputSchema{ CreateMessageScheme() };
 
+struct TMessageWrapper {
+    const TMessage& Message;
+
+    NYql::NUdf::TUnboxedValuePod GetData() const {
+        return NKikimr::NMiniKQL::MakeString(Message.Data);
+    }
+
+    NYql::NUdf::TUnboxedValuePod GetOffset() const {
+        return NYql::NUdf::TUnboxedValuePod(Message.Offset);
+    }
+};
+
 class TInputConverter {
 protected:
     IWorker* Worker_;
@@ -79,8 +91,9 @@ public:
         TUnboxedValue* items = nullptr;
         result = Cache_.NewArray(holderFactory, static_cast<ui32>(FieldCount), items);
 
-        items[Position.Data] = message->Data;
-        items[Position.Offset] = message->Offset;
+        TMessageWrapper wrap {*message};
+        items[Position.Data] = wrap.GetData();
+        items[Position.Offset] = wrap.GetOffset();
     }
 
     void ClearCache() {

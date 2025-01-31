@@ -103,10 +103,6 @@ namespace NActors {
     }
 
     i16 TSharedExecutorPool::FindPoolForWorker(TSharedExecutorThreadCtx& thread, ui64) {
-        TWorkerId workerId = Max<TWorkerId>();
-        if (TlsThreadContext) {
-            workerId = TlsThreadContext->WorkerId();
-        }
         for (i16 i : PoolManager.PriorityOrder) {
             if (Pools[i] == nullptr) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Trace, "pool[", i, "] is nullptr; OwnerPoolId == ", thread.OwnerPoolId);
@@ -432,10 +428,6 @@ namespace NActors {
         for (i16 threadId = PoolManager.PoolThreadRanges[ownerPoolId].Begin; threadId < PoolManager.PoolThreadRanges[ownerPoolId].End; ++threadId) {
             auto &thread = Threads[threadId];
             if (thread.WakeUp()) {
-                TWorkerId workerId = Max<TWorkerId>();
-                if (TlsThreadContext) {
-                    workerId = TlsThreadContext->WorkerId();
-                }
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "wakeup from own pool; ownerPoolId == ", ownerPoolId, " threadId == ", threadId);
                 break;
             }
@@ -450,11 +442,6 @@ namespace NActors {
         ui64 slots = ForeignThreadSlots[ownerPoolId].load(std::memory_order_acquire);
         if (slots <= 0) {
             return false;
-        }
-
-        TWorkerId workerId = Max<TWorkerId>();
-        if (TlsThreadContext) {
-            workerId = TlsThreadContext->WorkerId();
         }
 
         EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "ownerPoolId == ", ownerPoolId);

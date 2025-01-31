@@ -284,7 +284,6 @@ namespace NActors {
     }
 
     TMailbox* TBasicExecutorPool::GetReadyActivation(ui64 revolvingCounter) {
-        TWorkerId workerId = TlsThreadContext->WorkerId();
         if constexpr (NFeatures::IsLocalQueues()) {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue");
             return GetReadyActivationLocalQueue(revolvingCounter);
@@ -309,10 +308,6 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingCounter, TAtomic x) {
-        TWorkerId workerId = Max<TWorkerId>();
-        if (TlsThreadContext && TlsThreadContext->Pool() == this && TlsThreadContext->WorkerId() >= 0) {
-            workerId = TlsThreadContext->WorkerId();
-        }
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
         std::visit([mailbox, revolvingCounter](auto &x) {

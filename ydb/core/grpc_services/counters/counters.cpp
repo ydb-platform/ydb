@@ -658,11 +658,10 @@ NYdbGrpc::ICounterBlockPtr TServiceCounterCB::operator()(const char* serviceName
     auto block = MakeIntrusive<TYdbCounterBlock>(Counters, serviceName, requestName, streaming);
 
     NYdbGrpc::ICounterBlockPtr res(block);
-/* TODO
     if (ActorSystem && AppData(ActorSystem)->FeatureFlags.GetEnableDbCounters()) {
         res = MakeIntrusive<TYdbCounterBlockWrapper>(block, serviceName, requestName, streaming);
     }
-*/
+
     return res;
 }
 

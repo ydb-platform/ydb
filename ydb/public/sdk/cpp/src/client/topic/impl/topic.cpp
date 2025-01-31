@@ -627,8 +627,8 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
     *proto.mutable_attributes() = SerializeAttributes(Attributes_);
 }
 
-template class TConsumerSettings<TCreateTopicSettings>;
-template class TConsumerSettings<TAlterTopicSettings>;
+template struct TConsumerSettings<TCreateTopicSettings>;
+template struct TConsumerSettings<TAlterTopicSettings>;
 
 TCreateTopicSettings::TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest& proto)
     : PartitioningSettings_(TPartitioningSettings(proto.partitioning_settings()))

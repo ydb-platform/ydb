@@ -67,14 +67,8 @@ namespace NActors {
             return nullptr;
         }
 
-        virtual ui64 TimePerMailboxTs() const {
-            Y_ABORT("IExecutorPool::TimePerMailboxTs is not allowed");
-            return 0;
-        }
-        virtual ui32 EventsPerMailbox() const {
-            Y_ABORT("IExecutorPool::EventsPerMailbox is not allowed");
-            return 0;
-        }
+        virtual ui64 TimePerMailboxTs() const = 0;
+        virtual ui32 EventsPerMailbox() const = 0;
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.

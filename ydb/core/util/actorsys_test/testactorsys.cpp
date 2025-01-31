@@ -154,6 +154,14 @@ public:
         return true;
     }
 
+    ui64 TimePerMailboxTs() const override {
+        return TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat() * NHPTimer::GetClockRate();
+    }
+
+    ui32 EventsPerMailbox() const override {
+        return TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
+    }
+
     TAffinity* Affinity() const override {
         Y_ABORT();
     }

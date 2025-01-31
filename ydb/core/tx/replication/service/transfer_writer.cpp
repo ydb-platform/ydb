@@ -13,7 +13,6 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/purecalc_filter.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 
@@ -44,6 +43,15 @@ constexpr const char* RESULT_COLUMN_NAME = "__ydb_r";
 
 using namespace NYql::NPureCalc;
 using namespace NKikimr::NMiniKQL;
+
+struct TSchemaColumn {
+    TString Name;
+    TString TypeYson;
+
+    bool operator==(const TSchemaColumn& other) const = default;
+
+    TString ToString() const;
+};
 
 
 struct TOutputType {

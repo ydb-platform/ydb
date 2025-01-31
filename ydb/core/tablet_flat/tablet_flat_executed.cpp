@@ -153,10 +153,12 @@ void TTabletExecutedFlat::HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns:
 }
 
 void TTabletExecutedFlat::SignalTabletActive(const TActorIdentity &id, TString &&versionInfo) {
+    ReportStartTime();
     id.Send(Tablet(), new TEvTablet::TEvTabletActive(std::move(versionInfo)));
 }
 
 void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx, TString &&versionInfo) {
+    ReportStartTime();
     ctx.Send(Tablet(), new TEvTablet::TEvTabletActive(std::move(versionInfo)));
 }
 

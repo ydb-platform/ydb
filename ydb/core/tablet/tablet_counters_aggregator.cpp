@@ -398,6 +398,9 @@ private:
             if (TabletAppCounters.IsInitialized) {
                 TabletAppCounters.RecalcAll();
             }
+            if (TabletSysCounters.IsInitialized) {
+                TabletSysCounters.RecalcAll();
+            }
         }
 
         // db counters

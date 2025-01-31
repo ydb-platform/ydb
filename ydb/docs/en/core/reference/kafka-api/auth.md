@@ -4,7 +4,7 @@
 
 Authentication is always enabled when using the [Kafka API in Yandex Cloud](https://yandex.cloud/docs/data-streams/kafkaapi/auth).
 
-When you run YDB cluster [by your own](../../quickstart.md), [anonymous authentication](../../security/authentication.md#anonymous) is used by default.
+When you run [a single-node local {{ ydb-short-name }} cluster](../../quickstart.md), [anonymous authentication](../../security/authentication.md#anonymous) is used by default.
 It doesn't require a username and password.
 To require authentication, set the [`enforce_user_token_requirement` configuration option](../configuration/index.md#auth).
 

@@ -8,8 +8,69 @@ using namespace NYql::NDq;
 
 namespace {
 
-TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx) {
-    return node;
+TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
+
+    auto setItems = GetSetting(node->Head(), "set_items");
+    
+    TVector<TCoAtom> columns;
+    TVector<TExprNode::TPtr> lambdas;
+
+    THashMap<TString, TExprNode::TPtr> inputSources;
+    TExprNode::TPtr joinExpr;
+    TExprNode::TPtr filterExpr;
+
+    for (auto setItem : setItems->Tail().Children()) {
+        YQL_CLOG(TRACE, CoreDq) << "SetItem: " << setItem->Dump();
+
+        auto from = GetSetting(setItem->Tail(), "from");
+        YQL_CLOG(TRACE, CoreDq) << "From item: " << from->Dump();
+
+
+        if (from) {
+            for (auto fromItem : from->Child(1)->Children()) {
+                auto readExpr = fromItem->Child(0);
+                auto alias = fromItem->Child(1);
+
+                inputSources[alias->Content()] = readExpr;
+                joinExpr = readExpr;
+            }
+        }
+
+        filterExpr = joinExpr;
+
+        auto where = GetSetting(setItem->Tail(), "where");
+        YQL_CLOG(TRACE, CoreDq) << "Where item: " << where->Dump();
+
+        if (where) {
+            auto lambda = where->Child(1)->Child(1);
+            filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
+                .Input(joinExpr)
+                .Lambda(lambda)
+                .Done().Ptr();
+        }
+
+        TVector<TExprNode::TPtr> lambdas;
+        auto result = GetSetting(setItem->Tail(), "result");
+
+        for (auto resultItem : result->Child(1)->Children()) {
+            columns.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(resultItem->Child(0)->Content()).Done());
+            lambdas.push_back(resultItem->Child(2));
+        }
+    }
+
+    if (!filterExpr) {
+        filterExpr = Build<TKqpOpEmptySource>(ctx, node->Pos()).Done().Ptr();
+    }
+
+    return Build<TKqpOpMap>(ctx, node->Pos())
+        .Input(filterExpr)
+        .OutputColumns()
+            .Add(columns)
+        .Build()
+        .Lambdas()
+            .Add(lambdas)
+        .Build()
+        .Done().Ptr();
 }
 
 }
@@ -18,9 +79,9 @@ IGraphTransformer::TStatus TKqpPgRewriteTransformer::DoTransform(TExprNode::TPtr
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
 
-    auto status = OptimizeExpr(output, output, [] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+    auto status = OptimizeExpr(output, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (TCoPgSelect::Match(node.Get())) {
-            return RewritePgSelect(node, ctx);
+            return RewritePgSelect(node, ctx, TypeCtx);
         } else {
             return node;
         }}, ctx, settings);

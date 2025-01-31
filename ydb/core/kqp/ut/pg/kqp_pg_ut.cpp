@@ -1148,7 +1148,34 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_pg
-            SELECT 1;
+            SELECT 1 as "a", 2 as "b";
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(NewRBO2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id	Int64	NOT NULL,	
+	            name	String,
+                primary key(id)	
+            );
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session2.ExecuteDataQuery(R"(
+            --!syntax_pg
+            SET TablePathPrefix = "/Root/";
+            SELECT id as "id2" FROM foo WHERE name = 'some_name';
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

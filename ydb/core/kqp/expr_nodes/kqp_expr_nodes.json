@@ -724,6 +724,39 @@
                 {"Index": 2, "Name": "IssueCode", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Message", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name": "TKqpOpRead",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpRead"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList", "Optional": true}
+            ]
+        },
+        {
+            "Name": "TKqpOpEmptySource",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpEmpySource"}
+        },
+        {
+            "Name": "TKqpOpMap",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpMap"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "OutputColumns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Lambdas", "Type": "TExprList"}
+            ]
+        },
+        {
+            "Name": "TKqpOpFilter",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpFilter"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
         }
     ]
 }

@@ -467,10 +467,10 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
         BodySize -= firstKey.Size;
 
-        Y_ABORT_UNLESS(*firstKey.RefCount > 0,
-                       "Key: %s, RefCount %" PRISZT,
-                       firstKey.Key.ToString().data(), *firstKey.RefCount);
-        --*firstKey.RefCount;
+        Y_ABORT_UNLESS(firstKey.RefCount.GetUseCount() > 0,
+                       "Key: %s",
+                       firstKey.Key.ToString().data());
+        firstKey.RefCount.Dec();
 
         PQ_LOG_D("schedule delete body key " << firstKey.Key.ToString());
         DeletedHeadKeys.push_back(std::move(DataKeysBody.front()));
@@ -500,10 +500,10 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         if (StartOffset == EndOffset) {
             auto& firstKey = DataKeysBody.front();
 
-            Y_ABORT_UNLESS(*firstKey.RefCount > 0,
-                           "Key: %s, RefCount %" PRISZT,
-                           firstKey.Key.ToString().data(), *firstKey.RefCount);
-            --*firstKey.RefCount;
+            Y_ABORT_UNLESS(firstKey.RefCount.GetUseCount() > 0,
+                           "Key: %s",
+                           firstKey.Key.ToString().data());
+            firstKey.RefCount.Dec();
 
             PQ_LOG_D("schedule delete body key " << firstKey.Key.ToString());
             DeletedHeadKeys.push_back(std::move(firstKey));
@@ -2100,7 +2100,7 @@ void TPartition::TryAddDeleteHeadKeysToPersistRequest()
 {
     while (!DeletedHeadKeys.empty()) {
         auto& k = DeletedHeadKeys.back();
-        if (k.RefCount && *k.RefCount > 0) {
+        if (k.RefCount.GetUseCount() > 0) {
             // the blob has already been repackaged and is still being read
             PQ_LOG_D("wait for key " << k.Key.ToString());
             break;
@@ -3437,16 +3437,16 @@ void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue:
     PQ_LOG_D("=== ClearOldHead ===");
     PQ_LOG_D("offset=" << offset << ", partNo=" << partNo);
     for (const auto& v : HeadKeys) {
-        PQ_LOG_D("key=" << v.Key.ToString() << ", refs=" << *v.RefCount);
+        PQ_LOG_D("key=" << v.Key.ToString() << ", refs=" << v.RefCount.GetUseCount());
     }
     PQ_LOG_D("====================");
 
     for (auto it = HeadKeys.rbegin(); it != HeadKeys.rend(); ++it) {
         if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
-            Y_ABORT_UNLESS(*it->RefCount > 0,
-                           "Key: %s, RefCount %" PRISZT,
-                           it->Key.ToString().data(), *it->RefCount);
-            --*it->RefCount;
+            Y_ABORT_UNLESS(it->RefCount.GetUseCount() > 0,
+                           "Key: %s",
+                           it->Key.ToString().data());
+            it->RefCount.Dec();
 
             PQ_LOG_D("blob " << it->Key.ToString() << " will be deleted");
 

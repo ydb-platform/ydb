@@ -5,20 +5,6 @@
 namespace NKikimr {
 namespace NPQ {
 
-TBlobRefCounters::~TBlobRefCounters()
-{
-    for (auto& p : Ptrs) {
-        Y_ABORT_UNLESS(*p > 0);
-        --*p;
-    }
-}
-
-void TBlobRefCounters::Append(std::shared_ptr<size_t> p)
-{
-    ++*p;
-    Ptrs.push_back(std::move(p));
-}
-
 TSubscriberLogic::TSubscriberLogic()
 {}
 

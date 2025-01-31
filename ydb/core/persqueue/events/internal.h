@@ -5,6 +5,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/blob.h>
+#include <ydb/core/persqueue/blob_refcounter.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/metering_sink.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
@@ -76,7 +77,7 @@ namespace NPQ {
         ui32 Size = 0;
         TInstant Timestamp;
         ui64 CumulativeSize = 0;
-        std::shared_ptr<size_t> RefCount = nullptr;
+        TBlobRefCounter RefCount{};
     };
 
     struct TErrorInfo {

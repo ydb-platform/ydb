@@ -7,6 +7,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/blob_refcounter.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -16,21 +17,6 @@ struct TUserInfo;
 struct TReadAnswer {
     ui64 Size = 0;
     THolder<IEventBase> Event;
-};
-
-struct TBlobRefCounters {
-    TBlobRefCounters() = default;
-    TBlobRefCounters(const TBlobRefCounters& rhs);
-    TBlobRefCounters(TBlobRefCounters&& rhs) = default;
-    ~TBlobRefCounters();
-
-    TBlobRefCounters& operator=(const TBlobRefCounters& rhs);
-    TBlobRefCounters& operator=(TBlobRefCounters&& rhs) noexcept;
-
-    void Append(std::shared_ptr<size_t> p);
-    size_t Size() const { return Ptrs.size(); }
-
-    TVector<std::shared_ptr<size_t>> Ptrs;
 };
 
 struct TReadInfo {

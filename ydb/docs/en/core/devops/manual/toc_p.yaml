@@ -5,32 +5,18 @@ items:
   include:
     mode: link
     path: ../../maintenance/manual/toc_p.yaml
+- name: Backup and recovery
+  href: backup-and-recovery.md
 - name: Monitoring
   href: monitoring.md
 - name: Logging
   href: logging.md
-- name: Backup and recovery
-  href: backup-and-recovery.md
 - name: Updating YDB
   href: upgrade.md
-- name: Managing cluster configuration
-  items:
-  - name: Configuration overview
-    href: ../../maintenance/manual/config-overview.md
-  - name: Static configuration
-    href: ../../reference/configuration/index.md
-  - name: Database node authentication and authorization
-    href: node-authorization.md
-  - name: Dynamic configuration
-    href: ../../maintenance/manual/dynamic-config.md
-  - name: Configuration DSL
-    href: ../../maintenance/manual/dynamic-config-selectors.md
-  - name: Volatile configurations
-    href: ../../maintenance/manual/dynamic-config-volatile-config.md
-  - name: Updating configurations via CMS
-    href: ../../maintenance/manual/cms.md
-  - name: Changing an actor system's configuration
-    href: ../../maintenance/manual/change_actorsystem_configs.md
+- name: Changing an actor system's configuration
+  href: ../../maintenance/manual/change_actorsystem_configs.md
+- name: Updating configurations via CMS
+  href: ../../maintenance/manual/cms.md
 - name: System views
   href: system-views.md
 - name: Maintenance without downtime

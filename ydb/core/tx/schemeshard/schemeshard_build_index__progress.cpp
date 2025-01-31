@@ -568,9 +568,7 @@ private:
         auto& clusters = *ev->Record.MutableClusters();
         clusters.Reserve(buildInfo.Sample.Rows.size());
         for (const auto& [_, row] : buildInfo.Sample.Rows) {
-            const auto cluster = std::string_view{row}.substr(sizeof(ui16) + sizeof(ui32));
-            Y_DEBUG_ABORT_UNLESS(cluster == TSerializedCellVec{row}.GetCells().at(0).AsBuf());
-            *clusters.Add() = cluster;
+            *clusters.Add() = TSerializedCellVec::ExtractCell(row, 0).AsBuf();
         }
 
         ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());

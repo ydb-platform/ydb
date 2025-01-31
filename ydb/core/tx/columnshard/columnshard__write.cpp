@@ -570,9 +570,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    auto overloadStatus = SubDomainOutOfSpace && (*mType != NEvWrite::EModificationType::Delete) ? EOverloadStatus::Disk : CheckOverloadedImmediate(pathId);
+    const bool outOfSpace = SubDomainOutOfSpace && (*mType != NEvWrite::EModificationType::Delete);
+    auto overloadStatus = outOfSpace ? EOverloadStatus::Disk : CheckOverloadedImmediate(pathId);
     if (overloadStatus != EOverloadStatus::None) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded")("source", "dataevent");
+        if (outOfSpace) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded")("source", "dataevent");
+        }
         std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
         OverloadWriteFail(overloadStatus,

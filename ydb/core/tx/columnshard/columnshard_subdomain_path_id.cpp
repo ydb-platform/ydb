@@ -72,12 +72,8 @@ void TColumnShard::StopWatchingSubDomainPathId() {
 }
 
 void TColumnShard::StartWatchingSubDomainPathId() {
-    if (!SubDomainPathId || SubDomainPathId->OwnerId != CurrentSchemeShardId) {
+    if (!SubDomainPathId) {
         return;
-    }
-
-    if (WatchingSubDomainPathId && *WatchingSubDomainPathId != *SubDomainPathId) {
-        StopWatchingSubDomainPathId();
     }
 
     if (!WatchingSubDomainPathId) {
@@ -109,7 +105,7 @@ static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(10);
 void TColumnShard::StartFindSubDomainPathId(bool delayFirstRequest) {
     if (!FindSubDomainPathIdActor &&
         CurrentSchemeShardId != 0 &&
-        (!SubDomainPathId || SubDomainPathId->OwnerId != CurrentSchemeShardId))
+        (!SubDomainPathId))
     {
         FindSubDomainPathIdActor = Register(CreateFindSubDomainPathIdActor(SelfId(), TabletID(), CurrentSchemeShardId, delayFirstRequest, MaxFindSubDomainPathIdDelay));
     }

@@ -107,7 +107,7 @@ Solution: create a consumer group in YDB using [CLI](../ydb-cli/topic-consumer-a
 
 {% note info %}
 
-Using Kafka transactions when writing via Kafka API is currently not supported. Transactions are only available when using the [YDB Topic API](https://ydb.tech/docs/ru/reference/ydb-sdk/topic#write-tx).
+Using Kafka transactions when writing via Kafka API is currently not supported. Transactions are only available when using the [YDB Topic API](../ydb-sdk/topic.md#write-tx).
 
 Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no different.
 

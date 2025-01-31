@@ -108,7 +108,7 @@ Unexpected error in join group response: This most likely occurs because of a re
 {% note info %}
 
 Сейчас не поддержана запись по Kafka API с использованием Kafka транзакций. Транзакции доступны только при использовании
-[YDB Topic API](https://ydb.tech/docs/ru/reference/ydb-sdk/topic#write-tx).
+[YDB Topic API](../ydb-sdk/topic.md#write-tx).
 
 В остальном запись в Apache Kafka и в YDB Topics через Kafka API ничем не отличается.
 

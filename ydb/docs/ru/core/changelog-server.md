@@ -8,10 +8,10 @@
 
 #### Функциональность
 
+* [Поддержали](https://github.com/ydb-platform/ydb/pull/11276) рестарт без потери доступности кластера в [минимальной отказоустойчивой конфигурации](https://ydb.tech/docs/ru/concepts/topology#reduced) из трех узлов.
 * [Добавлены](https://github.com/ydb-platform/ydb/pull/13218) новый функции UDF Roaring bitmap: AndNotWithBinary, FromUint32List, RunOptimize.
 * Добавлена возможность регистрировать [динамический узел](https://ydb.tech/docs/ru/concepts/glossary#dynamic) по сертификату. В [Node Broker](https://ydb.tech/docs/ru/reference/configuration/#node-broker-config), системная таблетке, которая отвечает за регистрацию динамических узлов в кластере, добавлен флаг `AuthorizeByCertificate` использования сертификата при регистрации.
 * [Добавлены](https://github.com/ydb-platform/ydb/pull/11775) приоритеты проверки аутентификационных тикетов[ с использованием стороннего IAM-провайдера](https://ydb.tech/docs/ru/security/authentication#iam), с самым высоким приоритетом обрабатываются запросы от новых пользователей.
-* [Поддержали](https://github.com/ydb-platform/ydb/pull/11276) рестарт без потери доступности кластера в [минимальной отказоустойчивой конфигурации](https://ydb.tech/docs/ru/concepts/topology#reduced) из трех узлов.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/13748) возможность настраивать шаг планирования координатора c помощью [динамически обновляемой настройки](https://ydb.tech/docs/ru/maintenance/manual/dynamic-config#dynamic-kinds) `immediate_controls_config`.
 
 #### Производительность

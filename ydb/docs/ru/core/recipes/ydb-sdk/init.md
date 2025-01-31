@@ -114,13 +114,13 @@
 - JDBC Driver
 
   ```java
-      public void work() {
+  public void work() {
       // JDBC Driver должен быть доступен в classpath для автоматической загрузки
       Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
       // Работа с connection
       doWork(connection);
       connection.close();
-    }
+  }
   ```
 
 - Python

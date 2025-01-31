@@ -517,3 +517,29 @@ def test_viewer_query_issue_13945():
         'query': 'SELECT AsList();',
         'schema': 'multi'
     })
+
+
+def test_pqrb_tablet():
+    response_create_topic = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TOPIC topic1(CONSUMER consumer1)',
+        'schema': 'multi'
+    })
+    response_tablet_info = call_viewer("/viewer/tabletinfo", {
+        'database': dedicated_db,
+        'path': dedicated_db + '/topic1',
+        'enums': 'true'
+    })
+    result = {
+        'response_create_topic': response_create_topic,
+        'response_tablet_info': response_tablet_info,
+    }
+    return replace_values_by_key(result, ['version',
+                                          'ResponseTime',
+                                          'ChangeTime',
+                                          'HiveId',
+                                          'NodeId',
+                                          'TabletId',
+                                          'PathId',
+                                          'SchemeShard'
+                                          ])

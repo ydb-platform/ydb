@@ -3,6 +3,48 @@
         "status_code": 200,
         "text": "1\n"
     },
+    "test.test_pqrb_tablet": {
+        "response_create_topic": {
+            "version": "not-zero-number"
+        },
+        "response_tablet_info": {
+            "ResponseTime": "not-zero-number-text",
+            "TabletStateInfo": [
+                {
+                    "ChangeTime": "not-zero-number-text",
+                    "FollowerId": 0,
+                    "Generation": 1,
+                    "HiveId": "not-zero-number-text",
+                    "Leader": true,
+                    "NodeId": "not-zero-number",
+                    "Overall": "Green",
+                    "State": "Active",
+                    "TabletId": "not-zero-number-text",
+                    "TenantId": {
+                        "PathId": "not-zero-number-text",
+                        "SchemeShard": "not-zero-number-text"
+                    },
+                    "Type": "PersQueue"
+                },
+                {
+                    "ChangeTime": "not-zero-number-text",
+                    "FollowerId": 0,
+                    "Generation": 1,
+                    "HiveId": "not-zero-number-text",
+                    "Leader": true,
+                    "NodeId": "not-zero-number",
+                    "Overall": "Green",
+                    "State": "Active",
+                    "TabletId": "not-zero-number-text",
+                    "TenantId": {
+                        "PathId": "not-zero-number-text",
+                        "SchemeShard": "not-zero-number-text"
+                    },
+                    "Type": "PersQueueReadBalancer"
+                }
+            ]
+        }
+    },
     "test.test_storage_groups": {
         "FieldsAvailable": "111111111111111111111",
         "FieldsRequired": "111111111111111111111",

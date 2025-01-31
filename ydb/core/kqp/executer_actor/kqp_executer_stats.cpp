@@ -902,6 +902,8 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
     for (auto& task : *stats.MutableTasks()) {
         ResultBytes += task.GetResultBytes();
         ResultRows += task.GetResultRows();
+        TotalReadRows += task.GetIngressRows();
+        TotalReadBytes += task.GetIngressBytes();
         for (auto& table : task.GetTables()) {
             NYql::NDqProto::TDqTableStats* tableAggr = nullptr;
             if (auto it = TableStats.find(table.GetTablePath()); it != TableStats.end()) {
@@ -1358,6 +1360,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         ExportAggStats(stageStat.EgressRows, *stageStats.MutableEgressRows());
         ExportAggStats(stageStat.EgressBytes, *stageStats.MutableEgressBytes());
 
+        totalReadRows += stageStats.MutableIngressRows()->GetSum();
+        totalReadBytes += stageStats.MutableIngressBytes()->GetSum();
+
         ExportOffsetAggStats(stageStat.StartTimeMs, *stageStats.MutableStartTimeMs(), BaseTimeMs);
         ExportOffsetAggStats(stageStat.FinishTimeMs, *stageStats.MutableFinishTimeMs(), BaseTimeMs);
         ExportAggStats(stageStat.DurationUs, *stageStats.MutableDurationUs());
@@ -1381,9 +1386,6 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             ExportAggStats(t.EraseRows, *table.MutableEraseRows());
             ExportAggStats(t.EraseBytes, *table.MutableEraseBytes());
             table.SetAffectedPartitions(ExportAggStats(t.AffectedPartitions));
-
-            totalReadRows += table.GetReadRows().GetSum();
-            totalReadBytes += table.GetReadBytes().GetSum();
         }
         for (auto& [id, i] : stageStat.Ingress) {
             ExportAggAsyncBufferStats(i, (*stageStats.MutableIngress())[id]);

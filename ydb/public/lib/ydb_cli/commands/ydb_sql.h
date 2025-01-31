@@ -32,9 +32,11 @@ private:
     TString Query;
     TString QueryFile;
     TString Syntax;
+    TString FullStatsFileName;
     bool ExplainMode = false;
     bool ExplainAnalyzeMode = false;
     bool ExplainAst = false;
+    bool PrintProgress = false;
 };
 
 }

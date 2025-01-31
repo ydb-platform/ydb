@@ -93,7 +93,7 @@
         String connectionString = args[0];
 
         try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(NopAuthProvider.INSTANCE) // use anonimous auth provider
+                .withAuthProvider(NopAuthProvider.INSTANCE) // use anonymous credentials
                 .build()) {
 
             // For bulk upsert we have to use full path to table;

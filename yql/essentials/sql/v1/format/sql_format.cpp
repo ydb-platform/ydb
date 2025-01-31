@@ -496,6 +496,10 @@ private:
             ++CommentLines;
         }
 
+        if (!text.StartsWith("--")) {
+            CommentLines += CountIf(text, [](auto c) { return c == '\n'; });
+        }
+
         Out(text);
 
         if (text.StartsWith("--") && !text.EndsWith("\n")) {

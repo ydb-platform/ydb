@@ -93,6 +93,8 @@ namespace NKikimr {
         void OnKickEmergencyPutQueue();
 
         void SetLogChunkCount(ui32 logChunkCount);
+        bool IsThrottling() const;
+        ui32 GetThrottlingRate() const; // permille
 
     private:
         TIntrusivePtr<TVDiskContext> VCtx;

@@ -1103,7 +1103,9 @@ namespace NKikimr {
                          std::nullopt,
                          state,
                          replicated,
-                         outOfSpaceFlags));
+                         outOfSpaceFlags,
+                         std::nullopt,
+                         std::nullopt));
             // repeat later
             if (schedule) {
                 ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard);

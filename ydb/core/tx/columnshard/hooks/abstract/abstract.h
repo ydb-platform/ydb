@@ -344,7 +344,7 @@ private:
 
 public:
     template <class TController>
-    class TGuard: public TMoveOnly {
+    class TGuard: TMoveOnly {
     private:
         std::shared_ptr<TController> Controller;
 

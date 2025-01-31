@@ -1206,7 +1206,6 @@ public:
     static constexpr ui64 NumberOfSpillingBuckets_ = 10;
     std::deque<TSpillingBucket> SpillingBuckets_;
 
-    ISpiller::TPtr Spiller_;
     typename TDynMapImpl::const_iterator SpillingHashMapIt_;
     typename TFixedMapImpl::const_iterator SpillingHashFixedMapIt_;
     size_t SpillingOutputBlockSize_ = 0;
@@ -1269,6 +1268,7 @@ public:
     }
 
     void PrepareForSpilling() {
+        std::cerr << "Preparing for spilling" << std::endl;
         SpillingBuckets_.resize(NumberOfSpillingBuckets_);
         auto spiller = SpillerFactory_->CreateSpiller();
         for (auto &b: SpillingBuckets_) {
@@ -1403,7 +1403,7 @@ public:
             TString s = TString(sb.begin(), sb.size());
             int stringSize = s.size();
             NYql::TChunkedBuffer cb = NYql::TChunkedBuffer(std::move(s));
-            SpillingBuckets_[0].SpillingOperation_ = Spiller_->Put(std::move(cb));
+            SpillingBuckets_[0].SpillingOperation_ = SpillingBuckets_[0].Spiller_->Put(std::move(cb));
             std::cerr << "Spilled block " << stringSize << "SpillingOutputBlockSize: " << SpillingOutputBlockSize_ << std::endl;
             SpillingOutputBlockSize_ = 0;
             break;
@@ -1423,7 +1423,7 @@ public:
             SpillingProcessInput(data);
         }
         if (!SpillingBuckets_[0].SpillingKeys_.empty()) {
-            SpillingBuckets_[0].LoadingOperation_ = Spiller_->Get(SpillingBuckets_[0].SpillingKeys_.back());
+            SpillingBuckets_[0].LoadingOperation_ = SpillingBuckets_[0].Spiller_->Get(SpillingBuckets_[0].SpillingKeys_.back());
             SpillingBuckets_[0].SpillingKeys_.pop_back();
         }
 

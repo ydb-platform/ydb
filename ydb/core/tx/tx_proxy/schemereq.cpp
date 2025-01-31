@@ -38,12 +38,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     struct TPathToResolve {
         NKikimrSchemeOp::EOperationType OperationRelated;
+        std::optional<NKikimrSchemeOp::TModifyACL> ModifyACL;
+        ui32 RequireAccess = NACLib::EAccessRights::NoAccess;
 
+        // Params for NSchemeCache::TSchemeCacheNavigate::TEntry
         TVector<TString> Path;
-        bool RequiredRedirect = true;
-        ui32 RequiredAccess = NACLib::EAccessRights::NoAccess;
-
-        std::optional<NKikimrSchemeOp::TModifyACL> RequiredGrandAccess;
+        bool RequireRedirect = true;
 
         TPathToResolve(NKikimrSchemeOp::EOperationType opType)
             : OperationRelated(opType)
@@ -607,8 +607,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateDatabase | NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
-            toResolve.RequiredRedirect = false;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateDatabase | NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            toResolve.RequireRedirect = false;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -617,8 +617,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateDatabase | accessToUserAttrs;
-            toResolve.RequiredRedirect = false;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateDatabase | accessToUserAttrs;
+            toResolve.RequireRedirect = false;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -626,8 +626,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::WriteUserAttributes | accessToUserAttrs;
-            toResolve.RequiredRedirect = false;
+            toResolve.RequireAccess = NACLib::EAccessRights::WriteUserAttributes | accessToUserAttrs;
+            toResolve.RequireRedirect = false;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -637,7 +637,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = SplitPath(baseDir);
-            toResolve.RequiredAccess = NACLib::EAccessRights::NoAccess; // why not?
+            toResolve.RequireAccess = NACLib::EAccessRights::NoAccess; // why not?
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -669,7 +669,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -677,7 +677,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = SplitPath(GetPathNameForScheme(pbModifyScheme));
-            toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -704,7 +704,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::RemoveSchema;
+            toResolve.RequireAccess = NACLib::EAccessRights::RemoveSchema;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -713,37 +713,37 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain: {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::DropDatabase;
-            toResolve.RequiredRedirect = false;
+            toResolve.RequireAccess = NACLib::EAccessRights::DropDatabase;
+            toResolve.RequireRedirect = false;
             ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpForceDropUnsafe: {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::DropDatabase | NACLib::EAccessRights::RemoveSchema;
-            toResolve.RequiredRedirect = false;
+            toResolve.RequireAccess = NACLib::EAccessRights::DropDatabase | NACLib::EAccessRights::RemoveSchema;
+            toResolve.RequireRedirect = false;
             ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpModifyACL: {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
-            toResolve.RequiredAccess = NACLib::EAccessRights::GrantAccessRights | accessToUserAttrs;
-            toResolve.RequiredGrandAccess = pbModifyScheme.GetModifyACL();
+            toResolve.RequireAccess = NACLib::EAccessRights::GrantAccessRights | accessToUserAttrs;
+            toResolve.ModifyACL = pbModifyScheme.GetModifyACL();
             ResolveForACL.push_back(toResolve);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateTable: {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
 
             if (pbModifyScheme.GetCreateTable().HasCopyFromTable()) {
                 auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
                 toResolve.Path = SplitPath(pbModifyScheme.GetCreateTable().GetCopyFromTable());
-                toResolve.RequiredAccess = NACLib::EAccessRights::SelectRow;
+                toResolve.RequireAccess = NACLib::EAccessRights::SelectRow;
                 ResolveForACL.push_back(toResolve);
             }
             break;
@@ -768,7 +768,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -777,14 +777,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 {
                     auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
                     toResolve.Path = SplitPath(item.GetSrcPath());
-                    toResolve.RequiredAccess = NACLib::EAccessRights::SelectRow;
+                    toResolve.RequireAccess = NACLib::EAccessRights::SelectRow;
                     ResolveForACL.push_back(toResolve);
                 }
                 {
                     auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
                     auto dstDir = ToString(ExtractParent(item.GetDstPath()));
                     toResolve.Path = SplitPath(dstDir);
-                    toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable;
+                    toResolve.RequireAccess = NACLib::EAccessRights::CreateTable;
                     ResolveForACL.push_back(toResolve);
                 }
             }
@@ -795,7 +795,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             auto collectionPath = SplitPath(pbModifyScheme.GetBackupBackupCollection().GetName());
             std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
-            toResolve.RequiredAccess = NACLib::EAccessRights::GenericWrite;
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -804,7 +804,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             auto collectionPath = SplitPath(pbModifyScheme.GetBackupIncrementalBackupCollection().GetName());
             std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
-            toResolve.RequiredAccess = NACLib::EAccessRights::GenericWrite;
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -813,7 +813,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             auto collectionPath = SplitPath(pbModifyScheme.GetRestoreBackupCollection().GetName());
             std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
-            toResolve.RequiredAccess = NACLib::EAccessRights::GenericWrite;
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -822,14 +822,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {
                 auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
                 toResolve.Path = SplitPath(descr.GetSrcPath());
-                toResolve.RequiredAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::RemoveSchema;
+                toResolve.RequireAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::RemoveSchema;
                 ResolveForACL.push_back(toResolve);
             }
             {
                 auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
                 auto dstDir = ToString(ExtractParent(descr.GetDstPath()));
                 toResolve.Path = SplitPath(dstDir);
-                toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable;
+                toResolve.RequireAccess = NACLib::EAccessRights::CreateTable;
                 ResolveForACL.push_back(toResolve);
             }
             break;
@@ -839,7 +839,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {
                 auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
                 toResolve.Path = SplitPath(descr.GetTablePath());
-                toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema;
+                toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema;
                 ResolveForACL.push_back(toResolve);
             }
             break;
@@ -848,7 +848,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateDirectory | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateDirectory | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -856,7 +856,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::CreateQueue | accessToUserAttrs;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateQueue | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -866,9 +866,21 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             const auto& alter = pbModifyScheme.GetAlterLogin();
 
-            toResolve.RequiredAccess = (!IsChangeCanLoginOperation(alter) && IsSelfChangePasswordOperation(alter) ?
-                        NACLib::EAccessRights::NoAccess : 
-                        NACLib::EAccessRights::AlterSchema | accessToUserAttrs);
+            // case: user changes password (and nothing else) by themselves
+            auto PasswordSelfChange = [&alter](const NACLib::TSID& subjectSid) {
+                if (alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser) {
+                    const auto& targetUser = alter.GetModifyUser();
+                    if (targetUser.HasPassword() && !targetUser.HasCanLogin()) {
+                        return (subjectSid == targetUser.GetUser());
+                    }
+                }
+                return false;
+            };
+
+            bool bypassACL = UserToken && PasswordSelfChange(UserToken->GetUserSID());
+            if (!bypassACL) {
+                toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema;
+            }
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -877,14 +889,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {
                 auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
                 toResolve.Path = SplitPath(descr.GetSrcPath());
-                toResolve.RequiredAccess = NACLib::EAccessRights::RemoveSchema;
+                toResolve.RequireAccess = NACLib::EAccessRights::RemoveSchema;
                 ResolveForACL.push_back(toResolve);
             }
             {
                 auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
                 auto dstDir = ToString(ExtractParent(descr.GetDstPath()));
                 toResolve.Path = SplitPath(dstDir);
-                toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
+                toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
                 ResolveForACL.push_back(toResolve);
             }
             break;
@@ -952,7 +964,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             entry.Path = toReq.Path;
-            entry.RedirectRequired = toReq.RequiredRedirect;
+            entry.RedirectRequired = toReq.RequireRedirect;
             entry.SyncVersion = true;
             entry.ShowPrivatePath = true;
 
@@ -1054,7 +1066,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = *resolveIt;
             const TPathToResolve& request = *requestIt;
 
-            ui32 access = requestIt->RequiredAccess;
+            ui32 access = requestIt->RequireAccess;
 
             // request more rights if dst path is DB
             if (request.OperationRelated == NKikimrSchemeOp::ESchemeOpAlterUserAttributes) {
@@ -1084,7 +1096,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
 
             if (request.OperationRelated == NKikimrSchemeOp::ESchemeOpModifyACL) {
-                const auto& modifyACL = *request.RequiredGrandAccess;
+                const auto& modifyACL = *request.ModifyACL;
                 if (UserToken->IsExist(entry.SecurityObject->GetOwnerSID())) {
                     ++resolveIt;
                     ++requestIt;

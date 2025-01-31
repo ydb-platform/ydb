@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
 
     Y_UNIT_TEST_F(ShouldRollbackTransactionWhenCheckFails2, TFixture)
     {
-        auto connection = MakeConnection("ShouldRollbackTransactionWhenCheckFails");
+        auto connection = MakeConnection("ShouldRollbackTransactionWhenCheckFails2");
 
         auto future = connection->TableClient.RetryOperation(
             [prefix = connection->TablePathPrefix] (TSession session) {

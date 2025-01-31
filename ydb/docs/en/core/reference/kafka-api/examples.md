@@ -15,7 +15,8 @@ Before proceeding with the examples:
 
 ### In Docker {#how-to-try-kafka-api-in-docker}
 
-Run Docker following [this guide](../../quickstart#install) and the Kafka API will be available on port 9092.
+Run Docker following [the quickstart guide](../../quickstart.md#install), and the Kafka API will be available on port 9092.
+
 
 ### In Yandex Cloud {#how-to-try-kafka-api-in-cloud}
 
@@ -37,11 +38,13 @@ Authentication is required to work with Yandex Cloud, see authentication example
 
 ### Reading
 
-Consider the following points of using the Kafka API for reading:
+Consider the following limitations of using the Kafka API for reading:
+
 
 
 - No support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option.
-- Only one partition assignment strategy - roundrobin.
+- Only one partition assignment strategy - `roundrobin`.
+
 - No reading without a pre-created consumer group.
 
 
@@ -51,7 +54,7 @@ Therefore, in the consumer configuration, you must always specify the **consumer
 - `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
 
 Below are examples of reading using the Kafka protocol for various applications, programming languages, and frameworks without authentication.
-For examples of how to set up authentication, see the section [Authentication Examples](#authentication-examples)
+For examples of how to set up authentication, see [Authentication examples](#authentication-examples).
 
 {% list tabs %}
 
@@ -100,7 +103,8 @@ Unexpected error in join group response: This most likely occurs because of a re
 Most likely it means that a consumer group is not specified or, if specified, it does not exist in the YDB cluster.
 
 
-Solution: create a consumer group in YDB using [CLI](../ydb-cli/topic-consumer-add) or [SDK](../ydb-sdk/topic#alter-topic).
+Solution: create a consumer group in {{ ydb-short-name }} using [CLI](../ydb-cli/topic-consumer-add.md) or [SDK](../ydb-sdk/topic.md#alter-topic).
+
 
 
 ### Writing
@@ -109,7 +113,8 @@ Solution: create a consumer group in YDB using [CLI](../ydb-cli/topic-consumer-a
 
 Using Kafka transactions when writing via Kafka API is currently not supported. Transactions are only available when using the [YDB Topic API](../ydb-sdk/topic.md#write-tx).
 
-Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no different.
+Otherwise, writing to Apache Kafka and {{ ydb-short-name }} Topics through Kafka API is no different.
+
 
 {% endnote %}
 
@@ -158,11 +163,13 @@ Otherwise, writing to Apache Kafka and YDB Topics through Kafka API is no differ
 ### Authentication examples {#authentication-examples}
 
 
-For more details on authentication, see the section [Authentication](./auth.md). Below are examples of authentication in a cloud database and a local database.
+For more details on authentication, see the [Authentication](./auth.md) section. Below are examples of authentication in a cloud database and a local database.
+
 
 {% note info %}
 
-Currently, the only available authentication mechanism with Kafka API in YDB Topics is `SASL_PLAIN`.
+Currently, the only available authentication mechanism with Kafka API in {{ ydb-short-name }} Topics is `SASL_PLAIN`.
+
 
 {% endnote %}
 

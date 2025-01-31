@@ -361,6 +361,8 @@ public:
     TTenantDataErasureStarter TenantDataErasureStarter;
     TTenantDataErasureQueue* TenantDataErasureQueue = nullptr;
 
+    ui64 DataErasureGeneration = 0;
+
     struct TBackgroundCleaningState {
         THashSet<TTxId> TxIds;
         TVector<NKikimr::TPathId> DirsToRemove;
@@ -575,8 +577,7 @@ public:
 
     void StartStopCompactionQueues();
 
-    void StartDataErasure();
-    void FillDataErasureQueue();
+    void StartDataErasure(const TActorContext& ctx);
 
     void WaitForTableProfiles(ui64 importId, ui32 itemIdx);
     void LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* config, const TActorContext& ctx);
@@ -1117,6 +1118,12 @@ public:
 
     template <EventBasePtr TEvPtr>
     NTabletFlatExecutor::ITransaction* CreateTxOperationReply(TOperationId id, TEvPtr& ev);
+
+    struct TTxRunTenantDataErasure;
+    NTabletFlatExecutor::ITransaction* CreateTxRunTenantDataErasure(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev);
+
+    struct TTxRunDataErasure;
+    NTabletFlatExecutor::ITransaction* CreateTxRunDataErasure(ui64 generation);
 
     void PublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths, const TActorContext& ctx);
     void PublishToSchemeBoard(TTxId txId, TDeque<TPathId>&& paths, const TActorContext& ctx);

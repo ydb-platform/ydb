@@ -627,4 +627,7 @@ enum ETxTypes {
 
     TXTYPE_LIST_USERS = 90                                       [(TxTypeOpts) = {Name: "TxListUsers"}];
     TXTYPE_UNMARK_RESTORE_TABLES = 91                     [(TxTypeOpts) = {Name: "TxUnmarkRestoreTables"}];
+
+    TXTYPE_RUN_TENANT_DATA_ERASURE = 92 [(TxTypeOpts) = {Name: "TxRunTenantDataErasure"}];
+    TXTYPE_RUN_DATA_ERASURE = 93 [(TxTypeOpts) = {Name: "TxRunDataErasure"}];
 }

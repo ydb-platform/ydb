@@ -27,9 +27,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartDataErasure(const TPathId& path
         << ", running# " << DataErasureQueue->RunningSize() << " tenants"
         << " at schemeshard " << TabletID());
 
-    ui64 generation = 0;
     std::unique_ptr<TEvSchemeShard::TEvDataClenupRequest> request(
-        new TEvSchemeShard::TEvDataClenupRequest(generation));
+        new TEvSchemeShard::TEvDataClenupRequest(DataErasureGeneration));
 
     /*RunningBorrowedCompactions[shardIdx] = */PipeClientCache->Send(
         ctx,
@@ -50,6 +49,42 @@ void TSchemeShard::UpdateDataErasureQueueMetrics() {
 
     TabletCounters->Simple()[COUNTER_DATA_ERASURE_QUEUE_SIZE].Set(DataErasureQueue->Size());
     TabletCounters->Simple()[COUNTER_DATA_ERASURE_QUEUE_RUNNING].Set(DataErasureQueue->RunningSize());
+}
+
+struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
+    ui64 RequestedGeneration;
+
+    TTxRunDataErasure(TSelf *self, ui64 generation)
+        : TRwTxBase(self)
+        , RequestedGeneration(generation)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_RUN_DATA_ERASURE; }
+
+    void DoExecute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
+        NIceDb::TNiceDb db(txc.DB);
+        if (Self->DataErasureGeneration < RequestedGeneration) {
+            ui64 previousGeneration = Self->DataErasureGeneration;
+            Self->DataErasureGeneration = RequestedGeneration;
+            for (auto& [pathId, subdomain] : Self->SubDomains) {
+                auto path = TPath::Init(pathId, Self);
+                if (path->IsRoot()) {
+                    continue;
+                }
+                if (subdomain->GetTenantSchemeShardID() == InvalidTabletId) { // no tenant schemeshard
+                    continue;
+                }
+                Self->DataErasureQueue->Enqueue(pathId);
+            }
+            db.Table<Schema::DataErasure>().Key(previousGeneration).Delete();
+            db.Table<Schema::DataErasure>().Key(Self->DataErasureGeneration).Update();
+        }
+    }
+    void DoComplete(const TActorContext& /*ctx*/) override {}
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxRunDataErasure(ui64 generation) {
+    return new TTxRunDataErasure(this, generation);
 }
 
 } // NKikimr::NSchemeShard

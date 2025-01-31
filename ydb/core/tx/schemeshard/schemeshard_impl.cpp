@@ -7530,25 +7530,12 @@ void TSchemeShard::StartStopCompactionQueues() {
     BorrowedCompactionQueue->Start();
 }
 
-void TSchemeShard::StartDataErasure() {
+void TSchemeShard::StartDataErasure(const TActorContext& ctx) {
     if (IsDomainSchemeShard) {
         DataErasureQueue->Start();
-        FillDataErasureQueue();
+        Execute(CreateTxRunDataErasure(DataErasureGeneration), ctx);
     } else {
         TenantDataErasureQueue->Start();
-    }
-}
-
-void TSchemeShard::FillDataErasureQueue() {
-    for (auto& [pathId, subdomain] : SubDomains) {
-        auto path = TPath::Init(pathId, this);
-        if (path->IsRoot()) {
-            continue;
-        }
-        if (subdomain->GetTenantSchemeShardID() == InvalidTabletId) { // no tenant schemeshard
-            continue;
-        }
-        DataErasureQueue->Enqueue(pathId);
     }
 }
 

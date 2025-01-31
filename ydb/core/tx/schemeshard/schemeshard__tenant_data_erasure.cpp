@@ -2,12 +2,8 @@
 
 namespace NKikimr::NSchemeShard {
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvDataClenupRequest::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
-    for (const auto& [shardIdx, shardInfo] : ShardInfos) {
-        if (shardInfo.TabletType == ETabletType::DataShard) {
-            EnqueueTenantDataErasure(shardIdx); // forward generation
-        }
-    }
+void TSchemeShard::Handle(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxRunTenantDataErasure(ev), ctx);
 }
 
 NOperationQueue::EStartStatus TSchemeShard::StartTenantDataErasure(const TShardIdx& shardIdx) {
@@ -35,9 +31,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartTenantDataErasure(const TShardI
         << ", running# " << TenantDataErasureQueue->RunningSize() << " shards"
         << " at schemeshard " << TabletID());
 
-    ui64 generation = 0;
     std::unique_ptr<TEvDataShard::TEvForceDataCleanup> request(
-        new TEvDataShard::TEvForceDataCleanup(generation));
+        new TEvDataShard::TEvForceDataCleanup(DataErasureGeneration));
 
     /*RunningBorrowedCompactions[shardIdx] = */PipeClientCache->Send(
         ctx,
@@ -129,6 +124,42 @@ void TSchemeShard::UpdateTenantDataErasureQueueMetrics() {
 
     TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_SIZE].Set(TenantDataErasureQueue->Size());
     TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_RUNNING].Set(TenantDataErasureQueue->RunningSize());
+}
+
+struct TSchemeShard::TTxRunTenantDataErasure : public TSchemeShard::TRwTxBase {
+    TEvSchemeShard::TEvDataClenupRequest::TPtr Ev;
+
+    TTxRunTenantDataErasure(TSelf *self, TEvSchemeShard::TEvDataClenupRequest::TPtr& ev)
+        : TRwTxBase(self)
+        , Ev(std::move(ev))
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_RUN_TENANT_DATA_ERASURE; }
+
+    void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
+        if (Self->IsDomainSchemeShard) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[TenantDataErasure] [Request] Cannot run data erasure on root schemeshard");
+            return;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+        const auto& record = Ev->Get()->Record;
+        if (Self->DataErasureGeneration < record.GetGeneration()) {
+            for (const auto& [shardIdx, shardInfo] : Self->ShardInfos) {
+                if (shardInfo.TabletType == ETabletType::DataShard) {
+                    Self->EnqueueTenantDataErasure(shardIdx); // forward generation
+                }
+            }
+            Self->DataErasureGeneration = record.GetGeneration();
+            // write new DataErasureGeneration to local DB
+        }
+    }
+
+    void DoComplete(const TActorContext& /*ctx*/) override {}
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxRunTenantDataErasure(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev) {
+    return new TTxRunTenantDataErasure(this, ev);
 }
 
 } // NKikimr::NSchemeShard

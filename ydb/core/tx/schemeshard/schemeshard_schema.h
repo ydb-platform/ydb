@@ -1574,7 +1574,7 @@ struct Schema : NIceDb::Schema {
         // NKikimrSchemeOp::TModifyScheme serialized as string
         struct PreparedCreationQuery : Column<14, NScheme::NTypeIds::String> {};
         struct Permissions : Column<11, NScheme::NTypeIds::String> {};
-        struct Metadata : Column<12, NScheme::NTypeIds::String> {}; 
+        struct Metadata : Column<12, NScheme::NTypeIds::String> {};
         struct Changefeeds : Column<15, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TImportTableChangefeeds; };
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
@@ -1940,6 +1940,15 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct DataErasure : Table<114> {
+        struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Generation>;
+        using TColumns = TableColumns<
+            Generation
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2053,6 +2062,7 @@ struct Schema : NIceDb::Schema {
         BackupCollection,
         KMeansTreeProgress,
         KMeansTreeSample
+        DataErasure
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

@@ -69,7 +69,7 @@ namespace NFake {
                 starter = &defaultStarter;
             }
 
-            RunOn(7, { }, starter->Do(user, 1, tablet, std::move(make), followerId), mbx);
+            RunOn(7, { }, starter->Do(user, 1, tablet, std::move(make), StorageGroupCount, followerId), mbx);
         }
 
         void FireFollower(TActorId user, ui32 tablet, TStarter::TMake make, ui32 followerId)

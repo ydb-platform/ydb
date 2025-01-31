@@ -51,7 +51,7 @@ public:
     void FollowersSyncComplete(bool isBoot);
     TGCTime GetCommitedGcBarrier(ui32 channel);
     void SendCollectGarbage(const TActorContext& executor);
-    THashMap<ui32, TGCTime> GetCommitedGcBarriers();
+    bool HasGarbageBefore(TGCTime snapshotTime);
 
     struct TIntrospection {
         ui64 UncommitedEntries;
@@ -87,6 +87,7 @@ protected:
         TGCTime CollectSent;
         TGCTime KnownGcBarrier;
         TGCTime CommitedGcBarrier;
+        TGCTime MinUncollectedTime;
         ui32 GcCounter;
         ui32 GcWaitFor;
 

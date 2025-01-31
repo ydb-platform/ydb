@@ -1285,7 +1285,7 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
         }
         break;
     case NKikimrProto::OK:
-        if (GcForStepAckRequest) {
+        if (GcInFly == 0 && GcForStepAckRequest) {
             const auto& req = *GcForStepAckRequest->Get();
             const ui32 gen = StateStorageInfo.KnownGeneration;
             if (std::tie(req.Generation, req.Step) <= std::tie(gen, GcInFlyStep)) {
@@ -1307,7 +1307,7 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
 void TTablet::Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev) {
     const auto& req = *ev->Get();
     const ui32 gen = StateStorageInfo.KnownGeneration;
-    if (std::tie(req.Generation, req.Step) <= std::tie(gen, GcInFlyStep)) {
+    if (GcInFly == 0 && std::tie(req.Generation, req.Step) <= std::tie(gen, GcInFlyStep)) {
         Send(ev->Sender, new TEvTablet::TEvGcForStepAckResponse(gen, GcInFlyStep));
     } else {
         GcForStepAckRequest = ev;

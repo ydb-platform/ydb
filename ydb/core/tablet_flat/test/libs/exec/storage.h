@@ -57,15 +57,26 @@ namespace NFake {
             } else if (auto *ev = eh->CastAsLocal<NStore::TEvRange>()) {
                 Reply(eh, Model->Handle(ev));
             } else if (auto *ev = eh->CastAsLocal<NStore::TEvCollectGarbage>()) {
-                Reply(eh, Model->Handle(ev));
+                if (DeferGc) {
+                    DeferredGcRequests.emplace_back(eh);
+                } else {
+                    Reply(eh, Model->Handle(ev));
+                }
             } else if (eh->CastAsLocal<NStore::TEvStatus>()) {
                 auto flg = Model->GetStorageStatusFlags();
 
                 Reply(eh, new NStore::TEvStatusResult(NKikimrProto::OK, flg));
 
             } else if (auto *ev = eh->CastAsLocal<NFake::TEvBlobStorageContainsRequest>()) {
-                auto contains = ContainsInBlobs(ev->Values);
+                auto contains = ContainsInBlobs(ev->Value);
                 Reply(eh, new NFake::TEvBlobStorageContainsResponse(std::move(contains)));
+            } else if (auto *ev = eh->CastAsLocal<NFake::TEvBlobStorageDeferGc>()) {
+                DeferGc = ev->Defer;
+                if (!DeferGc) {
+                    for (auto& gcEh : DeferredGcRequests) {
+                        Inbox(gcEh);
+                    }
+                }
             } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
                 ReportUsage();
 
@@ -98,14 +109,11 @@ namespace NFake {
             }
         }
 
-        TVector<bool> ContainsInBlobs(const TVector<TString>& substrings) const {
-            TVector<bool> result(substrings.size());
-            for (const auto& [_, blob] : Model->AllMyBlobs()) {
-                if (!blob.DoNotKeep) {
-                    auto blobString = blob.Buffer.ConvertToString();
-                    for (auto i : xrange(substrings.size())) {
-                        result[i] = result[i] || blobString.Contains(substrings[i]);
-                    }
+        TVector<TEvBlobStorageContainsResponse::TBlobInfo> ContainsInBlobs(const TString& substring) const {
+            TVector<TEvBlobStorageContainsResponse::TBlobInfo> result;
+            for (const auto& [id, blob] : Model->AllMyBlobs()) {
+                if (blob.Buffer.ConvertToString().Contains(substring)) {
+                    result.emplace_back(id, blob.Keep, blob.DoNotKeep);
                 }
             }
             return result;
@@ -120,6 +128,9 @@ namespace NFake {
 
         ui64 PutItems = 0;
         ui64 PutBytes = 0;
+
+        bool DeferGc = false;
+        TVector<TEventHandlePtr> DeferredGcRequests;
     };
 
 }

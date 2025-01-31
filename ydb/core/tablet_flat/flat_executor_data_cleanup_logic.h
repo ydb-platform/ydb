@@ -25,57 +25,42 @@ class TDataCleanupLogic {
         ui64 CompactionId = 0;
     };
 
-    struct TCleanupChannesInfo {
-        TGCTime WriteEdge;
-        TGCTime CommitedGcBarrier;
-    };
-
 public:
     using IOps = NActors::IActorOps;
     using IExecutor = NFlatExecutorSetup::IExecutor;
     using ITablet = NFlatExecutorSetup::ITablet;
     using ELnLev = NUtil::ELnLev;
 
-    TDataCleanupLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* Logger);
+    TDataCleanupLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* logger, TExecutorGCLogic* gcLogic);
 
-    bool TryStartCleanup(const THashMap<ui32, TGCTime>& commitedGcBarriers);
+    bool TryStartCleanup();
     void OnCompactionPrepared(ui32 tableId, ui64 compactionId);
     void WaitCompaction();
-    void OnCompleteCompaction(
-        ui32 generation,
-        ui32 step,
-        ui32 tableId,
-        const TFinishedCompactionInfo& finishedCompactionInfo,
-        const TGCBlobDelta& gcDelta);
+    void OnCompleteCompaction(ui32 tableId, const TFinishedCompactionInfo& finishedCompactionInfo);
     bool NeedLogSnaphot();
-    void OnMakeLogSnapshot(ui32 generation, ui32 step, const TGCBlobDelta& gcDelta);
+    void OnMakeLogSnapshot(ui32 generation, ui32 step);
     void OnSnapshotCommited(ui32 generation, ui32 step);
-    void OnCollectedGarbage(ui32 channel, TGCTime commitedGcBarrier, const TActorContext& ctx);
-    void OnGcForStepAckResponse(ui32 step, const TActorContext& ctx);
-    bool NeedGC(TGCTime releasedBarrier, TGCTime activeBarrier);
+    void OnCollectedGarbage(const TActorContext& ctx);
+    void OnGcForStepAckResponse(ui32 generation, ui32 step, const TActorContext& ctx);
+    bool NeedGC();
 
 private:
     void CompleteDataCleanup(const TActorContext& ctx);
-    bool TabletGCCompleted();
-    void UpdateTabletGC(ui32 channel, TGCTime commitedGcBarrier);
-    void UpdateWriteEdges(TGCTime commitTime, const TGCBlobDelta& gcDelta);
 
 private:
     IOps* Ops;
     IExecutor* Executor;
     ITablet* Owner;
     NUtil::ILogger* const Logger;
+    TExecutorGCLogic* const GcLogic;
 
     EDataCleanupState State = EDataCleanupState::Idle;
     bool StartNextCleanup = false;
     THashMap<ui32, TCleanupTableInfo> CompactingTables; // tracks statuses of compaction
 
-    // tracks commited GC barriers and writes of upcoming compactions and snapshots per channel
-    THashMap<ui32, TCleanupChannesInfo> ChannelsGCInfo;
-
     // two subsequent are snapshots required to force GC
-    ui32 FirstLogSnaphotStep = 0;
-    ui32 SecondLogSnaphotStep = 0;
+    TGCTime FirstLogSnaphotStep;
+    TGCTime SecondLogSnaphotStep;
 };
 
 } // NKikimr::NTabletFlatExecutor

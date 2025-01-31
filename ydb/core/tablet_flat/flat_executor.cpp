@@ -446,7 +446,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
-    DataCleanupLogic = MakeHolder<TDataCleanupLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get());
+    DataCleanupLogic = MakeHolder<TDataCleanupLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get());
     LogicRedo->InstallCounters(Counters.Get(), nullptr);
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
@@ -914,7 +914,7 @@ void TExecutor::CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier) {
                 Owner->CompletedLoansChanged(OwnerCtx());
             }
         }
-        if (DataCleanupLogic->NeedGC(TGCTime(Generation(), barrier->Step), TGCTime(Generation(), GcLogic->GetActiveGcBarrier()))) {
+        if (DataCleanupLogic->NeedGC()) {
             GcLogic->SendCollectGarbage(ActorContext());
         }
     }
@@ -1337,7 +1337,7 @@ void TExecutor::Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev) {
         return;
     }
 
-    DataCleanupLogic->OnGcForStepAckResponse(ev->Get()->Step, OwnerCtx());
+    DataCleanupLogic->OnGcForStepAckResponse(Generation(), ev->Get()->Step, OwnerCtx());
 }
 
 void TExecutor::AdvancePendingPartSwitches() {
@@ -2661,7 +2661,7 @@ void TExecutor::MakeLogSnapshot() {
     BorrowLogic->SnapToLog(snap, *commit);
     GcLogic->SnapToLog(snap, commit->Step);
     LogicSnap->MakeSnap(snap, *commit, Logger.Get());
-    DataCleanupLogic->OnMakeLogSnapshot(Generation(), commit->Step, commit->GcDelta);
+    DataCleanupLogic->OnMakeLogSnapshot(Generation(), commit->Step);
 
     AttachLeaseCommit(commit.Get(), /* force */ true);
     CommitManager->Commit(commit);
@@ -2993,8 +2993,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
     GcLogic->OnCollectGarbageResult(ev);
-    auto channel = ev->Get()->Channel;
-    DataCleanupLogic->OnCollectedGarbage(channel, GcLogic->GetCommitedGcBarrier(channel), OwnerCtx());
+    DataCleanupLogic->OnCollectedGarbage(OwnerCtx());
 }
 
 void TExecutor::Handle(TEvResourceBroker::TEvResourceAllocated::TPtr &ev) {
@@ -3510,7 +3509,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     Y_ABORT_UNLESS(InFlyCompactionGcBarriers.emplace(commit->Step, ops->Barrier).second);
 
-    DataCleanupLogic->OnCompleteCompaction(Generation(), commit->Step, tableId, CompactionLogic->GetFinishedCompactionInfo(tableId), commit->GcDelta);
+    DataCleanupLogic->OnCompleteCompaction(tableId, CompactionLogic->GetFinishedCompactionInfo(tableId));
 
     AttachLeaseCommit(commit.Get());
     CommitManager->Commit(commit);
@@ -3906,7 +3905,7 @@ bool TExecutor::CompactTables() {
 }
 
 void TExecutor::CleanupData() {
-    if (DataCleanupLogic->TryStartCleanup(GcLogic->GetCommitedGcBarriers())) {
+    if (DataCleanupLogic->TryStartCleanup()) {
         for (const auto& [tableId, _] : Scheme().Tables) {
             auto compactionId = CompactionLogic->PrepareForceCompaction(tableId);
             DataCleanupLogic->OnCompactionPrepared(tableId, compactionId);

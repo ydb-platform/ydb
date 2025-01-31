@@ -24,6 +24,7 @@ namespace NFake {
         EvDataCleaned = Base_ + 17,
         EvBlobStorageContainsRequest = Base_ + 18,
         EvBlobStorageContainsResponse = Base_ + 19,
+        EvBlobStorageDeferGC = Base_ + 20,
     };
 
     struct TEvTerm : public TEventLocal<TEvTerm, EvTerm> { };
@@ -101,19 +102,33 @@ namespace NFake {
     };
 
     struct TEvBlobStorageContainsRequest :  public TEventLocal<TEvBlobStorageContainsRequest, EvBlobStorageContainsRequest> {
-        TEvBlobStorageContainsRequest(TVector<TString> values)
-            : Values(std::move(values))
+        TEvBlobStorageContainsRequest(TString value)
+            : Value(value)
         { }
 
-        const TVector<TString> Values;
+        const TString Value;
     };
 
     struct TEvBlobStorageContainsResponse :  public TEventLocal<TEvBlobStorageContainsResponse, EvBlobStorageContainsResponse> {
-        TEvBlobStorageContainsResponse(TVector<bool> contains)
+        struct TBlobInfo {
+            TLogoBlobID BlobId;
+            bool Keep;
+            bool DoNotKeep;
+        };
+
+        TEvBlobStorageContainsResponse(TVector<TBlobInfo> contains)
             : Contains(std::move(contains))
         { }
 
-        const TVector<bool> Contains;
+        const TVector<TBlobInfo> Contains;
+    };
+
+    struct TEvBlobStorageDeferGc : public TEventLocal<TEvBlobStorageDeferGc, EvBlobStorageDeferGC> {
+        TEvBlobStorageDeferGc(bool defer)
+            : Defer(defer)
+        { }
+
+        bool Defer;
     };
 
 }

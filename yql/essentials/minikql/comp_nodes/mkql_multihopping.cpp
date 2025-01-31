@@ -104,6 +104,7 @@ public:
             TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
 
             Cerr << "Save StatesMap size " << StatesMap.size() << Endl;
+            Cerr << "Save Ready size " << Ready.size() << Endl;
 
             out.Write<ui32>(StatesMap.size());
             for (const auto& [key, state] : StatesMap) {
@@ -146,6 +147,7 @@ public:
             const auto statesMapSize = in.Read<ui32>();
 
             Cerr << "Load StatesMap size " << statesMapSize << Endl;
+            Cerr << "Load Ready size " << Ready.size() << Endl;
 
             ClearState();
             StatesMap.reserve(statesMapSize);

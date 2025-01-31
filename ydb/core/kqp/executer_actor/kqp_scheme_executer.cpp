@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/gateway/actors/analyze_actor.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -123,12 +124,12 @@ public:
     }
 
     TString GetDatabaseName() const {
-        const auto appData = AppData();
-        if (appData && appData->AuthConfig.GetDomainLoginOnly()) {
-            const auto domain = appData->DomainsInfo ? appData->DomainsInfo->GetDomain() : nullptr;
-            return domain ? CanonizePath(domain->Name) : "";
-        }
-        return Database;
+        const auto domainLoginOnly = AppData()->AuthConfig.GetDomainLoginOnly();
+        const auto domain = AppData()->DomainsInfo ? AppData()->DomainsInfo->GetDomain() : nullptr;
+        const auto domainName = domain ? domain->Name : "";
+        TString database;
+        return NSchemeHelpers::SetDatabaseForLoginOperation(database, domainLoginOnly, domainName, Database)
+            ? database : Database;
     }
 
     void MakeSchemeOperationRequest() {

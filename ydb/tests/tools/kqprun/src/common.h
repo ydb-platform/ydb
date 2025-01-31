@@ -18,6 +18,7 @@
 namespace NKqpRun {
 
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
+constexpr ui64 DEFAULT_STORAGE_SIZE = 32_GB;
 
 struct TAsyncQueriesSettings {
     enum class EVerbose {
@@ -30,13 +31,28 @@ struct TAsyncQueriesSettings {
 };
 
 struct TYdbSetupSettings {
+    enum class EVerbose {
+        None,
+        Info,
+        QueriesText,
+        InitLogs,
+        Max
+    };
+
+    enum class EHealthCheck {
+        None,
+        NodesCount,
+        ScriptRequest,
+        Max
+    };
+
     ui32 NodeCount = 1;
     TString DomainName = "Root";
     std::unordered_set<TString> DedicatedTenants;
     std::unordered_set<TString> SharedTenants;
     std::unordered_set<TString> ServerlessTenants;
-    TDuration InitializationTimeout = TDuration::Seconds(10);
-    ui8 HealthCheckLevel = 1;
+    TDuration HealthCheckTimeout = TDuration::Seconds(10);
+    EHealthCheck HealthCheckLevel = EHealthCheck::NodesCount;
     bool SameSession = false;
 
     bool DisableDiskMock = false;
@@ -52,7 +68,7 @@ struct TYdbSetupSettings {
 
     bool TraceOptEnabled = false;
     TString LogOutputFile;
-    ui8 VerboseLevel = 1;
+    EVerbose VerboseLevel = EVerbose::Info;
 
     TString YqlToken;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;

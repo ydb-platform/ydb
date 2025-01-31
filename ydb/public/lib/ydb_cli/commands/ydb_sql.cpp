@@ -4,8 +4,10 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
+#include <ydb/public/lib/ydb_cli/common/progress_indication.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
@@ -40,6 +42,12 @@ void TCommandSql::Config(TConfig& config) {
         .StoreTrue(&ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+    config.Opts->AddLongOption("print-progress", "Print progress of query execution. "
+            "Requires non-none statistics collection mode.")
+        .StoreTrue(&PrintProgress);
+    config.Opts->AddLongOption("full-stats", "Full stats report file name. "
+            "Requires full or profile statistics collection mode.")
+        .StoreResult(&FullStatsFileName);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
         .Hidden();
@@ -94,6 +102,12 @@ void TCommandSql::Parse(TConfig& config) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain mode"
             "Relevant for execution mode only.";
     }
+    if (PrintProgress && (CollectStatsMode.empty() || CollectStatsMode == "none")) {
+        throw TMisuseException() << "Option \"--print-progress\" requires non-none statistics collection mode.";
+    }
+    if (FullStatsFileName && (CollectStatsMode.empty() || CollectStatsMode == "none" || CollectStatsMode == "basic")) {
+        throw TMisuseException() << "Option \"--full-stats\" requires full or profile statistics collection mode.";
+    }
     if (QueryFile) {
         if (QueryFile == "-") {
             if (IsStdinInteractive()) {
@@ -128,6 +142,9 @@ int TCommandSql::RunCommand(TConfig& config) {
     SetInterruptHandlers();
     // Single stream execution
     NQuery::TExecuteQuerySettings settings;
+    if (PrintProgress) {
+        settings.StatsCollectPeriod(std::chrono::milliseconds(500));
+    }
 
     if (ExplainMode || ExplainAst) {
         // Execute explain request for the query
@@ -186,25 +203,78 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
+        TProgressIndication progressIndication;
+
+        TString currentStatsFileName;
+        TString currentPlanWithStatsFileName;
+        TString currentPlanWithStatsFileNameJson;
+        if (FullStatsFileName) {
+            currentStatsFileName = TStringBuilder() << FullStatsFileName << ".stats";
+            currentPlanWithStatsFileName = TStringBuilder() << FullStatsFileName << ".plan.svg";
+            currentPlanWithStatsFileNameJson = TStringBuilder() << FullStatsFileName << ".plan.json";
+        }
+
+        TMaybe<NQuery::TExecStats> execStats;
+
         while (!IsInterrupted()) {
-            auto streamPart = result.ReadNext().GetValueSync();
+            auto streamPart = result.ReadNext().ExtractValueSync();
             if (ThrowOnErrorAndCheckEOS(streamPart)) {
                 break;
             }
 
+            if (streamPart.HasStats()) {
+                execStats = streamPart.ExtractStats();
+
+                if (FullStatsFileName) {
+                    TFileOutput out(currentStatsFileName);
+                    out << execStats->ToString();
+                    {
+                        auto plan = execStats->GetPlan();
+                        if (plan) {
+                            {
+                                TPlanVisualizer pv;
+                                TFileOutput out(currentPlanWithStatsFileName);
+                                try {
+                                    pv.LoadPlans(*execStats->GetPlan());
+                                    out << pv.PrintSvg();
+                                } catch (std::exception& e) {
+                                    out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";
+                                }
+                            }
+                            {
+                                TFileOutput out(currentPlanWithStatsFileNameJson);
+                                TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
+                                queryPlanPrinter.Print(*execStats->GetPlan());
+                            }
+                        }
+                    }
+                }
+
+                const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
+                // for (const auto& queryPhase : protoStats.query_phases()) {
+                //     for (const auto& tableAccessStats : queryPhase.table_access()) {
+                //         progressIndication.UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes(),
+                //             tableAccessStats.updates().rows(), tableAccessStats.updates().bytes(),
+                //             tableAccessStats.deletes().rows(), tableAccessStats.deletes().bytes()});
+                //     }
+                // }
+                progressIndication.UpdateProgress({protoStats.total_read_rows(), protoStats.total_read_bytes(),
+                    0, 0, 0, 0, protoStats.total_duration_us()});
+
+
+                progressIndication.Render();
+            }
+
             if (streamPart.HasResultSet() && !ExplainAnalyzeMode) {
+                progressIndication.Finish();
                 printer.Print(streamPart.GetResultSet());
             }
+        }
+        stats = execStats->ToString();
+        ast = execStats->GetAst();
 
-            if (streamPart.GetStats().has_value()) {
-                const auto& queryStats = *streamPart.GetStats();
-                stats = queryStats.ToString();
-                ast = queryStats.GetAst();
-
-                if (queryStats.GetPlan()) {
-                    plan = queryStats.GetPlan();
-                }
-            }
+        if (execStats->GetPlan()) {
+            plan = execStats->GetPlan();
         }
     } // TResultSetPrinter destructor should be called before printing stats
 

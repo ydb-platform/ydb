@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
             $__ydb_transfer_lambda = ($x) -> {
                 RETURN <|
                     key:CAST($x._offset As Uint32)
-                    --, value:CAST($x._data AS Utf8??)
+                    , value:CAST($x._data AS Utf8)
                 |>;
             };
         )");

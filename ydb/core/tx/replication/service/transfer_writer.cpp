@@ -475,7 +475,7 @@ private:
         for (auto& message : ev->Get()->Records) {
             Cerr << ">>>>> message.Data = " << message.Data << Endl << Flush;
             NYdb::NTopic::NPurecalc::TMessage input;
-            input.Data = NYql::NUdf::TUnboxedValuePod(); //MakeString(message.Data);
+            input.Data = MakeString("test test test test test"); // MakeString(NUdf::TStringRef(message.Data.data(), message.Data.size()));
             input.Offset = NYql::NUdf::TUnboxedValuePod(message.Offset);
 
 

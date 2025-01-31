@@ -310,6 +310,7 @@ private:
     TMaybe<ui64> GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings);
     void SendSessionError(TActorId readActorId, TStatus status);
     void RestartSessionIfOldestClient(const TClientsInfo& info);
+    void RefreshParsers();
 
 private:
 
@@ -499,6 +500,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
     LOG_ROW_DISPATCHER_DEBUG("Reconnect topic session, " << TopicPathPartition
         << ", StartingMessageTimestamp " << minTime
         << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
+    RefreshParsers();
     StopReadSession();
     CreateTopicSession();
     Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
@@ -775,6 +777,7 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     Metrics.RestartSessionByOffsets->Inc();
     ++RestartSessionByOffsets;
     info.RestartSessionByOffsetsByQuery->Inc();
+    RefreshParsers();
     StopReadSession();
 
     if (!ReadSession) {
@@ -902,6 +905,12 @@ TMaybe<ui64> TTopicSession::GetOffset(const NFq::NRowDispatcherProto::TEvStartSe
         return p.GetOffset();
     }
     return Nothing();
+}
+
+void TTopicSession::RefreshParsers() {
+    for (const auto& [_, formatHandler] : FormatHandlers) {
+        formatHandler->ForceRefresh();
+    }
 }
 
 }  // anonymous namespace

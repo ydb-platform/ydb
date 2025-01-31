@@ -1096,7 +1096,7 @@ std::vector<std::string> TFixture::GetPQTabletDataKeys(const TActorId& actorId,
 {
     using namespace NKikimr::NPQ;
 
-    TVector<TString> keys;
+    std::vector<std::string> keys;
 
     for (const auto& key : GetTabletKeys(actorId, tabletId)) {
         if (key.empty() ||
@@ -1125,7 +1125,7 @@ std::vector<NKikimr::NPQ::TEvPqCache::TEvCacheKeysResponse::TKey> TFixture::GetP
     TAutoPtr<IEventHandle> handle;
     auto* result = runtime.GrabEdgeEvent<TEvPqCache::TEvCacheKeysResponse>(handle);
 
-    TVector<NKikimr::NPQ::TEvPqCache::TEvCacheKeysResponse::TKey> keys;
+    std::vector<NKikimr::NPQ::TEvPqCache::TEvCacheKeysResponse::TKey> keys;
 
     for (const auto& key : result->Keys) {
         if (key.TabletId == tabletId) {
@@ -1870,8 +1870,12 @@ void TFixture::EnsureKeysIsEqual(const TString& topicName, unsigned id)
     std::sort(tabletKeys.begin(), tabletKeys.end());
     std::sort(cacheKeys.begin(), cacheKeys.end(), compareBlobId);
 
+    auto toString = [](const std::string& s) -> TString {
+        return {s.begin(), s.end()};
+    };
+
     for (size_t i = 0; i < tabletKeys.size(); ++i) {
-        const TKey key(tabletKeys[i]);
+        const TKey key(toString(tabletKeys[i]));
         const auto& blobId = cacheKeys[i];
 
         UNIT_ASSERT_VALUES_EQUAL_C(key.GetPartition().InternalPartitionId, blobId.Partition.InternalPartitionId,

@@ -169,10 +169,10 @@ void UpdateLocalHostName(const TAddressResolverConfigPtr& config)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& GetLoopbackAddress()
+const std::string& GetLoopbackAddress()
 {
-    static const TString ipv4result("[127.0.1.1]");
-    static const TString ipv6result("[::1]");
+    static const std::string ipv4result("[127.0.1.1]");
+    static const std::string ipv6result("[::1]");
     return IPv6Enabled_.load(std::memory_order::relaxed) ? ipv6result : ipv4result;
 }
 

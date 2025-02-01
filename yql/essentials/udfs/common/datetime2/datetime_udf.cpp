@@ -226,10 +226,157 @@ public:
     }
 };
 
-template <const char* TFuncName, typename TFieldStorage, TFieldStorage (*FieldFunc)(const TUnboxedValuePod&), ui32 Divisor, ui32 Scale, ui32 Limit, bool Fractional>
+template <const char* TFuncName, typename TFieldStorage,
+          TFieldStorage (*Accessor)(const TUnboxedValuePod&),
+          TFieldStorage (*WAccessor)(const TUnboxedValuePod&),
+          ui32 Divisor, ui32 Scale, ui32 Limit, bool Fractional>
 struct TGetTimeComponent {
     typedef bool TTypeAwareMarker;
 
+    static const TStringRef& Name() {
+        static auto name = TStringRef(TFuncName, std::strlen(TFuncName));
+        return name;
+    }
+
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
+
+        if (!userType) {
+            builder.SetError("User type is missing");
+            return true;
+        }
+
+        builder.UserType(userType);
+
+        const auto typeInfoHelper = builder.TypeInfoHelper();
+        TTupleTypeInspector tuple(*typeInfoHelper, userType);
+        Y_ENSURE(tuple, "Tuple with args and options tuples expected");
+        Y_ENSURE(tuple.GetElementsCount() > 0,
+                 "Tuple has to contain positional arguments");
+
+        TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
+        Y_ENSURE(argsTuple, "Tuple with args expected");
+        if (argsTuple.GetElementsCount() != 1) {
+            builder.SetError("Single argument expected");
+            return true;
+        }
+
+        auto argType = argsTuple.GetElementType(0);
+
+        TVector<const TType*> argBlockTypes;
+        argBlockTypes.push_back(argType);
+
+        TBlockTypeInspector block(*typeInfoHelper, argType);
+        if (block) {
+            Y_ENSURE(!block.IsScalar());
+            argType = block.GetItemType();
+        }
+
+        bool isOptional = false;
+        if (auto opt = TOptionalTypeInspector(*typeInfoHelper, argType)) {
+            argType = opt.GetItemType();
+            isOptional = true;
+        }
+
+        TResourceTypeInspector resource(*typeInfoHelper, argType);
+        if (!resource) {
+            TDataTypeInspector data(*typeInfoHelper, argType);
+            if (!data) {
+                builder.SetError("Data type expected");
+                return true;
+            }
+
+            const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
+            if (features & NUdf::BigDateType) {
+                BuildSignature<TFieldStorage, TM64ResourceName, WAccessor>(builder, typesOnly);
+                return true;
+            }
+            if (features & NUdf::TzDateType) {
+                BuildSignature<TFieldStorage, TMResourceName, Accessor>(builder, typesOnly);
+                return true;
+            }
+
+            if (features & NUdf::DateType) {
+                builder.Args()->Add(argsTuple.GetElementType(0)).Done();
+                const TType* retType = builder.SimpleType<TFieldStorage>();
+
+                if (isOptional) {
+                    retType = builder.Optional()->Item(retType).Build();
+                }
+
+                auto outputType = retType;
+                if (block) {
+                    retType = builder.Block(block.IsScalar())->Item(retType).Build();
+                }
+
+                builder.Returns(retType);
+                builder.SupportsBlocks();
+                builder.IsStrict();
+
+                if (!typesOnly) {
+                    const auto typeId = data.GetTypeId();
+                    if (typeId == TDataType<TDate>::Id) {
+                        if (block) {
+                            builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
+                                UnaryPreallocatedExecImpl<ui16, TFieldStorage, Core<ui16, true, false>>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                        } else {
+                            builder.Implementation(new TUnaryOverOptionalImpl<ui16, TFieldStorage, Core<ui16, true, false>>());
+                        }
+                    }
+
+                    if (typeId == TDataType<TDatetime>::Id) {
+                        if (block) {
+                            builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
+                                UnaryPreallocatedExecImpl<ui32, TFieldStorage, Core<ui32, false, false>>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                        } else {
+                            builder.Implementation(new TUnaryOverOptionalImpl<ui32, TFieldStorage, Core<ui32, false, false>>());
+                        }
+                    }
+
+                    if (typeId == TDataType<TTimestamp>::Id) {
+                        if (block) {
+                            builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
+                                UnaryPreallocatedExecImpl<ui64, TFieldStorage, Core<ui64, false, true>>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                        } else {
+                            builder.Implementation(new TUnaryOverOptionalImpl<ui64, TFieldStorage, Core<ui64, false, true>>());
+                        }
+                    }
+                }
+                return true;
+            }
+
+            ::TStringBuilder sb;
+            sb << "Invalid argument type: got ";
+            TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
+            sb << ", but Resource<" << TMResourceName <<"> or Resource<"
+               << TM64ResourceName << "> expected";
+            builder.SetError(sb);
+            return true;
+        }
+
+        Y_ENSURE(!block);
+
+        if (resource.GetTag() == TStringRef::Of(TM64ResourceName)) {
+            BuildSignature<TFieldStorage, TM64ResourceName, WAccessor>(builder, typesOnly);
+            return true;
+        }
+
+        if (resource.GetTag() == TStringRef::Of(TMResourceName)) {
+            BuildSignature<TFieldStorage, TMResourceName, Accessor>(builder, typesOnly);
+            return true;
+        }
+
+        builder.SetError("Unexpected Resource tag");
+        return true;
+    }
+private:
     template <typename TInput, bool AlwaysZero, bool InputFractional>
     static TFieldStorage Core(TInput val) {
         if constexpr (AlwaysZero) {
@@ -251,144 +398,24 @@ struct TGetTimeComponent {
         }
     }
 
+    template<typename TResult, TResult (*Func)(const TUnboxedValuePod&)>
     class TImpl : public TBoxedValue {
     public:
         TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
             Y_UNUSED(valueBuilder);
-            if (!args[0]) {
-                return {};
-            }
-
-            return TUnboxedValuePod(TFieldStorage((FieldFunc(args[0])) / Divisor));
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
+            return TUnboxedValuePod((TResult(Func(args[0])) / Divisor));
         }
     };
 
-    static const TStringRef& Name() {
-        static auto name = TStringRef(TFuncName, std::strlen(TFuncName));
-        return name;
-    }
-
-    static bool DeclareSignature(
-        const TStringRef& name,
-        TType* userType,
-        IFunctionTypeInfoBuilder& builder,
-        bool typesOnly)
-    {
-        if (Name() != name) {
-            return false;
+    template<typename TResult, const char* TResourceName, TResult (*Func)(const TUnboxedValuePod&)>
+    static void BuildSignature(NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        builder.Returns<TResult>();
+        builder.Args()->Add<TAutoMap<TResource<TResourceName>>>();
+        builder.IsStrict();
+        if (!typesOnly) {
+            builder.Implementation(new TImpl<TResult, Func>());
         }
-
-        try {
-            auto typeInfoHelper = builder.TypeInfoHelper();
-            TTupleTypeInspector tuple(*typeInfoHelper, userType);
-            if (tuple) {
-                Y_ENSURE(tuple.GetElementsCount() > 0);
-                TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
-                Y_ENSURE(argsTuple);
-                if (argsTuple.GetElementsCount() != 1) {
-                    builder.SetError("Expected one argument");
-                    return true;
-                }
-
-
-                auto argType = argsTuple.GetElementType(0);
-                TVector<const TType*> argBlockTypes;
-                argBlockTypes.push_back(argType);
-
-                TBlockTypeInspector block(*typeInfoHelper, argType);
-                if (block) {
-                    Y_ENSURE(!block.IsScalar());
-                    argType = block.GetItemType();
-                }
-
-                bool isOptional = false;
-                if (auto opt = TOptionalTypeInspector(*typeInfoHelper, argType)) {
-                    argType = opt.GetItemType();
-                    isOptional = true;
-                }
-
-                TResourceTypeInspector res(*typeInfoHelper, argType);
-                if (!res) {
-                    TDataTypeInspector data(*typeInfoHelper, argType);
-                    if (!data) {
-                        builder.SetError("Expected data type");
-                        return true;
-                    }
-
-                    auto typeId = data.GetTypeId();
-                    if (typeId == TDataType<TDate>::Id ||
-                        typeId == TDataType<TDatetime>::Id ||
-                        typeId == TDataType<TTimestamp>::Id) {
-
-                        builder.Args()->Add(argsTuple.GetElementType(0)).Done();
-                        const TType* retType = builder.SimpleType<TFieldStorage>();
-
-                        if (isOptional) {
-                            retType = builder.Optional()->Item(retType).Build();
-                        }
-
-                        auto outputType = retType;
-                        if (block) {
-                            retType = builder.Block(block.IsScalar())->Item(retType).Build();
-                        }
-
-                        builder.Returns(retType);
-                        builder.SupportsBlocks();
-                        builder.IsStrict();
-
-                        builder.UserType(userType);
-                        if (!typesOnly) {
-                            if (typeId == TDataType<TDate>::Id) {
-                                if (block) {
-                                    builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
-                                        UnaryPreallocatedExecImpl<ui16, TFieldStorage, Core<ui16, true, false>>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
-                                } else {
-                                    builder.Implementation(new TUnaryOverOptionalImpl<ui16, TFieldStorage, Core<ui16, true, false>>());
-                                }
-                            }
-
-                            if (typeId == TDataType<TDatetime>::Id) {
-                                if (block) {
-                                    builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
-                                        UnaryPreallocatedExecImpl<ui32, TFieldStorage, Core<ui32, false, false>>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
-                                } else {
-                                    builder.Implementation(new TUnaryOverOptionalImpl<ui32, TFieldStorage, Core<ui32, false, false>>());
-                                }
-                            }
-
-                            if (typeId == TDataType<TTimestamp>::Id) {
-                                if (block) {
-                                    builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
-                                        UnaryPreallocatedExecImpl<ui64, TFieldStorage, Core<ui64, false, true>>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
-                                } else {
-                                    builder.Implementation(new TUnaryOverOptionalImpl<ui64, TFieldStorage, Core<ui64, false, true>>());
-                                }
-                            }
-                        }
-
-                        return true;
-                    }
-                } else {
-                    Y_ENSURE(!block);
-                    if (res.GetTag() != TStringRef::Of(TMResourceName)) {
-                        builder.SetError("Unexpected resource tag");
-                        return true;
-                    }
-                }
-            }
-
-            // default implementation
-            builder.Args()->Add<TResource<TMResourceName>>().Flags(ICallablePayload::TArgumentFlags::AutoMap).Done();
-            builder.Returns<TFieldStorage>();
-            builder.IsStrict();
-            if (!typesOnly) {
-                builder.Implementation(new TImpl());
-            }
-        } catch (const std::exception& e) {
-            builder.SetError(TStringBuf(e.what()));
-        }
-
-        return true;
     }
 };
 
@@ -2623,11 +2650,11 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
         TGetDateComponent<GetDayOfMonthUDF, ui8, GetDay, ui8, GetWDay>,
         TGetDateComponent<GetDayOfWeekUDF, ui8, GetDayOfWeek, ui8, GetWDayOfWeek>,
         TGetDateComponentName<GetDayOfWeekNameUDF, GetDayOfWeekName<TMResourceName>, GetDayOfWeekName<TM64ResourceName>>,
-        TGetTimeComponent<GetHourUDF, ui8, GetHour, 1u, 3600u, 24u, false>,
-        TGetTimeComponent<GetMinuteUDF, ui8, GetMinute, 1u, 60u, 60u, false>,
-        TGetTimeComponent<GetSecondUDF, ui8, GetSecond, 1u, 1u, 60u, false>,
-        TGetTimeComponent<GetMillisecondOfSecondUDF, ui32, GetMicrosecond, 1000u, 1000u, 1000u, true>,
-        TGetTimeComponent<GetMicrosecondOfSecondUDF, ui32, GetMicrosecond, 1u, 1u, 1000000u, true>,
+        TGetTimeComponent<GetHourUDF, ui8, GetHour, GetWHour, 1u, 3600u, 24u, false>,
+        TGetTimeComponent<GetMinuteUDF, ui8, GetMinute, GetWMinute, 1u, 60u, 60u, false>,
+        TGetTimeComponent<GetSecondUDF, ui8, GetSecond, GetWSecond, 1u, 1u, 60u, false>,
+        TGetTimeComponent<GetMillisecondOfSecondUDF, ui32, GetMicrosecond, GetWMicrosecond, 1000u, 1000u, 1000u, true>,
+        TGetTimeComponent<GetMicrosecondOfSecondUDF, ui32, GetMicrosecond, GetWMicrosecond, 1u, 1u, 1000000u, true>,
         TGetDateComponent<GetTimezoneIdUDF, ui16, GetTimezoneId, ui16, GetWTimezoneId>,
         TGetDateComponentName<GetTimezoneNameUDF, GetTimezoneName<TMResourceName>, GetTimezoneName<TM64ResourceName>>,
 

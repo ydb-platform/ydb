@@ -32,7 +32,10 @@
 
 - includes:
   - cxxabi.h:
+    - contrib/libs/cxxsupp/libcxxabi/include/cxxabi.h
     - contrib/libs/cxxsupp/libcxxrt/include/cxxabi.h
+  - __cxxabi_config.h:
+    - contrib/libs/cxxsupp/libcxxabi/include/__cxxabi_config.h
   - omp.h:
     - contrib/libs/cxxsupp/openmp/omp.h
   - unwind.h:
@@ -44,9 +47,6 @@
   - math_cuda.h:
     - contrib/libs/cxxsupp/libcxx/include/math_cuda.h
 
-- source_filter: "^contrib/libs/cxxsupp/libcxxabi/"
-  includes:
-    - cxxabi.h: contrib/libs/cxxsupp/libcxxabi/include/cxxabi.h
 
 # Though these are headers provided by libcxx, we do not want to allow them to be included.
 # We are using non-existent filename to generate error instead, as there is no specific syntax for this case.

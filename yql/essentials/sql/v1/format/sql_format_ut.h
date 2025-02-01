@@ -1,10 +1,10 @@
 Y_UNIT_TEST(Pragma) {
     TCases cases = {
-        {"pragma user = user;","PRAGMA user = user;\n"},
-        {"pragma user = default;","PRAGMA user = default;\n"},
-        {"pragma user.user = user;","PRAGMA user.user = user;\n"},
-        {"pragma user.user(user);","PRAGMA user.user(user);\n"},
-        {"pragma user.user(user, user);","PRAGMA user.user(user, user);\n"},
+        {"pragma user = user;", "PRAGMA user = user;\n"},
+        {"pragma user = default;", "PRAGMA user = default;\n"},
+        {"pragma user.user = user;", "PRAGMA user.user = user;\n"},
+        {"pragma user.user(user);", "PRAGMA user.user(user);\n"},
+        {"pragma user.user(user, user);", "PRAGMA user.user(user, user);\n"},
     };
 
     TSetup setup;
@@ -1506,6 +1506,16 @@ Y_UNIT_TEST(Union) {
             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION ALL\nSELECT\n\t4\nUNION\nSELECT\n\t5\n;\n"},
         {"select 1 union all (select 2)",
             "SELECT\n\t1\nUNION ALL\n(\n\tSELECT\n\t\t2\n);\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(Comment) {
+    TCases cases = {
+        {"/*\nmulti\nline\ncomment\n*/\npragma foo = \"true\";\npragma bar = \"1\"",
+            "/*\nmulti\nline\ncomment\n*/\nPRAGMA foo = 'true';\nPRAGMA bar = '1';\n"},
     };
 
     TSetup setup;

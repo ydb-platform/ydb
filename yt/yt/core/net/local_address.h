@@ -41,7 +41,7 @@ TString GetLocalHostName();
 TString GetLocalYPCluster();
 
 // Returns the loopback address (either IPv4 or IPv6, depending on the configuration).
-const TString& GetLoopbackAddress();
+const std::string& GetLoopbackAddress();
 
 ////////////////////////////////////////////////////////////////////////////////
 

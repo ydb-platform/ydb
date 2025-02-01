@@ -1,7 +1,7 @@
 {% extends '//builtin/run.ym' %}
 
-{% block current_version %}80f9458cf30d13eef21b09042ea590945c5e64db{% endblock %}
-{% block current_date %}2024-03-05{% endblock %}
+{% block current_version %}239236b8c2154aa49e98bc7ed774a7d2712edf50{% endblock %}
+{% block current_date %}2024-04-02{% endblock %}
 
 {% block keep_sources %}
 .yandex_meta/scripts/sysincls.py

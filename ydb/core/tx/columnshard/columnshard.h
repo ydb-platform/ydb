@@ -289,8 +289,6 @@ namespace TEvColumnShard {
             return NColumnShard::ConvertToYdbStatus(status);
         }
     };
-
-    using TEvScan = TEvDataShard::TEvKqpScan;
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

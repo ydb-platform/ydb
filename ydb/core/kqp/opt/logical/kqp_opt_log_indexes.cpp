@@ -488,10 +488,10 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     const auto clusters = std::max<ui32>(2, settings.clusters());
     const auto levels = std::max<ui32>(1, settings.levels());
     Y_ENSURE(level <= levels);
+    const auto levelTop = std::min<ui32>(kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1), clusters);
 
-    // TODO(mbkkt) count should be customizable via query options
     auto count = ctx.Builder(pos)
-        .Callable("Uint64").Atom(0, std::to_string(std::min<ui32>(4, clusters)), TNodeFlags::Default).Seal()
+        .Callable("Uint64").Atom(0, std::to_string(levelTop), TNodeFlags::Default).Seal()
     .Build();
 
     // TODO(mbkkt) Is it best way to do `SELECT FROM levelTable WHERE first_pk_column = 0`?

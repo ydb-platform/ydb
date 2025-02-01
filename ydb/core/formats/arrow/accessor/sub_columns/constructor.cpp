@@ -19,14 +19,13 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
         return TConclusionStatus::Fail("cannot parse proto");
     }
     currentIndex += protoSize;
-    auto schema = NArrow::DeserializeSchema(TStringBuf(originalData.data() + currentIndex, proto.GetSchema().GetDescriptionSize()));
-    currentIndex += proto.GetSchema().GetDescriptionSize();
-    if (!schema) {
-        return TConclusionStatus::Fail("cannot parse schema from proto");
-    }
-    if (schema->num_fields() != proto.GetColumns().size()) {
-        return TConclusionStatus::Fail("inconsistency schema and columns for json proto");
-    }
+    std::shared_ptr<arrow::RecordBatch> columnStats = externalInfo.GetDefaultSerializer()->Deserialize(
+        TStringBuf(originalData.data() + currentIndex, proto.GetColumnStatsSize()), TDictStats::GetSchema());
+    currentIndex += proto.GetColumnStatsSize();
+    std::shared_ptr<arrow::RecordBatch> otherStats = externalInfo.GetDefaultSerializer()->Deserialize(
+        TStringBuf(originalData.data() + currentIndex, proto.GetOtherStatsSize()), TDictStats::GetSchema());
+    currentIndex += proto.GetOtherStatsSize();
+
     std::vector<TString> columns;
     for (ui32 i = 0; i < (ui32)schema->num_fields(); ++i) {
         columns.emplace_back(originalData.substr(currentIndex, proto.GetColumns(i).GetDescriptionSize()));

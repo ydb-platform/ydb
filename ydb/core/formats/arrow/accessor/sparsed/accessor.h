@@ -154,6 +154,41 @@ public:
         return *it;
     }
 
+    class TSparsedBuilder {
+    private:
+        std::shared_ptr<arrow::Schema> Schema;
+        std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
+        arrow::UInt32Builder* IndexBuilder;
+        arrow::StringBuilder* ValueBuilder;
+        ui32 RecordsCount = 0;
+
+    public:
+        TSparsedBuilder() {
+            arrow::FieldVector fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
+                std::make_shared<arrow::Field>("value", arrow::utf8()) };
+            Schema = std::make_shared<arrow::Schema>(fields);
+            Builders = NArrow::MakeBuilders(Schema);
+            IndexBuilder = static_cast<arrow::UInt32Builder*>(Builders[0].get());
+            ValueBuilder = static_cast<arrow::StringBuilder*>(Builders[1].get());
+        }
+
+        void AddRecord(const ui32 recordIndex, const std::string_view value) {
+            NArrow::TStatusValidator::Validate(IndexBuilder->Append(recordIndex));
+            NArrow::TStatusValidator::Validate(ValueBuilder->Append(value.data(), value.size()));
+            ++RecordsCount;
+        }
+
+        std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
+            TSparsedArray::TBuilder builder(nullptr, arrow::utf8());
+            builder.AddChunk(recordsCount, arrow::RecordBatch::Make(Schema, RecordsCount, NArrow::Finish(std::move(Builders))));
+            return builder.Finish();
+        }
+    };
+
+    static TSparsedBuilder MakeBuilderUtf8()  {
+        return TSparsedBuilder();
+    }
+
     class TBuilder {
     private:
         ui32 RecordsCount = 0;

@@ -31,7 +31,7 @@ std::vector<TChunkedArraySerialized> TSubColumnsArray::DoSplitBySizes(
     return result;
 }
 
-TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<IChunkedArray>& sourceArray, const std::shared_ptr<IDataAdapter>& adapter)
+TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<IChunkedArray>& sourceArray, const std::shared_ptr<NSubColumns::IDataAdapter>& adapter)
     : TBase(sourceArray->GetRecordsCount(), EType::SubColumnsArray, sourceArray->GetDataType()) {
     AFL_VERIFY(adapter);
     AFL_VERIFY(sourceArray);
@@ -72,22 +72,18 @@ TSubColumnsArray::TSubColumnsArray(
     Records = std::make_shared<TGeneralContainer>(std::move(fields), std::move(arrays));
 }
 
-TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<arrow::RecordBatch>& batch)
-    : TBase(batch->num_rows(), EType::SubColumnsArray, batch->schema()->field(batch->schema()->num_fields() - 1)->type())
-    , Schema(batch->schema()) {
-    AFL_VERIFY(batch);
-    AFL_VERIFY(batch->schema()->field(batch->schema()->num_fields() - 1)->name() == "__ORIGINAL")("schema", batch->schema()->ToString());
-    for (ui32 i = 0; i + 1 < (ui32)batch->schema()->num_fields(); ++i) {
-        AFL_VERIFY(batch->schema()->field(i)->name() < batch->schema()->field(i + 1)->name())("schema", batch->schema()->ToString());
-    }
-    Records = std::make_shared<TGeneralContainer>(batch);
-}
-
 TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
     : TBase(recordsCount, EType::SubColumnsArray, type) {
     Schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("__ORIGINAL", type) }));
     Records = std::make_shared<TGeneralContainer>(arrow::RecordBatch::Make(
         Schema, recordsCount, std::vector<std::shared_ptr<arrow::Array>>({ NArrow::TThreadSimpleArraysCache::GetNull(type, recordsCount) })));
+}
+
+TSubColumnsArray::TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColumns::TOthersData&& others,
+    const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
+    : TBase(recordsCount, EType::SubColumnsArray, type)
+    , ColumnsData(std::move(columns))
+    , OthersData(std::move(others)) {
 }
 
 TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& externalInfo) const {
@@ -115,6 +111,40 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     }
     so.Finish();
     return result;
+}
+
+IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
+    const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+    auto it = BuildUnorderedIterator();
+    ui32 recordsCount = 0;
+    auto builder = NArrow::MakeBuilder(arrow::binary());
+    auto* binaryBuilder = static_cast<arrow::BinaryBuilder>(builder.get());
+    while (it.IsValid()) {
+        NJson::TJsonValue value;
+        auto onStartRecord = [](const ui32 index) {
+            AFL_VERIFY(recordsCount++ == index);
+        };
+        auto onFinishRecord = []() {
+            auto bJson = NBinaryJson::SerializeToBinaryJson(value.GetStringRobust());
+            if (const TString* val = std::get_if<TString>(&bJson)) {
+                AFL_VERIFY(false);
+            } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
+                binaryBuilder->Append(val->data(), val->size());
+            } else {
+                AFL_VERIFY(false);
+            }
+        };
+        auto onRecordKV = [&](const ui32 index, const std::string_view value, const bool isColumn) {
+            if (isColumn) {
+                value.InsertValue(ColumnsData.GetStats().GetColumnName(index), value);
+            } else {
+                value.InsertValue(OthersData.GetStats().GetColumnName(index), value);
+            }
+        };
+        it.ReadRecords(1, onStartRecord, onRecordKV, onFinishRecord);
+    }
+    AFL_VERIFY(recordsCount == chunkCurrent.GetLength())("real", recordsCount)("expected", chunkCurrent.GetLength());
+    return TLocalDataAddress(NArrow::FinishBuilder(builder), 0, 0);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

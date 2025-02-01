@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 
 namespace NKikimr::NArrow::NAccessor {
@@ -12,7 +13,8 @@ private:
 protected:
     virtual std::optional<ui64> DoGetRawSize() const override;
 
-    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
+    virtual TLocalDataAddress DoGetLocalData(
+        const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
         return TLocalDataAddress(Array, 0, 0);
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
@@ -30,6 +32,38 @@ public:
     TTrivialArray(const std::shared_ptr<arrow::Array>& data)
         : TBase(data->length(), EType::Array, data->type())
         , Array(data) {
+    }
+
+    class TPlainBuilder {
+    private:
+        std::unique_ptr<arrow::ArrayBuilder> Builder;
+        arrow::StringBuilder* ValueBuilder;
+        std::optional<ui32> LastRecordIndex;
+
+    public:
+        TPlainBuilder() {
+            Builder = NArrow::MakeBuilder(arrow::utf8());
+            ValueBuilder = static_cast<arrow::StringBuilder*>(Builder.get());
+        }
+
+        void AddRecord(const ui32 recordIndex, const std::string_view value) {
+            TStatusValidator::Validate(ValueBuilder->AppendNulls(recordIndex - LastRecordIndex.value_or(0)));
+            LastRecordIndex = recordIndex;
+            TStatusValidator::Validate(ValueBuilder->Append(value.data(), value.size()));
+        }
+
+        std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
+            if (LastRecordIndex) {
+                TStatusValidator::Validate(ValueBuilder->AppendNulls(recordsCount - *LastRecordIndex - 1));
+            } else {
+                TStatusValidator::Validate(ValueBuilder->AppendNulls(recordsCount));
+            }
+            return std::make_shared<TTrivialArray>(NArrow::FinishBuilder(std::move(Builder)));
+        }
+    };
+
+    static TPlainBuilder MakeBuilderUtf8() {
+        return TPlainBuilder();
     }
 };
 

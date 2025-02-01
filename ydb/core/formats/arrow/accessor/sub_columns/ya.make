@@ -12,6 +12,12 @@ SRCS(
     GLOBAL request.cpp
     data_extractor.cpp
     accessor.cpp
+    direct_builder.cpp
+    settings.cpp
+    stats.cpp
+    others_storage.cpp
+    columns_storage.cpp
+    iterators.cpp
 )
 
 YQL_LAST_ABI_VERSION()

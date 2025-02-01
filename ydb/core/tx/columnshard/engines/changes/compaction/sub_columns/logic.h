@@ -100,7 +100,7 @@ private:
             InputRecordsCount += i->GetRecordsCount();
         }
         auto commonStats = TDictStats::Merge(stats);
-        auto splitted = commonStats.SplitByVolume(1024);
+        auto splitted = commonStats.SplitByVolume(NSubColumns::TSettings::ColumnAccessorsCountLimit);
         ResultColumnStats = splitted.ExtractColumns();
         ResultOtherStats = splitted.ExtractOthers();
 
@@ -118,66 +118,6 @@ private:
         const TDictStats ResultOtherStats;
         const TChunkMergeContext& Context;
         TOthersData::TBuilderWithStats OthersBuilder;
-
-        class TSparsedBuilder {
-        private:
-            std::shared_ptr<arrow::Schema> Schema;
-            std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
-            arrow::UInt32Builder* IndexBuilder;
-            arrow::StringBuilder* ValueBuilder;
-            ui32 RecordsCount = 0;
-        public:
-            TSparsedBuilder() {
-                arrow::FieldVector fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
-                    std::make_shared<arrow::Field>("value", arrow::utf8()) };
-                Schema = std::make_shared<arrow::Schema>(fields);
-                Builders = NArrow::MakeBuilders(Schema);
-                IndexBuilder = static_cast<arrow::UInt32Builder*>(Builders[0].get());
-                ValueBuilder = static_cast<arrow::StringBuilder*>(Builders[1].get());
-            }
-
-            void AddRecord(const ui32 recordIndex, const std::string_view value) {
-                IndexBuilder->Append(recordIndex);
-                ValueBuilder->Append(value.data(), value.size());
-                ++RecordsCount;
-            }
-
-            std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
-                TSparsedArray::TBuilder builder(nullptr, arrow::utf8());
-                builder.AddChunk(recordsCount, arrow::RecordBatch::Make(Schema, RecordsCount, NArrow::Finish(std::move(Builders))));
-                return builder.Finish();
-            }
-        };
-
-        class TPlainBuilder {
-        private:
-            std::shared_ptr<arrow::Schema> Schema;
-            std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
-            arrow::StringBuilder* ValueBuilder;
-            std::optional<ui32> LastRecordIndex;
-        public:
-            TPlainBuilder() {
-                arrow::FieldVector fields = { std::make_shared<arrow::Field>("value", arrow::utf8()) };
-                Schema = std::make_shared<arrow::Schema>(fields);
-                Builders = NArrow::MakeBuilders(Schema);
-                ValueBuilder = static_cast<arrow::StringBuilder*>(Builders[0].get());
-            }
-
-            void AddRecord(const ui32 recordIndex, const std::string_view value) {
-                ValueBuilder->AppendNulls(recordIndex - LastRecordIndex.value_or(0));
-                LastRecordIndex = recordIndex;
-                ValueBuilder->Append(value.data(), value.size());
-            }
-
-            std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
-                if (LastRecordIndex) {
-                    ValueBuilder->AppendNulls(recordsCount - *LastRecordIndex - 1);
-                } else {
-                    ValueBuilder->AppendNulls(recordsCount);
-                }
-                return std::make_shared<TTrivialArray>(arrow::RecordBatch::Make(NArrow::Finish(std::move(Builders)).front()));
-            }
-        };
 
         class TGeneralAccessorBuilder {
         private:

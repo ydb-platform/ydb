@@ -5,7 +5,7 @@
 #include <yql/essentials/types/binary_json/format.h>
 #include <yql/essentials/types/binary_json/read.h>
 
-namespace NKikimr::NArrow::NAccessor {
+namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const {
     if (sourceArray->type()->id() != arrow::binary()->id()) {
@@ -14,11 +14,11 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(const std::shared_p
 
     auto arr = std::static_pointer_cast<arrow::BinaryArray>(sourceArray);
     for (ui32 i = 0; i < arr->length(); ++i) {
-        const std::string_view view = arr->GetView(i);
-        auto reader = NBinaryJson::TBinaryJsonReader::Make(view);
+        const auto view = arr->GetView(i);
+        auto reader = NBinaryJson::TBinaryJsonReader::Make(TStringBuf(view.data(), view.size()));
         auto cursor = reader->GetRootCursor();
         if (cursor.GetType() != NBinaryJson::EContainerType::Object) {
-            return;
+            return TConclusionStatus::Fail("incorrect json data");
         }
         auto it = cursor.GetObjectIterator();
         while (it.HasNext()) {
@@ -43,10 +43,8 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(const std::shared_p
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus IDataAdapter::AddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, const std::shared_ptr<arrow::Schema>& schema,
-    const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders) const {
-    AFL_VERIFY((ui32)schema->num_fields() == builders.size())("schema", schema->ToString())("builders_count", builders.size());
-    return DoAddDataToBuilders(sourceArray, schema, builders);
+TConclusionStatus IDataAdapter::AddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const {
+    return DoAddDataToBuilders(sourceArray, dataBuilder);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

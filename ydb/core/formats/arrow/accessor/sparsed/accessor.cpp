@@ -70,7 +70,7 @@ TSparsedArray::TSparsedArray(const IChunkedArray& defaultArray, const std::share
     Records.emplace_back(0, GetRecordsCount(), records, DefaultValue);
 }
 
-std::vector<NKikimr::NArrow::NAccessor::TChunkedArraySerialized> TSparsedArray::DoSplitBySizes(
+std::vector<TChunkedArraySerialized> TSparsedArray::DoSplitBySizes(
     const TColumnLoader& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
     AFL_VERIFY(Records.size() == 1)("size", Records.size());
     auto chunks =
@@ -139,7 +139,7 @@ namespace {
 static thread_local THashMap<TString, std::shared_ptr<arrow::RecordBatch>> SimpleBatchesCache;
 }
 
-NKikimr::NArrow::NAccessor::TSparsedArrayChunk TSparsedArray::MakeDefaultChunk(
+TSparsedArrayChunk TSparsedArray::MakeDefaultChunk(
     const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount) {
     auto it = SimpleBatchesCache.find(type->ToString());
     if (it == SimpleBatchesCache.end()) {

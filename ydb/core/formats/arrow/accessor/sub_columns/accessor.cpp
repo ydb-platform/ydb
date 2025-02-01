@@ -35,11 +35,13 @@ TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<IChunkedArray>& sourceA
     : TBase(sourceArray->GetRecordsCount(), EType::SubColumnsArray, sourceArray->GetDataType()) {
     AFL_VERIFY(adapter);
     AFL_VERIFY(sourceArray);
-    Schema = adapter->BuildSchemaForData(sourceArray).DetachResult();
+    TDataBuilder builder;
     auto builders = NArrow::MakeBuilders(Schema, sourceArray->GetRecordsCount());
     IChunkedArray::TReader reader(sourceArray);
+    std::vector<std::shared_ptr<arrow::Array>> storage;
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
         auto address = reader.GetReadChunk(i);
+        storage.emplace_back(address.GetArray());
         adapter->AddDataToBuilders(address.GetArray(), Schema, builders);
         i += address.GetArray()->length();
         AFL_VERIFY(i <= reader.GetRecordsCount());
@@ -89,14 +91,30 @@ TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type,
 }
 
 TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& externalInfo) const {
+    TString blobData;
     NKikimrArrowAccessorProto::TSubColumnsAccessor proto;
-    *proto.MutableSchema()->MutableDescription() = NArrow::SerializeSchema(*Schema);
+    const TString blobSchema = NArrow::SerializeSchema(*Schema);
+    *proto.MutableSchema()->MutableDescriptionSize() = blobSchema.size();
     AFL_VERIFY((ui32)Schema->num_fields() == Records->num_columns());
+    std::vector<TString> rbBlobs;
+    ui64 blobsSize = 0;
     for (auto&& i : Schema->fields()) {
         auto rb = NArrow::ToBatch(Records->BuildTableVerified(TGeneralContainer::TTableConstructionContext({ i->name() })));
-        *proto.AddColumns()->MutableDescription() = externalInfo.GetDefaultSerializer()->SerializePayload(rb);
+        rbBlobs.emplace_back(externalInfo.GetDefaultSerializer()->SerializePayload(rb));
+        *proto.AddColumns()->MutableDescriptionSize() = rbBlobs.back().size();
+        blobsSize += rbBlobs.back().size();
     }
-    return proto.SerializeAsString();
+    const TString protoString = proto.SerializeAsString();
+    TString result;
+    TStringOutput so(result);
+    so.Reserve(protoString.size() + sizeof(ui32) + blobsSize);
+    const ui32 protoSize = protoString.size();
+    so.Write(&protoSize, sizeof(protoSize));
+    for (auto&& s : rbBlobs) {
+        so.Write(s.data(), s.size());
+    }
+    so.Finish();
+    return result;
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

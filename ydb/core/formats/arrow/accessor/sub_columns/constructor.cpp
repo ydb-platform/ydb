@@ -10,11 +10,17 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(con
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromString(
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
+    TStringInput si(originalData);
+    ui32 protoSize;
+    si.Read(&protoSize, sizeof(protoSize));
+    ui64 currentIndex = sizeof(protoSize);
     NKikimrArrowAccessorProto::TSubColumnsAccessor proto;
-    if (!proto.ParseFromArray(originalData.data(), originalData.size())) {
+    if (!proto.ParseFromArray(originalData.data() + currentIndex, protoSize)) {
         return TConclusionStatus::Fail("cannot parse proto");
     }
-    auto schema = NArrow::DeserializeSchema(proto.GetSchema().GetDescription());
+    currentIndex += protoSize;
+    auto schema = NArrow::DeserializeSchema(TStringBuf(originalData.data() + currentIndex, proto.GetSchema().GetDescriptionSize()));
+    currentIndex += proto.GetSchema().GetDescriptionSize();
     if (!schema) {
         return TConclusionStatus::Fail("cannot parse schema from proto");
     }
@@ -23,7 +29,8 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     }
     std::vector<TString> columns;
     for (ui32 i = 0; i < (ui32)schema->num_fields(); ++i) {
-        columns.emplace_back(proto.GetColumns(i).GetDescription());
+        columns.emplace_back(originalData.substr(currentIndex, proto.GetColumns(i).GetDescriptionSize()));
+        currentIndex += proto.GetColumns(i).GetDescriptionSize();
     }
     return std::make_shared<TSubColumnsArray>(schema, std::move(columns), externalInfo);
 }

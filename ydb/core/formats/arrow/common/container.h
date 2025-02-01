@@ -25,7 +25,7 @@ class TGeneralContainer {
 private:
     std::optional<ui64> RecordsCount;
     YDB_READONLY_DEF(std::shared_ptr<NModifier::TSchema>, Schema);
-    std::vector<std::shared_ptr<NAccessor::IChunkedArray>> Columns;
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NAccessor::IChunkedArray>>, Columns);
     void Initialize();
 public:
     TGeneralContainer(const ui32 recordsCount);

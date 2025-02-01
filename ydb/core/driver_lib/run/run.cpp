@@ -1,46 +1,8 @@
-#include "auto_config_initializer.h"
 #include "run.h"
-#include "service_initializer.h"
+
+#include "auto_config_initializer.h"
 #include "kikimr_services_initializers.h"
-
-#include <ydb/core/memory_controller/memory_controller.h>
-#include <ydb/library/actors/core/callstack.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/event_local.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/library/actors/core/mon_stats.h>
-#include <ydb/library/actors/core/monotonic_provider.h>
-#include <ydb/library/actors/core/process_stats.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/core/log_settings.h>
-
-#include <ydb/library/actors/core/executor_pool_basic.h>
-#include <ydb/library/actors/core/executor_pool_io.h>
-#include <ydb/library/actors/core/scheduler_basic.h>
-
-#include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
-#include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
-#include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
-#include <ydb/library/actors/interconnect/interconnect_mon.h>
-#include <ydb/core/config/init/dummy.h>
-
-#include <ydb/core/control/immediate_control_board_actor.h>
-
-#include <ydb/library/actors/protos/services_common.pb.h>
-#include <ydb/core/cms/console/grpc_library_helper.h>
-#include <ydb/core/keyvalue/keyvalue.h>
-#include <ydb/core/formats/clickhouse_block.h>
-#include <ydb/core/grpc_services/grpc_request_proxy.h>
-#include <ydb/core/grpc_services/grpc_mon.h>
-#include <ydb/core/log_backend/log_backend.h>
-#include <ydb/core/mon/mon.h>
-#include <ydb/core/mon/crossref.h>
-#include <ydb/core/mon_alloc/profiler.h>
-
-#include <ydb/library/actors/util/affinity.h>
+#include "service_initializer.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/channel_profiles.h>
@@ -76,9 +38,8 @@
 #include <ydb/core/mind/node_broker.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon_alloc/profiler.h>
-#include <ydb/core/mon/async_http_mon.h>
 #include <ydb/core/mon/crossref.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
@@ -92,7 +53,6 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
-#include <ydb/core/tablet/node_tablet_monitor.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_list_renderer.h>
@@ -105,6 +65,7 @@
 #include <ydb/core/util/sig.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>

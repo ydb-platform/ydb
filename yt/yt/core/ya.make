@@ -115,7 +115,6 @@ SRCS(
     logging/zstd_compression.cpp
 
     misc/arithmetic_formula.cpp
-    GLOBAL misc/assert.cpp
     misc/backoff_strategy.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
@@ -126,7 +125,7 @@ SRCS(
     misc/codicil.cpp
     misc/config.cpp
     misc/coro_pipe.cpp
-    misc/crash_handler.cpp
+    GLOBAL misc/crash_handler.cpp
     misc/digest.cpp
     misc/error.cpp
     misc/fs.cpp

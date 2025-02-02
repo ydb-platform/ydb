@@ -6,30 +6,27 @@ issue_patterns = [
     r"https://st.yandex-team.ru/[a-zA-Z]+-\d+"
 ]
 
-def validate_pr_description(file_path):
+def validate_pr_description(description, is_not_for_cl_valid=True):
     try:
-        with open(file_path, 'r') as file:
-            description = file.read()
-
         if not description.strip():
             print("::warning::PR description is empty. Please fill it out.")
-            sys.exit(1)
+            return False
 
         if "### Changelog category" not in description:
             print("::warning::Missing '### Changelog category'.")
-            sys.exit(1)
+            return False
 
         # Extract changelog category section
         category_section = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", description, re.DOTALL)
         if not category_section:
             print("::warning::Changelog category section not found.")
-            sys.exit(1)
+            return False
 
         categories = [line.strip('* ').strip() for line in category_section.group(1).splitlines() if line.strip()]
 
         if len(categories) != 1:
             print("::warning::Only one category can be selected at a time.")
-            sys.exit(1)
+            return False
 
         category = categories[0]
         valid_categories = [
@@ -50,13 +47,17 @@ def validate_pr_description(file_path):
 
         if not any(cat.startswith(category) for cat in valid_categories):
             print(f"::warning::Invalid Changelog category: {category}")
-            sys.exit(1)
+            return False
+
+        if not is_not_for_cl_valid and any(cat.startswith(category) for cat in not_for_cl_categories):
+            print(f"::notice::Category is not for changelog: {category}")
+            return False
 
         if not any(cat.startswith(category) for cat in not_for_cl_categories):
             entry_section = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", description, re.DOTALL)
             if not entry_section or len(entry_section.group(1).strip()) < 20:
                 print("::warning::Changelog entry is too short or missing.")
-                sys.exit(1)
+                return False
 
             if category == "Bugfix":
                 def check_issue_pattern(issue_pattern):
@@ -64,17 +65,30 @@ def validate_pr_description(file_path):
 
                 if not any(check_issue_pattern(issue_pattern) for issue_pattern in issue_patterns):
                     print("::warning::Bugfix requires a linked issue in the changelog entry")
-                    sys.exit(1)
+                    return False
 
         print("PR description is valid.")
+        return True
 
     except Exception as e:
         print(f"::error::Error during validation: {e}")
-        sys.exit(1)
+        return False
+
+def validate_pr_description_from_file(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            description = file.read()
+        return validate_pr_description(description)
+    except Exception as e:
+        print(f"::error::Failed to validate PR description: {e}")
+        return False
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("::error::Usage: python3 validate_pr_description.py <file_path>")
+        print("Usage: validate_pr_description.py <path_to_pr_description_file>")
         sys.exit(1)
-
-    validate_pr_description(sys.argv[1])
+    
+    file_path = sys.argv[1]
+    is_valid = validate_pr_description_from_file(file_path)
+    if not is_valid:
+        sys.exit(1)

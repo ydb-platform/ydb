@@ -10,6 +10,7 @@ namespace NKikimr::NOlap::NReader {
 struct TReadDescription {
 private:
     TSnapshot Snapshot;
+    std::optional<NOlap::TLock> Lock;
     TProgramContainer Program;
     std::shared_ptr<IScanCursor> ScanCursor;
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
@@ -17,7 +18,6 @@ private:
 public:
     // Table
     ui64 TxId = 0;
-    std::optional<ui64> LockId;
     ui64 PathId = 0;
     TString TableName;
     bool ReadNothing = false;
@@ -41,8 +41,9 @@ public:
         ScanCursor = cursor;
     }
 
-    TReadDescription(const TSnapshot& snapshot, const bool isReverse)
+    TReadDescription(const TSnapshot& snapshot, const std::optional<NOlap::TLock>& lock, const bool isReverse)
         : Snapshot(snapshot)
+        , Lock(lock)
         , PKRangesFilter(std::make_shared<NOlap::TPKRangesFilter>(isReverse)) {
     }
 
@@ -52,6 +53,10 @@ public:
 
     const TSnapshot& GetSnapshot() const {
         return Snapshot;
+    }
+
+    const std::optional<NOlap::TLock>& GetLock() const {
+        return Lock;
     }
 
     const TProgramContainer& GetProgram() const {

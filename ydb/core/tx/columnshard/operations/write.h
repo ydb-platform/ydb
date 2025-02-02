@@ -53,7 +53,7 @@ private:
     YDB_READONLY(EOperationStatus, Status, EOperationStatus::Draft);
     YDB_READONLY_DEF(TInstant, CreatedAt);
     YDB_READONLY_DEF(TOperationWriteId, WriteId);
-    YDB_READONLY(ui64, LockId, 0);
+    const NOlap::TLockWithSnapshot Lock;
     YDB_READONLY(ui64, Cookie, 0);
     YDB_READONLY_DEF(std::vector<TInsertWriteId>, InsertWriteIds);
     YDB_ACCESSOR(EOperationBehaviour, Behaviour, EOperationBehaviour::Undefined);
@@ -69,7 +69,7 @@ public:
         *Activity = 0;
     }
 
-    TWriteOperation(const ui64 pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
+    TWriteOperation(const ui64 pathId, const TOperationWriteId writeId, const NOlap::TLockWithSnapshot& lock, const ui64 cookie, const EOperationStatus& status,
         const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType,
         const bool writePortions);
 
@@ -87,11 +87,15 @@ public:
     }
 
     void Out(IOutputStream& out) const {
-        out << "write_id=" << (ui64)WriteId << ";lock_id=" << LockId;
+        out << "write_id=" << (ui64)WriteId << ";lock_id=" << Lock.LockId;
     }
 
     void ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const;
     void FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto);
+
+    ui64 GetLockId() const {
+        return Lock.LockId;
+    }
 };
 
 }   // namespace NKikimr::NColumnShard

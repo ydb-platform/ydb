@@ -40,10 +40,9 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     TReadMetadataPtr readMetadataRange;
     TScannerConstructorContext context(snapshot, 0, request.GetReverse());
     {
-        TReadDescription read(snapshot, request.GetReverse());
+        TReadDescription read(snapshot, Lock ? std::optional{NOlap::TLock{Lock->LockId, Lock->LockMode}} : std::nullopt,request.GetReverse());
         read.SetScanIdentifier(request.TaskIdentifier);
         read.PathId = request.GetPathId();
-        read.LockId = LockId;
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
@@ -82,7 +81,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(),
-        TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
+        TComputeShardingPolicy(), ScanId, Lock ? Lock->LockId : 0, ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
         NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters()));
 
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);

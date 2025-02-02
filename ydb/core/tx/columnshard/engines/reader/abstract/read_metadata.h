@@ -46,7 +46,9 @@ private:
     std::shared_ptr<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;
     std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
-    TSnapshot RequestSnapshot;
+    const TSnapshot RequestSnapshot;
+    const std::optional<NOlap::TLock> RequestLock;
+
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
     std::shared_ptr<IScanCursor> ScanCursor;
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
@@ -59,7 +61,6 @@ private:
 protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     ui64 TxId = 0;
-    std::optional<ui64> LockId;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
@@ -93,8 +94,22 @@ public:
         return ScanCursor;
     }
 
-    std::optional<ui64> GetLockId() const {
-        return LockId;
+    bool HasLock() const {
+        return !!RequestLock;
+    }
+
+    NOlap::TLockWithSnapshot GetLockVerified() const {
+        AFL_VERIFY(HasLock());
+        return {RequestLock->first, RequestLock->second, false, RequestSnapshot};
+    }
+
+    std::optional<ui64> GetLockIdOptional() const {
+        return RequestLock ? std::optional{RequestLock->first} : std::nullopt;
+    }
+
+    ui64 GetLockIdVerified() const {
+        AFL_VERIFY(HasLock());
+        return RequestLock->first;
     }
 
     void OnReadFinished(NColumnShard::TColumnShard& owner) const {
@@ -164,11 +179,12 @@ public:
     }
 
     TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
-        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::shared_ptr<IScanCursor>& scanCursor)
+        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::optional<NOlap::TLock>& requestLock, const std::shared_ptr<IScanCursor>& scanCursor)
         : Sorting(sorting)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)
         , RequestSnapshot(requestSnapshot)
+        , RequestLock(requestLock)
         , ScanCursor(scanCursor)
         , ResultIndexSchema(schema)
     {

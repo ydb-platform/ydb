@@ -10,7 +10,7 @@ private:
     TEvColumnShard::TEvInternalScan::TPtr InternalScanEvent;
     const ui32 ScanGen = 1;
     const ui32 ScanId = 1;
-    const std::optional<ui64> LockId;
+    const std::optional<NOlap::TLockWithSnapshot> Lock;
     void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;
 
 public:
@@ -19,7 +19,7 @@ public:
     TTxInternalScan(NColumnShard::TColumnShard* self, TEvColumnShard::TEvInternalScan::TPtr& ev)
         : TBase(self)
         , InternalScanEvent(ev)
-        , LockId(InternalScanEvent->Get()->GetLockId())
+        , Lock(InternalScanEvent->Get()->GetLock())
     {
     }
 

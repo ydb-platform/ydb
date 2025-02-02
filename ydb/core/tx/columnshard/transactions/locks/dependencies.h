@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NTxInteractions {
 
 class TTxConflicts {
 private:
-    THashMap<ui64, THashSet<ui64>> TxIdsFromCommitToBroken;
+    THashMap<ui64, THashSet<ui64>> TxIdsFromCommitToBroken; //ToAffected
 
 public:
     THashMap<ui64, THashSet<ui64>>::const_iterator begin() const {

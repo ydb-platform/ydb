@@ -9,8 +9,7 @@
 
 namespace NKikimr::NColumnShard {
 
-void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx) {
-    auto& record = ev->Get()->Record;
+void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx) {    auto& record = ev->Get()->Record;
     ui64 txId = record.GetTxId();
     const auto& scanId = record.GetScanId();
     const auto& snapshot = record.GetSnapshot();

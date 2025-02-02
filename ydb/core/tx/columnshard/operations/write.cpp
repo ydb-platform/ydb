@@ -13,14 +13,14 @@
 
 namespace NKikimr::NColumnShard {
 
-TWriteOperation::TWriteOperation(const ui64 pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
+TWriteOperation::TWriteOperation(const ui64 pathId, const TOperationWriteId writeId, const NOlap::TLockWithSnapshot& lock, const ui64 cookie,
     const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId,
     const NEvWrite::EModificationType mType, const bool writePortions)
     : PathId(pathId)
     , Status(status)
     , CreatedAt(createdAt)
     , WriteId(writeId)
-    , LockId(lockId)
+    , Lock(lock)
     , Cookie(cookie)
     , GranuleShardingVersionId(granuleShardingVersionId)
     , ModificationType(mType)
@@ -33,7 +33,7 @@ void TWriteOperation::Start(
 
     auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>((ui64)WriteId, GetPathId(), source, GranuleShardingVersionId, GetIdentifier(),
         context.GetWritingCounters()->GetWriteFlowCounters());
-    writeMeta->SetLockId(LockId);
+    writeMeta->SetLock(Lock);
     writeMeta->SetModificationType(ModificationType);
     NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
         owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR), WritePortions);
@@ -98,7 +98,7 @@ void TWriteOperation::OnWriteFinish(
     db.Table<Schema::Operations>()
         .Key((ui64)WriteId)
         .Update(NIceDb::TUpdate<Schema::Operations::Status>((ui32)Status), NIceDb::TUpdate<Schema::Operations::CreatedAt>(CreatedAt.Seconds()),
-            NIceDb::TUpdate<Schema::Operations::Metadata>(metadata), NIceDb::TUpdate<Schema::Operations::LockId>(LockId),
+            NIceDb::TUpdate<Schema::Operations::Metadata>(metadata), NIceDb::TUpdate<Schema::Operations::LockId>(Lock.LockId), //TODO fixme
             NIceDb::TUpdate<Schema::Operations::Cookie>(Cookie),
             NIceDb::TUpdate<Schema::Operations::GranuleShardingVersionId>(GranuleShardingVersionId.value_or(0)));
 }

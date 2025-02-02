@@ -62,9 +62,9 @@ public:
     }
     THashSet<ui64> GetConflictableLockIds() const {
         THashSet<ui64> result;
-        for (auto&& i : ConflictedWriteIds) {
-            if (i.second.IsConflictable()) {
-                result.emplace(i.second.GetLockId());
+        for (const auto& [_, writeIdInfo]: ConflictedWriteIds) {
+            if (writeIdInfo.IsConflictable()) {
+                result.emplace(writeIdInfo.GetLockId());
             }
         }
         return result;
@@ -117,9 +117,9 @@ public:
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::shared_ptr<TReadStats> ReadStats;
 
-    TReadMetadata(const ui64 pathId, const std::shared_ptr<TVersionedIndex> info, const TSnapshot& snapshot, const ESorting sorting,
-        const TProgramContainer& ssaProgram, const std::shared_ptr<IScanCursor>& scanCursor)
-        : TBase(info, sorting, ssaProgram, info->GetSchemaVerified(snapshot), snapshot, scanCursor)
+    TReadMetadata(const ui64 pathId, const std::shared_ptr<TVersionedIndex> info, const TSnapshot& snapshot, const std::optional<NOlap::TLock>& lock, 
+        const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<IScanCursor>& scanCursor)
+        : TBase(info, sorting, ssaProgram, info->GetSchemaVerified(snapshot), snapshot, lock, scanCursor)
         , PathId(pathId)
         , ReadStats(std::make_shared<TReadStats>()) {
     }

@@ -2414,9 +2414,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
                 Y_ASSERT(record.GetResultSet().rows().size() == 0);
 
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
-                resp->Record.SetSeqNo(record.GetSeqNo());
                 runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                 return true;
             }

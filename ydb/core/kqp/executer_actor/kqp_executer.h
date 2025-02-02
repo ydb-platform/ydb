@@ -70,7 +70,19 @@ struct TEvKqpExecuter {
         TKqpExecuterEvents::EvStreamData> {};
 
     struct TEvStreamDataAck : public TEventPB<TEvStreamDataAck, NKikimrKqp::TEvExecuterStreamDataAck,
-        TKqpExecuterEvents::EvStreamDataAck> {};
+        TKqpExecuterEvents::EvStreamDataAck>
+    {
+        friend class TEventPBBase;
+        explicit TEvStreamDataAck(ui64 seqno, ui64 channelId)
+        {
+            Record.SetSeqNo(seqno);
+            Record.SetChannelId(channelId);
+        }
+
+    private:
+        // using a little hack to hide default empty constructor
+        TEvStreamDataAck() = default;
+    };
 
     struct TEvStreamProfile : public TEventPB<TEvStreamProfile, NKikimrKqp::TEvExecuterStreamProfile,
         TKqpExecuterEvents::EvStreamProfile> {};

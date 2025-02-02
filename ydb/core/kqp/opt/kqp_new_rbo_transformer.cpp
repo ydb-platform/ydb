@@ -13,48 +13,63 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
     auto setItems = GetSetting(node->Head(), "set_items");
     
     TVector<TCoAtom> columns;
-    TVector<TExprNode::TPtr> lambdas;
+    TVector<TExprNode::TPtr> resultLambdas;
 
     THashMap<TString, TExprNode::TPtr> inputSources;
     TExprNode::TPtr joinExpr;
     TExprNode::TPtr filterExpr;
+    TExprNode::TPtr lastAlias;
+
 
     for (auto setItem : setItems->Tail().Children()) {
-        YQL_CLOG(TRACE, CoreDq) << "SetItem: " << setItem->Dump();
 
         auto from = GetSetting(setItem->Tail(), "from");
-        YQL_CLOG(TRACE, CoreDq) << "From item: " << from->Dump();
-
 
         if (from) {
             for (auto fromItem : from->Child(1)->Children()) {
-                auto readExpr = fromItem->Child(0);
+                auto readExpr = TKqlReadTableRanges(fromItem->Child(0));
                 auto alias = fromItem->Child(1);
 
-                inputSources[alias->Content()] = readExpr;
-                joinExpr = readExpr;
+                auto opRead = Build<TKqpOpRead>(ctx, node->Pos())
+                    .Table(readExpr.Table())
+                    .Columns(readExpr.Columns())
+                    .Done().Ptr();
+
+                if (!joinExpr) {
+                    joinExpr = opRead;
+                } 
+                else {
+                    joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
+                        .LeftInput(joinExpr)
+                        .RightInput(opRead)
+                        .LeftLabel(lastAlias)
+                        .RightLabel(alias)
+                        .Done().Ptr();
+                }
+                lastAlias = alias;
             }
         }
 
         filterExpr = joinExpr;
 
         auto where = GetSetting(setItem->Tail(), "where");
-        YQL_CLOG(TRACE, CoreDq) << "Where item: " << where->Dump();
 
         if (where) {
             auto lambda = where->Child(1)->Child(1);
             filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
-                .Input(joinExpr)
+                .Input(filterExpr)
                 .Lambda(lambda)
                 .Done().Ptr();
         }
 
-        TVector<TExprNode::TPtr> lambdas;
         auto result = GetSetting(setItem->Tail(), "result");
 
         for (auto resultItem : result->Child(1)->Children()) {
+            YQL_CLOG(TRACE, CoreDq) << "Result Item: " << resultItem->Dump();
             columns.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(resultItem->Child(0)->Content()).Done());
-            lambdas.push_back(resultItem->Child(2));
+            YQL_CLOG(TRACE, CoreDq) << "Result lambda: " << resultItem->Child(2)->Dump();
+
+            resultLambdas.push_back(resultItem->Child(2));
         }
     }
 
@@ -68,7 +83,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Add(columns)
         .Build()
         .Lambdas()
-            .Add(lambdas)
+            .Add(resultLambdas)
         .Build()
         .Done().Ptr();
 }

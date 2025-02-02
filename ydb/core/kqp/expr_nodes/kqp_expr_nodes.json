@@ -730,7 +730,7 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpRead"},
             "Children": [
-                {"Index": 0, "Name": "Table", "Type": "TCoAtom"},
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 1, "Name": "Columns", "Type": "TCoAtomList", "Optional": true}
             ]
         },
@@ -757,6 +757,19 @@
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"}
             ]
+        },
+        {
+            "Name": "TKqpOpJoin",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "TKqpOpJoin"},
+            "Children": [
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+                {"Index": 2, "Name": "LeftLabel", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "RightLabel", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList", "Optional" : true}
+            ]
         }
+
     ]
 }

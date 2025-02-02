@@ -293,7 +293,7 @@ private:
             const auto finishRecord = [&]() {
                 builder.FinishRecord();
             };
-            OrderedIterators[sourceIdx].ReadRecords(recordIdx, startRecord, addKV, finishRecord);
+            OrderedIterators[sourceIdx].ReadRecord(recordIdx, startRecord, addKV, finishRecord);
         }
         return builder.Finish(Context);
     }

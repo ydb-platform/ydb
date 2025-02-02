@@ -230,6 +230,7 @@ public:
                 return;
             } else if (SortedIterators.front()->GetRecordIndex() < recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
+                auto& itColumn = *SortedIterators.back();
                 if (!itColumn.Next()) {
                     SortedIterators.pop_back();
                 } else {
@@ -238,7 +239,7 @@ public:
                 continue;
             }
             startRecordActor(recordIndex);
-            while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == i) {
+            while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
                 kvActor(itColumn.GetKeyIndex(), itColumn.GetValue(), itColumn.IsColumnKey());

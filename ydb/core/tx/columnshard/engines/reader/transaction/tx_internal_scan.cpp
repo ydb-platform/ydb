@@ -40,10 +40,9 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     TReadMetadataPtr readMetadataRange;
     TScannerConstructorContext context(snapshot, 0, request.GetReverse());
     {
-        TReadDescription read(snapshot, request.GetReverse());
+        TReadDescription read(snapshot, Lock ? std::optional{NOlap::TLock{Lock->LockId, Lock->LockMode}} : std::nullopt,request.GetReverse());
         read.SetScanIdentifier(request.TaskIdentifier);
         read.PathId = request.GetPathId();
-        read.Lock = Lock;
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();

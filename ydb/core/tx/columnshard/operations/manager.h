@@ -55,7 +55,7 @@ class TLockFeatures: TMoveOnly {
 private:
     YDB_ACCESSOR_DEF(std::vector<TWriteOperation::TPtr>, WriteOperations);
     YDB_ACCESSOR_DEF(std::vector<NOlap::NTxInteractions::TTxEventContainer>, Events);
-    YDB_ACCESSOR_DEF(NOlap::TLockWithSnapshot, Lock);
+    const NOlap::TLockWithSnapshot Lock;
     YDB_ACCESSOR(ui64, Generation, 0);
     std::shared_ptr<TLockSharingInfo> SharingInfo;
 
@@ -64,6 +64,11 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, Committed);
 
 public:
+    NOlap::TLockWithSnapshot GetLock() const {
+        return Lock;
+    } 
+
+
     const std::shared_ptr<TLockSharingInfo>& GetSharingInfo() const {
         return SharingInfo;
     }

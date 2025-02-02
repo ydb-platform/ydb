@@ -34,10 +34,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;
     auto scanComputeActor = Ev->Sender;
-    TSnapshot snapshot = TSnapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
-    if (snapshot.IsZero()) {
-        snapshot = Self->GetLastTxSnapshot();
-    }
+    TSnapshot snapshot = TSnapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId()); 
+    AFL_VERIFY(snapshot.Valid());   
     TScannerConstructorContext context(snapshot, request.HasItemsLimit() ? request.GetItemsLimit() : 0, request.GetReverse());
     const auto scanId = request.GetScanId();
     const ui64 txId = request.GetTxId();
@@ -55,13 +53,16 @@ void TTxScan::Complete(const TActorContext& ctx) {
     {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
-        TReadDescription read(snapshot, request.GetReverse());
-        read.TxId = txId;
+        std::optional<NOlap::TLock> lock;
         if (request.HasLockTxId()) {
-            read.Lock = {request.GetLockTxId(), {0, 0}}; //todo fixme
+            AFL_VERIFY(request.HasLockMode());
+            lock = std::pair{request.GetLockTxId(), request.GetLockMode()};
         }
+
+        TReadDescription read(snapshot, lock, request.GetReverse());
+        read.TxId = txId;
         read.PathId = request.GetLocalPathId();
-        read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
+        read.ReadNothing = !Self->TablesManager.HasTable(read.PathId); //???
         read.TableName = table;
 
         const TString defaultReader =

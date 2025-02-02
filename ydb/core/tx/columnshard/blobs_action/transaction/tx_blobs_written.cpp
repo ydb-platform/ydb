@@ -68,7 +68,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         } else {
-            const auto lockId = operation->GetLock().LockId;
+            const auto lockId = operation->GetLockId();
             auto& info = Self->OperationsManager->GetLockVerified(lockId);
             NKikimrDataEvents::TLock lock;
             lock.SetLockId(lockId);
@@ -148,7 +148,7 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorCont
         const auto& writeMeta = wResult.GetWriteMeta();
         AFL_VERIFY(!writeMeta.HasLongTxId());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
-        const auto& lockId = op->GetLock().LockId;
+        const auto& lockId = op->GetLockId();
         Self->OperationsManager->AddTemporaryTxLink(lockId);
         Self->OperationsManager->AbortTransactionOnExecute(*Self, lockId, txc);
 

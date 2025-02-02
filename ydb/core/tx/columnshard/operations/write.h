@@ -53,7 +53,7 @@ private:
     YDB_READONLY(EOperationStatus, Status, EOperationStatus::Draft);
     YDB_READONLY_DEF(TInstant, CreatedAt);
     YDB_READONLY_DEF(TOperationWriteId, WriteId);
-    YDB_READONLY_DEF(NOlap::TLockWithSnapshot, Lock);
+    const NOlap::TLockWithSnapshot Lock;
     YDB_READONLY(ui64, Cookie, 0);
     YDB_READONLY_DEF(std::vector<TInsertWriteId>, InsertWriteIds);
     YDB_ACCESSOR(EOperationBehaviour, Behaviour, EOperationBehaviour::Undefined);

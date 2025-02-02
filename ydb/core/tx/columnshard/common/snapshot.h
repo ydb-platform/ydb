@@ -5,6 +5,8 @@
 #include <util/string/cast.h>
 #include <util/datetime/base.h>
 
+#include <ydb/core/protos/data_events.pb.h> //todo fixme
+
 namespace NKikimrColumnShardProto {
 class TSnapshot;
 }
@@ -97,15 +99,19 @@ public:
     NJson::TJsonValue DebugJson() const;
 };
 
+using TLock = std::pair<ui64, NKikimrDataEvents::ELockMode>;
 //TODO move me to a proper place
 class TLockWithSnapshot {
 public:
-    ui64 LockId = 0;
-    TSnapshot LockSnapshot = NOlap::TSnapshot::Zero(); //zero for serializable mode, non-zero for snapshot isolation
+    ui64 LockId;
+    NKikimrDataEvents::ELockMode LockMode;
+    bool IsWrite;
+    TSnapshot LockSnapshot;
 public:
-    TLockWithSnapshot() = default;
-    TLockWithSnapshot(ui64 lockId, const TSnapshot& lockSnapshot)
+    TLockWithSnapshot(const ui64 lockId, const NKikimrDataEvents::ELockMode lockMode, bool isWrite, const TSnapshot& lockSnapshot)
         : LockId(lockId)
+        , LockMode(lockMode)
+        , IsWrite(isWrite)
         , LockSnapshot(lockSnapshot)
     {}
 };

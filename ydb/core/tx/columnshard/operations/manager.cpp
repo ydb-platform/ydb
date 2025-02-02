@@ -16,7 +16,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             const TOperationWriteId writeId = (TOperationWriteId)rowset.GetValue<Schema::Operations::WriteId>();
             const ui64 createdAtSec = rowset.GetValue<Schema::Operations::CreatedAt>();
             const ui64 lockId = rowset.GetValue<Schema::Operations::LockId>();
-            const NOlap::TLockWithSnapshot lock(lockId, NOlap::TSnapshot::Zero()); //TODO fixme
+            const NOlap::TLockWithSnapshot lock(lockId, NKikimrDataEvents::ELockMode::OPTIMISTIC, false, NOlap::TSnapshot::Zero()); //TODO fixme
             const ui64 cookie = rowset.GetValueOrDefault<Schema::Operations::Cookie>(0);
             const TString metadata = rowset.GetValue<Schema::Operations::Metadata>();
             const EOperationStatus status = (EOperationStatus)rowset.GetValue<Schema::Operations::Status>();
@@ -39,7 +39,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
 
             auto it = LockFeatures.find(lockId);
             if (it == LockFeatures.end()) {
-                it = LockFeatures.emplace(lockId, TLockFeatures(NOlap::TLockWithSnapshot(lockId, NOlap::TSnapshot::Zero()), 0)).first; //TODO fixme
+                it = LockFeatures.emplace(lockId, TLockFeatures(NOlap::TLockWithSnapshot(lockId, NKikimrDataEvents::ELockMode::OPTIMISTIC, false, NOlap::TSnapshot::Zero()), 0)).first; //TODO fixme
             }
             it->second.MutableWriteOperations().emplace_back(operation);
             LastWriteId = std::max(LastWriteId, operation->GetWriteId());
@@ -58,7 +58,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             const ui64 lockId = rowset.GetValue<Schema::OperationTxIds::LockId>();
             const ui64 txId = rowset.GetValue<Schema::OperationTxIds::TxId>();
             if (auto it = LockFeatures.find(lockId); it == LockFeatures.end()) {
-                auto lock = TLockFeatures(NOlap::TLockWithSnapshot(lockId, NOlap::TSnapshot::Zero()), 0); //TODO FIXME
+                auto lock = TLockFeatures(NOlap::TLockWithSnapshot(lockId, NKikimrDataEvents::ELockMode::OPTIMISTIC, false, NOlap::TSnapshot::Zero()), 0); //TODO FIXME
                 lock.SetBroken();
                 LockFeatures.emplace(lockId, std::move(lock));
             }
@@ -89,13 +89,8 @@ void TOperationsManager::CommitTransactionOnComplete(
     TColumnShard& owner, const ui64 txId, const NOlap::TSnapshot& snapshot) {
     auto& lock = GetLockFeaturesForTxVerified(txId);
     TLogContextGuard gLogging(
-<<<<<<< HEAD
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
-=======
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("commit_tx_id", txId)("commit_lock_id", lock.GetLock().LockId));
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
-        }
-    }
+        //AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
 
     for (auto&& i : lock.GetNotifyOnCommit()) {
         if (auto lockNotify = GetLockOptional(i)) {
@@ -117,12 +112,7 @@ void TOperationsManager::AbortTransactionOnExecute(TColumnShard& owner, const ui
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "abort")("tx_id", txId)("problem", "finished");
         return;
     }
-<<<<<<< HEAD
-    TLogContextGuard gLogging(
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tx_id", txId)("lock_id", lock->GetLockId()));
-=======
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tx_id", txId)("lock_id", lock->GetLock().LockId));
->>>>>>> c8e1e89abd (introduce TLockWithSnapshot)
 
     TVector<TWriteOperation::TPtr> aborted;
     for (auto&& opPtr : lock->GetWriteOperations()) {
@@ -139,12 +129,7 @@ void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const u
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "abort")("tx_id", txId)("problem", "finished");
         return;
     }
-<<<<<<< HEAD
-    TLogContextGuard gLogging(
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tx_id", txId)("lock_id", lock->GetLockId()));
-=======
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tx_id", txId)("lock_id", lock->GetLock().LockId));
->>>>>>> c8e1e89abd (introduce TLockWithSnapshot)
 
     TVector<TWriteOperation::TPtr> aborted;
     for (auto&& opPtr : lock->GetWriteOperations()) {
@@ -226,6 +211,7 @@ TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 pathId, c
 }
 
 TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
+
     if (evWrite.Record.HasLockMode()) {
         switch(evWrite.Record.GetLockMode()) {
             case NKikimrDataEvents::OPTIMISTIC:
@@ -234,9 +220,18 @@ TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents:
                 }
                 break;
             case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
-                if (!evWrite.Record.HasMvccSnapshot()) {
-                    return TConclusionStatus::Fail("no MVCC snapshot for shapshot isolation mode");
+                if (evWrite.Record.HasMvccSnapshot()) {
+                    // const auto& snapshot = evWrite.Record.GetMvccSnapshot();
+                    // if (!snapshot.HasStep() || !snapshot.GetStep()) {
+                    //     return TConclusionStatus::Fail("no step set for snapshot isolation mode");
+                    // }
+                    // if (!snapshot.HasTxId() || !snapshot.GetTxId()) {
+                    //     return TConclusionStatus::Fail("no tx_id set for snapshot isolation mode");
+                    // }
+                } else {
+                    return TConclusionStatus::Fail("no MVCC snapshot for snapshot isolation mode");
                 }
+                
                 break;
         }
     } else if (evWrite.Record.HasMvccSnapshot()) {
@@ -302,10 +297,25 @@ void TOperationsManager::AddEventForLock(
     NOlap::NTxInteractions::TTxConflicts txConflicts;
     auto& txLock = GetLockVerified(lockId);
     writer->CheckInteraction(lockId, InteractionsContext, txConflicts, txNotifications);
-    for (auto&& i : txConflicts) {
-        if (auto lock = GetLockOptional(i.first)) {
-            GetLockVerified(i.first).AddBrokeOnCommit(i.second);
-        } else if (txLock.IsCommitted(i.first)) {
+    //Naive relaxed check for snapshot isolation conflicts. TODO fixme
+    for (const auto& [id, affectedIds] : txConflicts) {
+        const auto& lock = GetLockOptional(id);
+        if (!!lock) {
+            if (lock->GetLock().LockMode == NKikimrDataEvents::ELockMode::OPTIMISTIC_SNAPSHOT_ISOLATION) {
+                for (const auto& affected: affectedIds) {
+                    AFL_VERIFY(id == lockId || affected == lockId);
+                    const auto& affectedLock = GetLockOptional(affected);
+                    if (affectedLock && affectedLock->GetLock().LockMode == NKikimrDataEvents::ELockMode::OPTIMISTIC_SNAPSHOT_ISOLATION) {
+                        if (!lock->GetLock().IsWrite || !affectedLock->GetLock().IsWrite) {
+                            //both locks are of different snapshots in snapshot isolation transactions
+                            continue;
+                        }
+                    }
+                    lock->AddBrokeOnCommit({affected});
+                }
+                
+            }
+        } else if (txLock.IsCommitted(id)) {
             txLock.SetBroken();
         }
     }

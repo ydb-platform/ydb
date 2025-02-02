@@ -463,10 +463,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    if (record.GetLockMode() == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
-        Y_UNUSED(true);
-    }
-
     const auto behaviourConclusion = TOperationsManager::GetBehaviour(*ev->Get());
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_WRITE)("ev_write", record.DebugString());
     if (behaviourConclusion.IsFail()) {
@@ -488,8 +484,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, status, message);
         ctx.Send(source, result.release(), 0, cookie);
     };
-    if (behaviour == EOperationBehaviour::CommitWriteLock) {
-        auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
+    if (behaviour == EOperationBehaviour::CommitWriteLock) {        auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
         auto conclusionParse = commitOperation->Parse(*ev->Get());
         if (conclusionParse.IsFail()) {
             sendError(conclusionParse.GetErrorMessage(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
@@ -595,12 +590,15 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     } else {
         lockId = record.GetLockTxId();
     }
-
-    const auto& lockSnapshot = record.HasMvccSnapshot() ? 
-        NOlap::TSnapshot(record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId()) :
-        NOlap::TSnapshot::Zero();
+    AFL_VERIFY(record.HasLockMode());
+    const auto& lockWithSnapshot = NOlap::TLockWithSnapshot{
+        lockId,
+        record.GetLockMode(),
+        true,
+        record.HasMvccSnapshot() ? NOlap::TSnapshot(record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId()) : NOlap::TSnapshot::Zero()
+    };
     Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
-    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, granuleShardingVersionId, pathId, cookie, {lockId, lockSnapshot}, *mType, behaviour));
+    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, granuleShardingVersionId, pathId, cookie, lockWithSnapshot, *mType, behaviour));
     WriteTasksQueue->Drain(false, ctx);
 }
 

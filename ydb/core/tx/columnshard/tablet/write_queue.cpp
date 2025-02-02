@@ -28,7 +28,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) {
         owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max(),
         writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationInsertionWriteActorId,
         owner->BufferizationPortionsWriteActorId);
-    ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId)->GetBucketPositions());
+    ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId)->GetBucketPositions()); //?
     writeOperation->Start(*owner, ArrowData, SourceId, wContext);
     return true;
 }

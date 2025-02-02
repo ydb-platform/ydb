@@ -4,6 +4,7 @@
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/core/grpc_services/grpc_endpoint.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/persqueue/list_all_topics_actor.h>
 
 namespace NKafka {
 using namespace NKikimr;
@@ -32,12 +33,15 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
         SendDiscoveryRequest();
 
         if (Message->Topics.size() == 0) {
-            NeedCurrentNode = true;
+            ctx.Register(NKikimr::NPersQueue::MakeListAllTopicsActor(
+                    SelfId(), Context->DatabasePath, GetUserSerializedToken(Context), true, {}, {}));
+
+            PendingResponses++;
         }
     }
 
     if (Message->Topics.size() != 0) {
-        ProcessTopics();
+        ProcessTopicsFromRequest();
     }
 
     Become(&TKafkaMetadataActor::StateWork);
@@ -111,39 +115,58 @@ void TKafkaMetadataActor::HandleNodesResponse(
     RespondIfRequired(ctx);
 }
 
-void TKafkaMetadataActor::AddProxyNodeToBrokers() {
-    AddBroker(ProxyNodeId, Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort());
-}
-
-void TKafkaMetadataActor::ProcessTopics() {
-    THashMap<TString, TActorId> partitionActors;
+void TKafkaMetadataActor::ProcessTopicsFromRequest() {
+    TVector<TString> topicsToRequest;
     for (size_t i = 0; i < Message->Topics.size(); ++i) {
-        Response->Topics[i] = TMetadataResponseData::TMetadataResponseTopic{};
         auto& reqTopic = Message->Topics[i];
-        Response->Topics[i].Name = reqTopic.Name.value_or("");
-
         if (!reqTopic.Name.value_or("")) {
             AddTopicError(Response->Topics[i], EKafkaErrors::INVALID_TOPIC_EXCEPTION);
             continue;
         }
-        const auto& topicName = reqTopic.Name.value();
-        TActorId child;
-        auto namesIter = partitionActors.find(topicName);
-        if (namesIter.IsEnd()) {
-            child = SendTopicRequest(reqTopic);
-            partitionActors[topicName] = child;
-        } else {
-            child = namesIter->second;
-        }
-        TopicIndexes[child].push_back(i);
+        AddTopic(reqTopic.Name.value_or(""), i);
     }
 }
 
-TActorId TKafkaMetadataActor::SendTopicRequest(const TMetadataRequestData::TMetadataRequestTopic& topicRequest) {
-    KAFKA_LOG_D("Describe partitions locations for topic '" << *topicRequest.Name << "' for user '" << GetUsernameOrAnonymous(Context) << "'");
+void TKafkaMetadataActor::HandleListTopics(NKikimr::TEvPQ::TEvListAllTopicsResponse::TPtr& ev) {
+    Y_ABORT_UNLESS(PendingResponses > 0);
+    PendingResponses--;
+    auto topics = std::move(ev->Get()->Topics);
+    Response->Topics.resize(topics.size());
+    if (topics.empty()) {
+        NeedCurrentNode = true;
+    } else {
+        for (size_t i = 0; i < topics.size(); ++i) {
+            AddTopic(topics[i], i);
+        }
+    }
+    RespondIfRequired(ActorContext());
+}
+
+void TKafkaMetadataActor::AddProxyNodeToBrokers() {
+    AddBroker(ProxyNodeId, Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort());
+}
+
+
+void TKafkaMetadataActor::AddTopic(const TString& topic, ui64 index) {
+    Response->Topics[index] = TMetadataResponseData::TMetadataResponseTopic{};
+    Response->Topics[index].Name = topic;
+
+    TActorId child;
+    auto namesIter = PartitionActors.find(topic);
+    if (namesIter.IsEnd()) {
+        child = SendTopicRequest(topic);
+        PartitionActors[topic] = child;
+    } else {
+        child = namesIter->second;
+    }
+    TopicIndexes[child].push_back(index);
+}
+
+TActorId TKafkaMetadataActor::SendTopicRequest(const TString& topic) {
+    KAFKA_LOG_D("Describe partitions locations for topic '" << topic << "' for user '" << GetUsernameOrAnonymous(Context) << "'");
 
     TGetPartitionsLocationRequest locationRequest{};
-    locationRequest.Topic = NormalizePath(Context->DatabasePath, topicRequest.Name.value());
+    locationRequest.Topic = NormalizePath(Context->DatabasePath, topic);
     locationRequest.Token = GetUserSerializedToken(Context);
     locationRequest.Database = Context->DatabasePath;
 

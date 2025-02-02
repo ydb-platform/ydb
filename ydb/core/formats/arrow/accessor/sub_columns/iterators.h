@@ -223,10 +223,21 @@ public:
     }
 
     template <class TStartRecordActor, class TKVActor, class TFinishRecordActor>
-    void ReadRecords(const ui32 recordsCount, const TStartRecordActor& startRecordActor, const TKVActor& kvActor,
+    void ReadRecord(const ui32 recordIndex, const TStartRecordActor& startRecordActor, const TKVActor& kvActor,
         const TFinishRecordActor& finishRecordActor) {
-        for (ui32 i = 0; i < recordsCount; ++i) {
-            startRecordActor(i);
+        while (SortedIterators.size()) {
+            if (SortedIterators.front()->GetRecordIndex() > recordIndex) {
+                return;
+            } else if (SortedIterators.front()->GetRecordIndex() < recordIndex) {
+                std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
+                if (!itColumn.Next()) {
+                    SortedIterators.pop_back();
+                } else {
+                    std::push_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
+                }
+                continue;
+            }
+            startRecordActor(recordIndex);
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == i) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
@@ -238,7 +249,10 @@ public:
                 }
             }
             finishRecordActor();
+            return;
         }
+        startRecordActor(recordIndex);
+        finishRecordActor();
     }
 };
 

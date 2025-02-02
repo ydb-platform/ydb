@@ -1,4 +1,9 @@
+#include "settings.h"
 #include "stats.h"
+
+#include <ydb/core/formats/arrow/accessor/plain/constructor.h>
+#include <ydb/core/formats/arrow/accessor/sparsed/constructor.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 
@@ -72,6 +77,27 @@ TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     DataNames = std::static_pointer_cast<arrow::StringArray>(Original->column(0));
     DataRecordsCount = std::static_pointer_cast<arrow::UInt32Array>(Original->column(1));
     DataSize = std::static_pointer_cast<arrow::UInt32Array>(Original->column(2));
+}
+
+bool TDictStats::IsSparsed(const ui32 columnIndex, const ui32 recordsCount) const {
+    return TSettings::IsSparsed(GetColumnRecordsCount(columnIndex), recordsCount);
+}
+
+TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex, const ui32 recordsCount) const {
+    if (IsSparsed(columnIndex, recordsCount)) {
+        return std::make_shared<NAccessor::NSparsed::TConstructor>();
+    } else {
+        return std::make_shared<NAccessor::NPlain::TConstructor>();
+    }
+}
+
+TDictStats TDictStats::BuildEmpty() {
+    return TDictStats(MakeEmptyBatch(GetSchema()));
+}
+
+TString TDictStats::SerializeAsString(const std::shared_ptr<NSerialization::ISerializer>& serializer) const {
+    AFL_VERIFY(serializer);
+    return serializer->SerializePayload(Original);
 }
 
 TDictStats::TBuilder::TBuilder() {

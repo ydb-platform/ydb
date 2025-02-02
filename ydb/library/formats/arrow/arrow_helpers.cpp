@@ -210,7 +210,7 @@ std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Da
     return std::move(builder);
 }
 
-std::shared_ptr<arrow::Array> FinishBuilder(std::unique_ptr<arrow::ArrayBuilder>&& builders) {
+std::shared_ptr<arrow::Array> FinishBuilder(std::unique_ptr<arrow::ArrayBuilder>&& builder) {
     std::shared_ptr<arrow::Array> array;
     TStatusValidator::Validate(builder->Finish(&array));
     return array;

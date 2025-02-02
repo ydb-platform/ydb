@@ -14,9 +14,13 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 class TOthersData {
 private:
     TDictStats Stats;
-    std::shared_ptr<TGeneralContainer> Records;
+    YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
+    static TOthersData BuildEmpty() {
+        return TOthersData(TDictStats::BuildEmpty(), std::make_shared<TGeneralContainer>(0));
+    }
+
     ui64 GetRawSize() const {
         return Records->GetRawSizeVerified();
     }
@@ -127,8 +131,8 @@ public:
         TOthersData Finish(const TDictStats& stats);
     };
 
-    static TBuilderWithStats MakeMergedBuilder() {
-        return TBuilderWithStats();
+    static std::shared_ptr<TBuilderWithStats> MakeMergedBuilder() {
+        return std::make_shared<TBuilderWithStats>();
     }
 };
 

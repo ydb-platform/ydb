@@ -39,6 +39,7 @@ message TSubColumnsAccessor {
     message TColumn {
         optional uint32 Size = 1;
     }
-    repeated TColumn Columns = 3;
-    optional TColumn Others = 4;
+    repeated TColumn KeyColumns = 3;
+    repeated TColumn OtherColumns = 4;
+    optional uint32 OtherRecordsCount = 5;
 }

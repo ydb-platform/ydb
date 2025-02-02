@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -19,6 +21,30 @@ private:
     std::shared_ptr<arrow::UInt32Array> DataSize;
 
 public:
+    static TDictStats BuildEmpty();
+    TString SerializeAsString(const std::shared_ptr<NSerialization::ISerializer>& serializer) const;
+
+    std::optional<ui32> GetKeyIndexOptional(const std::string_view keyName) const {
+        for (ui32 i = 0; i < DataNames->length(); ++i) {
+            const auto arrView = DataNames->GetView(i);
+            if (std::string_view(arrView.data(), arrView.size()) == keyName) {
+                return i;
+            }
+        }
+        return std::nullopt;
+    }
+
+    ui32 GetKeyIndexVerified(const std::string_view keyName) const {
+        for (ui32 i = 0; i < DataNames->length(); ++i) {
+            const auto arrView = DataNames->GetView(i);
+            if (std::string_view(arrView.data(), arrView.size()) == keyName) {
+                return i;
+            }
+        }
+        AFL_VERIFY(false);
+        return 0;
+    }
+
     class TRTStats {
     private:
         YDB_READONLY_DEF(TString, KeyName);
@@ -97,6 +123,10 @@ public:
     }
 
     std::string_view GetColumnName(const ui32 index) const;
+    TString GetColumnNameString(const ui32 index) const {
+        auto view = GetColumnName(index);
+        return TString(view.data(), view.size());
+    }
     ui32 GetColumnRecordsCount(const ui32 index) const;
     ui32 GetColumnSize(const ui32 index) const;
 
@@ -107,6 +137,8 @@ public:
         return result;
     }
 
+    TConstructorContainer GetAccessorConstructor(const ui32 columnIndex, const ui32 recordsCount) const;
+    bool IsSparsed(const ui32 columnIndex, const ui32 recordsCount) const;
     TDictStats(const std::shared_ptr<arrow::RecordBatch>& original);
 };
 

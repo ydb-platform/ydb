@@ -37,7 +37,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
         for (auto&& i : rIt->second) {
             if (columnAccessorsCount < TSettings::ColumnAccessorsCountLimit) {
                 columnElements.emplace_back(i);
-                if (i->GetRecordIndexes().size() * 20 < CurrentRecordIndex) {
+                if (TSettings::IsSparsed(i->GetRecordIndexes().size(), CurrentRecordIndex)) {
                     i->BuildSparsedAccessor(CurrentRecordIndex);
                 } else {
                     i->BuildPlainAccessor(CurrentRecordIndex);
@@ -77,14 +77,14 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
     auto othersBuilder = TOthersData::MakeMergedBuilder();
     while (heap.size()) {
         std::pop_heap(heap.begin(), heap.end());
-        othersBuilder.Add(heap.back().GetRecordIndex(), heap.back().GetKeyIndex(), heap.back().GetValue());
+        othersBuilder->Add(heap.back().GetRecordIndex(), heap.back().GetKeyIndex(), heap.back().GetValue());
         if (!heap.back().Next()) {
             heap.pop_back();
         } else {
             std::push_heap(heap.begin(), heap.end());
         }
     }
-    return othersBuilder.Finish(BuildStats(otherKeys));
+    return othersBuilder->Finish(BuildStats(otherKeys));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

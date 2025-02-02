@@ -1,6 +1,9 @@
 #pragma once
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
 #include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/library/formats/arrow/accessor/common/const.h>
@@ -11,6 +14,13 @@ class TSubColumnsMerger: public IColumnMerger {
 private:
     static inline auto Registrator = TFactory::TRegistrator<TSubColumnsMerger>(NArrow::NAccessor::TGlobalConst::SubColumnsDataAccessorName);
     using TBase = IColumnMerger;
+    using TDictStats = NArrow::NAccessor::NSubColumns::TDictStats;
+    using TOthersData = NArrow::NAccessor::NSubColumns::TOthersData;
+    using TColumnsData = NArrow::NAccessor::NSubColumns::TColumnsData;
+    using TSparsedBuilder = NArrow::NAccessor::TSparsedArray::TSparsedBuilder;
+    using TPlainBuilder = NArrow::NAccessor::TTrivialArray::TPlainBuilder;
+    using TSubColumnsArray = NArrow::NAccessor::TSubColumnsArray;
+    using TReadIteratorOrderedKeys = NArrow::NAccessor::NSubColumns::TReadIteratorOrderedKeys;
     std::vector<std::shared_ptr<TSubColumnsArray>> Sources;
     std::vector<TReadIteratorOrderedKeys> OrderedIterators;
     ui32 OutputRecordsCount = 0;
@@ -19,6 +29,18 @@ private:
     std::optional<TDictStats> ResultOtherStats;
     class TRemapColumns {
     private:
+        class TRemapInfo {
+        private:
+            YDB_READONLY(ui32, CommonKeyIndex, 0);
+            YDB_READONLY(bool, IsColumnKey, false);
+
+        public:
+            TRemapInfo(const ui32 keyIndex, const bool isColumnKey)
+                : CommonKeyIndex(keyIndex)
+                , IsColumnKey(isColumnKey) {
+            }
+        };
+
         class TSourceAddress {
         private:
             const ui32 SourceIndex;
@@ -38,7 +60,6 @@ private:
         };
 
         std::map<TSourceAddress, TRemapInfo> RemapInfo;
-        std::vector<std::vector<std::vector<TRemapInfo>>> RemapInfo;
 
     public:
         void AddRemap(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats,
@@ -47,7 +68,7 @@ private:
                 if (auto commonKeyIndex = resultColumnStats.GetKeyIndexOptional(sourceColumnStats.GetColumnName(i))) {
                     AFL_VERIFY(RemapInfo.emplace(TSourceAddress(sourceIdx, i, true), TRemapInfo(*commonKeyIndex, true)).second);
                 } else {
-                    const ui32 commonKeyIndex = resultOtherStats.GetKeyIndexVerified(sourceColumnStats.GetColumnName(i));
+                    commonKeyIndex = resultOtherStats.GetKeyIndexVerified(sourceColumnStats.GetColumnName(i));
                     AFL_VERIFY(RemapInfo.emplace(TSourceAddress(sourceIdx, i, true), TRemapInfo(*commonKeyIndex, false)).second);
                 }
             }
@@ -55,23 +76,11 @@ private:
                 if (auto commonKeyIndex = resultColumnStats.GetKeyIndexOptional(sourceOtherStats.GetColumnName(i))) {
                     AFL_VERIFY(RemapInfo.emplace(TSourceAddress(sourceIdx, i, false), TRemapInfo(*commonKeyIndex, true)).second);
                 } else {
-                    const ui32 commonKeyIndex = resultOtherStats.GetKeyIndexVerified(sourceOtherStats.GetColumnName(i));
+                    commonKeyIndex = resultOtherStats.GetKeyIndexVerified(sourceOtherStats.GetColumnName(i));
                     AFL_VERIFY(RemapInfo.emplace(TSourceAddress(sourceIdx, i, false), TRemapInfo(*commonKeyIndex, false)).second);
                 }
             }
         }
-
-        class TRemapInfo {
-        private:
-            YDB_READONLY(ui32, CommonKeyIndex, 0);
-            YDB_READONLY(bool, IsColumnKey, false);
-
-        public:
-            TRemapInfo(const ui32 keyIndex, const bool isColumnKey)
-                : CommonKeyIndex(keyIndex)
-                , IsColumnKey(isColumnKey) {
-            }
-        };
 
         TRemapInfo RemapIndex(const ui32 sourceIdx, const ui32 sourceKeyIndex, const bool isColumnKey) const {
             auto it = RemapInfo.find(TSourceAddress(sourceIdx, sourceKeyIndex, isColumnKey));
@@ -89,7 +98,10 @@ private:
             if (i->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
                 Sources.emplace_back(std::static_pointer_cast<TSubColumnsArray>(i));
             } else {
-                auto subColumnsAccessor = mergeContext.GetAccessorConstructor().Construct(i);
+                auto subColumnsAccessor = Context.GetLoader()
+                                              ->GetAccessorConstructor()
+                                              ->Construct(i, Context.GetLoader()->BuildAccessorContext(i->GetRecordsCount()))
+                                              .DetachResult();
                 Sources.emplace_back(std::static_pointer_cast<TSubColumnsArray>(subColumnsAccessor));
             }
         }
@@ -100,13 +112,14 @@ private:
             InputRecordsCount += i->GetRecordsCount();
         }
         auto commonStats = TDictStats::Merge(stats);
-        auto splitted = commonStats.SplitByVolume(NSubColumns::TSettings::ColumnAccessorsCountLimit);
+        auto splitted = commonStats.SplitByVolume(NArrow::NAccessor::NSubColumns::TSettings::ColumnAccessorsCountLimit);
         ResultColumnStats = splitted.ExtractColumns();
         ResultOtherStats = splitted.ExtractOthers();
 
-        ui32 sourceIdx = 0;
-        for (auto&& i : Sources) {
-            RemapKeyIndex.AddRemap(sourceIdx++, i, ResultColumnStats, ResultOtherStats);
+        for (ui32 sourceIdx = 0; sourceIdx < Sources.size(); ++sourceIdx) {
+            auto source = Sources[sourceIdx];
+            RemapKeyIndex.AddRemap(
+                sourceIdx, source->GetColumnsData().GetStats(), source->GetOthersData().GetStats(), *ResultColumnStats, *ResultOtherStats);
         }
     }
 
@@ -117,33 +130,59 @@ private:
         const TDictStats ResultColumnStats;
         const TDictStats ResultOtherStats;
         const TChunkMergeContext& Context;
-        TOthersData::TBuilderWithStats OthersBuilder;
+        std::shared_ptr<TOthersData::TBuilderWithStats> OthersBuilder;
+        ui32 RecordIndex = 0;
 
         class TGeneralAccessorBuilder {
         private:
             std::variant<TSparsedBuilder, TPlainBuilder> Builder;
+
         public:
+            TGeneralAccessorBuilder(TSparsedBuilder&& builder)
+                : Builder(std::move(builder)) {
+            }
+
+            TGeneralAccessorBuilder(TPlainBuilder&& builder)
+                : Builder(std::move(builder)) {
+            }
+
             void AddRecord(const ui32 recordIndex, const std::string_view value) {
                 struct TVisitor {
-                    void operator(TSparsedBuilder& builder) const {
+                private:
+                    const ui32 RecordIndex;
+                    const std::string_view Value;
+
+                public:
+                    void operator()(TSparsedBuilder& builder) const {
                         builder.AddRecord(RecordIndex, Value);
                     }
-                    void operator(TPlainBuilder& builder) const {
+                    void operator()(TPlainBuilder& builder) const {
                         builder.AddRecord(RecordIndex, Value);
+                    }
+                    TVisitor(const ui32 recordIndex, const std::string_view value)
+                        : RecordIndex(recordIndex)
+                        , Value(value) {
                     }
                 };
-                Builder.visit(TVisitor(recordIndex, value));
+                std::visit(TVisitor(recordIndex, value), Builder);
             }
-            std::shared_ptr<IChunkedArray> Finish(const ui32 recordIndex, const std::string_view value) {
+            std::shared_ptr<NArrow::NAccessor::IChunkedArray> Finish(const ui32 recordsCount) {
                 struct TVisitor {
-                    void operator(TSparsedBuilder& builder) const {
-                        return builder.Finish();
+                private:
+                    const ui32 RecordsCount;
+
+                public:
+                    std::shared_ptr<NArrow::NAccessor::IChunkedArray> operator()(TSparsedBuilder& builder) const {
+                        return builder.Finish(RecordsCount);
                     }
-                    void operator(TPlainBuilder& builder) const {
-                        return builder.Finish();
+                    std::shared_ptr<NArrow::NAccessor::IChunkedArray> operator()(TPlainBuilder& builder) const {
+                        return builder.Finish(RecordsCount);
+                    }
+                    TVisitor(const ui32 recordsCount)
+                        : RecordsCount(recordsCount) {
                     }
                 };
-                return Builder.visit(TVisitor());
+                return std::visit(TVisitor(recordsCount), Builder);
             }
         };
 
@@ -152,30 +191,34 @@ private:
 
         void FlushData() {
             AFL_VERIFY(RecordIndex);
-            auto portionOthersData = OthersBuilder.Finish(ResultOtherStats);
-            std::vector<std::shared_ptr<IChunkedArray>> arrays;
+            auto portionOthersData = OthersBuilder->Finish(ResultOtherStats);
+            std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrays;
             for (auto&& i : ColumnBuilders) {
                 arrays.emplace_back(i.Finish(RecordIndex));
             }
-            TColumnsData cData(ResultColumnStats, std::make_shared<TGeneralContainer>(ResultColumnStats.BuildSchema(), arrays));
-            Results.emplace_back(std::make_shared<TSubColumnsArray>(std::move(cData), std::move(portionOthersData)));
+            TColumnsData cData(
+                ResultColumnStats, std::make_shared<NArrow::TGeneralContainer>(ResultColumnStats.BuildSchema()->fields(), std::move(arrays)));
+            Results.emplace_back(
+                std::make_shared<TSubColumnsArray>(std::move(cData), std::move(portionOthersData), arrow::binary(), RecordIndex));
             Initialize();
         }
 
         void Initialize() {
             ColumnBuilders.clear();
             for (ui32 i = 0; i < ResultColumnStats.GetColumnsCount(); ++i) {
-                if (ResultColumnStats.GetColumnRecordsCount(i) * 10 < OutputRecordsCount) {
-                    ColumnBuilders.emplace_back(TGeneralAccessorBuilder::MakeSparsedBuilder());
+                if (ResultColumnStats.IsSparsed(i, OutputRecordsCount)) {
+                    ColumnBuilders.emplace_back(TSparsedBuilder());
                 } else {
-                    ColumnBuilders.emplace_back(TGeneralAccessorBuilder::MakePlainBuilder());
+                    ColumnBuilders.emplace_back(TPlainBuilder());
                 }
             }
             OthersBuilder = TOthersData::MakeMergedBuilder();
             RecordIndex = 0;
         }
+
     public:
-        TMergedBuilder(const TDictStats& columnStats, const TDictStats& otherStats, const ui32 inputRecordsCount, const ui32 outputRecordsCount,
+        TMergedBuilder(const NArrow::NAccessor::NSubColumns::TDictStats& columnStats,
+            const NArrow::NAccessor::NSubColumns::TDictStats& otherStats, const ui32 inputRecordsCount, const ui32 outputRecordsCount,
             const TChunkMergeContext& context)
             : OutputRecordsCount(outputRecordsCount)
             , InputRecordsCount(inputRecordsCount)
@@ -183,13 +226,17 @@ private:
             , ResultOtherStats(otherStats)
             , Context(context)
             , OthersBuilder(TOthersData::MakeMergedBuilder()) {
+            Y_UNUSED(InputRecordsCount);
             Initialize();
         }
 
         class TPortionColumn: public TColumnPortionResult {
         public:
             void AddChunk(const std::shared_ptr<TSubColumnsArray>& cArray, const TColumnMergeContext& cmContext) {
-                Chunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(cArray->SerializeToString(), cArray,
+                AFL_VERIFY(cArray);
+                AFL_VERIFY(cArray->GetRecordsCount());
+                auto accContext = cmContext.GetLoader()->BuildAccessorContext(cArray->GetRecordsCount());
+                Chunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(cArray->SerializeToString(accContext), cArray,
                     TChunkAddress(cmContext.GetColumnId(), Chunks.size()),
                     cmContext.GetIndexInfo().GetColumnFeaturesVerified(cmContext.GetColumnId())));
             }
@@ -201,8 +248,9 @@ private:
             }
             std::vector<TColumnPortionResult> portions;
             for (auto&& i : Results) {
-                portions.emplace_back(TPortionColumn(cmContext.GetColumnId()));
-                portions.back().AddChunk(i, cmContext);
+                TPortionColumn pColumn(cmContext.GetColumnId());
+                pColumn.AddChunk(i, cmContext);
+                portions.emplace_back(std::move(pColumn));
             }
             return std::move(portions);
         }
@@ -217,37 +265,37 @@ private:
         }
         void AddColumnKV(const ui32 commonKeyIndex, const std::string_view value) {
             AFL_VERIFY(commonKeyIndex < ColumnBuilders.size());
-            ColumnBuilders[commonKeyIndex].AddRecord(RecordIndex, value)
+            ColumnBuilders[commonKeyIndex].AddRecord(RecordIndex, value);
         }
         void AddOtherKV(const ui32 commonKeyIndex, const std::string_view value) {
-            OthersBuilder.Add(RecordIndex, commonKeyIndex, value);
+            OthersBuilder->Add(RecordIndex, commonKeyIndex, value);
         }
     };
 
     virtual std::vector<TColumnPortionResult> DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) override {
         AFL_VERIFY(ResultColumnStats && ResultOtherStats);
         auto& mergeChunkContext = mergeContext.GetChunk(context.GetBatchIdx());
-        TMergedBuilder builder(*ResultColumnStats, *ResultOtherStats);
+        TMergedBuilder builder(*ResultColumnStats, *ResultOtherStats, InputRecordsCount, OutputRecordsCount, context);
         for (ui32 i = 0; i < context.GetRecordsCount(); ++i) {
-            const ui32 sourceIdx = mergeChunkContext.GetIdxArray()->Value(i);
-            const ui32 recordIdx = mergeChunkContext.GetRecordIdxArray()->Value(i);
-            const auto startRecord = [](const ui32 /*sourceRecordIndex*/) {
+            const ui32 sourceIdx = mergeChunkContext.GetIdxArray().Value(i);
+            const ui32 recordIdx = mergeChunkContext.GetRecordIdxArray().Value(i);
+            const auto startRecord = [&](const ui32 /*sourceRecordIndex*/) {
                 builder.StartRecord();
             };
-            const auto addKV = [sourceIdx](const ui32 sourceKeyIndex, const std::string_view value, const bool isColumnKey) {
+            const auto addKV = [&](const ui32 sourceKeyIndex, const std::string_view value, const bool isColumnKey) {
                 auto commonKeyInfo = RemapKeyIndex.RemapIndex(sourceIdx, sourceKeyIndex, isColumnKey);
-                if (commonKeyInfo.IsColumnKey()) {
+                if (commonKeyInfo.GetIsColumnKey()) {
                     builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), value);
                 } else {
                     builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), value);
                 }
             };
-            const auto finishRecord = []() {
+            const auto finishRecord = [&]() {
                 builder.FinishRecord();
             };
-            OrderedIterators[sourceIdx].ReadRecords(1, startRecord, addKV, finishRecord);
+            OrderedIterators[sourceIdx].ReadRecords(recordIdx, startRecord, addKV, finishRecord);
         }
-        return builder.Finish();
+        return builder.Finish(Context);
     }
 
 public:

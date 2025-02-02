@@ -13,9 +13,13 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 class TColumnsData {
 private:
     TDictStats Stats;
-    std::shared_ptr<TGeneralContainer> Records;
+    YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
+    static TColumnsData BuildEmpty(const ui32 recordsCount) {
+        return TColumnsData(TDictStats::BuildEmpty(), std::make_shared<TGeneralContainer>(recordsCount));
+    }
+
     ui64 GetRawSize() const {
         return Records->GetRawSizeVerified();
     }

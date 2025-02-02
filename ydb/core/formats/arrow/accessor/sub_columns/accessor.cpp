@@ -9,74 +9,38 @@
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
+#include <yql/essentials/types/binary_json/format.h>
+#include <yql/essentials/types/binary_json/write.h>
+
 namespace NKikimr::NArrow::NAccessor {
 
 std::vector<TChunkedArraySerialized> TSubColumnsArray::DoSplitBySizes(
-    const TColumnLoader& loader, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
-    std::vector<TChunkedArraySerialized> result;
-    auto table = Records->BuildTableVerified();
-    auto rb = NArrow::ToBatch(table);
-    AFL_VERIFY(GetRecordsCount());
-
-    ui32 idxCurrent = 0;
-    for (ui32 i = 0; i < splitSizes.size(); ++i) {
-        const ui32 recordsCount = 1.0 * splitSizes[i] / fullSerializedData.size() * GetRecordsCount();
-        AFL_VERIFY(recordsCount >= 1);
-        auto rbSlice = rb->Slice(idxCurrent, recordsCount);
-        auto subColumnsChunk = std::make_shared<TSubColumnsArray>(rbSlice);
-        result.emplace_back(subColumnsChunk,
-            loader.GetAccessorConstructor()->SerializeToString(subColumnsChunk, loader.BuildAccessorContext(GetRecordsCount())));
-    }
-
-    return result;
+    const TColumnLoader& /*loader*/, const TString& /*fullSerializedData*/, const std::vector<ui64>& /*splitSizes*/) {
+    AFL_VERIFY(false);
+    return {};
 }
 
-TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<IChunkedArray>& sourceArray, const std::shared_ptr<NSubColumns::IDataAdapter>& adapter)
-    : TBase(sourceArray->GetRecordsCount(), EType::SubColumnsArray, sourceArray->GetDataType()) {
+TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
+    const std::shared_ptr<IChunkedArray>& sourceArray, const std::shared_ptr<NSubColumns::IDataAdapter>& adapter) {
     AFL_VERIFY(adapter);
     AFL_VERIFY(sourceArray);
-    TDataBuilder builder;
-    auto builders = NArrow::MakeBuilders(Schema, sourceArray->GetRecordsCount());
+    NSubColumns::TDataBuilder builder;
     IChunkedArray::TReader reader(sourceArray);
     std::vector<std::shared_ptr<arrow::Array>> storage;
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
         auto address = reader.GetReadChunk(i);
         storage.emplace_back(address.GetArray());
-        adapter->AddDataToBuilders(address.GetArray(), Schema, builders);
+        adapter->AddDataToBuilders(address.GetArray(), builder);
         i += address.GetArray()->length();
         AFL_VERIFY(i <= reader.GetRecordsCount());
     }
-    auto arrays = NArrow::Finish(std::move(builders));
-
-    Records = std::make_shared<TGeneralContainer>(
-        arrow::RecordBatch::Make(Schema, sourceArray->GetRecordsCount(), NArrow::Finish(std::move(builders))));
-    Records->AddField(std::make_shared<arrow::Field>("__ORIGINAL", arrow::utf8()), sourceArray).Validate();
-}
-
-TSubColumnsArray::TSubColumnsArray(
-    const std::shared_ptr<arrow::Schema>& schema, const std::vector<TString>& columns, const TChunkConstructionData& externalInfo)
-    : TBase(externalInfo.GetRecordsCount(), EType::SubColumnsArray, externalInfo.GetColumnType())
-    , Schema(schema) {
-    AFL_VERIFY(schema);
-    AFL_VERIFY((ui32)schema->num_fields() == columns.size())("schema", schema->ToString())("columns", columns.size());
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    std::vector<std::shared_ptr<IChunkedArray>> arrays;
-    for (ui32 i = 0; i < (ui32)schema->num_fields(); ++i) {
-        fields.emplace_back(schema->field(i));
-        auto loader = std::make_shared<TColumnLoader>(externalInfo.GetDefaultSerializer(), std::make_shared<NPlain::TConstructor>(),
-            std::make_shared<arrow::Field>("__ORIGINAL", externalInfo.GetColumnType()), externalInfo.GetDefaultValue(), 0);
-        std::vector<TDeserializeChunkedArray::TChunk> chunks = { TDeserializeChunkedArray::TChunk(externalInfo.GetRecordsCount(), columns[i]) };
-        arrays.emplace_back(std::make_shared<TDeserializeChunkedArray>(externalInfo.GetRecordsCount(), loader, std::move(chunks)));
-    }
-
-    Records = std::make_shared<TGeneralContainer>(std::move(fields), std::move(arrays));
+    return builder.Finish();
 }
 
 TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
-    : TBase(recordsCount, EType::SubColumnsArray, type) {
-    Schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("__ORIGINAL", type) }));
-    Records = std::make_shared<TGeneralContainer>(arrow::RecordBatch::Make(
-        Schema, recordsCount, std::vector<std::shared_ptr<arrow::Array>>({ NArrow::TThreadSimpleArraysCache::GetNull(type, recordsCount) })));
+    : TBase(recordsCount, EType::SubColumnsArray, type)
+    , ColumnsData(NSubColumns::TColumnsData::BuildEmpty(recordsCount))
+    , OthersData(NSubColumns::TOthersData::BuildEmpty()) {
 }
 
 TSubColumnsArray::TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColumns::TOthersData&& others,
@@ -89,24 +53,42 @@ TSubColumnsArray::TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColu
 TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& externalInfo) const {
     TString blobData;
     NKikimrArrowAccessorProto::TSubColumnsAccessor proto;
-    const TString blobSchema = NArrow::SerializeSchema(*Schema);
-    *proto.MutableSchema()->MutableDescriptionSize() = blobSchema.size();
-    AFL_VERIFY((ui32)Schema->num_fields() == Records->num_columns());
-    std::vector<TString> rbBlobs;
-    ui64 blobsSize = 0;
-    for (auto&& i : Schema->fields()) {
-        auto rb = NArrow::ToBatch(Records->BuildTableVerified(TGeneralContainer::TTableConstructionContext({ i->name() })));
-        rbBlobs.emplace_back(externalInfo.GetDefaultSerializer()->SerializePayload(rb));
-        *proto.AddColumns()->MutableDescriptionSize() = rbBlobs.back().size();
-        blobsSize += rbBlobs.back().size();
+    std::vector<TString> blobRanges;
+    blobRanges.emplace_back(ColumnsData.GetStats().SerializeAsString(externalInfo.GetDefaultSerializer()));
+    proto.SetColumnStatsSize(blobRanges.back().size());
+
+    blobRanges.emplace_back(OthersData.GetStats().SerializeAsString(externalInfo.GetDefaultSerializer()));
+    proto.SetOtherStatsSize(blobRanges.back().size());
+    ui32 columnIdx = 0;
+    for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
+        TChunkConstructionData cData(ColumnsData.GetRecords()->GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
+        blobRanges.emplace_back(
+            ColumnsData.GetStats().GetAccessorConstructor(columnIdx++, ColumnsData.GetRecords()->GetRecordsCount()).SerializeToString(i, cData));
+        auto* cInfo = proto.AddKeyColumns();
+        cInfo->SetSize(blobRanges.back().size());
     }
+
+    for (auto&& i : OthersData.GetRecords()->GetColumns()) {
+        TChunkConstructionData cData(ColumnsData.GetRecords()->GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
+        blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
+        auto* cInfo = proto.AddOtherColumns();
+        cInfo->SetSize(blobRanges.back().size());
+    }
+    proto.SetOtherRecordsCount(OthersData.GetRecords()->GetRecordsCount());
+
+    ui64 blobsSize = 0;
+    for (auto&& i : blobRanges) {
+        blobsSize += i.size();
+    }
+
     const TString protoString = proto.SerializeAsString();
     TString result;
     TStringOutput so(result);
     so.Reserve(protoString.size() + sizeof(ui32) + blobsSize);
     const ui32 protoSize = protoString.size();
     so.Write(&protoSize, sizeof(protoSize));
-    for (auto&& s : rbBlobs) {
+    so.Write(protoString.data(), protoSize);
+    for (auto&& s : blobRanges) {
         so.Write(s.data(), s.size());
     }
     so.Finish();
@@ -114,37 +96,36 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
 }
 
 IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
-    const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+    const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
     auto it = BuildUnorderedIterator();
     ui32 recordsCount = 0;
     auto builder = NArrow::MakeBuilder(arrow::binary());
-    auto* binaryBuilder = static_cast<arrow::BinaryBuilder>(builder.get());
+    auto* binaryBuilder = static_cast<arrow::BinaryBuilder*>(builder.get());
     while (it.IsValid()) {
         NJson::TJsonValue value;
-        auto onStartRecord = [](const ui32 index) {
+        auto onStartRecord = [&](const ui32 index) {
             AFL_VERIFY(recordsCount++ == index);
         };
-        auto onFinishRecord = []() {
+        auto onFinishRecord = [&]() {
             auto bJson = NBinaryJson::SerializeToBinaryJson(value.GetStringRobust());
             if (const TString* val = std::get_if<TString>(&bJson)) {
                 AFL_VERIFY(false);
             } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
-                binaryBuilder->Append(val->data(), val->size());
+                TStatusValidator::Validate(binaryBuilder->Append(val->data(), val->size()));
             } else {
                 AFL_VERIFY(false);
             }
         };
-        auto onRecordKV = [&](const ui32 index, const std::string_view value, const bool isColumn) {
+        auto onRecordKV = [&](const ui32 index, const std::string_view valueView, const bool isColumn) {
             if (isColumn) {
-                value.InsertValue(ColumnsData.GetStats().GetColumnName(index), value);
+                value.InsertValue(ColumnsData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
             } else {
-                value.InsertValue(OthersData.GetStats().GetColumnName(index), value);
+                value.InsertValue(OthersData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
             }
         };
         it.ReadRecords(1, onStartRecord, onRecordKV, onFinishRecord);
     }
-    AFL_VERIFY(recordsCount == chunkCurrent.GetLength())("real", recordsCount)("expected", chunkCurrent.GetLength());
-    return TLocalDataAddress(NArrow::FinishBuilder(builder), 0, 0);
+    return TLocalDataAddress(NArrow::FinishBuilder(std::move(builder)), 0, 0);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

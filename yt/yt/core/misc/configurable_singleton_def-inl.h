@@ -18,7 +18,7 @@ template <bool Static>
 template <class TConfig>
 TIntrusivePtr<TConfig> TSingletonsConfigBase<Static>::TryGetSingletonConfig()
 {
-    CheckSingletonConfigRegistered(TSingletonConfigTag<TConfig, true>());
+    CheckSingletonConfigRegistered(TSingletonConfigTag<TConfig, Static>());
     return std::any_cast<TIntrusivePtr<TConfig>>(*GetOrCrash(TypeToConfig_, typeid(TConfig)));
 }
 

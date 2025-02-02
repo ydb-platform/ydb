@@ -1,3 +1,7 @@
+* Enable view exports and imports. Views are exported as `CREATE VIEW` YQL statements which are executed on import.
+* Save current stats in `ydb workload run`.
+* Added message if global timeout expiried in `ydb workload run` comamnd.
+* Fixed return code of `ydb workload run` comamnd.
 * Added statistics output on the current progress of the query in `ydb workload` command
 * Fixed a bug where arm64 YDB CLI binary was downloading amd64 binary to replace itself during `ydb update`. To update already installed binaries to the latest arm64 version, YDB CLI should be re-installed
 * Fixed a bug where `ydb workload tpch import generator` and `ydb workload tpcds import generator` commands were failing due to not all tables were created

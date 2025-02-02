@@ -3454,7 +3454,8 @@ TRuntimeNode TProgramBuilder::DynamicVariant(TRuntimeNode item, TRuntimeNode ind
 
     auto type = AS_TYPE(TVariantType, variantType);
     auto expectedIndexSlot = type->GetUnderlyingType()->IsTuple() ? NUdf::EDataSlot::Uint32 : NUdf::EDataSlot::Utf8;
-    auto indexType = AS_TYPE(TDataType, index.GetStaticType());
+    bool isOptional;
+    auto indexType = UnpackOptionalData(index.GetStaticType(), isOptional);
     MKQL_ENSURE(indexType->GetDataSlot() == expectedIndexSlot, "Mismatch type of index");
 
     auto resType = TOptionalType::Create(type, Env);
@@ -5751,17 +5752,6 @@ TRuntimeNode TProgramBuilder::BlockFunc(const std::string_view& funcName, TType*
     for (const auto& arg : args) {
         builder.Add(arg);
     }
-
-    return TRuntimeNode(builder.Build(), false);
-}
-
-TRuntimeNode TProgramBuilder::BlockBitCast(TRuntimeNode value, TType* targetType) {
-    MKQL_ENSURE(value.GetStaticType()->IsBlock(), "Expected Block type");
-
-    auto returnType = TBlockType::Create(targetType, AS_TYPE(TBlockType, value.GetStaticType())->GetShape(), Env);
-    TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(value);
-    builder.Add(TRuntimeNode(targetType, true));
 
     return TRuntimeNode(builder.Build(), false);
 }

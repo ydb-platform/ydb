@@ -672,8 +672,8 @@ public:
             newTable->SetAsyncReplica(true);
         }
 
-        if (tableInfo->IsRestoreTable()) {
-            newTable->SetRestoreTable();
+        if (tableInfo->IsIncrementalRestoreTable()) {
+            newTable->SetIncrementalRestoreTable();
         }
 
         context.SS->Tables[newTable->PathId] = tableInfo;

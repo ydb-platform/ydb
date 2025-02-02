@@ -48,9 +48,9 @@ public:
         };
 
         Debug::ActorChainRequest request;
-        request.SetChainLength(settings.ChainLength_);
-        request.SetWorkUsec(settings.WorkUsec_);
-        request.SetNoTailChain(settings.NoTailChain_);
+        request.set_chainlength(settings.ChainLength_);
+        request.set_workusec(settings.WorkUsec_);
+        request.set_notailchain(settings.NoTailChain_);
 
         Connections_->Run<Debug::V1::DebugService, Debug::ActorChainRequest, Debug::ActorChainResponse>(
             std::move(request),

@@ -330,9 +330,9 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->OlapStores.empty()) {
+        if (!AppDataVerified().FeatureFlags.GetEnableColumnStore()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "OLAP schema operations are not supported");
+                "Column stores are not supported");
             return result;
         }
 

@@ -648,6 +648,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     }
 
     alterData->IsBackup = op.GetIsBackup();
+    alterData->IsRestore = op.GetIsRestore();
 
     if (source && op.KeyColumnNamesSize() == 0)
         return alterData;
@@ -1962,6 +1963,11 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
         return false;
     }
 
+    // Don't split/merge restore tables
+    if (IsRestore) {
+        return false;
+    }
+
     // Ignore stats from unknown datashard (it could have been split)
     if (!Stats.PartitionStats.contains(shardIdx)) {
         return false;
@@ -2011,6 +2017,10 @@ bool TTableInfo::CheckSplitByLoad(
 {
     // Don't split/merge backup tables
     if (IsBackup)
+        return false;
+
+    // Don't split/merge restore tables
+    if (IsRestore)
         return false;
 
     if (!splitSettings.SplitByLoadEnabled)

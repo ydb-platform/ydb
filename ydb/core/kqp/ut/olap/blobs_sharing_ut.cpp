@@ -2,6 +2,7 @@
 #include "helpers/typed_local.h"
 #include "helpers/writer.h"
 
+#include <algorithm>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/context/context.h>
@@ -71,6 +72,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     TKikimrSettings GetKikimrSettings() {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAlterShardingInColumnShard(true);
+        featureFlags.SetEnableColumnStore(true);
         return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
     }
 

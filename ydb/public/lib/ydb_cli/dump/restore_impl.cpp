@@ -20,7 +20,6 @@
 #include <util/string/join.h>
 
 #include <format>
-#include <re2/re2.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -129,70 +128,9 @@ TRestoreResult CombineResults(const TVector<TRestoreResult>& results) {
     return Result<TRestoreResult>();
 }
 
-TString GetBackupRoot(TStringInput query) {
-    TString backupRoot;
-
-    constexpr TStringBuf targetLinePrefix = "-- backup root: \"";
-    constexpr TStringBuf discardedSuffix = "\"";
-    TString line;
-    while (query.ReadLine(line)) {
-        if (line.StartsWith(targetLinePrefix)) {
-            backupRoot = line.substr(
-                std::size(targetLinePrefix),
-                std::size(line) - std::size(targetLinePrefix) - std::size(discardedSuffix)
-            );
-            return backupRoot;
-        }
-    }
-
-    return backupRoot;
-}
-
 bool IsDatabase(TSchemeClient& client, const TString& path) {
     auto result = DescribePath(client, path);
     return result.GetStatus() == EStatus::SUCCESS && result.GetEntry().Type == ESchemeEntryType::SubDomain;
-}
-
-bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot,
-    bool restoreRootIsDatabase, NIssue::TIssues& issues
-) {
-    if (backupRoot == restoreRoot) {
-        return true;
-    }
-
-    TString pathPrefix;
-    if (!re2::RE2::PartialMatch(query, R"(PRAGMA TablePathPrefix = '(\S+)';)", &pathPrefix)) {
-        if (!restoreRootIsDatabase) {
-            // Initially, the view used the implicit table path prefix, but this is no longer feasible
-            // since the restore root is different from the database root.
-            // Consequently, we must issue an explicit TablePathPrefix pragma to ensure that the reference targets
-            // maintain the same relative positions to the view's location as they did previously.
-
-            size_t contextRecreationEnd = query.find("CREATE VIEW");
-            if (contextRecreationEnd == TString::npos) {
-                issues.AddIssue(TStringBuilder() << "no create view statement in the query: " << query);
-                return false;
-            }
-            query.insert(contextRecreationEnd, TString(
-                std::format("PRAGMA TablePathPrefix = '{}';\n", restoreRoot.data())
-            ));
-        }
-        return true;
-    }
-
-    pathPrefix = RewriteAbsolutePath(pathPrefix, backupRoot, restoreRoot);
-
-    constexpr TStringBuf pattern = R"(PRAGMA TablePathPrefix = '\S+';)";
-    if (!re2::RE2::Replace(&query, pattern,
-        std::format(R"(PRAGMA TablePathPrefix = '{}';)", pathPrefix.c_str())
-    )) {
-        issues.AddIssue(TStringBuilder() << "query: " << query.Quote()
-            << " does not contain the pattern: \"" << pattern << "\""
-        );
-        return false;
-    }
-
-    return true;
 }
 
 } // anonymous
@@ -454,12 +392,13 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
         }
     }
 
-    if (!result.Defined() && !IsDatabase(SchemeClient, dbPath)) {
+    const bool dbPathExists = oldEntries.contains(dbPath);
+    if (!result.Defined() && !dbPathExists) {
         // This situation occurs when all the children of the folder are views.
-        return RestoreEmptyDir(fsPath, dbPath, settings, oldEntries.contains(dbPath));
+        return RestoreEmptyDir(fsPath, dbPath, settings, dbPathExists);
     }
 
-    return RestorePermissions(fsPath, dbPath, settings, oldEntries.contains(dbPath));
+    return RestorePermissions(fsPath, dbPath, settings, dbPathExists);
 }
 
 TRestoreResult TRestoreClient::RestoreView(
@@ -483,31 +422,11 @@ TRestoreResult TRestoreClient::RestoreView(
     const auto createViewFile = fsPath.Child(NFiles::CreateView().FileName);
     TString query = TFileInput(createViewFile).ReadAll();
 
-    const auto backupRoot = GetBackupRoot(query);
-    {
-        NIssue::TIssues issues;
-        if (!RewriteTablePathPrefix(query, backupRoot, dbRestoreRoot, IsDatabase(SchemeClient, dbRestoreRoot), issues)) {
-            // hard fail since we want to avoid silent fails with wrong table path prefixes
-            return Result<TRestoreResult>(dbPath, TStatus(EStatus::BAD_REQUEST, std::move(issues)));
-        }
-    }
-    {
-        NYql::TIssues issues;
-        RewriteTableRefs(query, backupRoot, dbRestoreRoot, issues);
-        if (!issues.Empty()) {
-            // soft fail since the only kind of table references that cause issues are evaluated absolute paths
-            // and they will fail during the query execution anyway
-            LOG_W(issues.ToOneLineString());
-        }
-    }
-
-    constexpr TStringBuf pattern = R"(CREATE VIEW IF NOT EXISTS `\S+` )";
-    if (!re2::RE2::Replace(&query, pattern, std::format(R"(CREATE VIEW IF NOT EXISTS `{}` )", dbPath.c_str()))) {
-        NIssue::TIssues issues;
-        issues.AddIssue(TStringBuilder() << "Cannot restore a view from the file: " << createViewFile.GetPath().Quote()
-            << ". Pattern: \"" << pattern << "\", was not found in the create view statement: " << query.Quote()
-        );
-        return Result<TRestoreResult>(dbPath, TStatus(EStatus::BAD_REQUEST, std::move(issues)));
+    NYql::TIssues issues;
+    if (!RewriteCreateViewQuery(query, dbRestoreRoot, IsDatabase(SchemeClient, dbRestoreRoot), dbPath,
+        createViewFile.GetPath().Quote(), issues
+    )) {
+        return Result<TRestoreResult>(dbPath, EStatus::BAD_REQUEST, issues.ToString());
     }
 
     if (settings.DryRun_) {

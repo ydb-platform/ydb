@@ -1,5 +1,8 @@
 #pragma once
 
+#include "sort_helpers.h"
+
+#include <ydb/core/base/auth.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
@@ -20,7 +23,22 @@ template <typename TDerived>
 class TAuthScanBase : public TScanActorBase<TDerived> {
     struct TTraversingChildren {
         TNavigate::TEntry Entry;
+        TVector<const TNavigate::TListNodeEntry::TChild*> SortedChildren;
         size_t Index = 0;
+
+        TTraversingChildren() = default;
+
+        TTraversingChildren(TNavigate::TEntry&& entry)
+            : Entry(std::move(entry))
+            , SortedChildren(::Reserve(Entry.ListNodeEntry->Children.size()))
+        {
+            for (const auto& child : Entry.ListNodeEntry->Children) {
+                SortedChildren.push_back(&child);
+            }
+            SortBatch(SortedChildren, [](const auto* left, const auto* right) {
+                return left->Name < right->Name;
+            });
+        }
     };
 
 public:
@@ -31,8 +49,12 @@ public:
     }
 
     TAuthScanBase(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+        bool requireUserAdministratorAccess)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
+        , UserToken(std::move(userToken))
+        , RequireUserAdministratorAccess(requireUserAdministratorAccess)
     {
     }
 
@@ -53,6 +75,11 @@ public:
 protected:
     void ProceedToScan() override {
         TBase::Become(&TAuthScanBase::StateScan);
+
+        if (RequireUserAdministratorAccess && !IsAdministrator(AppData(), UserToken.Get())) {
+            TBase::ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "Administrator access is required");
+            return;
+        }
 
         // TODO: support TableRange filter
         if (auto cellsFrom = TBase::TableRange.From.GetCells(); cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
@@ -86,9 +113,9 @@ protected:
                 return;
             }
 
-            auto& children = last.Entry.ListNodeEntry->Children;
+            auto& children = last.SortedChildren;
             if (last.Index < children.size()) {
-                auto& child = children.at(last.Index++);
+                const auto& child = *children.at(last.Index++);
 
                 if (child.Kind == TSchemeCacheNavigate::KindExtSubdomain || child.Kind == TSchemeCacheNavigate::KindSubdomain) {
                     continue;
@@ -125,6 +152,12 @@ protected:
 
         FillBatch(*batch, entry);
 
+        if (!RequireUserAdministratorAccess 
+                && UserToken && !UserToken->GetSerializedToken().empty()
+                && entry.SecurityObject && !entry.SecurityObject->CheckAccess(NACLib::DescribeSchema, *UserToken)) {
+            batch->Rows.clear();
+        }
+
         if (!batch->Finished && entry.ListNodeEntry) {
             DeepFirstSearchStack.emplace_back(std::move(entry));
         }
@@ -159,7 +192,11 @@ protected:
 
     virtual void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) = 0;
 
+protected:
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+
 private:
+    bool RequireUserAdministratorAccess;
     TVector<TTraversingChildren> DeepFirstSearchStack;
 };
 

@@ -85,7 +85,9 @@ namespace NSQLTranslationV1 {
         Allow,
         AsStringLiteral,
         AsPgType,
-        MatchRecognize,
+        MatchRecognizeMeasures,
+        MatchRecognizeDefine,
+        MatchRecognizeDefineAggregate,
     };
 
     class TContext {
@@ -204,10 +206,34 @@ namespace NSQLTranslationV1 {
             return TopLevelColumnReferenceState;
         }
 
-        TStringBuf GetMatchRecognizeDefineVar() const {
-            YQL_ENSURE(EColumnRefState::MatchRecognize == ColumnReferenceState,
-                       "DefineVar can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+        [[nodiscard]] TString GetMatchRecognizeDefineVar() const {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
             return MatchRecognizeDefineVar;
+        }
+
+        TString ExtractMatchRecognizeAggrVar() {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            return std::exchange(MatchRecognizeAggrVar, "");
+        }
+
+        [[nodiscard]] bool SetMatchRecognizeAggrVar(TString var) {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            if (MatchRecognizeAggrVar.empty()) {
+                MatchRecognizeAggrVar = std::move(var);
+            } else if (MatchRecognizeAggrVar != var) {
+                Error() << "Illegal use of aggregates or navigation operators in MATCH_RECOGNIZE";
+                return false;
+            }
+            return true;
         }
 
         TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
@@ -231,6 +257,7 @@ namespace NSQLTranslationV1 {
         EColumnRefState ColumnReferenceState = EColumnRefState::Deny;
         EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny;
         TString MatchRecognizeDefineVar;
+        TString MatchRecognizeAggrVar;
         TString NoColumnErrorContext = "in current scope";
         TVector<TBlocks*> CurrentBlocks;
 
@@ -347,7 +374,13 @@ namespace NSQLTranslationV1 {
             } else {
                 Ctx.ColumnReferenceState = state;
             }
-            YQL_ENSURE(defineVar.empty() || EColumnRefState::MatchRecognize == state, "Internal logic error");
+            YQL_ENSURE(
+                defineVar.empty()
+                || EColumnRefState::MatchRecognizeMeasures == state
+                || EColumnRefState::MatchRecognizeDefine == state
+                || EColumnRefState::MatchRecognizeDefineAggregate == state,
+                "Internal logic error"
+            );
             ctx.MatchRecognizeDefineVar = defineVar;
         }
 

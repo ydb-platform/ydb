@@ -96,6 +96,17 @@ void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQuery
     }
 }
 
+void FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const TKqpPhyTxHolder::TConstPtr& tx) {
+    for (const auto& stage : tx->GetStages()) {
+        if (stage.SinksSize() != 1) {
+            continue;
+        }
+        for (auto& sink : stage.GetSinks()) {
+            YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+        }
+    }
+}
+
 class TRequestFail : public yexception {
 public:
     Ydb::StatusIds::StatusCode Status;
@@ -1243,6 +1254,18 @@ public:
                     YQL_ENSURE(false, "Unexpected physical tx type in data query: " << (ui32)tx->GetType());
             }
 
+            for (const auto& paramDesc : QueryState->PreparedQuery->GetParameters()) {
+                if (!paramDesc.GetName().StartsWith("_kqp_batch")) {
+                    continue;
+                }
+
+                NKikimrMiniKQL::TType protoType = paramDesc.GetType();
+                NKikimr::NMiniKQL::TType* paramType = ImportTypeFromProto(protoType, txCtx.TxAlloc->TypeEnv);
+
+                NUdf::TUnboxedValue value = MakeDefaultValueByType(paramType);
+                QueryState->QueryData->AddUVParam(paramDesc.GetName(), paramType, value);
+            }
+
             try {
                 QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txCtx.TxAlloc->TypeEnv);
             } catch (const yexception& ex) {
@@ -1378,6 +1401,16 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
+        if (!request.Transactions.empty()) {
+            NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+            FillTableSinkSettings(sinkSettings, request.Transactions.front().Body);
+
+            if (Settings.TableService.GetEnableOltpSink() && sinkSettings.GetIsBatch()) {
+                SendToPartitionedExecuter(txCtx, std::move(request));
+                return;
+            }
+        }
+
         if (Settings.TableService.GetEnableOltpSink() && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
             txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
@@ -1421,6 +1454,17 @@ public:
             YQL_ENSURE(!ExecuterId);
         }
         ExecuterId = exId;
+    }
+
+    void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& request) {
+        auto executerActor = CreateKqpPartitionedExecuter(std::move(request), SelfId(), Settings.Database,
+            QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(), Counters,
+            RequestCounters, false, Settings.TableService, AsyncIoFactory,
+            QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
+            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, txCtx->ShardIdToTableInfo);
+
+        ExecuterId = RegisterWithSameMailbox(executerActor);
+        LOG_D("Created new KQP partitioned executer: " << ExecuterId);
     }
 
 

@@ -457,6 +457,12 @@ public:
         return statistics;
     }
 
+    void ForceRefresh() override {
+        if (Parser) {
+            Parser->Refresh(true);
+        }
+    }
+
 protected:
     NActors::TActorId GetSelfId() const override {
         return SelfId();

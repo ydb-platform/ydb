@@ -286,7 +286,8 @@ private:
     void SubscribeOnNextEvent();
     void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void SendData(TClientsInfo& info);
-    void FatalError(TStatus status);
+    void FatalError(const TStatus& status);
+    void ThrowFatalError(const TStatus& status);
     void SendDataArrived(TClientsInfo& client);
     void StopReadSession();
     TString GetSessionId() const;
@@ -330,7 +331,8 @@ private:
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
-        IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);,
+        IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
+        IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);,
         ExceptionFunc(std::exception, HandleException)
     )
 };
@@ -565,7 +567,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClose
     const TString message = TStringBuilder() << "Read session to topic \"" << Self.TopicPathPartition << "\" was closed";
     LOG_ROW_DISPATCHER_DEBUG(message << ": " << ev.DebugString());
 
-    Self.FatalError(TStatus::Fail(
+    Self.ThrowFatalError(TStatus::Fail(
         NYql::NDq::YdbStatusToDqStatus(static_cast<Ydb::StatusIds::StatusCode>(ev.GetStatus())),
         ev.GetIssues()
     ).AddParentIssue(message));
@@ -780,7 +782,7 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     }
 }
 
-void TTopicSession::FatalError(TStatus status) {
+void TTopicSession::FatalError(const TStatus& status) {
     LOG_ROW_DISPATCHER_ERROR("FatalError: " << status.GetErrorMessage());
 
     for (auto& [readActorId, info] : Clients) {
@@ -789,7 +791,11 @@ void TTopicSession::FatalError(TStatus status) {
     }
     StopReadSession();
     Become(&TTopicSession::ErrorState);
-    ythrow yexception() << "FatalError: " << status.GetErrorMessage();    // To exit from current stack and call once PassAway() in HandleException().
+}
+
+void TTopicSession::ThrowFatalError(const TStatus& status) {
+    FatalError(status);
+    ythrow yexception() << "FatalError: " << status.GetErrorMessage();
 }
 
 void TTopicSession::SendSessionError(TActorId readActorId, TStatus status) {

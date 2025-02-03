@@ -10,7 +10,7 @@
 
 - 2024
 
-  {% include [Saint_HighLoad](./_includes/conferences/2024/HighLoad.md) %}
+  {% include [HighLoad](./_includes/conferences/2024/HighLoad.md) %}
 
   {% include [Saint_HighLoad](./_includes/conferences/2024/Saint_HighLoad.md) %}
 

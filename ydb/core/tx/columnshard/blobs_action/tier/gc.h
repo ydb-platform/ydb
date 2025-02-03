@@ -27,9 +27,6 @@ protected:
     virtual bool DoIsEmpty() const override {
         return DraftBlobIds.empty();
     }
-    NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetExternalStorageOperator() const {
-        return ExternalStorageOperator->Get();
-    }
 public:
     TGCTask(const TString& storageId, std::deque<TUnifiedBlobId>&& draftBlobIds, const std::shared_ptr<TExternalStorageOperatorHolder>& externalStorageOperator,
         TBlobsCategories&& blobsToRemove, const std::shared_ptr<TRemoveGCCounters>& counters)
@@ -40,6 +37,10 @@ public:
         for (auto&& i : DraftBlobIds) {
             Counters->OnRequest(i.BlobSize());
         }
+    }
+
+    NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetExternalStorageOperator() const {
+        return ExternalStorageOperator->Get();
     }
 };
 

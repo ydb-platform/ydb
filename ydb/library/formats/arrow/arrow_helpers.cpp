@@ -198,15 +198,19 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
     return builders;
 }
 
-std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Field>& field) {
+std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Field>& field, const ui32 reserveItems, const ui32 reserveSize) {
     AFL_VERIFY(field);
-    return MakeBuilder(field->type());
+    return MakeBuilder(field->type(), reserveItems, reserveSize);
 }
 
-std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::DataType>& type) {
+std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::DataType>& type, const ui32 reserveItems, const ui32 reserveSize) {
     AFL_VERIFY(type);
     std::unique_ptr<arrow::ArrayBuilder> builder;
     TStatusValidator::Validate(arrow::MakeBuilder(arrow::default_memory_pool(), type, &builder));
+    if (reserveSize) {
+        ReserveData(*builder, reserveSize);
+    }
+    TStatusValidator::Validate(builder->Reserve(reserveItems));
     return std::move(builder);
 }
 

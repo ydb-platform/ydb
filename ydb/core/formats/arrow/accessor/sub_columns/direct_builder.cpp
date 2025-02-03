@@ -9,7 +9,7 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount) {
     AFL_VERIFY(!Accessor);
-    auto recordsBuilder = TSparsedArray::MakeBuilderUtf8();
+    auto recordsBuilder = TSparsedArray::MakeBuilderUtf8(RecordIndexes.size(), DataSize);
     for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) {
         recordsBuilder.AddRecord(RecordIndexes[idx], Values[idx]);
     }
@@ -18,7 +18,7 @@ void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount) {
 
 void TColumnElements::BuildPlainAccessor(const ui32 recordsCount) {
     AFL_VERIFY(!Accessor);
-    auto builder = TTrivialArray::MakeBuilderUtf8();
+    auto builder = TTrivialArray::MakeBuilderUtf8(recordsCount, DataSize);
     for (auto it = RecordIndexes.begin(); it != RecordIndexes.end(); ++it) {
         builder.AddRecord(*it, Values[it - RecordIndexes.begin()]);
     }
@@ -62,7 +62,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
         records->AddField(std::make_shared<arrow::Field>(std::string(i->GetKeyName()), arrow::utf8()), i->GetAccessorVerified()).Validate();
     }
     TColumnsData cData(std::move(columnStats), std::move(records));
-    return std::make_shared<TSubColumnsArray>(std::move(cData), std::move(rbOthers), arrow::binary(), CurrentRecordIndex);
+    return std::make_shared<TSubColumnsArray>(std::move(cData), std::move(rbOthers), Type, CurrentRecordIndex);
 }
 
 TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& otherKeys) const {

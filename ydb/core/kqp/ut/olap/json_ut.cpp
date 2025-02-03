@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             const TString query = R"(
             CREATE TABLE `/Root/ColumnTable` (
                 Col1 Uint64 NOT NULL,
-                Col2 String,
+                Col2 JsonDocument,
                 PRIMARY KEY (Col1)
             )
             PARTITION BY HASH(Col1)
@@ -49,8 +49,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
         auto client = kikimr.GetQueryClient();
         auto prepareResult1 =
-            client.ExecuteQuery(R"(REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, '{"a" : "a1"}'), (2u, '{"a" : "a2"}'), 
-                                                                    (3u, '{"b" : "b3"}'), (4u, '{"b" : "b4asdsasdaa", "a" : "a4"}');)",
+            client.ExecuteQuery(R"(REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')),
+                                                                    (3u, JsonDocument('{"b" : "b3"}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'));)",
                     NYdb::NQuery::TTxControl::BeginTx().CommitTx())
                 .ExtractValueSync();
         UNIT_ASSERT_C(prepareResult1.IsSuccess(), prepareResult1.GetIssues().ToString());
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             const TString query = R"(
             CREATE TABLE `/Root/ColumnTable` (
                 Col1 Uint64 NOT NULL,
-                Col2 String,
+                Col2 JsonDocument,
                 PRIMARY KEY (Col1)
             )
             PARTITION BY HASH(Col1)
@@ -106,8 +106,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         {
             auto prepareResult =
                 client
-                    .ExecuteQuery(R"(REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, '{"a" : "a1"}'), (2u, '{"a" : "a2"}'), 
-                                                                    (3u, '{"b" : "b3"}'), (4u, '{"b" : "b4", "a" : "a4"}');)",
+                    .ExecuteQuery(R"(REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')), 
+                                                                    (3u, JsonDocument('{"b" : "b3"}')), (4u, JsonDocument('{"b" : "b4", "a" : "a4"}'));)",
                         NYdb::NQuery::TTxControl::BeginTx().CommitTx())
                     .ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
@@ -116,8 +116,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         {
             auto prepareResult =
                 client
-                    .ExecuteQuery(R"(REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(11u, '{"a" : "1a1"}'), (12u, '{"a" : "1a2"}'), 
-                                                                    (13u, '{"b" : "1b3"}'), (14u, '{"b" : "1b4", "a" : "a4"}');)",
+                    .ExecuteQuery(R"(REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(11u, JsonDocument('{"a" : "1a1"}')), (12u, JsonDocument('{"a" : "1a2"}')), 
+                                                                    (13u, JsonDocument('{"b" : "1b3"}')), (14u, JsonDocument('{"b" : "1b4", "a" : "a4"}'));)",
                         NYdb::NQuery::TTxControl::BeginTx().CommitTx())
                     .ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());

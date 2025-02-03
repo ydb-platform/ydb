@@ -105,6 +105,7 @@ private:
     TOthersData OthersData;
     std::vector<TGeneralIterator> Iterators;
     std::vector<TGeneralIterator*> SortedIterators;
+    ui32 CurrentRecordIndex = 0;
 
 public:
     bool IsValid() const {
@@ -121,27 +122,34 @@ public:
         for (auto&& i : Iterators) {
             SortedIterators.emplace_back(&i);
         }
+        auto checkIterator = [](const TGeneralIterator* it) {
+            return !it->IsValid();
+        };
+        SortedIterators.erase(std::remove_if(SortedIterators.begin(), SortedIterators.end(), checkIterator), SortedIterators.end());
     }
 
     template <class TStartRecordActor, class TKVActor, class TFinishRecordActor>
     void ReadRecords(const ui32 recordsCount, const TStartRecordActor& startRecordActor, const TKVActor& kvActor,
         const TFinishRecordActor& finishRecordActor) {
         for (ui32 i = 0; i < recordsCount; ++i) {
-            startRecordActor(i);
+            startRecordActor(CurrentRecordIndex);
             for (ui32 iIter = 0; iIter < SortedIterators.size();) {
                 auto& itColumn = *SortedIterators[iIter];
-                while (itColumn.GetRecordIndex() == i) {
+                AFL_VERIFY(CurrentRecordIndex <= itColumn.GetRecordIndex());
+                while (itColumn.GetRecordIndex() == CurrentRecordIndex) {
                     kvActor(itColumn.GetKeyIndex(), itColumn.GetValue(), itColumn.IsColumnKey());
                     if (!itColumn.Next()) {
-                        std::swap(SortedIterators[iIter], SortedIterators[SortedIterators.size() - 1]);
-                        SortedIterators.pop_back();
-                        break;
-                    } else if (itColumn.GetRecordIndex() != i) {
-                        ++iIter;
                         break;
                     }
                 }
+                if (!itColumn.IsValid()) {
+                    std::swap(SortedIterators[iIter], SortedIterators[SortedIterators.size() - 1]);
+                    SortedIterators.pop_back();
+                } else if (itColumn.GetRecordIndex() != CurrentRecordIndex) {
+                    ++iIter;
+                }
             }
+            ++CurrentRecordIndex;
             finishRecordActor();
         }
     }
@@ -153,6 +161,25 @@ private:
     TOthersData OthersData;
     std::vector<TGeneralIterator> Iterators;
     std::vector<TGeneralIterator*> SortedIterators;
+    class TKeyAddress {
+    private:
+        YDB_READONLY_DEF(std::string_view, Name);
+        YDB_READONLY(ui32, OriginalIndex, 0);
+        YDB_READONLY(bool, IsColumn, false);
+
+    public:
+        TKeyAddress(const std::string_view& keyName, const ui32 keyIndex, const bool isColumn)
+            : Name(keyName)
+            , OriginalIndex(keyIndex)
+            , IsColumn(isColumn) {
+        }
+
+        bool operator<(const TKeyAddress& item) const {
+            return Name < item.Name;
+        }
+    };
+
+        std::vector<TKeyAddress> Addresses;
 
 public:
     bool IsValid() const {
@@ -168,48 +195,25 @@ public:
     TReadIteratorOrderedKeys(const TColumnsData& columnsData, const TOthersData& othersData)
         : ColumnsData(columnsData)
         , OthersData(othersData) {
-        class TKeyAddress {
-        private:
-            YDB_READONLY_DEF(std::string_view, Name);
-            ui32 OriginalIndex = 0;
-            YDB_READONLY(bool, IsColumn, false);
-
-        public:
-            ui32 GetOriginalIndex() const {
-                return OriginalIndex;
-            }
-
-            TKeyAddress(const std::string_view& keyName, const ui32 keyIndex, const bool isColumn)
-                : Name(keyName)
-                , OriginalIndex(keyIndex)
-                , IsColumn(isColumn) {
-            }
-
-            bool operator<(const TKeyAddress& item) const {
-                return Name < item.Name;
-            }
-        };
-
-        std::vector<TKeyAddress> addresses;
         for (ui32 i = 0; i < ColumnsData.GetStats().GetColumnsCount(); ++i) {
-            addresses.emplace_back(ColumnsData.GetStats().GetColumnName(i), i, true);
+            Addresses.emplace_back(ColumnsData.GetStats().GetColumnName(i), i, true);
         }
         for (ui32 i = 0; i < OthersData.GetStats().GetColumnsCount(); ++i) {
-            addresses.emplace_back(OthersData.GetStats().GetColumnName(i), i, false);
+            Addresses.emplace_back(OthersData.GetStats().GetColumnName(i), i, false);
         }
-        std::sort(addresses.begin(), addresses.end());
+        std::sort(Addresses.begin(), Addresses.end());
         std::vector<ui32> remapColumns;
         remapColumns.resize(ColumnsData.GetStats().GetColumnsCount());
         std::vector<ui32> remapOthers;
         remapOthers.resize(OthersData.GetStats().GetColumnsCount());
-        for (ui32 i = 0; i < addresses.size(); ++i) {
+        for (ui32 i = 0; i < Addresses.size(); ++i) {
             if (i) {
-                AFL_VERIFY(addresses[i].GetName() != addresses[i - 1].GetName());
+                AFL_VERIFY(Addresses[i].GetName() != Addresses[i - 1].GetName());
             }
-            if (addresses[i].GetIsColumn()) {
-                remapColumns[addresses[i].GetOriginalIndex()] = i;
+            if (Addresses[i].GetIsColumn()) {
+                remapColumns[Addresses[i].GetOriginalIndex()] = i;
             } else {
-                remapOthers[addresses[i].GetOriginalIndex()] = i;
+                remapOthers[Addresses[i].GetOriginalIndex()] = i;
             }
         }
         for (ui32 i = 0; i < ColumnsData.GetStats().GetColumnsCount(); ++i) {
@@ -219,6 +223,10 @@ public:
         for (auto&& i : Iterators) {
             SortedIterators.emplace_back(&i);
         }
+        auto checkIterator = [](const TGeneralIterator* it) {
+            return !it->IsValid();
+        };
+        SortedIterators.erase(std::remove_if(SortedIterators.begin(), SortedIterators.end(), checkIterator), SortedIterators.end());
         std::make_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
     }
 
@@ -242,7 +250,7 @@ public:
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
-                kvActor(itColumn.GetKeyIndex(), itColumn.GetValue(), itColumn.IsColumnKey());
+                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetValue(), itColumn.IsColumnKey());
                 if (!itColumn.Next()) {
                     SortedIterators.pop_back();
                 } else {

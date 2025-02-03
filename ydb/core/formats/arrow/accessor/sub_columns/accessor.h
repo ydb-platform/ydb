@@ -24,16 +24,25 @@ private:
     NSubColumns::TOthersData OthersData;
 
 protected:
+    virtual ui32 DoGetNullsCount() const override {
+        AFL_VERIFY(false);
+        return 0;
+    }
+    virtual ui32 DoGetValueRawBytes() const override {
+        AFL_VERIFY(false);
+        return 0;
+    }
+
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
         return nullptr;
     }
 
-    virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
-        const TColumnLoader& loader, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) override;
-
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::optional<ui64> DoGetRawSize() const override {
         return ColumnsData.GetRawSize() + OthersData.GetRawSize();
+    }
+    virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
+        return std::make_shared<TSubColumnsArray>(ColumnsData.Slice(offset, count), OthersData.Slice(offset, count), GetDataType(), count);
     }
 
 public:

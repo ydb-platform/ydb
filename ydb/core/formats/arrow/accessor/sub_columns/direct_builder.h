@@ -54,9 +54,12 @@ private:
     ui32 CurrentRecordIndex = 0;
     THashMap<TStringBuf, TColumnElements> Elements;
     std::deque<TString> Storage;
+    const std::shared_ptr<arrow::DataType> Type;
 
 public:
-    TDataBuilder() {
+    TDataBuilder(const std::shared_ptr<arrow::DataType>& type)
+        : Type(type)
+    {
     }
 
     void StartNextRecord() {
@@ -73,11 +76,12 @@ public:
 
     void AddKVOwn(const TStringBuf key, const TString& value) {
         Storage.emplace_back(value);
-        auto itElements = Elements.find(key);
+        Storage.emplace_back(TString(key.data(), key.size()));
+        auto itElements = Elements.find(Storage.back());
         if (itElements == Elements.end()) {
-            itElements = Elements.emplace(key, key).first;
+            itElements = Elements.emplace(Storage.back(), Storage.back()).first;
         }
-        itElements->second.AddData(Storage.back(), CurrentRecordIndex);
+        itElements->second.AddData(value, CurrentRecordIndex);
     }
 
     class THeapElements {

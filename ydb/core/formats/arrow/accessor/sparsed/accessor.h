@@ -3,6 +3,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -72,6 +73,37 @@ public:
         const std::shared_ptr<arrow::Scalar>& defaultValue);
 
     ui64 GetRawSize() const;
+
+    ui32 GetNullsCount() const {
+        if (!!DefaultValue) {
+            return ColValue->null_count();
+        } else {
+            AFL_VERIFY(GetNotDefaultRecordsCount() <= GetRecordsCount());
+            return GetRecordsCount() - GetNotDefaultRecordsCount();
+        }
+    }
+    ui32 GetValueRawBytes() const {
+        return NArrow::GetArrayDataSize(ColValue);
+    }
+
+    TSparsedArrayChunk Slice(const ui32 newStart, const ui32 offset, const ui32 count) const {
+        AFL_VERIFY(offset + count <= RecordsCount)("offset", offset)("count", count)("records", RecordsCount);
+        std::optional<ui32> startPosition = NArrow::FindUpperOrEqualPosition(*UI32ColIndex, offset);
+        std::optional<ui32> finishPosition = NArrow::FindUpperOrEqualPosition(*UI32ColIndex, offset + count);
+        if (!startPosition || startPosition == finishPosition) {
+            return TSparsedArrayChunk(newStart, count, NArrow::MakeEmptyBatch(Records->schema(), 0), DefaultValue);
+        } else {
+            AFL_VERIFY(startPosition);
+            auto builder = NArrow::MakeBuilder(arrow::uint32());
+            for (ui32 i = *startPosition; i < finishPosition.value_or(Records->num_rows()); ++i) {
+                NArrow::Append<arrow::UInt32Type>(*builder, UI32ColIndex->Value(i) - offset);
+            }
+            auto arrIndexes = NArrow::FinishBuilder(std::move(builder));
+            auto arrValue = ColValue->Slice(*startPosition, finishPosition.value_or(Records->num_rows()) - *startPosition);
+            auto sliceRecords = arrow::RecordBatch::Make(Records->schema(), arrValue->length(), { arrIndexes, arrValue });
+            return TSparsedArrayChunk(newStart, count, sliceRecords, DefaultValue);
+        }
+    }
 };
 
 class TSparsedArray: public IChunkedArray {
@@ -83,8 +115,40 @@ private:
 protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
 
-    virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
-        const TColumnLoader& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) override;
+    virtual ui32 DoGetNullsCount() const override {
+        ui32 result = 0;
+        for (auto&& i : Records) {
+            result += i.GetNullsCount();
+        }
+        return result;
+    }
+    virtual ui32 DoGetValueRawBytes() const override {
+        ui32 result = 0;
+        for (auto&& i : Records) {
+            result += i.GetValueRawBytes();
+        }
+        return result;
+    }
+
+    virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
+        TBuilder builder(DefaultValue, GetDataType());
+        ui32 newStart = 0;
+        for (ui32 i = 0; i < Records.size(); ++i) {
+            if (Records[i].GetStartPosition() + Records[i].GetRecordsCount() <= offset) {
+                continue;
+            }
+            if (offset + count <= Records[i].GetStartPosition()) {
+                continue;
+            }
+            const ui32 chunkStart = (offset < Records[i].GetStartPosition()) ? 0 : (offset - Records[i].GetStartPosition());
+            const ui32 chunkCount = (offset + count <= Records[i].GetFinishPosition())
+                                        ? (offset + count - Records[i].GetStartPosition() - chunkStart)
+                                        : (Records[i].GetFinishPosition() - chunkStart);
+            builder.AddChunk(Records[i].Slice(newStart, chunkStart, chunkCount));
+            newStart += chunkCount;
+        }
+        return builder.Finish();
+    }
 
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override {
         ui32 currentIdx = 0;
@@ -157,36 +221,34 @@ public:
     class TSparsedBuilder {
     private:
         std::shared_ptr<arrow::Schema> Schema;
-        std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
-        arrow::UInt32Builder* IndexBuilder;
-        arrow::StringBuilder* ValueBuilder;
+        std::unique_ptr<arrow::ArrayBuilder> IndexBuilder;
+        std::unique_ptr<arrow::ArrayBuilder> ValueBuilder;
         ui32 RecordsCount = 0;
 
     public:
-        TSparsedBuilder() {
-            arrow::FieldVector fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
-                std::make_shared<arrow::Field>("value", arrow::utf8()) };
-            Schema = std::make_shared<arrow::Schema>(fields);
-            Builders = NArrow::MakeBuilders(Schema);
-            IndexBuilder = static_cast<arrow::UInt32Builder*>(Builders[0].get());
-            ValueBuilder = static_cast<arrow::StringBuilder*>(Builders[1].get());
+        TSparsedBuilder(const ui32 reserveItems, const ui32 reserveData) {
+            IndexBuilder = NArrow::MakeBuilder(arrow::uint32(), reserveItems, 0);
+            ValueBuilder = NArrow::MakeBuilder(arrow::uint32(), reserveItems, reserveData);
         }
 
         void AddRecord(const ui32 recordIndex, const std::string_view value) {
-            NArrow::TStatusValidator::Validate(IndexBuilder->Append(recordIndex));
-            NArrow::TStatusValidator::Validate(ValueBuilder->Append(value.data(), value.size()));
+            AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
+            AFL_VERIFY(NArrow::Append<arrow::StringType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
             ++RecordsCount;
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
             TSparsedArray::TBuilder builder(nullptr, arrow::utf8());
-            builder.AddChunk(recordsCount, arrow::RecordBatch::Make(Schema, RecordsCount, NArrow::Finish(std::move(Builders))));
+            std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders;
+            builders.emplace_back(std::move(IndexBuilder));
+            builders.emplace_back(std::move(ValueBuilder));
+            builder.AddChunk(recordsCount, arrow::RecordBatch::Make(Schema, RecordsCount, NArrow::Finish(std::move(builders))));
             return builder.Finish();
         }
     };
 
-    static TSparsedBuilder MakeBuilderUtf8()  {
-        return TSparsedBuilder();
+    static TSparsedBuilder MakeBuilderUtf8(const ui32 reserveItems = 0, const ui32 reserveData = 0) {
+        return TSparsedBuilder(reserveItems, reserveData);
     }
 
     class TBuilder {
@@ -203,6 +265,10 @@ public:
         }
 
         void AddChunk(const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& data);
+        void AddChunk(TSparsedArrayChunk&& chunk) {
+            RecordsCount += chunk.GetRecordsCount();
+            Chunks.emplace_back(std::move(chunk));
+        }
 
         std::shared_ptr<TSparsedArray> Finish() {
             return std::shared_ptr<TSparsedArray>(new TSparsedArray(std::move(Chunks), DefaultValue, Type, RecordsCount));

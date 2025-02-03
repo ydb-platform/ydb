@@ -14,17 +14,11 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-std::vector<TChunkedArraySerialized> TSubColumnsArray::DoSplitBySizes(
-    const TColumnLoader& /*loader*/, const TString& /*fullSerializedData*/, const std::vector<ui64>& /*splitSizes*/) {
-    AFL_VERIFY(false);
-    return {};
-}
-
 TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
     const std::shared_ptr<IChunkedArray>& sourceArray, const std::shared_ptr<NSubColumns::IDataAdapter>& adapter) {
     AFL_VERIFY(adapter);
     AFL_VERIFY(sourceArray);
-    NSubColumns::TDataBuilder builder;
+    NSubColumns::TDataBuilder builder(sourceArray->GetDataType());
     IChunkedArray::TReader reader(sourceArray);
     std::vector<std::shared_ptr<arrow::Array>> storage;
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
@@ -99,27 +93,31 @@ IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
     auto it = BuildUnorderedIterator();
     ui32 recordsCount = 0;
-    auto builder = NArrow::MakeBuilder(arrow::binary());
-    auto* binaryBuilder = static_cast<arrow::BinaryBuilder*>(builder.get());
+    auto builder = NArrow::MakeBuilder(GetDataType());
     while (it.IsValid()) {
         NJson::TJsonValue value;
         auto onStartRecord = [&](const ui32 index) {
-            AFL_VERIFY(recordsCount++ == index);
+            AFL_VERIFY(recordsCount++ == index)("count", recordsCount)("index", index);
         };
         auto onFinishRecord = [&]() {
-            auto bJson = NBinaryJson::SerializeToBinaryJson(value.GetStringRobust());
-            if (const TString* val = std::get_if<TString>(&bJson)) {
-                AFL_VERIFY(false);
-            } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
-                TStatusValidator::Validate(binaryBuilder->Append(val->data(), val->size()));
-            } else {
-                AFL_VERIFY(false);
-            }
+            auto str = value.GetStringRobust();
+//            NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(str.data(), str.size()));
+//             
+             auto bJson = NBinaryJson::SerializeToBinaryJson(value.GetStringRobust());
+             if (const TString* val = std::get_if<TString>(&bJson)) {
+                 AFL_VERIFY(false)("error", *val);
+             } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
+                 NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(val->data(), val->size()));
+             } else {
+                 AFL_VERIFY(false);
+             }
         };
         auto onRecordKV = [&](const ui32 index, const std::string_view valueView, const bool isColumn) {
             if (isColumn) {
+                Cerr << ColumnsData.GetStats().GetColumnNameString(index) << " : " << valueView << " : " << isColumn << Endl;
                 value.InsertValue(ColumnsData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
             } else {
+                Cerr << OthersData.GetStats().GetColumnNameString(index) << " : " << valueView << " : " << isColumn << Endl;
                 value.InsertValue(OthersData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
             }
         };

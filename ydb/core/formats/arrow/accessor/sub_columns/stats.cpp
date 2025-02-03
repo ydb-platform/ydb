@@ -56,14 +56,17 @@ TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& stats) {
 }
 
 ui32 TDictStats::GetColumnRecordsCount(const ui32 index) const {
+    AFL_VERIFY(index < DataRecordsCount->length());
     return DataRecordsCount->Value(index);
 }
 
 ui32 TDictStats::GetColumnSize(const ui32 index) const {
+    AFL_VERIFY(index < DataSize->length());
     return DataSize->Value(index);
 }
 
 std::string_view TDictStats::GetColumnName(const ui32 index) const {
+    AFL_VERIFY(index < DataNames->length());
     auto view = DataNames->GetView(index);
     return std::string_view(view.data(), view.size());
 }
@@ -92,7 +95,7 @@ TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex,
 }
 
 TDictStats TDictStats::BuildEmpty() {
-    return TDictStats(MakeEmptyBatch(GetSchema()));
+    return TDictStats(MakeEmptyBatch(GetStatsSchema()));
 }
 
 TString TDictStats::SerializeAsString(const std::shared_ptr<NSerialization::ISerializer>& serializer) const {
@@ -101,7 +104,7 @@ TString TDictStats::SerializeAsString(const std::shared_ptr<NSerialization::ISer
 }
 
 TDictStats::TBuilder::TBuilder() {
-    Builders = NArrow::MakeBuilders(GetSchema());
+    Builders = NArrow::MakeBuilders(GetStatsSchema());
     AFL_VERIFY(Builders.size() == 3);
     AFL_VERIFY(Builders[0]->type()->id() == arrow::utf8()->id());
     AFL_VERIFY(Builders[1]->type()->id() == arrow::uint32()->id());
@@ -118,6 +121,8 @@ void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, con
     } else {
         AFL_VERIFY(*LastKeyName < name);
     }
+    AFL_VERIFY(recordsCount);
+    AFL_VERIFY(dataSize);
     TStatusValidator::Validate(Names->Append(name.data(), name.size()));
     TStatusValidator::Validate(Records->Append(recordsCount));
     TStatusValidator::Validate(DataSize->Append(dataSize));
@@ -131,7 +136,7 @@ void TDictStats::TBuilder::Add(const std::string_view name, const ui32 recordsCo
 TDictStats TDictStats::TBuilder::Finish() {
     AFL_VERIFY(Builders.size());
     auto arrays = NArrow::Finish(std::move(Builders));
-    return TDictStats(arrow::RecordBatch::Make(GetSchema(), RecordsCount, arrays));
+    return TDictStats(arrow::RecordBatch::Make(GetStatsSchema(), RecordsCount, arrays));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

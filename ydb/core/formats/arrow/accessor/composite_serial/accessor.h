@@ -39,16 +39,27 @@ private:
     std::shared_ptr<TColumnLoader> Loader;
     std::vector<TChunk> Chunks;
 
+    virtual EType GetTypeDeep() const override {
+        return Loader->GetAccessorConstructor()->GetType();
+    }
+
 protected:
+    virtual ui32 DoGetNullsCount() const override {
+        AFL_VERIFY(false);
+        return 0;
+    }
+    virtual ui32 DoGetValueRawBytes() const override {
+        AFL_VERIFY(false);
+        return 0;
+    }
+    virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 /*offset*/, const ui32 /*count*/) const override {
+        AFL_VERIFY(false);
+        return nullptr;
+    }
+
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
-
-    virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
-        const TColumnLoader& /*saver*/, const TString& /*fullSerializedData*/, const std::vector<ui64>& /*splitSizes*/) override {
-        AFL_VERIFY(false);
-        return {};
-    }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
         AFL_VERIFY(false)("problem", "cannot use method");
@@ -65,7 +76,6 @@ protected:
         AFL_VERIFY(false);
         return nullptr;
     }
-
 public:
     TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, std::vector<TChunk>&& chunks)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())

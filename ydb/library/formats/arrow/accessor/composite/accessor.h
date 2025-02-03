@@ -1,25 +1,32 @@
 #pragma once
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
-class TCompositeChunkedArray: public NArrow::NAccessor::IChunkedArray {
+class TCompositeChunkedArray: public IChunkedArray {
 private:
-    using TBase = NArrow::NAccessor::IChunkedArray;
+    using TBase = IChunkedArray;
 
 private:
-    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> Chunks;
+    std::vector<std::shared_ptr<IChunkedArray>> Chunks;
 
 protected:
+    virtual ui32 DoGetNullsCount() const override {
+        AFL_VERIFY(false);
+        return 0;
+    }
+    virtual ui32 DoGetValueRawBytes() const override {
+        AFL_VERIFY(false);
+        return 0;
+    }
+    virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 /*offset*/, const ui32 /*count*/) const override {
+        AFL_VERIFY(false);
+        return nullptr;
+    }
+
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
-
-    virtual std::vector<NArrow::NAccessor::TChunkedArraySerialized> DoSplitBySizes(
-        const TColumnLoader& /*saver*/, const TString& /*fullSerializedData*/, const std::vector<ui64>& /*splitSizes*/) override {
-        AFL_VERIFY(false);
-        return {};
-    }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
         AFL_VERIFY(false)("problem", "cannot use method");

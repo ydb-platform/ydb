@@ -1,4 +1,5 @@
 #pragma once
+#include <util/generic/string.h>
 #include <util/system/types.h>
 
 #include <vector>
@@ -10,11 +11,11 @@ class TArrayView {
 private:
     typename TContainer::iterator Begin;
     typename TContainer::iterator End;
+
 public:
     TArrayView(typename TContainer::iterator itBegin, typename TContainer::iterator itEnd)
         : Begin(itBegin)
         , End(itEnd) {
-
     }
 
     typename TContainer::iterator begin() {
@@ -44,11 +45,10 @@ using TVectorView = TArrayView<std::vector<TObject>>;
 class TSimilarPacker {
 private:
     const ui64 BottomLimitNecessary = 0;
+
 public:
     TSimilarPacker(const ui64 bottomLimitNecessary)
-        : BottomLimitNecessary(bottomLimitNecessary)
-    {
-
+        : BottomLimitNecessary(bottomLimitNecessary) {
     }
 
     template <class TObject>
@@ -58,7 +58,7 @@ public:
             fullSize += i.GetSize();
         }
         if (fullSize <= BottomLimitNecessary) {
-            return {TVectorView<TObject>(objects.begin(), objects.end())};
+            return { TVectorView<TObject>(objects.begin(), objects.end()) };
         }
         ui64 currentSize = 0;
         ui64 currentStart = 0;
@@ -76,6 +76,9 @@ public:
         }
         return result;
     }
+
+    static std::vector<ui32> SizesToRecordsCount(
+        const ui32 serializedRecordsCount, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt);
 };
 
-}
+}   // namespace NKikimr::NArrow::NSplitter

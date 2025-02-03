@@ -117,9 +117,10 @@ private:
         ResultOtherStats = splitted.ExtractOthers();
 
         for (ui32 sourceIdx = 0; sourceIdx < Sources.size(); ++sourceIdx) {
-            auto source = Sources[sourceIdx];
+            const auto& source = Sources[sourceIdx];
             RemapKeyIndex.AddRemap(
                 sourceIdx, source->GetColumnsData().GetStats(), source->GetOthersData().GetStats(), *ResultColumnStats, *ResultOtherStats);
+            OrderedIterators.emplace_back(source->BuildOrderedIterator());
         }
     }
 
@@ -197,7 +198,7 @@ private:
                 arrays.emplace_back(i.Finish(RecordIndex));
             }
             TColumnsData cData(
-                ResultColumnStats, std::make_shared<NArrow::TGeneralContainer>(ResultColumnStats.BuildSchema()->fields(), std::move(arrays)));
+                ResultColumnStats, std::make_shared<NArrow::TGeneralContainer>(ResultColumnStats.BuildColumnsSchema()->fields(), std::move(arrays)));
             Results.emplace_back(
                 std::make_shared<TSubColumnsArray>(std::move(cData), std::move(portionOthersData), arrow::binary(), RecordIndex));
             Initialize();
@@ -207,9 +208,9 @@ private:
             ColumnBuilders.clear();
             for (ui32 i = 0; i < ResultColumnStats.GetColumnsCount(); ++i) {
                 if (ResultColumnStats.IsSparsed(i, OutputRecordsCount)) {
-                    ColumnBuilders.emplace_back(TSparsedBuilder());
+                    ColumnBuilders.emplace_back(TSparsedBuilder(0, 0));
                 } else {
-                    ColumnBuilders.emplace_back(TPlainBuilder());
+                    ColumnBuilders.emplace_back(TPlainBuilder(0, 0));
                 }
             }
             OthersBuilder = TOthersData::MakeMergedBuilder();
@@ -256,10 +257,9 @@ private:
         }
 
         void StartRecord() {
-            ++RecordIndex;
         }
         void FinishRecord() {
-            if (RecordIndex == Context.GetPortionRowsCountLimit()) {
+            if (++RecordIndex == Context.GetPortionRowsCountLimit()) {
                 FlushData();
             }
         }

@@ -70,6 +70,11 @@ public:
             , DataSize(dataSize) {
         }
 
+        void AddValue(const std::string_view str) {
+            ++RecordsCount;
+            DataSize += str.size();
+        }
+
         void Add(const TDictStats& stats, const ui32 idx) {
             RecordsCount += stats.GetColumnRecordsCount(idx);
             DataSize += stats.GetColumnSize(idx);
@@ -104,7 +109,7 @@ public:
         return TBuilder();
     }
 
-    std::shared_ptr<arrow::Schema> BuildSchema() const {
+    std::shared_ptr<arrow::Schema> BuildColumnsSchema() const {
         arrow::FieldVector fields;
         for (ui32 i = 0; i < DataNames->length(); ++i) {
             const auto view = DataNames->GetView(i);
@@ -130,7 +135,7 @@ public:
     ui32 GetColumnRecordsCount(const ui32 index) const;
     ui32 GetColumnSize(const ui32 index) const;
 
-    static std::shared_ptr<arrow::Schema> GetSchema() {
+    static std::shared_ptr<arrow::Schema> GetStatsSchema() {
         static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::utf8()),
             std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()) };
         static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(fields);

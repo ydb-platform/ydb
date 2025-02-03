@@ -11,17 +11,19 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 class IDataAdapter {
 private:
-    virtual TConclusionStatus DoAddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const = 0;
+    virtual TConclusionStatus DoAddDataToBuilders(
+        const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept = 0;
 
 public:
     virtual ~IDataAdapter() = default;
 
-    TConclusionStatus AddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const;
+    TConclusionStatus AddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept;
 };
 
 class TFirstLevelSchemaData: public IDataAdapter {
 private:
-    virtual TConclusionStatus DoAddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const override;
+    virtual TConclusionStatus DoAddDataToBuilders(
+        const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept override;
 
 public:
 };

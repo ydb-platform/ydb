@@ -16,6 +16,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
+    TColumnsData Slice(const ui32 offset, const ui32 count) const;
+
     static TColumnsData BuildEmpty(const ui32 recordsCount) {
         return TColumnsData(TDictStats::BuildEmpty(), std::make_shared<TGeneralContainer>(recordsCount));
     }
@@ -39,10 +41,19 @@ public:
                 AFL_VERIFY(CurrentAddress.GetPosition() == 0);
                 AFL_VERIFY(CurrentAddress.GetArray()->type()->id() == arrow::utf8()->id());
                 CurrentArray = std::static_pointer_cast<arrow::StringArray>(CurrentAddress.GetArray());
-                if (ChunkedArray->GetType() != IChunkedArray::EType::SparsedArray || !CurrentArray->IsNull(0)) {
+                if (ChunkedArray->GetTypeDeep() == IChunkedArray::EType::Array) {
+                    if (CurrentArray->IsNull(0)) {
+                        Next();
+                    }
                     break;
+                } else if (ChunkedArray->GetTypeDeep() == IChunkedArray::EType::SparsedArray) {
+                    if (CurrentArray->IsNull(0)) {
+                        CurrentIndex += CurrentAddress.GetArray()->length();
+                    } else {
+                        break;
+                    }
                 } else {
-                    CurrentIndex += CurrentAddress.GetArray()->length();
+                    AFL_VERIFY(false)("type", ChunkedArray->GetType())("deep", ChunkedArray->GetTypeDeep());
                 }
             }
         }

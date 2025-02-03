@@ -2,6 +2,7 @@
 #include "constructor.h"
 
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
+#include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -23,18 +24,18 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     }
     currentIndex += protoSize;
     std::shared_ptr<arrow::RecordBatch> rbColumnStats = TStatusValidator::GetValid(externalInfo.GetDefaultSerializer()->Deserialize(
-        TString(originalData.data() + currentIndex, proto.GetColumnStatsSize()), TDictStats::GetSchema()));
+        TString(originalData.data() + currentIndex, proto.GetColumnStatsSize()), TDictStats::GetStatsSchema()));
     TDictStats columnStats(rbColumnStats);
     currentIndex += proto.GetColumnStatsSize();
     std::shared_ptr<arrow::RecordBatch> rbOtherStats = TStatusValidator::GetValid(externalInfo.GetDefaultSerializer()->Deserialize(
-        TString(originalData.data() + currentIndex, proto.GetOtherStatsSize()), TDictStats::GetSchema()));
+        TString(originalData.data() + currentIndex, proto.GetOtherStatsSize()), TDictStats::GetStatsSchema()));
     TDictStats otherStats(rbOtherStats);
     currentIndex += proto.GetOtherStatsSize();
 
     std::shared_ptr<TGeneralContainer> columnKeysContainer;
     {
         std::vector<std::shared_ptr<IChunkedArray>> columns;
-        auto schema = columnStats.GetSchema();
+        auto schema = columnStats.BuildColumnsSchema();
         AFL_VERIFY(rbColumnStats->num_rows() == proto.GetKeyColumns().size());
         for (ui32 i = 0; i < (ui32)proto.GetKeyColumns().size(); ++i) {
             std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(externalInfo.GetDefaultSerializer(),
@@ -49,11 +50,11 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     std::shared_ptr<TGeneralContainer> otherKeysContainer;
     {
         std::vector<std::shared_ptr<IChunkedArray>> columns;
-        AFL_VERIFY(rbOtherStats->num_rows() == proto.GetOtherColumns().size());
-        auto schema = otherStats.GetSchema();
+        AFL_VERIFY(rbOtherStats->schema()->num_fields() == proto.GetOtherColumns().size());
+        auto schema = TOthersData::GetSchema();
         for (ui32 i = 0; i < (ui32)proto.GetOtherColumns().size(); ++i) {
-            std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(externalInfo.GetDefaultSerializer(),
-                otherStats.GetAccessorConstructor(i, proto.GetOtherRecordsCount()), schema->field(i), nullptr, 0);
+            std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(
+                externalInfo.GetDefaultSerializer(), std::make_shared<NPlain::TConstructor>(), schema->field(i), nullptr, 0);
             std::vector<TDeserializeChunkedArray::TChunk> chunks = { TDeserializeChunkedArray::TChunk(
                 proto.GetOtherRecordsCount(), originalData.substr(currentIndex, proto.GetOtherColumns(i).GetSize())) };
             columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(proto.GetOtherRecordsCount(), columnLoader, std::move(chunks)));

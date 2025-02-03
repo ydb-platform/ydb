@@ -2,6 +2,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
+#include <ydb/library/formats/arrow/splitter/similar_packer.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
@@ -236,6 +237,9 @@ private:
         return TLocalChunkedArrayAddress(nullptr, 0, 0);
     }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
+    virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const = 0;
+    virtual ui32 DoGetNullsCount() const = 0;
+    virtual ui32 DoGetValueRawBytes() const = 0;
 
 protected:
     std::shared_ptr<arrow::Schema> GetArraySchema() const {
@@ -243,13 +247,10 @@ protected:
         return std::make_shared<arrow::Schema>(fields);
     }
 
-
     TLocalChunkedArrayAddress GetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const = 0;
-    virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
-        const TColumnLoader& loader, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) = 0;
 
     template <class TCurrentPosition, class TChunkAccessor>
     void SelectChunk(const std::optional<TCurrentPosition>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) const {
@@ -306,9 +307,21 @@ protected:
     }
 
 public:
+    ui32 GetNullsCount() const {
+        return DoGetNullsCount();
+    }
+
+    ui32 GetValueRawBytes() const {
+        return DoGetValueRawBytes();
+    }
+
     TLocalDataAddress GetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
         AFL_VERIFY(position < GetRecordsCount())("position", position)("records_count", GetRecordsCount());
         return DoGetLocalData(chunkCurrent, position);
+    }
+
+    virtual EType GetTypeDeep() const {
+        return Type;
     }
 
     class TReader {
@@ -339,9 +352,18 @@ public:
         return DoGetScalar(index);
     }
 
+    template <class TSerializer>
     std::vector<TChunkedArraySerialized> SplitBySizes(
-        const TColumnLoader& loader, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
-        return DoSplitBySizes(loader, fullSerializedData, splitSizes);
+        const TSerializer& serialize, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
+        const std::vector<ui32> recordsCount = NSplitter::TSimilarPacker::SizesToRecordsCount(GetRecordsCount(), fullSerializedData, splitSizes);
+        std::vector<TChunkedArraySerialized> result;
+        ui32 currentStartIndex = 0;
+        for (auto&& i : recordsCount) {
+            std::shared_ptr<IChunkedArray> slice = ISlice(currentStartIndex, i);
+            result.emplace_back(slice, serialize(slice));
+            currentStartIndex += i;
+        }
+        return result;
     }
 
     std::shared_ptr<arrow::Scalar> GetMaxScalar() const {
@@ -372,6 +394,10 @@ public:
     virtual ~IChunkedArray() = default;
 
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
+    std::shared_ptr<IChunkedArray> ISlice(const ui32 offset, const ui32 count) const {
+        AFL_VERIFY(offset + count <= GetRecordsCount())("offset", offset)("count", count)("records", GetRecordsCount());
+        return DoISlice(offset, count);
+    }
 
     bool IsDataOwner() const {
         switch (Type) {

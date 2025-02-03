@@ -67,6 +67,9 @@ void TGeneralContainer::DeleteFieldsByIndex(const std::vector<ui32>& idxs) {
 
 void TGeneralContainer::Initialize() {
     std::optional<ui64> recordsCount;
+    if (Schema->num_fields() == 0) {
+        recordsCount = 0;
+    }
     AFL_VERIFY(Schema->num_fields() == (i32)Columns.size())("schema", Schema->num_fields())("columns", Columns.size());
     for (i32 i = 0; i < Schema->num_fields(); ++i) {
         AFL_VERIFY(Columns[i]);

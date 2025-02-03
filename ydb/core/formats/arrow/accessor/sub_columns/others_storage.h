@@ -2,6 +2,7 @@
 
 #include "stats.h"
 
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/common/container.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -17,6 +18,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
+    TOthersData Slice(const ui32 offset, const ui32 count) const;
+
     static TOthersData BuildEmpty() {
         return TOthersData(TDictStats::BuildEmpty(), std::make_shared<TGeneralContainer>(0));
     }
@@ -45,35 +48,50 @@ public:
             , RecordIndexReader(records->GetColumnVerified(0))
             , KeyIndexReader(records->GetColumnVerified(1))
             , ValuesReader(records->GetColumnVerified(2)) {
-            auto recordIndexChunk = RecordIndexReader.GetReadChunk(0);
-            AFL_VERIFY(recordIndexChunk.GetArray()->length() == RecordsCount);
-            RecordIndex = std::static_pointer_cast<arrow::UInt32Array>(recordIndexChunk.GetArray());
+            if (RecordsCount) {
+                auto recordIndexChunk = RecordIndexReader.GetReadChunk(0);
+                AFL_VERIFY(recordIndexChunk.GetArray()->length() == RecordsCount);
+                RecordIndex = std::static_pointer_cast<arrow::UInt32Array>(recordIndexChunk.GetArray());
 
-            auto keyIndexChunk = KeyIndexReader.GetReadChunk(0);
-            AFL_VERIFY(keyIndexChunk.GetArray()->length() == RecordsCount);
-            KeyIndex = std::static_pointer_cast<arrow::UInt32Array>(keyIndexChunk.GetArray());
+                auto keyIndexChunk = KeyIndexReader.GetReadChunk(0);
+                AFL_VERIFY(keyIndexChunk.GetArray()->length() == RecordsCount);
+                KeyIndex = std::static_pointer_cast<arrow::UInt32Array>(keyIndexChunk.GetArray());
 
-            auto valuesChunk = ValuesReader.GetReadChunk(0);
-            AFL_VERIFY(valuesChunk.GetArray()->length() == RecordsCount);
-            Values = std::static_pointer_cast<arrow::StringArray>(valuesChunk.GetArray());
+                auto valuesChunk = ValuesReader.GetReadChunk(0);
+                AFL_VERIFY(valuesChunk.GetArray()->length() == RecordsCount);
+                Values = std::static_pointer_cast<arrow::StringArray>(valuesChunk.GetArray());
+            }
 
             CurrentIndex = 0;
         }
 
+        std::optional<ui32> FindPosition(const ui32 findRecordIndex) const {
+            return NArrow::FindUpperOrEqualPosition(*RecordIndex, findRecordIndex);
+        }
+
+        void MoveToPosition(const ui32 index) {
+            CurrentIndex = index;
+            AFL_VERIFY(IsValid());
+        }
+
         ui32 GetRecordIndex() const {
+            AFL_VERIFY(IsValid());
             return RecordIndex->Value(CurrentIndex);
         }
 
         ui32 GetKeyIndex() const {
+            AFL_VERIFY(IsValid());
             return KeyIndex->Value(CurrentIndex);
         }
 
         std::string_view GetValue() const {
+            AFL_VERIFY(IsValid());
             auto view = Values->GetView(CurrentIndex);
             return std::string_view(view.data(), view.size());
         }
 
         bool Next() {
+            AFL_VERIFY(IsValid());
             return ++CurrentIndex < RecordsCount;
         }
 
@@ -106,8 +124,12 @@ public:
         , Records(records) {
         AFL_VERIFY(Records->num_columns() == 3)("count", Records->num_columns());
         AFL_VERIFY(Records->GetColumnVerified(0)->GetDataType()->id() == arrow::uint32()->id());
-        AFL_VERIFY(Records->GetColumnVerified(1)->GetDataType()->id() == arrow::utf8()->id());
-        AFL_VERIFY(Records->GetColumnVerified(2)->GetDataType()->id() == arrow::uint32()->id());
+        AFL_VERIFY(Records->GetColumnVerified(1)->GetDataType()->id() == arrow::uint32()->id());
+        AFL_VERIFY(Records->GetColumnVerified(2)->GetDataType()->id() == arrow::utf8()->id());
+    }
+
+    const std::shared_ptr<IChunkedArray>& GetValuesArray() const {
+        return Records->GetColumnVerified(2);
     }
 
     class TBuilderWithStats: TNonCopyable {

@@ -30,6 +30,14 @@ private:
 public:
     TGeneralContainer(const ui32 recordsCount);
 
+    TGeneralContainer Slice(const ui32 offset, const ui32 count) const {
+        std::vector<std::shared_ptr<NAccessor::IChunkedArray>> columns;
+        for (auto&& i : Columns) {
+            columns.emplace_back(i->ISlice(offset, count));
+        }
+        return TGeneralContainer(Schema->GetFields(), std::move(columns));
+    }
+
     ui64 GetRawSizeVerified() const {
         ui64 result = 0;
         for (auto&& i : Columns) {

@@ -70,47 +70,6 @@ TSparsedArray::TSparsedArray(const IChunkedArray& defaultArray, const std::share
     Records.emplace_back(0, GetRecordsCount(), records, DefaultValue);
 }
 
-std::vector<TChunkedArraySerialized> TSparsedArray::DoSplitBySizes(
-    const TColumnLoader& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
-    AFL_VERIFY(Records.size() == 1)("size", Records.size());
-    auto chunks =
-        NArrow::NSplitter::TSimpleSplitter(saver.GetSerializer()).SplitBySizes(Records.front().GetRecords(), fullSerializedData, splitSizes);
-
-    std::vector<TChunkedArraySerialized> result;
-    ui32 idx = 0;
-    ui32 startIdx = 0;
-    for (auto&& i : chunks) {
-        AFL_VERIFY(i.GetSlicedBatch()->num_columns() == 2);
-        AFL_VERIFY(i.GetSlicedBatch()->column(0)->type()->id() == arrow::uint32()->id());
-        auto UI32Column = static_pointer_cast<arrow::UInt32Array>(i.GetSlicedBatch()->column(0));
-        ui32 nextStartIdx = NArrow::NAccessor::TSparsedArray::GetLastIndex(i.GetSlicedBatch()) + 1;
-        if (idx + 1 == chunks.size()) {
-            nextStartIdx = GetRecordsCount();
-        }
-        std::shared_ptr<arrow::RecordBatch> batch;
-        {
-            std::unique_ptr<arrow::ArrayBuilder> builder = NArrow::MakeBuilder(arrow::uint32());
-            arrow::UInt32Builder* builderImpl = (arrow::UInt32Builder*)builder.get();
-            for (ui32 rowIdx = 0; rowIdx < UI32Column->length(); ++rowIdx) {
-                TStatusValidator::Validate(builderImpl->Append(UI32Column->Value(rowIdx) - startIdx));
-            }
-            auto colIndex = TStatusValidator::GetValid(builder->Finish());
-            batch = arrow::RecordBatch::Make(
-                i.GetSlicedBatch()->schema(), i.GetSlicedBatch()->num_rows(), { colIndex, i.GetSlicedBatch()->column(1) });
-        }
-
-        ++idx;
-        {
-            TBuilder builder(DefaultValue, GetDataType());
-            builder.AddChunk(nextStartIdx - startIdx, batch);
-            result.emplace_back(builder.Finish(), saver.GetSerializer()->SerializePayload(batch));
-        }
-        startIdx = nextStartIdx;
-    }
-
-    return result;
-}
-
 std::shared_ptr<arrow::Scalar> TSparsedArray::DoGetMaxScalar() const {
     std::shared_ptr<arrow::Scalar> result;
     for (auto&& i : Records) {

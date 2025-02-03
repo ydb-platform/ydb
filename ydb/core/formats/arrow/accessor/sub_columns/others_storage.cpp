@@ -1,5 +1,8 @@
 #include "others_storage.h"
 
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -18,8 +21,8 @@ TOthersData::TBuilderWithStats::TBuilderWithStats() {
 void TOthersData::TBuilderWithStats::Add(const ui32 recordIndex, const ui32 keyIndex, const std::string_view value) {
     AFL_VERIFY(Builders.size());
     if (RecordsCountByKeyIndex.size() <= keyIndex) {
-        RecordsCountByKeyIndex.resize(RecordsCountByKeyIndex.size() * 2);
-        BytesByKeyIndex.resize(BytesByKeyIndex.size() * 2);
+        RecordsCountByKeyIndex.resize((keyIndex + 1) * 2);
+        BytesByKeyIndex.resize((keyIndex + 1) * 2);
     }
     ++RecordsCountByKeyIndex[keyIndex];
     BytesByKeyIndex[keyIndex] += value.size();
@@ -70,6 +73,60 @@ TOthersData TOthersData::TBuilderWithStats::Finish(const TDictStats& stats) {
     }
     auto arrays = NArrow::Finish(std::move(Builders));
     return TOthersData(*resultStats, std::make_shared<TGeneralContainer>(arrow::RecordBatch::Make(GetSchema(), RecordsCount, arrays)));
+}
+
+TOthersData TOthersData::Slice(const ui32 offset, const ui32 count) const {
+    AFL_VERIFY(Records->GetColumnsCount() == 3);
+    TOthersData::TIterator itOthersData = BuildIterator();
+    std::optional<ui32> startPosition = itOthersData.FindPosition(offset);
+    std::optional<ui32> finishPosition = itOthersData.FindPosition(offset + count);
+    if (!startPosition || startPosition == finishPosition) {
+        return TOthersData(TDictStats::BuildEmpty(), std::make_shared<TGeneralContainer>(0));
+    }
+    std::map<ui32, TDictStats::TRTStats> usedKeys;
+    {
+        itOthersData.MoveToPosition(*startPosition);
+        for (; itOthersData.IsValid() && itOthersData.GetRecordIndex() < offset + count; itOthersData.Next()) {
+            auto itUsedKey = usedKeys.find(itOthersData.GetKeyIndex());
+            if (itUsedKey == usedKeys.end()) {
+                itUsedKey = usedKeys.emplace(itOthersData.GetKeyIndex(), Stats.GetColumnName(itOthersData.GetKeyIndex())).first;
+            }
+            itUsedKey->second.AddValue(itOthersData.GetValue());
+        }
+    }
+    std::vector<ui32> keyIndexDecoder;
+    if (usedKeys.size()) {
+        keyIndexDecoder.resize(usedKeys.rbegin()->first + 1, Max<ui32>());
+        ui32 idx = 0;
+        for (auto&& i : usedKeys) {
+            keyIndexDecoder[i.first] = idx++;
+        }
+    }
+    std::vector<TDictStats::TRTStats> statKeys;
+    TDictStats::TBuilder statBuilder;
+    for (auto&& i : usedKeys) {
+        statBuilder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize());
+    }
+    TDictStats sliceStats = statBuilder.Finish();
+
+    {
+        auto recordIndexBuilder = NArrow::MakeBuilder(arrow::uint32());
+        auto keyIndexBuilder = NArrow::MakeBuilder(arrow::uint32());
+        itOthersData.MoveToPosition(*startPosition);
+        for (; itOthersData.IsValid() && itOthersData.GetRecordIndex() < offset + count; itOthersData.Next()) {
+            NArrow::Append<arrow::UInt32Type>(*recordIndexBuilder, itOthersData.GetRecordIndex() - offset);
+            AFL_VERIFY(itOthersData.GetKeyIndex() < keyIndexDecoder.size());
+            const ui32 newKeyIndex = keyIndexDecoder[itOthersData.GetKeyIndex()];
+            AFL_VERIFY(newKeyIndex < sliceStats.GetColumnsCount());
+            NArrow::Append<arrow::UInt32Type>(*keyIndexBuilder, keyIndexDecoder[itOthersData.GetKeyIndex()]);
+        }
+        auto recordIndexes = NArrow::FinishBuilder(std::move(recordIndexBuilder));
+        auto keyIndexes = NArrow::FinishBuilder(std::move(keyIndexBuilder));
+        std::vector<std::shared_ptr<IChunkedArray>> arrays = { std::make_shared<TTrivialArray>(recordIndexes),
+            std::make_shared<TTrivialArray>(keyIndexes), GetValuesArray()->ISlice(*startPosition, *finishPosition - *startPosition) };
+        auto sliceRecords = std::make_shared<TGeneralContainer>(GetSchema(), std::move(arrays));
+        return TOthersData(sliceStats, sliceRecords);
+    }
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

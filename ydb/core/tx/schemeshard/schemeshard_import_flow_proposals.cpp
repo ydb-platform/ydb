@@ -86,28 +86,23 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     return CreateTablePropose(ss, txId, importInfo, itemIdx, unused);
 }
 
-TVector<THolder<TEvSchemeShard::TEvModifySchemeTransaction>> CreateChangefeedsProposes( TSchemeShard* ss, TTxId txId, const TImportInfo::TItem& item) {
-    const auto& changefeeds = item.Changefeeds;
-    TVector<THolder<TEvSchemeShard::TEvModifySchemeTransaction>> result;
-    result.reserve(changefeeds.size());
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose( TSchemeShard* ss, TTxId txId, const TImportInfo::TItem& item) {
+    const auto& [changefeed, topic] = item.Changefeed;
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto& record = propose->Record;
+    auto& modifyScheme = *record.AddTransaction();
+    auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
 
-    for (const auto& [changefeed, topic]: changefeeds) {
-        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
-        auto& record = propose->Record;
-        auto& modifyScheme = *record.AddTransaction();
-        auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
+    TString error;
+    Ydb::StatusIds::StatusCode status;
 
-        TString error;
-        Ydb::StatusIds::StatusCode status;
+    auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
 
-        auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
-
-        Y_ABORT_UNLESS(FillChangefeedDescription(cdcStreamDescription, changefeed, status, error));
-            
-        cdcStream.SetRetentionPeriodSeconds(topic.Getretention_period().seconds());
-        result.push_back(std::move(propose));
-    }
-    return result;
+    Y_ABORT_UNLESS(FillChangefeedDescription(cdcStreamDescription, changefeed, status, error));
+        
+    cdcStream.SetRetentionPeriodSeconds(topic.Getretention_period().seconds());
+    
+    return propose;
 }
 
 static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) {

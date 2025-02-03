@@ -371,28 +371,23 @@ private:
         Y_ABORT_UNLESS(propose);
 
         Send(Self->SelfId(), std::move(propose));
-
-        CreateChangefeeds(importInfo, itemIdx, txId);
     }
 
-    void CreateChangefeeds(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+    void CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
         item.SubState = ESubState::Proposed;
 
-        LOG_I("TImport::TTxProgress: CreateChangefeeds propose"
+        LOG_I("TImport::TTxProgress: CreateChangefeed propose"
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
-        auto proposes = CreateChangefeedsProposes(Self, txId, item);
-
-        for (auto& propose : proposes) {
-            Send(Self->SelfId(), std::move(propose));
-        }
+        auto propose = CreateChangefeedPropose(Self, txId, item);
+        Send(Self->SelfId(), std::move(propose));
     }
 
     void ExecutePreparedQuery(TTransactionContext& txc, TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
@@ -1002,6 +997,11 @@ private:
 
             case EState::BuildIndexes:
                 BuildIndex(importInfo, i, txId);
+                itemIdx = i;
+                break;
+            
+            case EState::CreateChangefeed:
+                CreateChangefeed(importInfo, i, txId);
                 itemIdx = i;
                 break;
 

@@ -145,6 +145,7 @@ namespace {
         TString Scheme;
         TString CreationQuery;
         TString Permissions;
+        TVector<TString> Changefeeds;
         TVector<TTestData> Data;
 
         TTestDataWithScheme() = default;
@@ -251,12 +252,14 @@ namespace {
         const TTypedScheme& typedScheme,
         const TVector<std::pair<TString, ui64>>& shardsConfig = {{"a", 1}},
         const TString& permissions = "",
-        const TString& metadata = ""
+        const TString& metadata = "",
+        const TVector<TString> changefeeds = {}
     ) {
         TTestDataWithScheme result;
         result.Type = typedScheme.Type;
         result.Permissions = permissions;
         result.Metadata = metadata;
+        result.Changefeeds = changefeeds;
 
         switch (typedScheme.Type) {
         case EPathTypeTable:
@@ -5060,5 +5063,35 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             )"
         );
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleShardTableWithChangefeed) {
+        TTestBasicRuntime runtime;
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}});
+
+        Run(runtime, ConvertTestData(data), R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )");
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        NKqp::CompareYson(data.Data[0].YsonStr, content);
     }
 }

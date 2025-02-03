@@ -20,7 +20,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     ui32 itemIdx
 );
 
-TVector<THolder<TEvSchemeShard::TEvModifySchemeTransaction>> CreateChangefeedsProposes(
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo::TItem& item

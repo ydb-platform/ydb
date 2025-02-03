@@ -2828,6 +2828,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         CreateSchemeObject,
         Transferring,
         BuildIndexes,
+        CreateChangefeed,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,
@@ -2857,6 +2858,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
         TVector<TChangefeedImportDescriptions> Changefeeds;
+        int NextChangefeedIdx = 0;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;

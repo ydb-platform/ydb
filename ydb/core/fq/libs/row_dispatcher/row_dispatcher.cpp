@@ -117,16 +117,16 @@ struct TQueryStatKeyHash {
 };
 
 struct TAggQueryStat {
-    NYql::TCounters::TEntry FilteredReadBytes;
-    NYql::TCounters::TEntry UnreadBytes;
-    NYql::TCounters::TEntry UnreadRows;
+    NYql::TCounters::TEntry FilteredBytes;
+    NYql::TCounters::TEntry QueuedBytes;
+    NYql::TCounters::TEntry QueuedRows;
     NYql::TCounters::TEntry ReadLagMessages;
     bool IsWaiting = false;
 
     void Add(const TTopicSessionClientStatistic& stat) {
-        FilteredReadBytes.Add(NYql::TCounters::TEntry(stat.FilteredReadBytes));
-        UnreadBytes.Add(NYql::TCounters::TEntry(stat.UnreadBytes));
-        UnreadRows.Add(NYql::TCounters::TEntry(stat.UnreadRows));
+        FilteredBytes.Add(NYql::TCounters::TEntry(stat.FilteredBytes));
+        QueuedBytes.Add(NYql::TCounters::TEntry(stat.QueuedBytes));
+        QueuedRows.Add(NYql::TCounters::TEntry(stat.QueuedRows));
         ReadLagMessages.Add(NYql::TCounters::TEntry(stat.ReadLagMessages));
         IsWaiting = IsWaiting || stat.IsWaiting;
     }        
@@ -410,7 +410,7 @@ public:
     void UpdateReadActorsInternalState();
     template <class TEventPtr>
     bool CheckSession(TAtomicSharedPtr<TConsumerInfo>& consumer, const TEventPtr& ev);
-    void SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax);
+    void SetQueryMetrics(const TQueryStatKey& queryKey, ui64 queuedBytesMax, ui64 queuedBytesAvg, i64 readLagMessagesMax);
     void PrintStateToLog();
     void UpdateCpuTime();
 
@@ -611,7 +611,7 @@ void TRowDispatcher::UpdateMetrics() {
             toDelete.insert(key);
             continue;
         }
-        SetQueryMetrics(key, stats->UnreadBytes.Max, stats->UnreadBytes.Avg, stats->ReadLagMessages.Max);
+        SetQueryMetrics(key, stats->QueuedBytes.Max, stats->QueuedBytes.Avg, stats->ReadLagMessages.Max);
     }
     for (const auto& key : toDelete) {
          SetQueryMetrics(key, 0, 0, 0);
@@ -621,11 +621,11 @@ void TRowDispatcher::UpdateMetrics() {
     PrintStateToLog();
 }
 
-void TRowDispatcher::SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax) {
+void TRowDispatcher::SetQueryMetrics(const TQueryStatKey& queryKey, ui64 queuedBytesMax, ui64 queuedBytesAvg, i64 readLagMessagesMax) {
     auto queryGroup = Metrics.Counters->GetSubgroup("query_id", queryKey.QueryId);
     auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(queryKey.ReadGroup));
-    topicGroup->GetCounter("MaxUnreadBytes")->Set(unreadBytesMax);
-    topicGroup->GetCounter("AvgUnreadBytes")->Set(unreadBytesAvg);
+    topicGroup->GetCounter("MaxQueuedBytes")->Set(queuedBytesMax);
+    topicGroup->GetCounter("AvgQueuedBytes")->Set(queuedBytesAvg);
     topicGroup->GetCounter("MaxReadLag")->Set(readLagMessagesMax);
 }
 
@@ -663,11 +663,11 @@ TString TRowDispatcher::GetInternalState() {
 
     THashMap<TQueryStatKey, TAggQueryStat, TQueryStatKeyHash> queryState;
     THashMap<TQueryStatKey, ui64, TQueryStatKeyHash> sessionCountByQuery;
-    ui64 unreadBytesSum = 0;
+    ui64 queuedBytesSum = 0;
 
     for (auto& [sessionKey, sessionsInfo] : TopicSessions) {
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
-            unreadBytesSum += sessionInfo.Stat.UnreadBytes;
+            queuedBytesSum += sessionInfo.Stat.QueuedBytes;
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
                 auto key = TQueryStatKey{consumer->QueryId, sessionKey.ReadGroup};
                 ++sessionCountByQuery[key];
@@ -677,7 +677,7 @@ TString TRowDispatcher::GetInternalState() {
     }
 
     if (TopicSessions.size()) {
-        str << "Buffer used: " <<  Prec(unreadBytesSum * 100.0 / (TopicSessions.size() * MaxSessionBufferSizeBytes), 4) << "% (" << toHuman(unreadBytesSum) << ")\n";
+        str << "Buffer used: " <<  Prec(queuedBytesSum * 100.0 / (TopicSessions.size() * MaxSessionBufferSizeBytes), 4) << "% (" << toHuman(queuedBytesSum) << ")\n";
     }
 
     str << "Queries:\n";
@@ -685,10 +685,10 @@ TString TRowDispatcher::GetInternalState() {
         auto [queryId, readGroup] = queryStatKey;
         const auto& aggStat = AggrStats.LastQueryStats[queryStatKey];
         auto sessionsBufferSumSize = sessionCountByQuery[queryStatKey] * MaxSessionBufferSizeBytes;
-        auto used = sessionsBufferSumSize ? (stat.UnreadBytes.Sum * 100.0 / sessionsBufferSumSize) : 0.0;
-        str << "  " << queryId << " / " << readGroup << ": buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.UnreadBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.UnreadBytes.Max) << " data rate";
+        auto used = sessionsBufferSumSize ? (stat.QueuedBytes.Sum * 100.0 / sessionsBufferSumSize) : 0.0;
+        str << "  " << queryId << " / " << readGroup << ": buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.QueuedBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.QueuedBytes.Max) << " data rate";
         if (aggStat) {
-            printDataRate(aggStat->FilteredReadBytes);
+            printDataRate(aggStat->FilteredBytes);
         }
         str << " waiting " << stat.IsWaiting << " max read lag " << stat.ReadLagMessages.Max;
         str << "\n";
@@ -698,7 +698,7 @@ TString TRowDispatcher::GetInternalState() {
         str << "  " << key.TopicPath << " / " << key.PartitionId  << " / " << key.ReadGroup;
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             str << " / " << LeftPad(actorId, 32)
-                << " data rate " << toHumanDR(sessionInfo.AggrReadBytes.Sum) << " unread bytes " << toHuman(sessionInfo.Stat.UnreadBytes)
+                << " data rate " << toHumanDR(sessionInfo.AggrReadBytes.Sum) << " unread bytes " << toHuman(sessionInfo.Stat.QueuedBytes)
                 << " offset " << LeftPad(sessionInfo.Stat.LastReadedOffset, 12) << " restarts by offsets " << sessionInfo.Stat.RestartSessionByOffsets << "\n";
             ui64 maxInitialOffset = 0;
             ui64 minInitialOffset = std::numeric_limits<ui64>::max();
@@ -712,7 +712,7 @@ TString TRowDispatcher::GetInternalState() {
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
                 const auto& partition = consumer->Partitions[key.PartitionId];
                 str << "    " << consumer->QueryId << " " << LeftPad(readActorId, 32) << " unread bytes "
-                    << toHuman(consumer->Stat.UnreadBytes) << " (" << leftPad(consumer->Stat.UnreadRows) << " rows) "
+                    << toHuman(consumer->Stat.QueuedBytes) << " (" << leftPad(consumer->Stat.QueuedRows) << " rows) "
                     << " offset " << leftPad(consumer->Stat.Offset) << " init offset " << leftPad(consumer->Stat.InitialOffset)
                     << " get " << leftPad(consumer->Counters.GetNextBatch)
                     << " arr " << leftPad(consumer->Counters.NewDataArrived) << " btc " << leftPad(consumer->Counters.MessageBatch) 
@@ -1054,6 +1054,10 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
         }
         auto event = std::make_unique<TEvRowDispatcher::TEvStatistics>();
         ui64 readBytes = 0;
+        ui64 filteredBytes = 0;
+        ui64 filteredRows = 0;
+        ui64 queuedBytes = 0;
+        ui64 queuedRows = 0;
         for (auto& [partitionId, partition] : consumer->Partitions) {
             if (!partition.StatisticsUpdated) {
                 continue;
@@ -1062,12 +1066,20 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
             partitionsProto->SetPartitionId(partitionId);
             partitionsProto->SetNextMessageOffset(partition.Stat.Offset);
             readBytes += partition.Stat.ReadBytes;
+            filteredBytes += partition.Stat.FilteredBytes;
+            filteredRows += partition.Stat.FilteredRows;
+            queuedBytes += partition.Stat.QueuedBytes;
+            queuedRows += partition.Stat.QueuedRows;
             partition.Stat.Clear();
             partition.StatisticsUpdated = false;
         }
         event->Record.SetReadBytes(readBytes);
         event->Record.SetCpuMicrosec(consumer->CpuMicrosec);
         consumer->CpuMicrosec = 0;
+        event->Record.SetFilteredBytes(filteredBytes);
+        event->Record.SetFilteredRows(filteredRows);
+        event->Record.SetQueuedBytes(queuedBytes);
+        event->Record.SetQueuedRows(queuedRows);
         LWPROBE(Statistics, consumer->ReadActorId.ToString(), consumer->QueryId, consumer->Generation, event->Record.ByteSizeLong());
         consumer->EventsQueue.Send(event.release(), consumer->Generation);
     }
@@ -1102,7 +1114,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
                 key.TopicPath,
                 key.PartitionId,
                 stat.Common.ReadBytes,
-                stat.Common.UnreadBytes,
+                stat.Common.QueuedBytes,
                 stat.Common.RestartSessionByOffsets,
                 stat.Common.ReadEvents,
                 stat.Common.LastReadedOffset);

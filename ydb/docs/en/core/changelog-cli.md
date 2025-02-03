@@ -1,5 +1,28 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.19.0 {#2-19-0}
+
+Released on February 4, 2025. To update to version **2.19.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+### Features
+
+* Added [views](./concepts/datamodel/view) support in `ydb export s3` and `ydb import s3`. Views are exported as `CREATE VIEW` YQL statements which are executed on import.
+* Added [changefeeds](./concepts/cdc) support in `ydb tools dump` and `ydb tools restore`. As a result, there are changes in the backup file structure: for tables with changefeeds, a subdirectory is created for each changefeed, named after the changefeed. This subdirectory contains two files: `changefeed_description.pb`, which contains the changefeed description, and `topic_description.pb`, which contains information about the underlying topic.
+* Added `CREATE TABLE` text suggestion on scheme error during `ydb import file csv`.
+* Added `--skip-checksum-validation` option to `ydb import s3` command to skip server-side checksum validation.
+* Added statistics output on the current progress of the query in `ydb workload` command.
+* Added query text to error message if a query fails in `ydb workload run` comamnd.
+* Added a message if global timeout expiried in `ydb workload run` comamnd.
+* Added new experimental options for `ydb debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
+* Added some temporary changes to experimental `ydb admin storage` command for internal usage.
+
+### Bug fixes
+
+* Fixed a bug where arm64 YDB CLI binary was downloading amd64 binary to replace itself during `ydb update`. To update already installed binaries to the latest arm64 version, YDB CLI should be re-installed.
+* Fixed return code of `ydb workload run` comamnd.
+* Fixed a bug where `ydb workload tpch import generator` and `ydb workload tpcds import generator` commands were failing due to not all tables had been created
+* Fixed a bug with backslashes in `ydb workload` benchmark paths on Windows
+
 ## Version 2.18.0 {#2-18-0}
 
 Released on December 24, 2024. To update to version **2.18.0**, select the [Downloads](downloads/index.md#ydb-cli) section.

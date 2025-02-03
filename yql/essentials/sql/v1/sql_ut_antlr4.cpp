@@ -8121,3 +8121,42 @@ $__ydb_transfer_lambda = ($x) -> {
 
     }
 }
+
+Y_UNIT_TEST_SUITE(MatchRecognizeMeasuresAggregation) {
+    Y_UNIT_TEST(InsideSelect) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(0), LAST(1);
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:30: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(OutsideSelect) {
+        ExpectFailWithError(R"sql(
+            $lambda = ($x) -> (FIRST($x) + LAST($x));
+            SELECT $lambda(x) FROM plato.Input;
+            )sql",
+            "<main>:2:32: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:44: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(AsAggregateFunction) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(x), LAST(x) FROM plato.Input;
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:30: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(AsWindowFunction) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(x) OVER(), LAST(x) OVER() FROM plato.Input;
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:37: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+}

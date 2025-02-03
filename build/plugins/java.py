@@ -256,18 +256,19 @@ def on_fill_jar_gen_srcs(unit, *args):
     resolved_srcdir = unit.resolve_arc_path(srcdir)
     if not resolved_srcdir.startswith('$') or resolved_srcdir.startswith('$S'):
         return
+    if jar_type == 'SRC_JAR' and unit.get('SOURCES_JAR') != 'yes':
+        return
 
+    args_delim = unit.get('JAR_BUILD_SCRIPT_FLAGS_DELIM')
     exclude_pos = args.index('EXCLUDE')
-    globs = args[7:exclude_pos]
-    excludes = args[exclude_pos + 1 :]
+    globs = ' '.join(args[7:exclude_pos])
+    excludes = ' '.join(args[exclude_pos + 1 :])
     var = unit.get(varname)
-    var += ' && ${{cwd:BINDIR}} $YMAKE_PYTHON ${{input:"build/scripts/resolve_java_srcs.py"}} --append -d {} -s {} -k {} -r {} --include-patterns {}'.format(
-        srcdir, java_list, kt_list, res_list, ' '.join(globs)
-    )
+    var += f' {args_delim} --append -d {srcdir} -s {java_list} -k {kt_list} -r {res_list} --include-patterns {globs}'
     if jar_type == 'SRC_JAR':
         var += ' --all-resources'
     if len(excludes) > 0:
-        var += ' --exclude-patterns {}'.format(' '.join(excludes))
+        var += f' --exclude-patterns {excludes}'
     if unit.get('WITH_KOTLIN_VALUE') == 'yes':
         var += ' --resolve-kotlin'
     unit.set([varname, var])

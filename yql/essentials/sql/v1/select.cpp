@@ -95,10 +95,11 @@ TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery,
 
 class TSourceNode: public INode {
 public:
-    TSourceNode(TPosition pos, TSourcePtr&& source, bool checkExist)
+    TSourceNode(TPosition pos, TSourcePtr&& source, bool checkExist, bool withTables)
         : INode(pos)
         , Source(std::move(source))
         , CheckExist(checkExist)
+        , WithTables(withTables)
     {}
 
     ISource* GetSource() override {
@@ -133,6 +134,20 @@ public:
             }
             src->AddDependentSource(Source.Get());
         }
+        if (Node && WithTables) {
+            TTableList tableList;
+            Source->GetInputTables(tableList);
+
+            TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, IsSubquery(), ctx.Scoped));
+            if (!inputTables->Init(ctx, Source.Get())) {
+                return false;
+            }
+
+            auto blockContent = inputTables;
+            blockContent = L(blockContent, Y("return", Node));
+            Node = Y("block", Q(blockContent));
+        }
+
         return true;
     }
 
@@ -150,16 +165,17 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TSourceNode(Pos, Source->CloneSource(), CheckExist);
+        return new TSourceNode(Pos, Source->CloneSource(), CheckExist, WithTables);
     }
 protected:
     TSourcePtr Source;
     TNodePtr Node;
     bool CheckExist;
+    bool WithTables;
 };
 
-TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist) {
-    return new TSourceNode(pos, std::move(source), checkExist);
+TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist, bool withTables) {
+    return new TSourceNode(pos, std::move(source), checkExist, withTables);
 }
 
 class TFakeSource: public ISource {
@@ -338,7 +354,10 @@ protected:
     }
 
     void GetInputTables(TTableList& tableList) const override {
-        Source->GetInputTables(tableList);
+        if (Source) {
+            Source->GetInputTables(tableList);
+        }
+
         ISource::GetInputTables(tableList);
     }
 

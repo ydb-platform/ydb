@@ -2673,6 +2673,7 @@ private:
                 }
                 mergeSpec.Output(ytDst);
                 mergeSpec.ForceTransform(forceTransform);
+                FillOperationSpec(mergeSpec, execCtx);
 
                 if (rowSpec->IsSorted()) {
                     mergeSpec.Mode(MM_SORTED);
@@ -3082,7 +3083,7 @@ private:
         mapOpSpec.AddOutput(tmpTable);
         job->SetTableNames(inputTables);
 
-        FillOperationSpec(mapOpSpec, execCtx);
+        FillUserOperationSpec(mapOpSpec, execCtx);
 
         NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
         FillSpec(spec, *execCtx, entry, 0., Nothing(), EYtOpProp::WithMapper);
@@ -3552,6 +3553,7 @@ private:
                 sortOpSpec.Output(outYPaths.front());
                 sortOpSpec.SortBy(execCtx->OutTables_.front().SortedBy);
                 sortOpSpec.SchemaInferenceMode(ESchemaInferenceMode::FromOutput);
+                FillOperationSpec(sortOpSpec, execCtx);
 
                 NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
 
@@ -3629,6 +3631,7 @@ private:
                 mergeOpSpec.ForceTransform(forceTransform);
                 mergeOpSpec.CombineChunks(combineChunks);
                 mergeOpSpec.SchemaInferenceMode(ESchemaInferenceMode::FromOutput);
+                FillOperationSpec(mergeOpSpec, execCtx);
 
                 NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
                 EYtOpProps flags = EYtOpProp::AllowSampling;
@@ -3798,7 +3801,7 @@ private:
 
                 mapOpSpec.MapperSpec(userJobSpec);
             }
-            FillOperationSpec(mapOpSpec, execCtx);
+            FillUserOperationSpec(mapOpSpec, execCtx);
             auto formats = job->GetIOFormats(execCtx->FunctionRegistry_);
             mapOpSpec.InputFormat(forceYsonInputFormat ? NYT::TFormat::YsonBinary() : formats.first);
             mapOpSpec.OutputFormat(formats.second);
@@ -4008,7 +4011,7 @@ private:
                 FillUserJobSpec(userJobSpec, execCtx, extraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
                 reduceOpSpec.ReducerSpec(userJobSpec);
             }
-            FillOperationSpec(reduceOpSpec, execCtx);
+            FillUserOperationSpec(reduceOpSpec, execCtx);
             auto formats = job->GetIOFormats(execCtx->FunctionRegistry_);
             reduceOpSpec.InputFormat(formats.first);
             reduceOpSpec.OutputFormat(formats.second);
@@ -4287,7 +4290,7 @@ private:
                 FillUserJobSpec(reduceUserJobSpec, execCtx, reduceExtraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
                 mapReduceOpSpec.ReducerSpec(reduceUserJobSpec);
             }
-            FillOperationSpec(mapReduceOpSpec, execCtx);
+            FillUserOperationSpec(mapReduceOpSpec, execCtx);
             auto formats = mapJob->GetIOFormats(execCtx->FunctionRegistry_);
             if (!intermediateSchema.IsUndefined() && formats.second.Config.AsString() == "skiff") {
                 formats.second.Config.Attributes()["override_intermediate_table_schema"] = intermediateSchema;
@@ -4440,7 +4443,7 @@ private:
                 FillUserJobSpec(reduceUserJobSpec, execCtx, reduceExtraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
                 mapReduceOpSpec.ReducerSpec(reduceUserJobSpec);
             }
-            FillOperationSpec(mapReduceOpSpec, execCtx);
+            FillUserOperationSpec(mapReduceOpSpec, execCtx);
             auto formats = reduceJob->GetIOFormats(execCtx->FunctionRegistry_);
             if (!intermediateSchema.IsUndefined() && formats.first.Config.AsString() == "skiff") {
                 formats.first.Config.Attributes()["override_intermediate_table_schema"] = intermediateSchema;
@@ -4770,7 +4773,7 @@ private:
                 mapOpSpec.AddOutput(outYPaths[i]);
             }
 
-            FillOperationSpec(mapOpSpec, execCtx);
+            FillUserOperationSpec(mapOpSpec, execCtx);
             const auto formats = job->GetIOFormats(execCtx->FunctionRegistry_);
             mapOpSpec.InputFormat(formats.first);
             mapOpSpec.OutputFormat(formats.second);
@@ -5396,7 +5399,7 @@ private:
 
         mapOpSpec.AddInput(tmpTable);
         mapOpSpec.AddOutput(tmpTable);
-        FillOperationSpec(mapOpSpec, execCtx);
+        FillUserOperationSpec(mapOpSpec, execCtx);
 
         if (localRun && mapOpSpec.MapperSpec_.Files_.empty()) {
             return LocalCalcJob(mapOpSpec, job.Get(), lambda, std::move(factory));

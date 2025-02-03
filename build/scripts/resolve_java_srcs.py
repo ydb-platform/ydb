@@ -22,7 +22,7 @@ def pattern_to_regexp(p):
         '^'
         + ('/' if not p.startswith('**') else '')
         + re.escape(p)
-        .replace(r'\*\*\/', '[_DIR_]')
+        .replace(r'\*\*/', '[_DIR_]')
         .replace(r'\*', '[_FILE_]')
         .replace('[_DIR_]', '(.*/)?')
         .replace('[_FILE_]', '([^/]*)')
@@ -80,7 +80,7 @@ def resolve_java_srcs(srcdir, include_patterns, exclude_patterns, all_resources,
     return sorted(result['java']), sorted(result['not_java']), sorted(result['kotlin'])
 
 
-def do_it(
+def resolve_sources_and_fill_filelists(
     directory,
     sources_file,
     resources_file,
@@ -99,7 +99,7 @@ def do_it(
         open(kotlin_sources_file, mode).writelines(i + '\n' for i in k + j)
 
 
-if __name__ == '__main__':
+def cli_main(argv, force_skip_source_jars=False):
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--directory', required=True)
     parser.add_argument('-s', '--sources-file', required=True)
@@ -110,6 +110,13 @@ if __name__ == '__main__':
     parser.add_argument('--resolve-kotlin', action='store_true', default=False)
     parser.add_argument('--include-patterns', nargs='*', default=[])
     parser.add_argument('--exclude-patterns', nargs='*', default=[])
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    do_it(**vars(args))
+    if force_skip_source_jars and args.all_resources:
+        return
+
+    resolve_sources_and_fill_filelists(**vars(args))
+
+
+if __name__ == '__main__':
+    cli_main(sys.argv[1:])

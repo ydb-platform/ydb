@@ -683,6 +683,8 @@ public:
 
     static size_t SerializedSize(TConstArrayRef<TCell> cells);
 
+    static TCell ExtractCell(std::string_view data, size_t pos);
+
     const TString& GetBuffer() const { return Buf; }
 
     TString ReleaseBuffer() {

@@ -2310,7 +2310,9 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
     if (!t.WriteInfo->BlobsFromHead.empty()) {
         auto& first = t.WriteInfo->BlobsFromHead.front();
-        NewHead.PartNo = first.GetPartNo();
+        // In one operation, a partition can write blocks of several transactions. Some of them can be broken down
+        // into parts. We need to take this division into account.
+        NewHead.PartNo += first.GetPartNo();
 
         Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
 

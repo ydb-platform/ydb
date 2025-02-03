@@ -105,7 +105,7 @@ struct TSplitSettings {
     TForceShardSplitSettings GetForceShardSplitSettings() const {
         return TForceShardSplitSettings{
             .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
-            .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
+            .DisableForceShardSplit = true,
         };
     }
 };
@@ -396,6 +396,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         THashMap<ui32, TColumn> Columns;
         TVector<ui32> KeyColumnIds;
         bool IsBackup = false;
+        bool IsRestore = false;
 
         NKikimrSchemeOp::TTableDescription TableDescriptionDiff;
         TMaybeFail<NKikimrSchemeOp::TTableDescription> TableDescriptionFull;
@@ -439,6 +440,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     THashMap<ui32, TColumn> Columns;
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
+    bool IsRestore = false;
     bool IsTemporary = false;
     TActorId OwnerActorId;
 
@@ -479,7 +481,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     const NKikimrSchemeOp::TTableIncrementalBackupConfig& IncrementalBackupConfig() const { return TableDescription.GetIncrementalBackupConfig(); }
     NKikimrSchemeOp::TTableIncrementalBackupConfig& MutableIncrementalBackupConfig() { return *TableDescription.MutableIncrementalBackupConfig(); }
 
-    bool IsRestoreTable() const {
+    bool IsIncrementalRestoreTable() const {
         switch (TableDescription.GetIncrementalBackupConfig().GetMode()) {
             case NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_NONE:
                 return false;
@@ -564,6 +566,7 @@ public:
         , Columns(std::move(alterData.Columns))
         , KeyColumnIds(std::move(alterData.KeyColumnIds))
         , IsBackup(alterData.IsBackup)
+        , IsRestore(alterData.IsRestore)
     {
         TableDescription.Swap(alterData.TableDescriptionFull.Get());
     }
@@ -2822,7 +2825,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         Invalid = 0,
         Waiting,
         GetScheme,
-        CreateTable,
+        CreateSchemeObject,
         Transferring,
         BuildIndexes,
         Done = 240,
@@ -2844,14 +2847,19 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString DstPathName;
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
+        TString CreationQuery;
+        TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
         TTxId WaitTxId = InvalidTxId;
+        TActorId SchemeGetter;
+        TActorId SchemeQueryExecutor;
         int NextIndexIdx = 0;
         TString Issue;
+        int ViewCreationRetries = 0;
 
         TItem() = default;
 
@@ -3672,17 +3680,32 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     }
 
     float CalcProgressPercent() const {
+        const auto total = Shards.size();
+        const auto done = DoneShards.size();
         if (IsBuildVectorIndex()) {
+            const auto inProgress = InProgressShards.size();
+            const auto toUpload = ToUploadShards.size();
             Y_ASSERT(KMeans.Level != 0);
-            // TODO(mbkkt) better calculation for vector index
-            return KMeans.Level * 100.0 / KMeans.Levels;
+            if (!KMeans.NeedsAnotherLevel() && !KMeans.NeedsAnotherParent()
+                && toUpload == 0 && inProgress == 0) {
+                return 100.f;
+            }
+            auto percent = static_cast<float>(KMeans.Level - 1) / KMeans.Levels;
+            auto multiply = 1.f / KMeans.Levels;
+            if (KMeans.State == TKMeans::MultiLocal) {
+                percent += (multiply * (total - inProgress - toUpload)) / total;
+            } else {
+                const auto parentSize = KMeans.BinPow(KMeans.K, KMeans.Level - 1);
+                const auto parentFrom = KMeans.ParentEnd - parentSize + 1;
+                percent += (multiply * (KMeans.Parent - parentFrom)) / parentSize;
+            }
+            return 100.f * percent;
         }
         if (Shards) {
-            float totalShards = Shards.size();
-            return 100.0 * DoneShards.size() / totalShards;
+            return (100.f * done) / total;
         }
         // No shards - no progress
-        return 0.0;
+        return 0.f;
     }
 
     void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;

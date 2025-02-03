@@ -479,11 +479,21 @@ void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& fol
     outFile.Write(protoStr.data(), protoStr.size());
 }
 
-void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
-    auto entry = DescribePath(driver, JoinDatabasePath(dbPrefix, path));
+void WriteCreationQueryToFile(const TString& creationQuery, const TFsPath& folderPath, const NDump::NFiles::TFileInfo& fileInfo) {
+    LOG_D("Write " << fileInfo.LogObjectType << " into " << folderPath.Child(fileInfo.FileName).GetPath().Quote());
+    TFile outFile(folderPath.Child(fileInfo.FileName), CreateAlways | WrOnly);
+    outFile.Write(creationQuery.data(), creationQuery.size());
+}
+
+void BackupPermissions(TDriver driver, const TString& dbPath, const TFsPath& folderPath) {
+    auto entry = DescribePath(driver, dbPath);
     Ydb::Scheme::ModifyPermissionsRequest proto;
     entry.SerializeTo(proto);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::Permissions());
+}
+
+void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
+    BackupPermissions(driver, JoinDatabasePath(dbPrefix, path), folderPath);
 }
 
 Ydb::Table::ChangefeedDescription ProtoFromChangefeedDesc(const NTable::TChangefeedDescription& changefeedDesc) {
@@ -492,11 +502,13 @@ Ydb::Table::ChangefeedDescription ProtoFromChangefeedDesc(const NTable::TChangef
     return protoChangeFeedDesc;
 }
 
-NTopic::TDescribeTopicResult DescribeTopic(TDriver driver, const TString& path) {
-    NYdb::NTopic::TTopicClient client(driver);
-    return NConsoleClient::RetryFunction([&]() {
-        return client.DescribeTopic(path).GetValueSync();
+NTopic::TTopicDescription DescribeTopic(TDriver driver, const TString& path) {
+    NTopic::TTopicClient client(driver);
+    const auto result = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeTopic(path).ExtractValueSync();
     });
+    VerifyStatus(result, "describe topic to build a backup");
+    return result.GetTopicDescription();
 }
 
 void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& folderPath) {
@@ -506,16 +518,14 @@ void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& 
         TFsPath changefeedDirPath = CreateDirectory(folderPath, TString{changefeedDesc.GetName()});
 
         auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
-        const auto descTopicResult = DescribeTopic(driver, JoinDatabasePath(tablePath, TString{changefeedDesc.GetName()}));
-        VerifyStatus(descTopicResult);
-        const auto& topicDescription = descTopicResult.GetTopicDescription();
+        const auto topicDescription = DescribeTopic(driver, JoinDatabasePath(tablePath, TString{changefeedDesc.GetName()}));
         auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
         // Unnecessary fields
         protoTopicDescription.clear_self();
         protoTopicDescription.clear_topic_stats();
 
         WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, NDump::NFiles::Changefeed());
-        WriteProtoToFile(protoTopicDescription, changefeedDirPath, NDump::NFiles::Topic());
+        WriteProtoToFile(protoTopicDescription, changefeedDirPath, NDump::NFiles::TopicDescription());
     }
 }
 
@@ -542,11 +552,12 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
 
 namespace {
 
-NView::TViewDescription DescribeView(NView::TViewClient& client, const TString& path) {
+NView::TViewDescription DescribeView(TDriver driver, const TString& path) {
+    NView::TViewClient client(driver);
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeView(path).ExtractValueSync();
     });
-    VerifyStatus(status);
+    VerifyStatus(status, "describe view to build a backup");
     return status.GetViewDescription();
 }
 
@@ -559,22 +570,18 @@ and writes it to the backup folder designated for this view.
 
 \param dbBackupRoot the root of the backup in the database
 \param dbPathRelativeToBackupRoot the path to the view in the database relative to the backup root
-\param fsBackupDir the path on the file system to write the file with the CREATE VIEW statement to
+\param fsBackupFolder the path on the file system to write the file with the CREATE VIEW statement to
 \param issues the accumulated backup issues container
 */
 void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPathRelativeToBackupRoot,
-    const TFsPath& fsBackupDir, NYql::TIssues& issues
+    const TFsPath& fsBackupFolder, NYql::TIssues& issues
 ) {
     Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
     const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
 
-    LOG_I("Backup view " << dbPath.Quote() << " to " << fsBackupDir.GetPath().Quote());
+    LOG_I("Backup view " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    NView::TViewClient client(driver);
-    const auto viewDescription = DescribeView(client, dbPath);
-
-    const auto fsPath = fsBackupDir.Child(NDump::NFiles::CreateView().FileName);
-    LOG_D("Write view creation query to " << fsPath.GetPath().Quote());
+    const auto viewDescription = DescribeView(driver, dbPath);
 
     const auto creationQuery = NDump::BuildCreateViewQuery(
         TFsPath(dbPathRelativeToBackupRoot).GetName(),
@@ -585,10 +592,22 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
     );
     Y_ENSURE(creationQuery, issues.ToString());
 
-    TFileOutput output(fsPath);
-    output << creationQuery;
+    WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateView());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
 
-    BackupPermissions(driver, dbBackupRoot, dbPathRelativeToBackupRoot, fsBackupDir);
+void BackupTopic(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup topic " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto topicDescription = DescribeTopic(driver, dbPath);
+
+    Ydb::Topic::CreateTopicRequest creationRequest;
+    topicDescription.SerializeTo(creationRequest);
+    creationRequest.clear_attributes();
+
+    WriteProtoToFile(creationRequest, fsBackupFolder, NDump::NFiles::CreateTopic());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
 void CreateClusterDirectory(const TDriver& driver, const TString& path, bool rootBackupDir = false) {
@@ -677,6 +696,9 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
             }
             if (dbIt.IsView()) {
                 BackupView(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
+            }
+            if (dbIt.IsTopic()) {
+                BackupTopic(driver, dbIt.GetFullPath(), childFolderPath);
             }
             dbIt.Next();
         }

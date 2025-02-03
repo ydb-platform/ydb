@@ -1,11 +1,15 @@
 #include "ydb_version.h"
 
-#include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
+#ifndef DISABLE_UPDATE
+    #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
+#endif
 
 #include <library/cpp/resource/resource.h>
 #include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient {
+
+const char* VersionResourceName = "version.txt";
 
 TCommandVersion::TCommandVersion()
     : TClientCommand("version", {}, "Print YDB CLI version")
@@ -20,6 +24,8 @@ void TCommandVersion::Config(TConfig& config) {
 
     config.Opts->AddLongOption("semantic", "Print semantic version only")
         .StoreTrue(&Semantic);
+
+#ifndef DISABLE_UPDATE
     config.Opts->AddLongOption("check", "Force to check latest version available")
         .StoreTrue(&config.ForceVersionCheck);
     config.Opts->AddLongOption("disable-checks", "Disable version checks. CLI will not check whether there is a newer version available")
@@ -33,6 +39,8 @@ void TCommandVersion::Config(TConfig& config) {
     config.Opts->MutuallyExclusive("enable-checks", "semantic");
     config.Opts->MutuallyExclusive("enable-checks", "check");
     config.Opts->MutuallyExclusive("check", "semantic");
+#endif
+
 }
 
 void TCommandVersion::Parse(TConfig& config) {
@@ -44,6 +52,7 @@ void TCommandVersion::Parse(TConfig& config) {
 int TCommandVersion::Run(TConfig& config) {
     Y_UNUSED(config);
 
+#ifndef DISABLE_UPDATE
     if (EnableChecks) {
         TYdbUpdater updater;
         updater.SetCheckVersion(true);
@@ -56,6 +65,8 @@ int TCommandVersion::Run(TConfig& config) {
         Cout << "Latest version checks disabled" << Endl;
         return EXIT_SUCCESS;
     }
+#endif
+
     if (!Semantic) {
         Cout << "YDB CLI ";
     }

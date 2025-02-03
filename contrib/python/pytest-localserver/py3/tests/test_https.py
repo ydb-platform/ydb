@@ -1,3 +1,4 @@
+import pytest
 import requests
 
 from pytest_localserver import https
@@ -39,5 +40,18 @@ def test_HEAD_request(httpsserver):
     httpsserver.serve_content("TEST!", headers={"Content-type": "text/plain"})
     print(httpsserver.url)
     resp = requests.head(httpsserver.url, verify=False)
+    assert resp.status_code == 200
+    assert resp.headers["Content-type"] == "text/plain"
+
+
+def test_client_does_not_trust_self_signed_certificate(httpsserver):
+    httpsserver.serve_content("TEST!", headers={"Content-type": "text/plain"})
+    with pytest.raises(requests.exceptions.SSLError, match="CERTIFICATE_VERIFY_FAILED"):
+        requests.get(httpsserver.url, verify=True)
+
+
+def test_add_server_certificate_to_client_trust_chain(httpsserver):
+    httpsserver.serve_content("TEST!", headers={"Content-type": "text/plain"})
+    resp = requests.get(httpsserver.url, verify=httpsserver.certificate)
     assert resp.status_code == 200
     assert resp.headers["Content-type"] == "text/plain"

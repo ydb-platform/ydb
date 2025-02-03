@@ -395,7 +395,7 @@ namespace NKikimr::NBsController {
 
                 static std::pair<TPDiskLayoutPosition, TPDiskLayoutPosition> MakeRange(const TPDiskLayoutPosition& x, TEntityId& scope) {
                     scope = x.Domain;
-                    return {x, x};
+                    return {{x.RealmGroup, x.Realm, x.Domain, TEntityId::Min()}, {x.RealmGroup, x.Realm, x.Domain, TEntityId::Max()}};
                 }
             };
 

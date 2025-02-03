@@ -40,6 +40,10 @@ struct TUpdateOperationParametersOptions
     : public TTimeoutOptions
 { };
 
+struct TPatchOperationSpecOptions
+    : public TTimeoutOptions
+{ };
+
 struct TDumpJobContextOptions
     : public TTimeoutOptions
 { };
@@ -475,6 +479,11 @@ struct IOperationClient
         const NYson::TYsonString& parameters,
         const TUpdateOperationParametersOptions& options = {}) = 0;
 
+    virtual TFuture<void> PatchOperationSpec(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const TPatchOperationSpecOptions& options = {}) = 0;
+
     virtual TFuture<TOperation> GetOperation(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const TGetOperationOptions& options = {}) = 0;
@@ -546,4 +555,3 @@ struct IOperationClient
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

@@ -79,6 +79,10 @@ void TParallelFileInputState::Next() {
     Valid_ = NextValue();
 }
 
+TString TParallelFileInputState::DebugInfo() const {
+    return {};
+}
+
 void TParallelFileInputState::Finish() {
     TimerAwaiting_.Report(Spec_->JobStats_);
     MkqlReader_.Finish();

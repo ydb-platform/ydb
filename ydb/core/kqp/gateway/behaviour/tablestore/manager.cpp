@@ -16,6 +16,9 @@ TConclusion<ITableStoreOperation::TPtr> TTableStoreManager::BuildOperation(
     if (context.GetActivityType() != NMetadata::NModifications::IOperationsManager::EActivityType::Alter) {
         return TConclusionStatus::Fail("not implemented");
     }
+    if (IsStandalone && !AppData()->ColumnShardConfig.GetAlterObjectEnabled()) {
+        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("ALTER OBJECT is disabled for column tables"));
+    }
     auto actionName = settings.GetFeaturesExtractor().Extract("ACTION");
     if (!actionName) {
         return TConclusionStatus::Fail("can't find ACTION parameter");
@@ -42,13 +45,51 @@ NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> TTableStoreManager
             TYqlConclusionStatus::Fail("This place needs an actor system. Please contact internal support"));
     }
 
-    auto promiseScheme = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
-    actorSystem->Register(new NKqp::TSchemeOpRequestHandler(request.Release(), promiseScheme, false));
-    return promiseScheme.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& f) {
-        if (f.HasValue() && !f.HasException() && f.GetValue().Success()) {
-            return TYqlConclusionStatus::Success();
-        } else if (f.HasValue()) {
-            return TYqlConclusionStatus::Fail(f.GetValue().Status(), f.GetValue().Issues().ToString());
+    switch (context.GetActivityType()) {
+        case EActivityType::Create:
+        case EActivityType::Upsert:
+        case EActivityType::Drop:
+        case EActivityType::Undefined:
+            return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("not implemented"));
+        case EActivityType::Alter:
+        try {
+            if (IsStandalone && !AppData()->ColumnShardConfig.GetAlterObjectEnabled()) {
+                return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("ALTER OBJECT is disabled for column tables"));
+            }
+            auto actionName = settings.GetFeaturesExtractor().Extract("ACTION");
+            if (!actionName) {
+                return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("can't find ACTION parameter"));
+            }
+            ITableStoreOperation::TPtr operation(ITableStoreOperation::TFactory::Construct(*actionName));
+            if (!operation) {
+                return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("invalid ACTION: " + *actionName));
+            }
+            {
+                auto parsingResult = operation->Deserialize(settings);
+                if (!parsingResult) {
+                    return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(parsingResult.GetErrorMessage()));
+                }
+            }
+            auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            ev->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
+            if (context.GetExternalData().GetUserToken()) {
+                ev->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
+            }
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            operation->SerializeScheme(schemeTx, IsStandalone);
+
+            auto promiseScheme = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
+            actorSystem->Register(new NKqp::TSchemeOpRequestHandler(ev.Release(), promiseScheme, false));
+            return promiseScheme.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& f) {
+                if (f.HasValue() && !f.HasException() && f.GetValue().Success()) {
+                    return TYqlConclusionStatus::Success();
+                } else if (f.HasValue()) {
+                    return TYqlConclusionStatus::Fail(f.GetValue().Status(), f.GetValue().Issues().ToString());
+                }
+                return TYqlConclusionStatus::Fail("no value in result");
+            });
+        } catch (yexception& e) {
+            return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(e.what()));
         }
         return TYqlConclusionStatus::Fail("no value in result");
     });

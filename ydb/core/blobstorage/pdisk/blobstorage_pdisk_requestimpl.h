@@ -1144,6 +1144,7 @@ public:
 class TShredPDisk : public TRequestBase {
 public:
     ui64 ShredGeneration;
+    ui64 Cookie;
 
     TShredPDisk(NPDisk::TEvShredPDisk& ev, TActorId sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ShredPDisk, reqIdx), OwnerSystem, 0, NPriInternal::Other)

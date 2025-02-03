@@ -73,7 +73,7 @@ void CheckToken(const TString& token, const NKikimrScheme::TEvDescribeSchemeResu
 
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
-    Y_UNIT_TEST(Login) {
+    Y_UNIT_TEST(UserLogin) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -107,9 +107,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
-    Y_UNIT_TEST(RemoveLogin) {
+    Y_UNIT_TEST_FLAG(RemoveUser, StrictAclCheck) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
@@ -125,12 +125,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
-    Y_UNIT_TEST(RemoveLogin_NonExisting) {
+    Y_UNIT_TEST_FLAG(RemoveUser_NonExisting, StrictAclCheck) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
 
-        for (bool missingOk : { false, true}) {
+        for (bool missingOk : {false, true}) {
             auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
             auto transaction = modifyTx->Record.AddTransaction();
             transaction->SetWorkingDir("/MyRoot");
@@ -148,9 +148,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
-    Y_UNIT_TEST(RemoveLogin_Groups) {
+    Y_UNIT_TEST_FLAG(RemoveUser_Groups, StrictAclCheck) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
@@ -193,9 +193,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
-    Y_UNIT_TEST(RemoveLogin_Owner) {
+    Y_UNIT_TEST_FLAG(RemoveUser_Owner, StrictAclCheck) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
@@ -213,15 +213,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
         // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
 
-        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1",
-            TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed, "User user1 owns /MyRoot/Dir1/DirSub1 and can't be removed"}});
+        if (StrictAclCheck) {
+            CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1",
+                TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed, "User user1 owns /MyRoot/Dir1/DirSub1 and can't be removed"}});
 
-        // check user still exists and has their rights:
-        {
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
-                {NLs::HasOwner("user1")});
-            auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "");
+            // check user still exists and has their rights:
+            {
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+                    {NLs::HasOwner("user1")});
+                auto resultLogin = Login(runtime, "user1", "password1");
+                UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "");
+            }
         }
 
         AsyncModifyACL(runtime, ++txId, "/MyRoot/Dir1", "DirSub1", NACLib::TDiffACL().SerializeAsString(), "user2");
@@ -237,9 +239,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
-    Y_UNIT_TEST(RemoveLogin_Acl) {
+    Y_UNIT_TEST_FLAG(RemoveUser_Acl, StrictAclCheck) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
@@ -262,17 +264,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
         // Cerr << DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Dir1").DebugString() << Endl;
 
-        CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1",
-            TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed, "User user1 has an ACL record on /MyRoot/Dir1 and can't be removed"}});
+        if (StrictAclCheck) {
+            CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1",
+                TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed, "User user1 has an ACL record on /MyRoot/Dir1 and can't be removed"}});
 
-        // check user still exists and has their rights:
-        {
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
-                {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
-                {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-            auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "");
+            // check user still exists and has their rights:
+            {
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+                    {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
+                    {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
+                auto resultLogin = Login(runtime, "user1", "password1");
+                UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "");
+            }
         }
 
         {
@@ -299,6 +303,121 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
+    Y_UNIT_TEST_FLAG(RemoveGroup, StrictAclCheck) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        CreateAlterLoginCreateGroup(runtime, ++txId, "/MyRoot", "group1");
+        AlterLoginAddGroupMembership(runtime, ++txId, "/MyRoot", "user1", "group1");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasGroup("group1", {"user1"})});
+        
+        CreateAlterLoginRemoveGroup(runtime, ++txId, "/MyRoot", "group1");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasNoGroup("group1")});
+    }
+
+    Y_UNIT_TEST_FLAG(RemoveGroup_NonExisting, StrictAclCheck) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
+        ui64 txId = 100;
+        
+        for (bool missingOk : {false, true}) {
+            auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+            auto transaction = modifyTx->Record.AddTransaction();
+            transaction->SetWorkingDir("/MyRoot");
+            transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+
+            auto removeUser = transaction->MutableAlterLogin()->MutableRemoveGroup();
+            removeUser->SetGroup("group1");
+            removeUser->SetMissingOk(missingOk);
+
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
+            TestModificationResults(runtime, txId, TVector<TExpectedResult>{{
+                missingOk ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusPreconditionFailed,
+                missingOk ? "" : "Group not found"
+            }});
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(RemoveGroup_Owner, StrictAclCheck) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateGroup(runtime, ++txId, "/MyRoot", "group1");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasGroup("group1", {})});
+
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
+        AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "group1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+                {NLs::HasOwner("group1")});
+
+        if (StrictAclCheck) {
+            CreateAlterLoginRemoveGroup(runtime, ++txId, "/MyRoot", "group1",
+                TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed, "Group group1 owns /MyRoot/Dir1 and can't be removed"}});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                {NLs::HasGroup("group1", {})});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+                    {NLs::HasOwner("group1")});
+        }
+
+        AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "root@builtin");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+                {NLs::HasOwner("root@builtin")});
+        
+        CreateAlterLoginRemoveGroup(runtime, ++txId, "/MyRoot", "group1");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasNoGroup("group1")});
+    }
+
+    Y_UNIT_TEST_FLAG(RemoveGroup_Acl, StrictAclCheck) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateGroup(runtime, ++txId, "/MyRoot", "group1");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasGroup("group1", {})});
+
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
+        {
+            NACLib::TDiffACL diffACL;
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "group1");
+            AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+        }
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+                {NLs::HasRight("+U:group1")});
+
+        if (StrictAclCheck) {
+            CreateAlterLoginRemoveGroup(runtime, ++txId, "/MyRoot", "group1",
+                TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed, "Group group1 has an ACL record on /MyRoot/Dir1 and can't be removed"}});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                {NLs::HasGroup("group1", {})});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+                    {NLs::HasRight("+U:group1")});
+        }
+
+        {
+            NACLib::TDiffACL diffACL;
+            diffACL.RemoveAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "group1");
+            AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+        }
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+                {NLs::HasNoRight("+U:group1")});
+        
+        CreateAlterLoginRemoveGroup(runtime, ++txId, "/MyRoot", "group1");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+            {NLs::HasNoGroup("group1")});
+    }
+
     Y_UNIT_TEST(TestExternalLogin) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -319,22 +438,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
     }
 
-    Y_UNIT_TEST(AddAccess_NonExisting) {
+    Y_UNIT_TEST_FLAG(AddAccess_NonExisting, StrictAclCheck) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
-        {
-            NACLib::TDiffACL diffACL;
-            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
+
+        if (StrictAclCheck) {
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
             TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "SID user1 not found"}});
-        }
 
-        {
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
             TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Owner SID user1 not found"}});
         }
@@ -343,11 +461,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
             {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"), NLs::HasOwner("root@builtin")});
+
+        AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+
+        AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
+            {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1"), NLs::HasOwner("user1")});
     }
 
-    Y_UNIT_TEST(AddAccess_NonYdb) {
+    Y_UNIT_TEST_FLAG(AddAccess_NonYdb, StrictAclCheck) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");

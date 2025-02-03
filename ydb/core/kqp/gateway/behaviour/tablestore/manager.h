@@ -11,7 +11,7 @@ namespace NKikimr::NKqp {
 
 class TTableStoreManager: public NMetadata::NModifications::IOperationsManager {
     using TBase = NMetadata::NModifications::IOperationsManager;
-    bool IsStandalone = false;
+    const bool IsStandalone = false;
 
 private:
     TConclusion<ITableStoreOperation::TPtr> BuildOperation(

@@ -2,9 +2,9 @@
 
 #include <library/cpp/colorizer/colors.h>
 
+#include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
-
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
 
@@ -68,7 +68,7 @@ private:
 
 class TSessionState {
 public:
-    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId, ui8 verboseLevel)
+    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId, TYdbSetupSettings::EVerbose verboseLevel)
         : Runtime_(runtime)
         , TargetNodeIndex_(targetNodeIndex)
     {
@@ -134,6 +134,8 @@ void FillQueryMeta(TQueryMeta& meta, const NKikimrKqp::TQueryResponse& response)
 //// TYdbSetup::TImpl
 
 class TYdbSetup::TImpl {
+    using EVerbose = TYdbSetupSettings::EVerbose;
+
 private:
     TAutoPtr<TLogBackend> CreateLogBackend() const {
         if (Settings_.LogOutputFile) {
@@ -176,24 +178,41 @@ private:
     }
 
     void SetStorageSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
-        TString diskPath;
+        TFsPath diskPath;
         if (Settings_.PDisksPath && *Settings_.PDisksPath != "-") {
-            diskPath = TStringBuilder() << *Settings_.PDisksPath << "/";
+            diskPath = *Settings_.PDisksPath;
+            if (!diskPath) {
+                ythrow yexception() << "Storage directory path should not be empty";
+            }
+            if (diskPath.IsRelative()) {
+                diskPath = TFsPath::Cwd() / diskPath;
+            }
+            diskPath.Fix();
+            diskPath.MkDir();
+            if (Settings_.VerboseLevel >= EVerbose::InitLogs) {
+                Cout << CoutColors_.Cyan() << "Setup storage by path: " << diskPath.GetPath() << CoutColors_.Default() << Endl;
+            }
         }
 
         bool formatDisk = true;
         NKqpRun::TStorageMeta storageMeta;
         if (diskPath) {
-            TFsPath storageMetaPath(diskPath);
-            storageMetaPath.MkDirs();
-
-            storageMetaPath = storageMetaPath.Child("kqprun_storage_meta.conf");
+            const auto storageMetaPath = TFsPath(diskPath).Child("kqprun_storage_meta.conf");
             if (storageMetaPath.Exists() && !Settings_.FormatStorage) {
                 if (!google::protobuf::TextFormat::ParseFromString(TFileInput(storageMetaPath.GetPath()).ReadAll(), &storageMeta)) {
                     ythrow yexception() << "Storage meta is corrupted, please use --format-storage";
                 }
                 storageMeta.SetStorageGeneration(storageMeta.GetStorageGeneration() + 1);
                 formatDisk = false;
+            }
+
+            if (Settings_.DiskSize && storageMeta.GetStorageSize() != *Settings_.DiskSize) {
+                if (!formatDisk) {
+                    ythrow yexception() << "Cannot change disk size without formatting storage, current disk size " << NKikimr::NBlobDepot::FormatByteSize(storageMeta.GetStorageSize()) << ", please use --format-storage";
+                }
+                storageMeta.SetStorageSize(*Settings_.DiskSize);
+            } else if (!storageMeta.GetStorageSize()) {
+                storageMeta.SetStorageSize(DEFAULT_STORAGE_SIZE);
             }
 
             TString storageMetaStr;
@@ -204,13 +223,16 @@ private:
             storageMetaOutput.Finish();
         }
 
+        TString storagePath = diskPath.GetPath();
+        SlashFolderLocal(storagePath);
+
         const NKikimr::NFake::TStorage storage = {
             .UseDisk = !!Settings_.PDisksPath,
             .SectorSize = NKikimr::TTestStorageFactory::SECTOR_SIZE,
             .ChunkSize = Settings_.PDisksPath ? NKikimr::TTestStorageFactory::CHUNK_SIZE : NKikimr::TTestStorageFactory::MEM_CHUNK_SIZE,
-            .DiskSize = Settings_.DiskSize,
+            .DiskSize = Settings_.DiskSize ? *Settings_.DiskSize : 32_GB,
             .FormatDisk = formatDisk,
-            .DiskPath = diskPath
+            .DiskPath = storagePath
         };
 
         serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.PDisksPath);
@@ -240,7 +262,7 @@ private:
         serverSettings.SetYtGateway(Settings_.YtGateway);
         serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         serverSettings.SetInitializeFederatedQuerySetupFactory(true);
-        serverSettings.SetVerbose(Settings_.VerboseLevel >= 2);
+        serverSettings.SetVerbose(Settings_.VerboseLevel >= EVerbose::InitLogs);
 
         SetLoggerSettings(serverSettings);
         SetFunctionRegistry(serverSettings);
@@ -351,10 +373,17 @@ private:
 
     void WaitResourcesPublishing() const {
         auto promise = NThreading::NewPromise();
-        GetRuntime()->Register(CreateResourcesWaiterActor(promise, Settings_.NodeCount), 0, GetRuntime()->GetAppData().SystemPoolId);
+        const TWaitResourcesSettings settings = {
+            .ExpectedNodeCount = static_cast<i32>(Settings_.NodeCount),
+            .HealthCheckLevel = Settings_.HealthCheckLevel,
+            .HealthCheckTimeout = Settings_.HealthCheckTimeout,
+            .VerboseLevel = Settings_.VerboseLevel,
+            .Database = NKikimr::CanonizePath(Settings_.DomainName)
+        };
+        GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), 0, GetRuntime()->GetAppData().SystemPoolId);
 
         try {
-            promise.GetFuture().GetValue(Settings_.InitializationTimeout);
+            promise.GetFuture().GetValue(2 * Settings_.HealthCheckTimeout);
         } catch (...) {
             ythrow yexception() << "Failed to initialize all resources: " << CurrentExceptionMessage();
         }
@@ -371,13 +400,13 @@ public:
         InitializeServer(grpcPort);
         WaitResourcesPublishing();
 
-        if (Settings_.MonitoringEnabled && Settings_.VerboseLevel >= 1) {
+        if (Settings_.MonitoringEnabled && Settings_.VerboseLevel >= EVerbose::Info) {
             for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount; ++nodeIndex) {
                 Cout << CoutColors_.Cyan() << "Monitoring port" << (Settings_.NodeCount > 1 ? TStringBuilder() << " for node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
             }
         }
 
-        if (Settings_.GrpcEnabled && Settings_.VerboseLevel >= 1) {
+        if (Settings_.GrpcEnabled && Settings_.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << grpcPort << Endl;
         }
     }

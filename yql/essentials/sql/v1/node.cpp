@@ -706,6 +706,14 @@ TAstNode* TAstDirectNode::Translate(TContext& ctx) const {
     return Node;
 }
 
+TNodePtr BuildList(TPosition pos, TVector<TNodePtr> nodes) {
+    return new TAstListNodeImpl(pos, std::move(nodes));
+}
+
+TNodePtr BuildQuote(TPosition pos, TNodePtr expr) {
+    return BuildList(pos, {BuildAtom(pos, "quote", TNodeFlags::Default), expr});
+}
+
 TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg) {
     return new TAstAtomNodeImpl(pos, content, flags, isOptionalArg);
 }
@@ -2667,10 +2675,6 @@ private:
 
 TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup) {
     return new TAccessNode(pos, ids, isLookup);
-}
-
-TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, const TString& var, const TString& column, bool theSameVar) {
-    return new TMatchRecognizeVarAccessNode(pos, var, column, theSameVar);
 }
 
 void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,

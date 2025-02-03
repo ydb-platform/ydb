@@ -3,7 +3,6 @@
 #include "restore_compat.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
@@ -11,6 +10,7 @@
 #include <ydb/public/lib/ydb_cli/dump/util/log.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -19,18 +19,18 @@
 #include <util/stream/file.h>
 #include <util/string/join.h>
 
-#include <format>
-
 #include <google/protobuf/text_format.h>
 
-namespace NYdb {
-namespace NDump {
+#include <format>
+
+namespace NYdb::NDump {
 
 using namespace NConsoleClient;
 using namespace NImport;
 using namespace NOperation;
 using namespace NScheme;
 using namespace NTable;
+using namespace NTopic;
 
 extern const char DOC_API_TABLE_VERSION_ATTR[] = "__document_api_version";
 extern const char DOC_API_REQUEST_TYPE[] = "_document_api_request";
@@ -42,28 +42,32 @@ bool IsFileExists(const TFsPath& path) {
 }
 
 template <typename TProtoType>
-TProtoType ReadProtoFromFile(const TFsPath& fsDirPath, const TLog* log, const NDump::NFiles::TFileInfo& fileInfo) {
-    LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read " << fileInfo.LogObjectType << " from " << fsDirPath.GetPath().Quote());
+TProtoType ReadProtoFromFile(const TFsPath& fsDirPath, const TLog* log, const NFiles::TFileInfo& fileInfo) {
+    const auto fsPath = fsDirPath.Child(fileInfo.FileName);
+    LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read " << fileInfo.LogObjectType << " from " << fsPath.GetPath().Quote());
     TProtoType proto;
-    Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsDirPath.Child(fileInfo.FileName)).ReadAll(), &proto));
+    Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
     return proto;
-
 }
 
 Ydb::Table::CreateTableRequest ReadTableScheme(const TFsPath& fsDirPath, const TLog* log) {
-    return ReadProtoFromFile<Ydb::Table::CreateTableRequest>(fsDirPath, log, NDump::NFiles::TableScheme());
+    return ReadProtoFromFile<Ydb::Table::CreateTableRequest>(fsDirPath, log, NFiles::TableScheme());
 }
 
 Ydb::Table::ChangefeedDescription ReadChangefeedDescription(const TFsPath& fsDirPath, const TLog* log) {
-    return ReadProtoFromFile<Ydb::Table::ChangefeedDescription>(fsDirPath, log, NDump::NFiles::Changefeed());
+    return ReadProtoFromFile<Ydb::Table::ChangefeedDescription>(fsDirPath, log, NFiles::Changefeed());
 }
 
 Ydb::Topic::DescribeTopicResult ReadTopicDescription(const TFsPath& fsDirPath, const TLog* log) {
-    return ReadProtoFromFile<Ydb::Topic::DescribeTopicResult>(fsDirPath, log, NDump::NFiles::TopicDescription());
+    return ReadProtoFromFile<Ydb::Topic::DescribeTopicResult>(fsDirPath, log, NFiles::TopicDescription());
 }
 
 Ydb::Topic::CreateTopicRequest ReadTopicCreationRequest(const TFsPath& fsDirPath, const TLog* log) {
-    return ReadProtoFromFile<Ydb::Topic::CreateTopicRequest>(fsDirPath, log, NDump::NFiles::CreateTopic());
+    return ReadProtoFromFile<Ydb::Topic::CreateTopicRequest>(fsDirPath, log, NFiles::CreateTopic());
+}
+
+Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadProtoFromFile<Ydb::Scheme::ModifyPermissionsRequest>(fsDirPath, log, NFiles::Permissions());
 }
 
 TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTableRequest& proto) {
@@ -74,20 +78,13 @@ TChangefeedDescription ChangefeedDescriptionFromProto(const Ydb::Table::Changefe
     return TProtoAccessor::FromProto(proto);
 }
 
-NTopic::TTopicDescription TopicDescriptionFromProto(Ydb::Topic::DescribeTopicResult&& proto) {
-    return NTopic::TTopicDescription(std::move(proto));
+TTopicDescription TopicDescriptionFromProto(Ydb::Topic::DescribeTopicResult&& proto) {
+    return TTopicDescription(std::move(proto));
 }
 
 TTableDescription TableDescriptionWithoutIndexesFromProto(Ydb::Table::CreateTableRequest proto) {
     proto.clear_indexes();
     return TableDescriptionFromProto(proto);
-}
-
-Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath, const TLog* log) {
-    LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read ACL from " << fsPath.Quote());
-    Ydb::Scheme::ModifyPermissionsRequest proto;
-    Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
-    return proto;
 }
 
 TStatus WaitForIndexBuild(TOperationClient& client, const TOperation::TOperationId& id) {
@@ -146,7 +143,7 @@ TMaybe<TRestoreResult> ErrorOnIncomplete(const TFsPath& fsPath) {
     return Nothing();
 }
 
-TRestoreResult CheckExistenceAndType(TSchemeClient& client, const TString& dbPath, NScheme::ESchemeEntryType expectedType) {
+TRestoreResult CheckExistenceAndType(TSchemeClient& client, const TString& dbPath, ESchemeEntryType expectedType) {
     auto pathDescription = DescribePath(client, dbPath);
     if (!pathDescription.IsSuccess()) {
         return Result<TRestoreResult>(dbPath, std::move(pathDescription));
@@ -160,12 +157,12 @@ TRestoreResult CheckExistenceAndType(TSchemeClient& client, const TString& dbPat
     return Result<TRestoreResult>();
 }
 
-TStatus CreateTopic(NTopic::TTopicClient& client, const TString& dbPath, const Ydb::Topic::CreateTopicRequest& creationRequest) {
-    const auto settings = NTopic::TCreateTopicSettings(creationRequest);
-    auto creationResult = NConsoleClient::RetryFunction([&]() {
+TStatus CreateTopic(TTopicClient& client, const TString& dbPath, const Ydb::Topic::CreateTopicRequest& request) {
+    const auto settings = TCreateTopicSettings(request);
+    auto result = NConsoleClient::RetryFunction([&]() {
         return client.CreateTopic(dbPath, settings).ExtractValueSync();
     });
-    return creationResult;
+    return result;
 }
 
 } // anonymous
@@ -283,7 +280,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
             size = ViewRestorationCalls.size();
             std::swap(calls, ViewRestorationCalls);
 
-            for (auto& [fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, isAlreadyExisting] : calls) {
+            for (const auto& [fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, isAlreadyExisting] : calls) {
                 auto result = RestoreView(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, isAlreadyExisting);
                 if (!result.IsSuccess()) {
                     lastFail = std::move(result);
@@ -322,49 +319,50 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         }
 
         const auto& fullPath = entry.Name; // RecursiveList returns full path instead of entry's name
+        TMaybe<TStatus> result;
 
         switch (entry.Type) {
             case ESchemeEntryType::Directory: {
-                auto result = NConsoleClient::RemoveDirectoryRecursive(SchemeClient, TableClient, nullptr, &QueryClient, TString{fullPath}, ERecursiveRemovePrompt::Never, {}, true, false);
-                if (!result.IsSuccess()) {
-                    LOG_E("Error removing directory: " << TString{fullPath}.Quote() << ": " << result.GetIssues().ToOneLineString());
-                    return restoreResult;
-                }
+                result = NConsoleClient::RemoveDirectoryRecursive(SchemeClient, TableClient, nullptr, &QueryClient,
+                    TString{fullPath}, ERecursiveRemovePrompt::Never, {}, true, false);
                 break;
             }
             case ESchemeEntryType::Table: {
-                auto result = TableClient.RetryOperationSync([path = fullPath](TSession session) {
+                result = TableClient.RetryOperationSync([&path = fullPath](TSession session) {
                     return session.DropTable(path).GetValueSync();
                 });
-                if (!result.IsSuccess()) {
-                    LOG_E("Error removing table: " << TString{fullPath}.Quote() << ": " << result.GetIssues().ToOneLineString());
-                    return restoreResult;
-                }
                 break;
             }
             case ESchemeEntryType::View: {
-                auto result = QueryClient.RetryQuerySync([&fullPath](NQuery::TSession session) {
-                    return session.ExecuteQuery(std::format(R"(
-                        DROP VIEW IF EXISTS `{}`;
-                    )", fullPath.c_str()), NQuery::TTxControl::NoTx()).ExtractValueSync();
+                result = QueryClient.RetryQuerySync([&path = fullPath](NQuery::TSession session) {
+                    return session.ExecuteQuery(std::format("DROP VIEW IF EXISTS `{}`;", path),
+                        NQuery::TTxControl::NoTx()).ExtractValueSync();
                 });
-                if (!result.IsSuccess()) {
-                    LOG_E("Error removing view: " << TString{fullPath}.Quote() << ": " << result.GetIssues().ToOneLineString());
-                    return restoreResult;
-                }
                 break;
             }
             default:
-                LOG_E("Error removing unexpected object: " << TString{fullPath}.Quote());
-                return restoreResult;
+                break;
+        }
+
+        if (!result) {
+            LOG_E("Error removing unexpected object: " << TString{fullPath}.Quote());
+            return restoreResult;
+        } else if (!result->IsSuccess()) {
+            LOG_E("Error removing " << entry.Type << ": " << TString{fullPath}.Quote()
+                << ": " << result->GetIssues().ToOneLineString());
+            return restoreResult;
         }
     }
 
     return restoreResult;
 }
 
-TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot,
-    const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
+TRestoreResult TRestoreClient::RestoreFolder(
+        const TFsPath& fsPath,
+        const TString& dbRestoreRoot,
+        const TString& dbPathRelativeToRestoreRoot,
+        const TRestoreSettings& settings,
+        const THashSet<TString>& oldEntries)
 {
     const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
 
@@ -446,8 +444,8 @@ TRestoreResult TRestoreClient::RestoreView(
     const TString& dbRestoreRoot,
     const TString& dbPathRelativeToRestoreRoot,
     const TRestoreSettings& settings,
-    bool isAlreadyExisting
-) {
+    bool isAlreadyExisting)
+{
     LOG_D("Process " << fsPath.GetPath().Quote());
 
     if (auto error = ErrorOnIncomplete(fsPath)) {
@@ -468,61 +466,65 @@ TRestoreResult TRestoreClient::RestoreView(
     }
 
     if (settings.DryRun_) {
-        return CheckExistenceAndType(SchemeClient, dbPath, NScheme::ESchemeEntryType::View);
+        return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::View);
     }
 
     LOG_D("Executing view creation query: " << query.Quote());
-    auto creationResult = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
-        return session.ExecuteQuery(
-            query,
-            NQuery::TTxControl::NoTx()
-        ).ExtractValueSync();
+    auto result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
+        return session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
     });
 
-    if (creationResult.IsSuccess()) {
-        LOG_D("Creation of the view " << dbPath.Quote() << " succeeded");
+    if (result.IsSuccess()) {
+        LOG_D("Created " << dbPath.Quote());
         return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
     }
 
-    if (creationResult.GetStatus() == EStatus::SCHEME_ERROR) {
-        LOG_I("Creation of the view: " << dbPath.Quote() << " failed; will retry.");
+    if (result.GetStatus() == EStatus::SCHEME_ERROR) {
+        LOG_I("Failed to create " << dbPath.Quote() << ". Will retry.");
         // Scheme error happens when the view depends on a table (or a view) that is not yet restored.
         // Instead of tracking view dependencies, we simply retry the creation of the view later.
         ViewRestorationCalls.emplace_back(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, isAlreadyExisting);
     } else {
-        LOG_E("Creation of the view: " << dbPath.Quote() << " failed");
+        LOG_E("Failed to create " << dbPath.Quote());
     }
-    return Result<TRestoreResult>(dbPath, std::move(creationResult));
+
+    return Result<TRestoreResult>(dbPath, std::move(result));
 }
 
 TRestoreResult TRestoreClient::RestoreTopic(
     const TFsPath& fsPath,
     const TString& dbPath,
     const TRestoreSettings& settings,
-    bool isAlreadyExisting
-) {
+    bool isAlreadyExisting)
+{
     LOG_D("Process " << fsPath.GetPath().Quote());
+
     if (auto error = ErrorOnIncomplete(fsPath)) {
         return *error;
     }
+
     LOG_I("Restore topic " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
     if (settings.DryRun_) {
-        return CheckExistenceAndType(SchemeClient, dbPath, NScheme::ESchemeEntryType::Topic);
+        return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::Topic);
     }
 
     const auto creationRequest = ReadTopicCreationRequest(fsPath, Log.get());
-    auto creationResult = CreateTopic(TopicClient, dbPath, creationRequest);
-    if (creationResult.IsSuccess()) {
-        LOG_D("Creation of the topic " << dbPath.Quote() << " succeeded");
+    auto result = CreateTopic(TopicClient, dbPath, creationRequest);
+    if (result.IsSuccess()) {
+        LOG_D("Created " << dbPath.Quote());
         return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
     }
-    LOG_E("Creation of the topic: " << dbPath.Quote() << " failed");
-    return Result<TRestoreResult>(dbPath, std::move(creationResult));
+
+    LOG_E("Failed to create " << dbPath.Quote());
+    return Result<TRestoreResult>(dbPath, std::move(result));
 }
 
-TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath,
-    const TRestoreSettings& settings, bool isAlreadyExisting)
+TRestoreResult TRestoreClient::RestoreTable(
+        const TFsPath& fsPath,
+        const TString& dbPath,
+        const TRestoreSettings& settings,
+        bool isAlreadyExisting)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
@@ -639,8 +641,11 @@ TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDe
     return Result<TRestoreResult>();
 }
 
-THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(const TString& dbPath, const TRestoreSettings& settings,
-    const TTableDescription& desc, const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators)
+THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(
+        const TString& dbPath,
+        const TRestoreSettings& settings,
+        const TTableDescription& desc,
+        const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators)
 {
     THolder<NPrivate::IDataWriter> writer;
     switch (settings.Mode_) {
@@ -656,11 +661,16 @@ THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(const TString& d
             break;
         }
     }
+
     return writer;
 }
 
-TRestoreResult TRestoreClient::CreateDataAccumulators(TVector<THolder<NPrivate::IDataAccumulator>>& outAccumulators,
-    const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc, ui32 dataFilesCount)
+TRestoreResult TRestoreClient::CreateDataAccumulators(
+        TVector<THolder<NPrivate::IDataAccumulator>>& outAccumulators,
+        const TString& dbPath,
+        const TRestoreSettings& settings,
+        const NTable::TTableDescription& desc,
+        ui32 dataFilesCount)
 {
     const ui32 accumulatorsCount = std::min(settings.InFly_, dataFilesCount);
     outAccumulators.resize(accumulatorsCount);
@@ -685,10 +695,16 @@ TRestoreResult TRestoreClient::CreateDataAccumulators(TVector<THolder<NPrivate::
             break;
         }
     }
+
     return Result<TRestoreResult>();
 }
 
-TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const TTableDescription& desc) {
+TRestoreResult TRestoreClient::RestoreData(
+        const TFsPath& fsPath,
+        const TString& dbPath,
+        const TRestoreSettings& settings,
+        const TTableDescription& desc)
+{
     // Threads can access memory owned by this vector through pointers during restore operation
     TVector<TFsPath> dataFiles = CollectDataFiles(fsPath);
 
@@ -867,41 +883,45 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
 
     changefeedDesc = changefeedDesc.WithRetentionPeriod(topicDesc.GetRetentionPeriod());
 
-    auto createResult = TableClient.RetryOperationSync([&changefeedDesc, &dbPath](TSession session) {
+    auto result = TableClient.RetryOperationSync([&changefeedDesc, &dbPath](TSession session) {
         return session.AlterTable(dbPath, TAlterTableSettings().AppendAddChangefeeds(changefeedDesc)).GetValueSync();
     });
-    if (createResult.IsSuccess()) {
+    if (result.IsSuccess()) {
         LOG_D("Created " << fsPath.GetPath().Quote());
     } else {
         LOG_E("Failed to create " << fsPath.GetPath().Quote());
-        return Result<TRestoreResult>(fsPath.GetPath(), std::move(createResult));
+        return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
     }
 
     return RestoreConsumers(Join("/", dbPath, fsPath.GetName()), topicDesc.GetConsumers());;
 }
 
-TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const std::vector<NTopic::TConsumer>& consumers) {
+TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const std::vector<TConsumer>& consumers) {
     for (const auto& consumer : consumers) {
-        auto createResult = TopicClient.AlterTopic(topicPath,
-            NTopic::TAlterTopicSettings()
+        auto result = TopicClient.AlterTopic(topicPath,
+            TAlterTopicSettings()
                 .BeginAddConsumer()
                     .ConsumerName(consumer.GetConsumerName())
                     .Important(consumer.GetImportant())
                     .Attributes(consumer.GetAttributes())
                 .EndAddConsumer()
         ).GetValueSync();
-        if (createResult.IsSuccess()) {
+        if (result.IsSuccess()) {
             LOG_D("Created consumer " << TString{consumer.GetConsumerName()}.Quote() << " for " << topicPath.Quote());
         } else {
             LOG_E("Failed to create " << TString{consumer.GetConsumerName()}.Quote() << " for " << topicPath.Quote());
-            return Result<TRestoreResult>(topicPath, std::move(createResult));
+            return Result<TRestoreResult>(topicPath, std::move(result));
         }
     }
+
     return Result<TRestoreResult>();
 }
 
-TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const TString& dbPath,
-    const TRestoreSettings& settings, bool isAlreadyExisting)
+TRestoreResult TRestoreClient::RestorePermissions(
+        const TFsPath& fsPath,
+        const TString& dbPath,
+        const TRestoreSettings& settings,
+        bool isAlreadyExisting)
 {
     if (auto error = ErrorOnIncomplete(fsPath)) {
         return *error;
@@ -921,12 +941,15 @@ TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const T
 
     LOG_D("Restore ACL " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
-    auto permissions = ReadPermissions(fsPath.Child(NFiles::Permissions().FileName), Log.get());
+    auto permissions = ReadPermissions(fsPath, Log.get());
     return ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
 }
 
-TRestoreResult TRestoreClient::RestoreEmptyDir(const TFsPath& fsPath, const TString& dbPath,
-    const TRestoreSettings& settings, bool isAlreadyExisting)
+TRestoreResult TRestoreClient::RestoreEmptyDir(
+        const TFsPath& fsPath,
+        const TString& dbPath,
+        const TRestoreSettings& settings,
+        bool isAlreadyExisting)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
@@ -944,8 +967,7 @@ TRestoreResult TRestoreClient::RestoreEmptyDir(const TFsPath& fsPath, const TStr
     return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
 }
 
-} // NDump
-} // NYdb
+} // NYdb::NDump
 
 Y_DECLARE_OUT_SPEC(, NYdb::NDump::NPrivate::TLocation, o, x) {
     return x.Out(o);

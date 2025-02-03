@@ -90,10 +90,12 @@ public:
         Insert,
         Upsert,
         BulkUpsert,
+        Select
     };
 
 private:
     TQueryInfoList WriteRows(TString operation, TVector<TRow>&& rows);
+    TQueryInfoList Select(TVector<TRow>&& rows);
     TQueryInfoList Insert(TVector<TRow>&& rows);
     TQueryInfoList Upsert(TVector<TRow>&& rows);
     TQueryInfoList BulkUpsert(TVector<TRow>&& rows);

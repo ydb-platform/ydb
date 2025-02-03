@@ -75,6 +75,8 @@ TQueryInfoList TLogGenerator::GetWorkload(int type) {
             return Upsert(GenerateRandomRows());
         case EType::BulkUpsert:
             return BulkUpsert(GenerateRandomRows());
+        case EType::Select:
+            return Select(GenerateRandomRows());
         default:
             return TQueryInfoList();
     }
@@ -86,6 +88,7 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TLogGenerator::GetSupportedWorkl
     result.emplace_back(static_cast<int>(EType::Insert), "insert", "Insert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::Upsert), "upsert", "Upsert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::BulkUpsert), "bulk_upsert", "Bulk upsert random rows into table near current ts");
+    result.emplace_back(static_cast<int>(EType::Select), "select", "Select random rows from table");
     return result;
 }
 
@@ -154,6 +157,61 @@ TQueryInfoList TLogGenerator::Insert(TVector<TRow>&& rows) {
 
 TQueryInfoList TLogGenerator::Upsert(TVector<TRow>&& rows) {
     return WriteRows("UPSERT", std::move(rows));
+}
+
+TQueryInfoList TLogGenerator::Select(TVector<TRow>&& rows) {
+    std::stringstream ss;
+
+    NYdb::TParamsBuilder paramsBuilder;
+
+    ss << "--!syntax_v1\n";
+
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        for (size_t col = 0; col < Params.KeyColumnsCnt; ++col) {
+            TString paramName = "$r" + std::to_string(row) + "_" + std::to_string(col);
+            if (col == 0) {
+                ss << "DECLARE " << paramName << " AS Timestamp;\n";
+                paramsBuilder.AddParam(paramName).Timestamp(rows[row].Ts).Build();
+            } else if (col < Params.IntColumnsCnt) {
+                ss << "DECLARE " << paramName << " AS Uint64;\n";
+                paramsBuilder.AddParam(paramName).Uint64(rows[row].Ints[col]).Build();
+            } else {
+                ss << "DECLARE " << paramName << " AS String;\n";
+                paramsBuilder.AddParam(paramName).String(rows[row].Strings[col - Params.IntColumnsCnt]).Build();
+            }
+        }
+    }
+
+    ss << "SELECT ";
+    for (size_t col = 1; col <= TotalColumnsCnt; ++col) {
+        ss << "c" << col;
+        if (col + 1 < TotalColumnsCnt) {
+            ss << ",";
+        }
+        ss << " ";
+    }
+
+    ss << "FROM `" << Params.TableName << "` WHERE ";
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        for (size_t col = 0; col < Params.KeyColumnsCnt; ++col) {
+            TString paramName = "$r" + std::to_string(row) + "_" + std::to_string(col);
+            if (col == 0) {
+                ss << "ts = " << paramName;
+            } else {
+                ss << "c" << col << " = " << paramName;
+            }
+            if (col + 1 < Params.KeyColumnsCnt) {
+                ss << " AND ";
+            }
+        }
+        if (row + 1 < Params.RowsCnt) {
+            ss << " OR ";
+        }
+    }
+
+    auto params = paramsBuilder.Build();
+    TQueryInfo info(ss.str(), std::move(params));
+    return TQueryInfoList(1, std::move(info));
 }
 
 TQueryInfoList TLogGenerator::BulkUpsert(TVector<TRow>&& rows) {
@@ -278,6 +336,7 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
         opts.AddLongOption("key-cols", "Number of key columns")
             .DefaultValue((ui64)LogWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
         switch (static_cast<TLogGenerator::EType>(workloadType)) {
+        case TLogGenerator::EType::Select:
         case TLogGenerator::EType::Insert:
         case TLogGenerator::EType::Upsert:
         case TLogGenerator::EType::BulkUpsert:

@@ -26,6 +26,7 @@ target_link_libraries(engines-changes-abstract PUBLIC
   contrib-libs-cxxsupp
   yutil
   columnshard-counters-common
+  engines-changes-counters
   ydb-core-tablet_flat
   essentials-core-expr_nodes
   tx-columnshard-blobs_action

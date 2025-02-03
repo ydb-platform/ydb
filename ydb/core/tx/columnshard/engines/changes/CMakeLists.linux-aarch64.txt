@@ -13,8 +13,8 @@
 # changes in this file.
 
 add_subdirectory(abstract)
-add_subdirectory(compaction)
 add_subdirectory(counters)
+add_subdirectory(compaction)
 add_subdirectory(actualization)
 
 add_library(columnshard-engines-changes)

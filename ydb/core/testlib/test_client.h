@@ -291,6 +291,7 @@ namespace Tests {
             FeatureFlags.SetEnableColumnStore(true);
         }
 
+        TServerSettings() = default;
         TServerSettings(const TServerSettings& settings) = default;
         TServerSettings& operator=(const TServerSettings& settings) = default;
     private:

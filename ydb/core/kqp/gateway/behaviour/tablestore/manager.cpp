@@ -17,7 +17,7 @@ TConclusion<ITableStoreOperation::TPtr> TTableStoreManager::BuildOperation(
         return TConclusionStatus::Fail("not implemented");
     }
     if (IsStandalone && !AppData()->ColumnShardConfig.GetAlterObjectEnabled()) {
-        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("ALTER OBJECT is disabled for column tables"));
+        return TConclusionStatus::Fail("ALTER OBJECT is disabled for column tables");
     }
     auto actionName = settings.GetFeaturesExtractor().Extract("ACTION");
     if (!actionName) {

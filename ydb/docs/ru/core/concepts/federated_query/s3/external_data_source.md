@@ -24,13 +24,13 @@ WITH
 
 ## Создание внешнего подключения на S3 бакет {#external-data-source-settings}
 
-Бакеты в S3 бывают двух видов: публичные и приватные. Для подключения к публичному бакету необходимо использовать `AUTH_METHOD="NONE"`, а для подключения к приватному `AUTH_METHOD="AWS"`. Подробное описание `AWS` можно найти [здесь](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html). `AUTH_METHOD="NONE"` означает что не нужно использовать какую либо аутентификацию. В случае `AUTH_METHOD="AWS"` необходимо указать несколько дополнительных параметров:
+Бакеты в S3 бывают двух видов: публичные и приватные. Для подключения к публичному бакету необходимо использовать `AUTH_METHOD="NONE"`, а для подключения к приватному - `AUTH_METHOD="AWS"`. Подробное описание `AWS` можно найти [здесь](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html). `AUTH_METHOD="NONE"` означает, что не нужно использовать какую либо аутентификацию. В случае `AUTH_METHOD="AWS"` необходимо указать несколько дополнительных параметров:
 
-- `AWS_ACCESS_KEY_ID_SECRET_NAME` - ссылка на имя [секрета](../../datamodel/secrets.md) в котором хранится `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY_SECRET_NAME` - ссылка на имя [секрета](../../datamodel/secrets.md) в котором хранится `AWS_SECRET_ACCESS_KEY`
-- `AWS_REGION` - регион из которого будет происходить чтение, например `ru-central-1`
+- `AWS_ACCESS_KEY_ID_SECRET_NAME` - ссылка на имя [секрета](../../datamodel/secrets.md) в котором хранится `AWS_ACCESS_KEY_ID`.
+- `AWS_SECRET_ACCESS_KEY_SECRET_NAME` - ссылка на имя [секрета](../../datamodel/secrets.md) в котором хранится `AWS_SECRET_ACCESS_KEY`.
+- `AWS_REGION` - регион из которого будет происходить чтение, например `ru-central-1`.
 
-Для настройки соединения к публичному бакету достаточно выполнить следующий SQL-запрос. Запрос создаст внешнее подключение с именем `object_storage`, которое будет указывать на конкретный s3 бакет с именем `bucket`.
+Для настройки соединения к публичному бакету достаточно выполнить следующий SQL-запрос. Запрос создаст внешнее подключение с именем `object_storage`, которое будет указывать на конкретный S3 бакет с именем `bucket`.
 
 ```yql
 CREATE EXTERNAL DATA SOURCE object_storage WITH (
@@ -47,7 +47,7 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
     CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=`<key>`);
 ```
 
-Следующий шагом создается внешнее подключение с именем `object_storage`, которое будет указывать на конкретный s3 бакет с именем `bucket`. А также использовать `AUTH_METHOD="AWS"`. Для которого заполняются параметры `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, `AWS_REGION`. Значения этих параметров описаны выше
+Следующим шагом создается внешнее подключение с именем `object_storage`, которое будет указывать на конкретный S3 бакет с именем `bucket`, а также использовать `AUTH_METHOD="AWS"`, для которого заполняются параметры `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, `AWS_REGION`. Значения этих параметров описаны выше
 
 ```yql
 CREATE EXTERNAL DATA SOURCE object_storage WITH (
@@ -60,7 +60,7 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
 );
 ```
 
-Пример использования созданного внешнего подключения `object_storage` можно найти [здесь](#working_with_s3)
+Пример использования созданного внешнего подключения `object_storage` можно найти [здесь](#working_with_s3).
 
 ## Модель данных {#data_model}
 

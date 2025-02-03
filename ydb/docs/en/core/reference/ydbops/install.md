@@ -46,4 +46,4 @@ Currently, only building from source is available as an installation option. The
 
 ## Download the binary from releases page
 
-You can download binary releases from GitHub - [YDBOps Releases](https://github.com/ydb-platform/ydbops/releases).
+You can download binary releases from official site - [YDBOps Releases](https://ydb.tech/docs/en/downloads/#ydbops).

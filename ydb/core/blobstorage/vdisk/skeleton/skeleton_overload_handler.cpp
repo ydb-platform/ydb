@@ -2,6 +2,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
+#include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -181,6 +182,10 @@ namespace NKikimr {
     private:
         NMonGroup::TSkeletonOverloadGroup& Mon;
         TIntrusivePtr<TVDiskConfig> VCfg;
+        TPDiskCtxPtr PDiskCtx;
+
+        TControlWrapper ThrottlingMinInplacedSize;
+        TControlWrapper ThrottlingMaxInplacedSize;
 
         ui64 CurrentSstCount = 0;
         ui64 CurrentInplacedSize = 0;
@@ -215,8 +220,8 @@ namespace NKikimr {
 
         ui64 CalcInplacedSizeSpeedLimit() const {
             ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
-            ui64 maxInplacedSize = (ui64)VCfg->ThrottlingMaxInplacedSize;
+            ui64 minInplacedSize = (ui64)ThrottlingMinInplacedSize;
+            ui64 maxInplacedSize = (ui64)ThrottlingMaxInplacedSize;
 
             return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, deviceSpeed);
         }
@@ -252,15 +257,36 @@ namespace NKikimr {
 
     public:
         explicit TThrottlingController(
-            const TIntrusivePtr<TVDiskConfig> &vcfg,
-            NMonGroup::TSkeletonOverloadGroup& mon)
+            const TIntrusivePtr<TVDiskConfig>& vcfg,
+            NMonGroup::TSkeletonOverloadGroup& mon,
+            const TPDiskCtxPtr& pdiskCtx)
             : Mon(mon)
             , VCfg(vcfg)
-        {}
+            , PDiskCtx(pdiskCtx)
+        {
+            NPDisk::EDeviceType mediaType = NPDisk::DEVICE_TYPE_UNKNOWN;
+            if (PDiskCtx && PDiskCtx->Dsk) {
+                mediaType = PDiskCtx->Dsk->TrueMediaType;
+            }
+            if (mediaType == NPDisk::DEVICE_TYPE_UNKNOWN) {
+                mediaType = VCfg->BaseInfo.DeviceType;
+            }
+            switch (mediaType) {
+                case NPDisk::DEVICE_TYPE_SSD:
+                case NPDisk::DEVICE_TYPE_NVME:
+                    ThrottlingMinInplacedSize = VCfg->ThrottlingMinInplacedSizeSSD;
+                    ThrottlingMaxInplacedSize = VCfg->ThrottlingMaxInplacedSizeSSD;
+                    break;
+                default:
+                    ThrottlingMinInplacedSize = VCfg->ThrottlingMinInplacedSizeHDD;
+                    ThrottlingMaxInplacedSize = VCfg->ThrottlingMaxInplacedSizeHDD;
+                    break;
+            }
+        }
 
         bool IsActive() const {
             ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
-            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
+            ui64 minInplacedSize = (ui64)ThrottlingMinInplacedSize;
             ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
             ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
 
@@ -363,7 +389,7 @@ namespace NKikimr {
         , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
                 std::move(vMultiPut), std::move(loc), std::move(aoput)))
         , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx))
-        , ThrottlingController(new TThrottlingController(vcfg, Mon))
+        , ThrottlingController(new TThrottlingController(vcfg, Mon, pdiskCtx))
     {}
 
     TOverloadHandler::~TOverloadHandler() {}

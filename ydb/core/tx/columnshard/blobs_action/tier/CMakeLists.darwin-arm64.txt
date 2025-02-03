@@ -35,5 +35,6 @@ target_sources(columnshard-blobs_action-tier PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/read.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/storage.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/remove.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/common.cpp
 )
 

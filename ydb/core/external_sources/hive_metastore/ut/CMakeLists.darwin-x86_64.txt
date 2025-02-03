@@ -80,7 +80,7 @@ set_yunittest_property(
   ydb-core-external_sources-hive_metastore-ut
   PROPERTY
   LABELS
-  MEDIUM
+  LARGE
 )
 
 set_yunittest_property(

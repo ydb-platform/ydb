@@ -18,7 +18,6 @@ private:
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode) override {
         Ctx_->Attach(TActorId());
         TResponse resp;
-      //  FillYdbStatus(resp, IssueManager_.GetIssues(), status);
         Ctx_->WriteAndFinish(std::move(resp), grpc::Status::OK);
     }
 public:

@@ -175,6 +175,9 @@ struct TRange : public TOperation {
     }
 };
 
+constexpr bool NotifyWatchtower = true;
+using TNotifier = std::function<void(TString&&, NEtcd::TData&&, NEtcd::TData&&)>;
+
 struct TPut : public TOperation {
     TString Key, Value;
     i64 Lease = 0LL;
@@ -226,14 +229,19 @@ struct TPut : public TOperation {
         sql << "insert into `verhaal` select * from " << newResultSetName << ';' << Endl;
         sql << (update ? "update `huidig` on" : "upsert into `huidig`") << " select * from " << newResultSetName << ';' << Endl;
 
-        if (GetPrevious) {
+        if (GetPrevious || NotifyWatchtower) {
             if (resultsCounter)
                 ResultIndex = (*resultsCounter)++;
             sql << "select `value`, `created`, `modified`, `version`, `lease` from " << oldResultSetName << " where `version` > 0L;" << Endl;
         }
+        if (NotifyWatchtower) {
+            if (resultsCounter)
+                ++(*resultsCounter);
+            sql << "select `value`, `created`, `modified`, `version`, `lease` from " << newResultSetName << ';' << Endl;
+        }
     }
 
-    etcdserverpb::PutResponse MakeResponse(const NYdb::TResultSets& results) const {
+    etcdserverpb::PutResponse MakeResponse(const NYdb::TResultSets& results, const TNotifier& notifier) const {
         etcdserverpb::PutResponse response;
         if (GetPrevious) {
             if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
@@ -244,6 +252,24 @@ struct TPut : public TOperation {
                 prev->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
                 prev->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
                 prev->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+            }
+        }
+        if (NotifyWatchtower && notifier) {
+            NEtcd::TData oldData, newData;
+            if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
+                oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
+                oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
+                oldData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
+                oldData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
+                oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
+            }
+            if (auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
+                newData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
+                newData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
+                newData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
+                newData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
+                newData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
+                notifier(TString(Key), std::move(oldData), std::move(newData));
             }
         }
         return response;
@@ -278,15 +304,16 @@ struct TDeleteRange : public TOperation {
         sql << "select `key`, `created`, $Revision as `modified`, 0L as `version`, `value`, `lease` from $Old;" << Endl;
 
         sql << "select count(*) from " << oldResultSetName << ';' << Endl;
-        if (GetPrevious) {
+        if (GetPrevious || NotifyWatchtower) {
             if (resultsCounter)
                 ++(*resultsCounter);
             sql << "select `key`,`value`, `created`, `modified`, `version`, `lease` from " << oldResultSetName << ';' << Endl;
         }
+
         sql << "delete from `huidig` " << where << ';' << Endl;
     }
 
-    etcdserverpb::DeleteRangeResponse MakeResponse(const NYdb::TResultSets& results) const {
+    etcdserverpb::DeleteRangeResponse MakeResponse(const NYdb::TResultSets& results, const TNotifier& notifier) const {
         etcdserverpb::DeleteRangeResponse response;
         if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
             response.set_deleted(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
@@ -302,6 +329,18 @@ struct TDeleteRange : public TOperation {
                 kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
                 kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
                 kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+            }
+        }
+        if (NotifyWatchtower && notifier) {
+            auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]);
+            while (parser.TryNextRow()) {
+                NEtcd::TData oldData;
+                oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
+                oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
+                oldData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
+                oldData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
+                oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
+                notifier(TString(Key), std::move(oldData), {});
             }
         }
         return response;
@@ -473,7 +512,7 @@ struct TTxn : public TOperation {
         make(Failure, paramsCounter, resultsCounter, scalarBoolTwoName);
     }
 
-    etcdserverpb::TxnResponse MakeResponse(const NYdb::TResultSets& results) const {
+    etcdserverpb::TxnResponse MakeResponse(const NYdb::TResultSets& results, const TNotifier& notifier) const {
         etcdserverpb::TxnResponse response;
         if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
             const bool succeeded = NYdb::TValueParser(parser.GetValue(0)).GetBool();
@@ -483,11 +522,11 @@ struct TTxn : public TOperation {
                 if (const auto oper = std::get_if<TRange>(&operation))
                     *resp->mutable_response_range() = oper->MakeResponse(results);
                 else if (const auto oper = std::get_if<TPut>(&operation))
-                    *resp->mutable_response_put() = oper->MakeResponse(results);
+                    *resp->mutable_response_put() = oper->MakeResponse(results, notifier);
                 else if (const auto oper = std::get_if<TDeleteRange>(&operation))
-                    *resp->mutable_response_delete_range() = oper->MakeResponse(results);
+                    *resp->mutable_response_delete_range() = oper->MakeResponse(results, notifier);
                 else if (const auto oper = std::get_if<TTxn>(&operation))
-                    *resp->mutable_response_txn() = oper->MakeResponse(results);
+                    *resp->mutable_response_txn() = oper->MakeResponse(results, notifier);
             }
         }
         return response;
@@ -499,7 +538,7 @@ class TBaseEtcdRequest {
 protected:
     virtual bool ParseGrpcRequest() = 0;
     virtual void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) = 0;
-    virtual void ReplyWith(const NYdb::TResultSets& results) = 0;
+    virtual void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) = 0;
 
     i64 Revision;
 };
@@ -789,15 +828,15 @@ private:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NEtcd::TEvQueryResult, Handle);
+            HFunc(NEtcd::TEvQueryResult, Handle);
             hFunc(NEtcd::TEvQueryError, Handle);
         default:
             return TBase::StateFuncBase(ev);
         }
     }
 
-    void Handle(NEtcd::TEvQueryResult::TPtr &ev) {
-        this->ReplyWith(ev->Get()->Results);
+    void Handle(NEtcd::TEvQueryResult::TPtr &ev, const TActivationContext& ctx) {
+        this->ReplyWith(ev->Get()->Results, ctx);
     }
 
     void Handle(NEtcd::TEvQueryError::TPtr &ev) {
@@ -820,7 +859,7 @@ private:
         return Range.MakeQueryWithParams(sql, params);
     }
 
-    void ReplyWith(const NYdb::TResultSets& results) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext&) final {
         auto response = Range.MakeResponse(results);
         const auto header = response.mutable_header();
         header->set_revision(Revision);
@@ -849,8 +888,13 @@ private:
         return Put.MakeQueryWithParams(sql, params);
     }
 
-    void ReplyWith(const NYdb::TResultSets& results) final {
-        auto response = Put.MakeResponse(results);
+    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
+        const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
+        const auto notifier = [&watcher, &ctx](TString&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
+            ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
+        };
+
+        auto response = Put.MakeResponse(results, notifier);
         const auto header = response.mutable_header();
         header->set_revision(Revision);
         header->set_cluster_id(0ULL);
@@ -878,8 +922,13 @@ private:
         return DeleteRange.MakeQueryWithParams(sql, params);
     }
 
-    void ReplyWith(const NYdb::TResultSets& results) final {
-        auto response = DeleteRange.MakeResponse(results);
+    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
+        const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
+        const auto notifier = [&watcher, &ctx](TString&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
+            ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
+        };
+
+        auto response = DeleteRange.MakeResponse(results, notifier);
         const auto header = response.mutable_header();
         header->set_revision(Revision);
         header->set_cluster_id(0ULL);
@@ -908,8 +957,13 @@ private:
         return Txn.MakeQueryWithParams(sql, params, &resultsCounter, &paramsCounter);
     }
 
-    void ReplyWith(const NYdb::TResultSets& results) final {
-        auto response = Txn.MakeResponse(results);
+    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
+        const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
+        const auto notifier = [&watcher, &ctx](TString&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
+            ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
+        };
+
+        auto response = Txn.MakeResponse(results, notifier);
         const auto header = response.mutable_header();
         header->set_revision(Revision);
         header->set_cluster_id(0ULL);
@@ -939,7 +993,7 @@ private:
         sql << "delete from `verhaal` where `modified` < " << AddParam("Revision", params, KeyRevision) << ';' << Endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets&) final {
+    void ReplyWith(const NYdb::TResultSets&, const TActivationContext&) final {
         etcdserverpb::CompactionResponse response;
         const auto header = response.mutable_header();
         header->set_revision(Revision);

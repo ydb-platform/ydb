@@ -83,6 +83,7 @@ target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_comp_gen.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_compaction.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_compaction_multi.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_data_cleanup.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_datetime.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_decimal.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_charge.cpp

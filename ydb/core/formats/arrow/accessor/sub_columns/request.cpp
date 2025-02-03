@@ -4,19 +4,27 @@
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 NKikimrArrowAccessorProto::TRequestedConstructor TRequestedConstuctor::DoSerializeToProto() const {
-    return NKikimrArrowAccessorProto::TRequestedConstructor();
+    NKikimrArrowAccessorProto::TRequestedConstructor result;
+    *result.MutableSubColumns()->MutableSettings() = Settings.SerializeToRequestedProto();
+    return result;
 }
 
-bool TRequestedConstuctor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TRequestedConstructor& /*proto*/) {
-    return true;
+bool TRequestedConstuctor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TRequestedConstructor& proto) {
+    return Settings.DeserializeFromRequestedProto(proto.GetSubColumns().GetSettings());
 }
 
-NKikimr::TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeaturesExtractor& /*features*/) {
+NKikimr::TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) {
+    if (auto columnsLimit = features.Extract<ui32>("COLUMNS_LIMIT")) {
+        Settings.SetColumnsLimit(*columnsLimit);
+    }
+    if (auto kff = features.Extract<ui32>("SPARSED_DETECTOR_KFF")) {
+        Settings.SetSparsedDetectorKff(*kff);
+    }
     return TConclusionStatus::Success();
 }
 
 NKikimr::TConclusion<TConstructorContainer> TRequestedConstuctor::DoBuildConstructor() const {
-    return std::make_shared<TConstructor>();
+    return std::make_shared<TConstructor>(Settings);
 }
 
 }

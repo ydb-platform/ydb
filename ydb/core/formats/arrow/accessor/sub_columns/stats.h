@@ -1,4 +1,6 @@
 #pragma once
+#include "settings.h"
+
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -142,8 +144,8 @@ public:
         return result;
     }
 
-    TConstructorContainer GetAccessorConstructor(const ui32 columnIndex, const ui32 recordsCount) const;
-    bool IsSparsed(const ui32 columnIndex, const ui32 recordsCount) const;
+    TConstructorContainer GetAccessorConstructor(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const;
+    bool IsSparsed(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const;
     TDictStats(const std::shared_ptr<arrow::RecordBatch>& original);
 };
 

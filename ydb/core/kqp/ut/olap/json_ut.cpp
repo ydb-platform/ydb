@@ -11,24 +11,226 @@
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/strip.h>
 
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapJson) {
-    Y_UNIT_TEST(Simple) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_TX, NActors::NLog::PRI_DEBUG);
+    class ICommand {
+    private:
+        virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) = 0;
 
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    public:
+        virtual ~ICommand() = default;
 
+        TConclusionStatus Execute(TKikimrRunner& kikimr) {
+            return DoExecute(kikimr);
+        }
+    };
+
+    class TSchemaCommand: public ICommand {
+    private:
+        const TString Command;
+        virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
+            Cerr << "EXECUTE: " << Command << Endl;
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(Command).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            return TConclusionStatus::Success();
+        }
+
+    public:
+        TSchemaCommand(const TString& command)
+            : Command(command) {
+        }
+    };
+
+    class TDataCommand: public ICommand {
+    private:
+        const TString Command;
+        virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
+            Cerr << "EXECUTE: " << Command << Endl;
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto client = kikimr.GetQueryClient();
+            auto prepareResult = client.ExecuteQuery(Command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+            return TConclusionStatus::Success();
+        }
+
+    public:
+        TDataCommand(const TString& command)
+            : Command(command) {
+        }
+    };
+
+    class TSelectCommand: public ICommand {
+    private:
+        const TString Command;
+        const TString Compare;
+        virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
+            Cerr << "EXECUTE: " << Command << Endl;
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto it = kikimr.GetQueryClient().StreamExecuteQuery(Command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), NYdb::EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            if (Compare) {
+                Cerr << "COMPARE: " << Compare << Endl;
+                CompareYson(output, Compare);
+            }
+            return TConclusionStatus::Success();
+        }
+
+    public:
+        TSelectCommand(const TString& command, const TString& compare)
+            : Command(command)
+            , Compare(compare) {
+        }
+    };
+
+    class TWaitCompactionCommand: public ICommand {
+    private:
+        virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override {
+            auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+            AFL_VERIFY(controller);
+            controller->WaitCompactions(TDuration::Seconds(5));
+            return TConclusionStatus::Success();
+        }
+
+    public:
+        TWaitCompactionCommand() {
+        }
+    };
+
+    class TScriptExecutor {
+    private:
+        std::vector<std::shared_ptr<ICommand>> Commands;
+
+    public:
+        TScriptExecutor(const std::vector<std::shared_ptr<ICommand>>& commands)
+            : Commands(commands)
         {
-            const TString query = R"(
+
+        }
+        void Execute() {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+            auto settings = TKikimrSettings().SetAppConfig(appConfig).SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+            TKikimrRunner kikimr(settings);
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+            csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+            csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+            csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+            for (auto&& i : Commands) {
+                i->Execute(kikimr);
+            }
+        }
+    };
+
+    class TScriptVariator {
+    private:
+        std::vector<TScriptExecutor> Scripts;
+        std::shared_ptr<ICommand> BuildCommand(TString command) {
+            if (command.StartsWith("SCHEMA:")) {
+                command = command.substr(7);
+                return std::make_shared<TSchemaCommand>(command);
+            } else if (command.StartsWith("DATA:")) {
+                command = command.substr(5);
+                return std::make_shared<TDataCommand>(command);
+            } else if (command.StartsWith("READ:")) {
+                auto lines = StringSplitter(command.substr(5)).SplitBySet("\n").ToList<TString>();
+                int step = 0;
+                TString request;
+                TString expectation;
+                for (auto&& i : lines) {
+                    i = Strip(i);
+                    if (i.StartsWith("EXPECTED:")) {
+                        step = 1;
+                        i = i.substr(9);
+                    }
+                    if (step == 0) {
+                        request += i;
+                    } else if (step == 1) {
+                        expectation += i;
+                    }
+                }
+                return std::make_shared<TSelectCommand>(request, expectation);
+            } else if (command.StartsWith("WAIT_COMPACTION")) {
+                return std::make_shared<TWaitCompactionCommand>();
+            } else {
+                AFL_VERIFY(false)("command", command);
+                return nullptr;
+            }
+        }
+        void BuildScripts(const std::vector<std::vector<std::shared_ptr<ICommand>>>& commands, const ui32 currentLayer,
+            std::vector<std::shared_ptr<ICommand>>& currentScript, std::vector<TScriptExecutor>& scripts) {
+            if (currentLayer == commands.size()) {
+                scripts.emplace_back(currentScript);
+                return;
+            }
+            for (auto&& i : commands[currentLayer]) {
+                currentScript.emplace_back(i);
+                BuildScripts(commands, currentLayer + 1, currentScript, scripts);
+                currentScript.pop_back();
+            }
+        }
+
+        void BuildVariantsImpl(const std::vector<std::vector<TString>>& chunks, const ui32 currentLayer, std::vector<TString>& currentCommand,
+            std::vector<TString>& results) {
+            if (currentLayer == chunks.size()) {
+                results.emplace_back(JoinSeq("", currentCommand));
+                return;
+            }
+            for (auto&& i : chunks[currentLayer]) {
+                currentCommand.emplace_back(i);
+                BuildVariantsImpl(chunks, currentLayer + 1, currentCommand, results);
+                currentCommand.pop_back();
+            }
+        }
+        std::vector<TString> BuildVariants(const TString& command) {
+            auto chunks = StringSplitter(command).SplitByString("$$").ToList<TString>();
+            std::vector<std::vector<TString>> chunksVariants;
+            for (ui32 i = 0; i < chunks.size(); ++i) {
+                if (i % 2 == 0) {
+                    chunksVariants.emplace_back(std::vector<TString>({ chunks[i] }));
+                } else {
+                    chunksVariants.emplace_back(StringSplitter(chunks[i]).SplitBySet("|").ToList<TString>());
+                }
+            }
+            std::vector<TString> result;
+            std::vector<TString> currentCommand;
+            BuildVariantsImpl(chunksVariants, 0, currentCommand, result);
+            return result;
+        }
+
+    public:
+        TScriptVariator(const TString& script) {
+            auto commands = StringSplitter(script).SplitByString("------").ToList<TString>();
+            std::vector<std::vector<std::shared_ptr<ICommand>>> commandsDescription;
+            for (auto&& i : commands) {
+                auto& cVariants = commandsDescription.emplace_back();
+                i = Strip(i);
+                std::vector<TString> variants = BuildVariants(i);
+                for (auto&& v : variants) {
+                    cVariants.emplace_back(BuildCommand(v));
+                }
+            }
+            std::vector<TScriptExecutor> scripts;
+            std::vector<std::shared_ptr<ICommand>> scriptCommands;
+            BuildScripts(commandsDescription, 0, scriptCommands, Scripts);
+        }
+
+        void Execute() {
+            for (auto&& i : Scripts) {
+                i.Execute();
+            }
+
+        }
+    };
+
+    Y_UNIT_TEST(SimpleVariants) {
+        TString script = R"(
+            SCHEMA:            
             CREATE TABLE `/Root/ColumnTable` (
                 Col1 Uint64 NOT NULL,
                 Col2 JsonDocument,
@@ -36,53 +238,25 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
-            )";
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            const TString query = R"(ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`);)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        auto client = kikimr.GetQueryClient();
-        auto prepareResult1 =
-            client.ExecuteQuery(R"(REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')),
-                                                                    (3u, JsonDocument('{"b" : "b3"}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'));)",
-                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-                .ExtractValueSync();
-        UNIT_ASSERT_C(prepareResult1.IsSuccess(), prepareResult1.GetIssues().ToString());
-
-        {
-            auto it =
-                client.StreamExecuteQuery("SELECT * FROM `/Root/ColumnTable` ORDER BY Col1", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), NYdb::EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[1u;["{\"a\":\"a1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]])");
-        }
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')),
+                                                                    (3u, JsonDocument('{"b" : "b3"}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'))
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
     }
 
-    Y_UNIT_TEST(Merge) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
-        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_TX, NActors::NLog::PRI_DEBUG);
-
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-
-        {
-            const TString query = R"(
+    Y_UNIT_TEST(CompactionVariants) {
+        TString script = R"(
+            SCHEMA:            
             CREATE TABLE `/Root/ColumnTable` (
                 Col1 Uint64 NOT NULL,
                 Col2 JsonDocument,
@@ -90,50 +264,27 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
-            )";
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            const TString query =
-                R"(ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`);)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        auto client = kikimr.GetQueryClient();
-        {
-            auto prepareResult =
-                client
-                    .ExecuteQuery(R"(REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')), 
-                                                                    (3u, JsonDocument('{"b" : "b3"}')), (4u, JsonDocument('{"b" : "b4", "a" : "a4"}'));)",
-                        NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-                    .ExtractValueSync();
-            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
-        }
-
-        {
-            auto prepareResult =
-                client
-                    .ExecuteQuery(R"(REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(11u, JsonDocument('{"a" : "1a1"}')), (12u, JsonDocument('{"a" : "1a2"}')), 
-                                                                    (13u, JsonDocument('{"b" : "1b3"}')), (14u, JsonDocument('{"b" : "1b4", "a" : "a4"}'));)",
-                        NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-                    .ExtractValueSync();
-            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
-        }
-
-        csController->WaitCompactions(TDuration::Seconds(5));
-
-        {
-            auto it =
-                client.StreamExecuteQuery("SELECT * FROM `/Root/ColumnTable` ORDER BY Col1", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), NYdb::EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[1u;["{\"a\":\"a1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4\"}"]];
-                                   [11u;["{\"a\":\"1a1\"}"]];[12u;["{\"a\":\"1a2\"}"]];[13u;["{\"b\":\"1b3\"}"]];[14u;["{\"a\":\"a4\",\"b\":\"1b4\"}"]]])");
-        }
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')), 
+                                                                    (3u, JsonDocument('{"b" : "b3"}')), (4u, JsonDocument('{"b" : "b4", "a" : "a4"}'))
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(11u, JsonDocument('{"a" : "1a1"}')), (12u, JsonDocument('{"a" : "1a2"}')), 
+                                                                    (13u, JsonDocument('{"b" : "1b3"}')), (14u, JsonDocument('{"b" : "1b4", "a" : "a4"}'))
+            ------
+            WAIT_COMPACTION
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4\"}"]];
+                                   [11u;["{\"a\":\"1a1\"}"]];[12u;["{\"a\":\"1a2\"}"]];[13u;["{\"b\":\"1b3\"}"]];[14u;["{\"a\":\"a4\",\"b\":\"1b4\"}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
     }
 }
 

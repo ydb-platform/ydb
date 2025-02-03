@@ -35,9 +35,9 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     std::vector<TColumnElements*> otherElements;
     for (auto rIt = elementsBySize.rbegin(); rIt != elementsBySize.rend(); ++rIt) {
         for (auto&& i : rIt->second) {
-            if (columnAccessorsCount < TSettings::ColumnAccessorsCountLimit) {
+            if (columnAccessorsCount < Settings.GetColumnsLimit()) {
                 columnElements.emplace_back(i);
-                if (TSettings::IsSparsed(i->GetRecordIndexes().size(), CurrentRecordIndex)) {
+                if (Settings.IsSparsed(i->GetRecordIndexes().size(), CurrentRecordIndex)) {
                     i->BuildSparsedAccessor(CurrentRecordIndex);
                 } else {
                     i->BuildPlainAccessor(CurrentRecordIndex);
@@ -62,7 +62,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
         records->AddField(std::make_shared<arrow::Field>(std::string(i->GetKeyName()), arrow::utf8()), i->GetAccessorVerified()).Validate();
     }
     TColumnsData cData(std::move(columnStats), std::move(records));
-    return std::make_shared<TSubColumnsArray>(std::move(cData), std::move(rbOthers), Type, CurrentRecordIndex);
+    return std::make_shared<TSubColumnsArray>(std::move(cData), std::move(rbOthers), Type, CurrentRecordIndex, Settings);
 }
 
 TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& otherKeys) const {

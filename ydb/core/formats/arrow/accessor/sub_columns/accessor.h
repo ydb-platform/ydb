@@ -3,6 +3,7 @@
 #include "data_extractor.h"
 #include "iterators.h"
 #include "others_storage.h"
+#include "settings.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/common/container.h>
@@ -22,6 +23,7 @@ private:
     using TBase = IChunkedArray;
     NSubColumns::TColumnsData ColumnsData;
     NSubColumns::TOthersData OthersData;
+    const NSubColumns::TSettings Settings;
 
 protected:
     virtual ui32 DoGetNullsCount() const override {
@@ -42,7 +44,7 @@ protected:
         return ColumnsData.GetRawSize() + OthersData.GetRawSize();
     }
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
-        return std::make_shared<TSubColumnsArray>(ColumnsData.Slice(offset, count), OthersData.Slice(offset, count), GetDataType(), count);
+        return std::make_shared<TSubColumnsArray>(ColumnsData.Slice(offset, count), OthersData.Slice(offset, count), GetDataType(), count, Settings);
     }
 
 public:
@@ -64,12 +66,12 @@ public:
     TString SerializeToString(const TChunkConstructionData& externalInfo) const;
 
     TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColumns::TOthersData&& others, const std::shared_ptr<arrow::DataType>& type,
-        const ui32 recordsCount);
+        const ui32 recordsCount, const NSubColumns::TSettings& settings);
 
-    static TConclusion<std::shared_ptr<TSubColumnsArray>> Make(
-        const std::shared_ptr<IChunkedArray>& sourceArray, const std::shared_ptr<NSubColumns::IDataAdapter>& adapter);
+    static TConclusion<std::shared_ptr<TSubColumnsArray>> Make(const std::shared_ptr<IChunkedArray>& sourceArray,
+        const std::shared_ptr<NSubColumns::IDataAdapter>& adapter, const NSubColumns::TSettings& settings);
 
-    TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount);
+    TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount, const NSubColumns::TSettings& settings);
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
         return nullptr;

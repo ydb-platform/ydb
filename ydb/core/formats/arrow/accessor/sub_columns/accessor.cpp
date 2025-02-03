@@ -14,11 +14,11 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
-    const std::shared_ptr<IChunkedArray>& sourceArray, const std::shared_ptr<NSubColumns::IDataAdapter>& adapter) {
+TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(const std::shared_ptr<IChunkedArray>& sourceArray,
+    const std::shared_ptr<NSubColumns::IDataAdapter>& adapter, const NSubColumns::TSettings& settings) {
     AFL_VERIFY(adapter);
     AFL_VERIFY(sourceArray);
-    NSubColumns::TDataBuilder builder(sourceArray->GetDataType());
+    NSubColumns::TDataBuilder builder(sourceArray->GetDataType(), settings);
     IChunkedArray::TReader reader(sourceArray);
     std::vector<std::shared_ptr<arrow::Array>> storage;
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
@@ -31,17 +31,19 @@ TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
     return builder.Finish();
 }
 
-TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
+TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount, const NSubColumns::TSettings& settings)
     : TBase(recordsCount, EType::SubColumnsArray, type)
     , ColumnsData(NSubColumns::TColumnsData::BuildEmpty(recordsCount))
-    , OthersData(NSubColumns::TOthersData::BuildEmpty()) {
+    , OthersData(NSubColumns::TOthersData::BuildEmpty())
+    , Settings(settings) {
 }
 
 TSubColumnsArray::TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColumns::TOthersData&& others,
-    const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
+    const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount, const NSubColumns::TSettings& settings)
     : TBase(recordsCount, EType::SubColumnsArray, type)
     , ColumnsData(std::move(columns))
-    , OthersData(std::move(others)) {
+    , OthersData(std::move(others))
+    , Settings(settings) {
 }
 
 TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& externalInfo) const {
@@ -55,15 +57,15 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     proto.SetOtherStatsSize(blobRanges.back().size());
     ui32 columnIdx = 0;
     for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
-        TChunkConstructionData cData(ColumnsData.GetRecords()->GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
+        TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
         blobRanges.emplace_back(
-            ColumnsData.GetStats().GetAccessorConstructor(columnIdx++, ColumnsData.GetRecords()->GetRecordsCount()).SerializeToString(i, cData));
+            ColumnsData.GetStats().GetAccessorConstructor(columnIdx++, GetRecordsCount(), Settings).SerializeToString(i, cData));
         auto* cInfo = proto.AddKeyColumns();
         cInfo->SetSize(blobRanges.back().size());
     }
 
     for (auto&& i : OthersData.GetRecords()->GetColumns()) {
-        TChunkConstructionData cData(ColumnsData.GetRecords()->GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
+        TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
         blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
         auto* cInfo = proto.AddOtherColumns();
         cInfo->SetSize(blobRanges.back().size());
@@ -101,16 +103,16 @@ IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
         };
         auto onFinishRecord = [&]() {
             auto str = value.GetStringRobust();
-//            NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(str.data(), str.size()));
-//             
-             auto bJson = NBinaryJson::SerializeToBinaryJson(value.GetStringRobust());
-             if (const TString* val = std::get_if<TString>(&bJson)) {
-                 AFL_VERIFY(false)("error", *val);
-             } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
-                 NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(val->data(), val->size()));
-             } else {
-                 AFL_VERIFY(false);
-             }
+            //            NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(str.data(), str.size()));
+            //
+            auto bJson = NBinaryJson::SerializeToBinaryJson(value.GetStringRobust());
+            if (const TString* val = std::get_if<TString>(&bJson)) {
+                AFL_VERIFY(false)("error", *val);
+            } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
+                NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(val->data(), val->size()));
+            } else {
+                AFL_VERIFY(false);
+            }
         };
         auto onRecordKV = [&](const ui32 index, const std::string_view valueView, const bool isColumn) {
             if (isColumn) {

@@ -1,5 +1,8 @@
 #pragma once
+#include "settings.h"
+
 #include <ydb/core/formats/arrow/accessor/abstract/request.h>
+
 #include <ydb/library/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -12,6 +15,9 @@ public:
 
 private:
     static inline auto Registrator = TFactory::TRegistrator<TRequestedConstuctor>(GetClassNameStatic());
+
+    TSettings Settings;
+
     virtual TConclusion<TConstructorContainer> DoBuildConstructor() const override;
     virtual NKikimrArrowAccessorProto::TRequestedConstructor DoSerializeToProto() const override;
     virtual bool DoDeserializeFromProto(const NKikimrArrowAccessorProto::TRequestedConstructor& proto) override;
@@ -23,4 +29,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NArrow::NAccessor::NSparsed
+}   // namespace NKikimr::NArrow::NAccessor::NSubColumns

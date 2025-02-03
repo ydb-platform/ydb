@@ -11,10 +11,14 @@ class TConstructor: public IConstructor {
 private:
     using TBase = IConstructor;
     std::shared_ptr<IDataAdapter> DataExtractor = std::make_shared<TFirstLevelSchemaData>();
+    TSettings Settings;
 
 public:
     static TString GetClassNameStatic() {
         return TGlobalConst::SubColumnsDataAccessorName;
+    }
+    const TSettings& GetSettings() const {
+        return Settings;
     }
 
 private:
@@ -37,6 +41,11 @@ private:
 public:
     TConstructor()
         : TBase(IChunkedArray::EType::SubColumnsArray) {
+    }
+
+    TConstructor(const TSettings& settings)
+        : TBase(IChunkedArray::EType::SubColumnsArray)
+        , Settings(settings) {
     }
 
     virtual TString GetClassName() const override {

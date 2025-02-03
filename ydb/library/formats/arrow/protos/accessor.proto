@@ -9,9 +9,18 @@ message TRequestedConstructor {
     message TSparsed {
     }
 
+    message TSubColumns {
+        message TSettings {
+            optional uint32 SparsedDetectorKff = 1 [default = 20];
+            optional uint32 ColumnsLimit = 2 [default = 1024];
+        }
+        optional TSettings Settings = 1;
+    }
+
     oneof Implementation {
         TPlain Plain = 10;
         TSparsed Sparsed = 11;
+        TSubColumns SubColumns = 12;
     }
 }
 
@@ -25,6 +34,11 @@ message TConstructor {
     }
 
     message TSubColumns {
+        message TSettings {
+            optional uint32 SparsedDetectorKff = 1 [default = 20];
+            optional uint32 ColumnsLimit = 2 [default = 1024];
+        }
+        optional TSettings Settings = 1;
     }
     oneof Implementation {
         TPlain Plain = 10;

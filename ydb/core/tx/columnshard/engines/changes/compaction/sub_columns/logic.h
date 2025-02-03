@@ -2,6 +2,7 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/settings.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
@@ -20,6 +21,7 @@ private:
     using TSparsedBuilder = NArrow::NAccessor::TSparsedArray::TSparsedBuilder;
     using TPlainBuilder = NArrow::NAccessor::TTrivialArray::TPlainBuilder;
     using TSubColumnsArray = NArrow::NAccessor::TSubColumnsArray;
+    using TSettings = NArrow::NAccessor::NSubColumns::TSettings;
     using TReadIteratorOrderedKeys = NArrow::NAccessor::NSubColumns::TReadIteratorOrderedKeys;
     std::vector<std::shared_ptr<TSubColumnsArray>> Sources;
     std::vector<TReadIteratorOrderedKeys> OrderedIterators;
@@ -90,6 +92,9 @@ private:
     };
 
     TRemapColumns RemapKeyIndex;
+
+    const TSettings& GetSettings() const;
+
     virtual void DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext) override {
         for (auto&& i : mergeContext.GetChunks()) {
             OutputRecordsCount += i.GetRecordsCount();
@@ -112,7 +117,7 @@ private:
             InputRecordsCount += i->GetRecordsCount();
         }
         auto commonStats = TDictStats::Merge(stats);
-        auto splitted = commonStats.SplitByVolume(NArrow::NAccessor::NSubColumns::TSettings::ColumnAccessorsCountLimit);
+        auto splitted = commonStats.SplitByVolume(GetSettings().GetColumnsLimit());
         ResultColumnStats = splitted.ExtractColumns();
         ResultOtherStats = splitted.ExtractOthers();
 
@@ -133,6 +138,7 @@ private:
         const TChunkMergeContext& Context;
         std::shared_ptr<TOthersData::TBuilderWithStats> OthersBuilder;
         ui32 RecordIndex = 0;
+        const TSettings Settings;
 
         class TGeneralAccessorBuilder {
         private:
@@ -197,18 +203,18 @@ private:
             for (auto&& i : ColumnBuilders) {
                 arrays.emplace_back(i.Finish(RecordIndex));
             }
-            TColumnsData cData(
-                ResultColumnStats, std::make_shared<NArrow::TGeneralContainer>(ResultColumnStats.BuildColumnsSchema()->fields(), std::move(arrays)));
+            TColumnsData cData(ResultColumnStats,
+                std::make_shared<NArrow::TGeneralContainer>(ResultColumnStats.BuildColumnsSchema()->fields(), std::move(arrays)));
             Results.emplace_back(
-                std::make_shared<TSubColumnsArray>(std::move(cData), std::move(portionOthersData), arrow::binary(), RecordIndex));
+                std::make_shared<TSubColumnsArray>(std::move(cData), std::move(portionOthersData), arrow::binary(), RecordIndex, Settings));
             Initialize();
         }
 
         void Initialize() {
             ColumnBuilders.clear();
             for (ui32 i = 0; i < ResultColumnStats.GetColumnsCount(); ++i) {
-                if (ResultColumnStats.IsSparsed(i, OutputRecordsCount)) {
-                    ColumnBuilders.emplace_back(TSparsedBuilder(0, 0));
+                if (ResultColumnStats.IsSparsed(i, OutputRecordsCount, Settings)) {
+                    ColumnBuilders.emplace_back(TSparsedBuilder(nullptr, 0, 0));
                 } else {
                     ColumnBuilders.emplace_back(TPlainBuilder(0, 0));
                 }
@@ -220,13 +226,14 @@ private:
     public:
         TMergedBuilder(const NArrow::NAccessor::NSubColumns::TDictStats& columnStats,
             const NArrow::NAccessor::NSubColumns::TDictStats& otherStats, const ui32 inputRecordsCount, const ui32 outputRecordsCount,
-            const TChunkMergeContext& context)
+            const TChunkMergeContext& context, const TSettings& settings)
             : OutputRecordsCount(outputRecordsCount)
             , InputRecordsCount(inputRecordsCount)
             , ResultColumnStats(columnStats)
             , ResultOtherStats(otherStats)
             , Context(context)
-            , OthersBuilder(TOthersData::MakeMergedBuilder()) {
+            , OthersBuilder(TOthersData::MakeMergedBuilder())
+            , Settings(settings) {
             Y_UNUSED(InputRecordsCount);
             Initialize();
         }
@@ -275,7 +282,7 @@ private:
     virtual std::vector<TColumnPortionResult> DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) override {
         AFL_VERIFY(ResultColumnStats && ResultOtherStats);
         auto& mergeChunkContext = mergeContext.GetChunk(context.GetBatchIdx());
-        TMergedBuilder builder(*ResultColumnStats, *ResultOtherStats, InputRecordsCount, OutputRecordsCount, context);
+        TMergedBuilder builder(*ResultColumnStats, *ResultOtherStats, InputRecordsCount, OutputRecordsCount, context, GetSettings());
         for (ui32 i = 0; i < context.GetRecordsCount(); ++i) {
             const ui32 sourceIdx = mergeChunkContext.GetIdxArray().Value(i);
             const ui32 recordIdx = mergeChunkContext.GetRecordIdxArray().Value(i);

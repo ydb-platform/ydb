@@ -220,15 +220,16 @@ public:
 
     class TSparsedBuilder {
     private:
-        std::shared_ptr<arrow::Schema> Schema;
         std::unique_ptr<arrow::ArrayBuilder> IndexBuilder;
         std::unique_ptr<arrow::ArrayBuilder> ValueBuilder;
         ui32 RecordsCount = 0;
+        const std::shared_ptr<arrow::Scalar> DefaultValue;
 
     public:
-        TSparsedBuilder(const ui32 reserveItems, const ui32 reserveData) {
+        TSparsedBuilder(const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 reserveItems, const ui32 reserveData)
+            : DefaultValue(defaultValue) {
             IndexBuilder = NArrow::MakeBuilder(arrow::uint32(), reserveItems, 0);
-            ValueBuilder = NArrow::MakeBuilder(arrow::uint32(), reserveItems, reserveData);
+            ValueBuilder = NArrow::MakeBuilder(arrow::utf8(), reserveItems, reserveData);
         }
 
         void AddRecord(const ui32 recordIndex, const std::string_view value) {
@@ -238,17 +239,18 @@ public:
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
-            TSparsedArray::TBuilder builder(nullptr, arrow::utf8());
+            TSparsedArray::TBuilder builder(DefaultValue, arrow::utf8());
             std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders;
             builders.emplace_back(std::move(IndexBuilder));
             builders.emplace_back(std::move(ValueBuilder));
-            builder.AddChunk(recordsCount, arrow::RecordBatch::Make(Schema, RecordsCount, NArrow::Finish(std::move(builders))));
+            builder.AddChunk(recordsCount,
+                arrow::RecordBatch::Make(TSparsedArray::BuildSchema(arrow::utf8()), RecordsCount, NArrow::Finish(std::move(builders))));
             return builder.Finish();
         }
     };
 
     static TSparsedBuilder MakeBuilderUtf8(const ui32 reserveItems = 0, const ui32 reserveData = 0) {
-        return TSparsedBuilder(reserveItems, reserveData);
+        return TSparsedBuilder(nullptr, reserveItems, reserveData);
     }
 
     class TBuilder {

@@ -55,10 +55,12 @@ private:
     THashMap<TStringBuf, TColumnElements> Elements;
     std::deque<TString> Storage;
     const std::shared_ptr<arrow::DataType> Type;
+    const TSettings Settings;
 
 public:
-    TDataBuilder(const std::shared_ptr<arrow::DataType>& type)
+    TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings)
         : Type(type)
+        , Settings(settings)
     {
     }
 

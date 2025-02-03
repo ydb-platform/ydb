@@ -82,12 +82,12 @@ TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     DataSize = std::static_pointer_cast<arrow::UInt32Array>(Original->column(2));
 }
 
-bool TDictStats::IsSparsed(const ui32 columnIndex, const ui32 recordsCount) const {
-    return TSettings::IsSparsed(GetColumnRecordsCount(columnIndex), recordsCount);
+bool TDictStats::IsSparsed(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const {
+    return settings.IsSparsed(GetColumnRecordsCount(columnIndex), recordsCount);
 }
 
-TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex, const ui32 recordsCount) const {
-    if (IsSparsed(columnIndex, recordsCount)) {
+TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const {
+    if (IsSparsed(columnIndex, recordsCount, settings)) {
         return std::make_shared<NAccessor::NSparsed::TConstructor>();
     } else {
         return std::make_shared<NAccessor::NPlain::TConstructor>();

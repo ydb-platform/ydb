@@ -9,7 +9,7 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {
     AFL_VERIFY(externalInfo.GetDefaultValue() == nullptr);
-    return std::make_shared<TSubColumnsArray>(externalInfo.GetColumnType(), externalInfo.GetRecordsCount());
+    return std::make_shared<TSubColumnsArray>(externalInfo.GetColumnType(), externalInfo.GetRecordsCount(), Settings);
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromString(
@@ -39,7 +39,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
         AFL_VERIFY(rbColumnStats->num_rows() == proto.GetKeyColumns().size());
         for (ui32 i = 0; i < (ui32)proto.GetKeyColumns().size(); ++i) {
             std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(externalInfo.GetDefaultSerializer(),
-                columnStats.GetAccessorConstructor(i, externalInfo.GetRecordsCount()), schema->field(i), nullptr, 0);
+                columnStats.GetAccessorConstructor(i, externalInfo.GetRecordsCount(), Settings), schema->field(i), nullptr, 0);
             std::vector<TDeserializeChunkedArray::TChunk> chunks = { TDeserializeChunkedArray::TChunk(
                 externalInfo.GetRecordsCount(), originalData.substr(currentIndex, proto.GetKeyColumns(i).GetSize())) };
             columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(externalInfo.GetRecordsCount(), columnLoader, std::move(chunks)));
@@ -65,22 +65,22 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     TColumnsData columnData(columnStats, columnKeysContainer);
     TOthersData otherData(otherStats, otherKeysContainer);
     return std::make_shared<TSubColumnsArray>(
-        std::move(columnData), std::move(otherData), externalInfo.GetColumnType(), externalInfo.GetRecordsCount());
+        std::move(columnData), std::move(otherData), externalInfo.GetColumnType(), externalInfo.GetRecordsCount(), Settings);
 }
 
 NKikimrArrowAccessorProto::TConstructor TConstructor::DoSerializeToProto() const {
     NKikimrArrowAccessorProto::TConstructor result;
-    *result.MutableSubColumns() = {};
+    *result.MutableSubColumns()->MutableSettings() = Settings.SerializeToProto();
     return result;
 }
 
-bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& /*proto*/) {
-    return true;
+bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& proto) {
+    return Settings.DeserializeFromProto(proto.GetSubColumns().GetSettings());
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     const std::shared_ptr<IChunkedArray>& originalData, const TChunkConstructionData& /*externalInfo*/) const {
-    return NAccessor::TSubColumnsArray::Make(originalData, DataExtractor).DetachResult();
+    return NAccessor::TSubColumnsArray::Make(originalData, DataExtractor, Settings).DetachResult();
 }
 
 TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {

@@ -4465,17 +4465,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Changefeeds>()) {
-                        const auto& importTableChangefeeds = rowset.GetValue<Schema::ImportItems::Changefeeds>();
-                        const int count = importTableChangefeeds.GetChangefeedDescriptions().size();
-                        Y_ASSERT(importTableChangefeeds.GetTopics().size() == count);
-
+                        const auto& importTableChangefeeds = rowset.GetValue<Schema::ImportItems::Changefeeds>().GetChangefeeds();
                         TVector<TImportInfo::TChangefeedImportDescriptions> changefeeds;
-                        changefeeds.reserve(count);
+                        changefeeds.reserve(importTableChangefeeds.size());
 
-                        for (int i = 0; i < count; ++i) {
-                            const Ydb::Table::ChangefeedDescription& changefeedImport = importTableChangefeeds.GetChangefeedDescriptions()[i];
-                            const Ydb::Topic::DescribeTopicResult& topicImport = importTableChangefeeds.GetTopics()[i];
-                            changefeeds.emplace_back(changefeedImport, topicImport);
+                        for (const auto& changefeedAndTopic : importTableChangefeeds) {
+                            const Ydb::Table::ChangefeedDescription& changefeed = changefeedAndTopic.GetChangefeedDescription();
+                            const Ydb::Topic::DescribeTopicResult& topic = changefeedAndTopic.GetTopic();
+                            changefeeds.emplace_back(changefeed, topic);
                         }
                         item.Changefeeds = std::move(changefeeds);
                     }

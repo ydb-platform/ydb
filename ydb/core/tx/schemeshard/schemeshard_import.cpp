@@ -197,8 +197,10 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     NKikimrSchemeOp::TImportTableChangefeeds changefeeds;
 
     for (const auto& [changefeed, topic] : item.Changefeeds) {
-        *changefeeds.MutableChangefeedDescriptions()->Add() = changefeed;
-        *changefeeds.MutableTopics()->Add() = topic;
+        NKikimrSchemeOp::TImportChangefeedTopic changefeedTopic;
+        *changefeedTopic.MutableChangefeedDescription() = changefeed;
+        *changefeedTopic.MutableTopic() = topic;
+        *changefeeds.MutableChangefeeds()->Add() = changefeedTopic;
     }
 
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(

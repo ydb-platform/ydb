@@ -469,7 +469,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
     }
 
-    void ListingChangefeeds() {
+    void ListChangefeeds() {
         CreateClient();
         ListObjects(ImportInfo->Settings.items(ItemIdx).source_prefix());
     }
@@ -496,7 +496,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void DownloadChangefeeds() {
-        ListingChangefeeds();
+        ListChangefeeds();
     }
 
     void ResetRetries() {

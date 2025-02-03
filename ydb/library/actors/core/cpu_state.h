@@ -8,7 +8,7 @@ namespace NActors {
 
     class alignas(64) TCpuState {
         // Atomic cachelign-aligned 64-bit state, see description below
-        TAtomic State = 0;
+        std::atomic<i64> State = 0;
         char Padding[64 - sizeof(TAtomic)];
 
         // Bits 0-31: Currently executing pool
@@ -31,48 +31,50 @@ namespace NActors {
         }
 
         void Load(TPoolId& assigned, TPoolId& current) const {
-            TAtomicBase state = AtomicLoad(&State);
+            i64 state = State.load(std::memory_order_acquire);
             assigned = (state & AssignedMask) >> AssignedOffs;
             current = state & CurrentMask;
         }
 
         TPoolId CurrentPool() const {
-            return TPoolId(AtomicLoad(&State) & CurrentMask);
+            return TPoolId(State.load(std::memory_order_acquire) & CurrentMask);
         }
 
         void SwitchPool(TPoolId pool) {
+            i64 state = State.load(std::memory_order_acquire);
+
             while (true) {
-                TAtomicBase state = AtomicLoad(&State);
-                if (AtomicCas(&State, (state & ~CurrentMask) | pool, state)) {
+                if (State.compare_exchange_strong(state, (state & ~CurrentMask) | pool)) {
                     return;
                 }
             }
         }
 
         TPoolId AssignedPool() const {
-            return TPoolId((AtomicLoad(&State) & AssignedMask) >> AssignedOffs);
+            return TPoolId((State.load(std::memory_order_acquire) & AssignedMask) >> AssignedOffs);
         }
 
         // Assigns new pool to cpu and wakes it up if cpu is idle
         void AssignPool(TPoolId pool) {
+            i64 state = State.load(std::memory_order_acquire);
+
             while (true) {
-                TAtomicBase state = AtomicLoad(&State);
                 TPoolId current(state & CurrentMask);
                 if (Y_UNLIKELY(current == CpuStopped)) {
                     return; // it would be better to shutdown instead of balancing
                 }
                 // Idle cpu must be woken up after balancing to handle pending tokens (if any) in assigned/schedulable pool(s)
                 if (current == CpuSpinning) {
-                    if (AtomicCas(&State, (ui64(pool) << AssignedOffs) | pool, state)) {
+                    if (State.compare_exchange_strong(state, (ui64(pool) << AssignedOffs) | pool)) {
                         return; // successfully woken up
                     }
                 } else if (current == CpuBlocked) {
-                    if (AtomicCas(&State, (ui64(pool) << AssignedOffs) | pool, state)) {
+                    if (State.compare_exchange_strong(state, (ui64(pool) << AssignedOffs) | pool)) {
                         FutexWake();
                         return; // successfully woken up
                     }
                 } else {
-                    if (AtomicCas(&State, (ui64(pool) << AssignedOffs) | (state & ~AssignedMask), state)) {
+                    if (State.compare_exchange_strong(state, (ui64(pool) << AssignedOffs) | (state & ~AssignedMask))) {
                         return; // wakeup is not required
                     }
                 }
@@ -80,9 +82,10 @@ namespace NActors {
         }
 
         void Stop() {
+            i64 state = State.load(std::memory_order_acquire);
+
             while (true) {
-                TAtomicBase state = AtomicLoad(&State);
-                if (AtomicCas(&State, (state & ~CurrentMask) | CpuStopped, state)) {
+                if (State.compare_exchange_strong(state, (state & ~CurrentMask) | CpuStopped)) {
                     FutexWake();
                     return; // successfully stopped
                 }
@@ -91,25 +94,27 @@ namespace NActors {
 
         // Start waiting, returns false in case of actorsystem shutdown
         bool StartSpinning() {
+            i64 state = State.load(std::memory_order_acquire);
+
             while (true) {
-                TAtomicBase state = AtomicLoad(&State);
                 TPoolId current(state & CurrentMask);
                 if (Y_UNLIKELY(current == CpuStopped)) {
                     return false;
                 }
                 Y_DEBUG_ABORT_UNLESS(current < MaxPools, "unexpected already waiting state of cpu (%d)", (int)current);
-                if (AtomicCas(&State, (state & ~CurrentMask) | CpuSpinning, state)) { // successfully marked as spinning
+                if (State.compare_exchange_strong(state, (state & ~CurrentMask) | CpuSpinning)) { // successfully marked as spinning
                     return true;
                 }
             }
         }
 
         bool StartBlocking() {
+            i64 state = State.load(std::memory_order_acquire);
+
             while (true) {
-                TAtomicBase state = AtomicLoad(&State);
                 TPoolId current(state & CurrentMask);
                 if (current == CpuSpinning) {
-                    if (AtomicCas(&State, (state & ~CurrentMask) | CpuBlocked, state)) {
+                    if (State.compare_exchange_strong(state, (state & ~CurrentMask) | CpuBlocked)) {
                         return false; // successful switch
                     }
                 } else {
@@ -127,7 +132,7 @@ namespace NActors {
 #else
             NanoSleep(timeoutNs); // non-linux wake is not supported, cpu will go idle on wake after blocked state
 #endif
-            TAtomicBase state = AtomicLoad(&State);
+            i64 state = State.load(std::memory_order_acquire);
             TPoolId current(state & CurrentMask);
             if (current == CpuBlocked) {
                 return false; // timeout
@@ -145,17 +150,18 @@ namespace NActors {
         };
 
         EWakeResult WakeWithoutToken(TPoolId pool) {
+            i64 state = State.load(std::memory_order_relaxed);
+
             while (true) {
-                TAtomicBase state = RelaxedLoad(&State);
                 TPoolId current(state & CurrentMask);
                 TPoolId assigned((state & AssignedMask) >> AssignedOffs);
                 if (assigned == CpuShared || assigned == pool) {
                     if (current == CpuSpinning) {
-                        if (AtomicCas(&State, (state & ~CurrentMask) | pool, state)) {
+                        if (State.compare_exchange_strong(state, (state & ~CurrentMask) | pool)) {
                             return Woken;
                         }
                     } else if (current == CpuBlocked) {
-                        if (AtomicCas(&State, (state & ~CurrentMask) | pool, state)) {
+                        if (State.compare_exchange_strong(state, (state & ~CurrentMask) | pool)) {
                             FutexWake();
                             return Woken;
                         }
@@ -171,18 +177,19 @@ namespace NActors {
         }
 
         EWakeResult WakeWithTokenAcquired(TPoolId token) {
+            i64 state = State.load(std::memory_order_relaxed);
+
             while (true) {
-                TAtomicBase state = RelaxedLoad(&State);
                 TPoolId current(state & CurrentMask);
                 // NOTE: We ignore assigned value because we already have token, so
                 // NOTE: not assigned pool may be run here. This will be fixed
                 // NOTE: after we finish with current activation
                 if (current == CpuSpinning) {
-                    if (AtomicCas(&State, (state & ~CurrentMask) | token, state)) {
+                    if (State.compare_exchange_strong(state, (state & ~CurrentMask) | token)) {
                         return Woken;
                     }
                 } else if (current == CpuBlocked) {
-                    if (AtomicCas(&State, (state & ~CurrentMask) | token, state)) {
+                    if (State.compare_exchange_strong(state, (state & ~CurrentMask) | token)) {
                         FutexWake();
                         return Woken;
                     }
@@ -195,7 +202,7 @@ namespace NActors {
         }
 
         bool IsPoolReassigned(TPoolId current) const {
-            TAtomicBase state = AtomicLoad(&State);
+            i64 state = State.load(std::memory_order_acquire);
             TPoolId assigned((state & AssignedMask) >> AssignedOffs);
             return assigned != current;
         }

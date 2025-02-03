@@ -368,7 +368,7 @@ public:
 
 private:
 
-    TStringBuilder LogPrefix() const;
+    TStringBuilder LogPrefixImpl() const;
 
     void UpdateTokenIfNeededImpl();
 

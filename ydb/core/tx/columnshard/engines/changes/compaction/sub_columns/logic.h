@@ -100,7 +100,7 @@ private:
             OutputRecordsCount += i.GetRecordsCount();
         }
         for (auto&& i : input) {
-            if (i->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+            if (i->GetTypeDeep() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
                 Sources.emplace_back(std::static_pointer_cast<TSubColumnsArray>(i));
             } else {
                 auto subColumnsAccessor = Context.GetLoader()

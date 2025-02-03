@@ -31,7 +31,7 @@ public:
         Become(&TThis::StateWork);
     }
 
-    void Handle(TEvConsole::TEvReplaceYamlConfigResponse::TPtr& /* ev */) {
+    void Handle(TEvConsole::TEvReplaceYamlConfigResponse::TPtr& /*ev*/) {
         auto response = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
         response->Record.SetStatus(NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed);
         SendInReply(std::move(response));
@@ -93,7 +93,11 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::
     auto response = std::make_unique<TEvBlobStorage::TEvControllerProposeConfigResponse>();
     auto& responseRecord = response->Record;
 
-    if (YamlVersion == proposedConfigVersion) {
+    if (!record.HasConfigHash()) {
+        responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::ReverseCommit);
+        responseRecord.SetConsoleConfigVersion(YamlVersion);
+        responseRecord.SetYAML(YamlConfig);
+    } else if (YamlVersion == proposedConfigVersion) {
         responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNeeded);
     } else if (YamlVersion != proposedConfigVersion && (proposedConfigVersion && YamlVersion != proposedConfigVersion - 1)) {
         responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::UnexpectedConfig);
@@ -111,7 +115,7 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::
     SendInReply(ev->Sender, ev->InterconnectSession, std::move(response), ev->Cookie);
 }
 
-void TConfigsManager::Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::TPtr& ev, const TActorContext& /* ctx */) {
+void TConfigsManager::Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::TPtr& ev, const TActorContext& /*ctx*/) {
     auto response = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
     const auto& yamlConfig = ev->Get()->Record.GetYAML();
     if (!CheckSession(*ev, response, NKikimrBlobStorage::TEvControllerConsoleCommitResponse::SessionMismatch)) {
@@ -122,30 +126,28 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::
     CommitActor = Register(actor);
 }
 
-void TConfigsManager::Handle(TEvBlobStorage::TEvControllerValidateConfigRequest::TPtr& ev, const TActorContext& /* ctx */) {
+void TConfigsManager::Handle(TEvBlobStorage::TEvControllerValidateConfigRequest::TPtr& ev, const TActorContext& /*ctx*/) {
     auto response = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigResponse>();
-    auto requestRecord = ev->Get()->Record;
-    response->Record.SetSkipBSCValidation(requestRecord.GetSkipBSCValidation());
-    response->Record.SetConfigVersion(requestRecord.GetConfigVersion());
-    auto& record = response->Record;
-    auto yamlConfig = requestRecord.GetYAML();
     if (!CheckSession(*ev, response, NKikimrBlobStorage::TEvControllerValidateConfigResponse::IdPipeServerMismatch)) {
         return;
     }
-    auto result = ValidateConfigAndReplaceMetadata(yamlConfig);
-    if (result.ErrorReason || result.HasForbiddenUnknown) {
+
+    auto& record = response->Record;
+    auto yamlConfig = ev->Get()->Record.GetYAML();
+
+    if (auto res = ValidateConfigAndReplaceMetadata(yamlConfig); res.ErrorReason || res.HasForbiddenUnknown) {
         record.SetStatus(NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigNotValid);
-        if (!result.ErrorReason) {
-            record.SetErrorReason("has forbidden unknown fields");
-        } else {
-            record.SetErrorReason(*result.ErrorReason);
-            if (result.HasForbiddenUnknown) {
-                record.SetErrorReason(record.GetErrorReason() + " + has forbidden unknown fields");
-            }
+        TStringStream s;
+        if (res.ErrorReason) {
+            s << *res.ErrorReason << (res.HasForbiddenUnknown ? " and " : "");
         }
+        if (res.HasForbiddenUnknown) {
+            s << "has forbidden unknown fields";
+        }
+        record.SetErrorReason(s.Str());
     } else {
         record.SetStatus(NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigIsValid);
-        record.SetYAML(result.UpdatedConfig);
+        record.SetYAML(res.UpdatedConfig);
     }
     SendInReply(ev->Sender, ev->InterconnectSession, std::move(response), ev->Cookie);
 }

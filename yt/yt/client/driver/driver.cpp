@@ -33,7 +33,6 @@
 
 #include <yt/yt/library/tvm/tvm_base.h>
 
-
 namespace NYT::NDriver {
 
 using namespace NYTree;
@@ -51,6 +50,7 @@ using namespace NHiveClient;
 using namespace NTabletClient;
 using namespace NApi;
 using namespace NNodeTrackerClient;
+using namespace NSignature;
 using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -112,7 +112,11 @@ class TDriver
     : public IDriver
 {
 public:
-    TDriver(TDriverConfigPtr config, IConnectionPtr connection)
+    TDriver(
+        TDriverConfigPtr config,
+        IConnectionPtr connection,
+        TSignatureGeneratorBasePtr signatureGenerator,
+        TSignatureValidatorBasePtr signatureValidator)
         : Config_(std::move(config))
         , Connection_(std::move(connection))
         , ClientCache_(New<TClientCache>(Config_->ClientCache, Connection_))
@@ -122,6 +126,8 @@ public:
         , ProxyDiscoveryCache_(CreateProxyDiscoveryCache(
             Config_->ProxyDiscoveryCache,
             RootClient_))
+        , SignatureGenerator_(std::move(signatureGenerator))
+        , SignatureValidator_(std::move(signatureValidator))
         , StickyTransactionPool_(CreateStickyTransactionPool(Logger()))
     {
         // Register all commands.
@@ -495,6 +501,16 @@ public:
         return Connection_;
     }
 
+    TSignatureGeneratorBasePtr GetSignatureGenerator() override
+    {
+        return SignatureGenerator_;
+    }
+
+    TSignatureValidatorBasePtr GetSignatureValidator() override
+    {
+        return SignatureValidator_;
+    }
+
     void Terminate() override
     {
         // TODO(ignat): find and eliminate reference loop.
@@ -518,6 +534,8 @@ private:
     TClientCachePtr ClientCache_;
     const IClientPtr RootClient_;
     IProxyDiscoveryCachePtr ProxyDiscoveryCache_;
+    TSignatureGeneratorBasePtr SignatureGenerator_;
+    TSignatureValidatorBasePtr SignatureValidator_;
 
     class TCommandContext;
     using TCommandContextPtr = TIntrusivePtr<TCommandContext>;
@@ -710,14 +728,20 @@ private:
 
 IDriverPtr CreateDriver(
     IConnectionPtr connection,
-    TDriverConfigPtr config)
+    TDriverConfigPtr config,
+    TSignatureGeneratorBasePtr signatureGenerator,
+    TSignatureValidatorBasePtr signatureValidator)
 {
     YT_VERIFY(connection);
     YT_VERIFY(config);
+    YT_VERIFY(signatureGenerator);
+    YT_VERIFY(signatureValidator);
 
     return New<TDriver>(
         std::move(config),
-        std::move(connection));
+        std::move(connection),
+        std::move(signatureGenerator),
+        std::move(signatureValidator));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

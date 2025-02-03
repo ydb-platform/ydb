@@ -308,18 +308,7 @@ class StabilityCluster:
         node = list(self.kikimr_cluster.nodes.values())[0]
         node.ssh_command("/Berkanavt/kikimr/bin/kikimr admin console validator disable bootstrap", raise_on_error=True)
 
-        for node in self.kikimr_cluster.nodes.values():
-            node.ssh_command(["sudo", "mkdir", "-p", STRESS_BINARIES_DEPLOY_PATH], raise_on_error=False)
-            for artifact in self.artifacts:
-                node.copy_file_or_dir(
-                    artifact,
-                    os.path.join(
-                        STRESS_BINARIES_DEPLOY_PATH,
-                        os.path.basename(
-                            artifact
-                        )
-                    )
-                )
+        self.deploy_tools()
 
     def deploy_tools(self):
         for node in self.kikimr_cluster.nodes.values():
@@ -364,6 +353,12 @@ def parse_args():
         help="Path to ydbd",
     )
     parser.add_argument(
+        "--next_ydbd_path",
+        required=False,
+        type=path_type,
+        help="Path to next ydbd version",
+    )
+    parser.add_argument(
         "--ssh_user",
         required=False,
         default=getpass.getuser(),
@@ -406,6 +401,7 @@ def main():
         ssh_username=ssh_username,
         cluster_path=args.cluster_path,
         ydbd_path=args.ydbd_path,
+        ydbd_next_path=args.next_ydbd_path,
     )
 
     for action in args.actions:

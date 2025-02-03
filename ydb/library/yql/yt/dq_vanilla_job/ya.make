@@ -8,6 +8,7 @@ PEERDIR(
     ydb/library/yql/dq/transform
     yql/essentials/providers/common/comp_nodes
     yt/yql/providers/yt/codec/codegen
+    yql/essentials/minikql/comp_nodes/llvm14
     yt/yql/providers/yt/comp_nodes/llvm14
     yql/essentials/utils/backtrace
     yt/yql/providers/yt/comp_nodes/dq/llvm14

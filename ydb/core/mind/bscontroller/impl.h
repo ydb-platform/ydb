@@ -1510,6 +1510,14 @@ public:
     using THostRecordMap = std::shared_ptr<THostRecordMapImpl>;
 
 private:
+    using TYamlConfig = std::tuple<TString, ui64, TString>; // yaml, configVersion, yamlReturnedByFetch; this tuple must not change
+
+    static TString CompressYamlConfig(const TYamlConfig& configYaml);
+    static TString CompressStorageYamlConfig(const TString& storageConfigYaml);
+    static TYamlConfig DecompressYamlConfig(const TString& buffer);
+    static TString DecompressStorageYamlConfig(const TString& buffer);
+
+private:
     TString InstanceId;
     std::shared_ptr<std::atomic_uint64_t> SelfHealUnreassignableGroups = std::make_shared<std::atomic_uint64_t>();
     TMaybe<TActorId> MigrationId;
@@ -1547,8 +1555,8 @@ private:
     TDuration ScrubPeriodicity;
     NKikimrBlobStorage::TStorageConfig StorageConfig;
     bool SelfManagementEnabled = false;
-    TString YamlConfig;
-    ui32 ConfigVersion = 0;
+    std::optional<TYamlConfig> YamlConfig;
+    std::optional<TString> StorageYamlConfig; // if separate config is in effect
     TBackoffTimer GetBlockBackoff{1, 1000};
 
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
@@ -1794,7 +1802,6 @@ private:
     void ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender);
 
     void StartConsoleInteraction();
-    void MakeCommitToConsole();
 
     void RenderResourceValues(IOutputStream& out, const TResourceRawValues& current);
     void RenderHeader(IOutputStream& out);
@@ -1965,7 +1972,9 @@ private:
     ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
-    ITransaction* CreateTxCommitConfig(TString& yamlConfig, ui64 configVersion, NKikimrBlobStorage::TStorageConfig& storageConfig);
+    ITransaction* CreateTxCommitConfig(std::optional<TYamlConfig>&& yamlConfig,
+        std::optional<std::optional<TString>>&& storageYamlConfig,
+        std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig);
 
     struct TVDiskAvailabilityTiming {
         TVSlotId VSlotId;

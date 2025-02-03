@@ -184,8 +184,15 @@ const std::vector<TConsumer>& TTopicDescription::GetConsumers() const {
 }
 
 void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) const {
-    Y_UNUSED(request);
-    Y_ABORT("Not implemented");
+    *request.mutable_partitioning_settings() = Proto_.partitioning_settings();
+    *request.mutable_retention_period() = Proto_.retention_period();
+    request.set_retention_storage_mb(Proto_.retention_storage_mb());
+    *request.mutable_supported_codecs() = Proto_.supported_codecs();
+    request.set_partition_write_speed_bytes_per_second(Proto_.partition_write_speed_bytes_per_second());
+    request.set_partition_write_burst_bytes(Proto_.partition_write_burst_bytes());
+    *request.mutable_attributes() = Proto_.attributes();
+    *request.mutable_consumers() = Proto_.consumers();
+    request.set_metering_mode(Proto_.metering_mode());
 }
 
 const Ydb::Topic::DescribeTopicResult& TTopicDescription::GetProto() const {

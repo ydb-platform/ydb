@@ -1,8 +1,8 @@
 diff --git a/include/__string/char_traits.h b/include/__string/char_traits.h
-index 5880d3a..91b413a 100644
+index 47ed105..249057c 100644
 --- a/include/__string/char_traits.h
 +++ b/include/__string/char_traits.h
-@@ -73,6 +73,106 @@ exposition-only to document what members a char_traits specialization should pro
+@@ -72,6 +72,106 @@ exposition-only to document what members a char_traits specialization should pro
  };
  */
  

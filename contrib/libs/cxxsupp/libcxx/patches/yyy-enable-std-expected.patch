@@ -12,10 +12,10 @@ index 27f01d9..174f97f 100644
  _LIBCPP_BEGIN_NAMESPACE_STD
  
 diff --git a/include/__expected/expected.h b/include/__expected/expected.h
-index 443d925..bfa3d25 100644
+index d7adaac..21b610b 100644
 --- a/include/__expected/expected.h
 +++ b/include/__expected/expected.h
-@@ -62,7 +62,7 @@
+@@ -52,7 +52,7 @@
  _LIBCPP_PUSH_MACROS
  #include <__undef_macros>
  

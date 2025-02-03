@@ -1,10 +1,10 @@
 Y_UNIT_TEST(Pragma) {
     TCases cases = {
-        {"pragma user = user;","PRAGMA user = user;\n"},
-        {"pragma user = default;","PRAGMA user = default;\n"},
-        {"pragma user.user = user;","PRAGMA user.user = user;\n"},
-        {"pragma user.user(user);","PRAGMA user.user(user);\n"},
-        {"pragma user.user(user, user);","PRAGMA user.user(user, user);\n"},
+        {"pragma user = user;", "PRAGMA user = user;\n"},
+        {"pragma user = default;", "PRAGMA user = default;\n"},
+        {"pragma user.user = user;", "PRAGMA user.user = user;\n"},
+        {"pragma user.user(user);", "PRAGMA user.user(user);\n"},
+        {"pragma user.user(user, user);", "PRAGMA user.user(user, user);\n"},
     };
 
     TSetup setup;
@@ -1015,6 +1015,8 @@ Y_UNIT_TEST(TableHints) {
             "SELECT\n\t*\nFROM\n\tplato.T WITH SCHEMA struct<foo: integer, Bar: list<string?>>\nWHERE\n\tkey < 0\n;\n"},
         {"select * from plato.T with (foo=bar, x=$y, a=(a, b, c), u='aaa', schema (foo int32, bar list<string>))",
             "SELECT\n\t*\nFROM\n\tplato.T WITH (\n\t\tfoo = bar,\n\t\tx = $y,\n\t\ta = (a, b, c),\n\t\tu = 'aaa',\n\t\tSCHEMA (foo int32, bar list<string>)\n\t)\n;\n"},
+        {"select * from plato.T with schema struct<\nfoo:int32,\nbar:double\n> as a",
+            "SELECT\n\t*\nFROM\n\tplato.T WITH SCHEMA struct<\n\t\tfoo: int32,\n\t\tbar: double\n\t> AS a\n;\n"},
     };
 
     TSetup setup;
@@ -1504,6 +1506,16 @@ Y_UNIT_TEST(Union) {
             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION ALL\nSELECT\n\t4\nUNION\nSELECT\n\t5\n;\n"},
         {"select 1 union all (select 2)",
             "SELECT\n\t1\nUNION ALL\n(\n\tSELECT\n\t\t2\n);\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(Comment) {
+    TCases cases = {
+        {"/*\nmulti\nline\ncomment\n*/\npragma foo = \"true\";\npragma bar = \"1\"",
+            "/*\nmulti\nline\ncomment\n*/\nPRAGMA foo = 'true';\nPRAGMA bar = '1';\n"},
     };
 
     TSetup setup;

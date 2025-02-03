@@ -8,11 +8,11 @@
 
 #### Функциональность
 
-* [Поддержали](https://github.com/ydb-platform/ydb/pull/11276) рестарт без потери доступности кластера в [минимальной отказоустойчивой конфигурации](https://ydb.tech/docs/ru/concepts/topology#reduced) из трех узлов.
+* [Поддержан](https://github.com/ydb-platform/ydb/pull/11276) рестарт без потери доступности кластера в [минимальной отказоустойчивой конфигурации](./concepts/topology#reduced) из трех узлов.
 * [Добавлены](https://github.com/ydb-platform/ydb/pull/13218) новый функции UDF Roaring bitmap: AndNotWithBinary, FromUint32List, RunOptimize.
-* Добавлена возможность регистрировать [динамический узел](https://ydb.tech/docs/ru/concepts/glossary#dynamic) по сертификату. В [Node Broker](https://ydb.tech/docs/ru/reference/configuration/#node-broker-config), системная таблетке, которая отвечает за регистрацию динамических узлов в кластере, добавлен флаг `AuthorizeByCertificate` использования сертификата при регистрации.
-* [Добавлены](https://github.com/ydb-platform/ydb/pull/11775) приоритеты проверки аутентификационных тикетов[ с использованием стороннего IAM-провайдера](https://ydb.tech/docs/ru/security/authentication#iam), с самым высоким приоритетом обрабатываются запросы от новых пользователей.
-* [Добавлена](https://github.com/ydb-platform/ydb/pull/13748) возможность настраивать шаг планирования координатора c помощью [динамически обновляемой настройки](https://ydb.tech/docs/ru/maintenance/manual/dynamic-config#dynamic-kinds) `immediate_controls_config`.
+* Добавлена возможность регистрировать [динамический узел](./concepts/glossary#dynamic) по сертификату. В [Node Broker](./reference/configuration/#node-broker-config), системная таблетке, которая отвечает за регистрацию динамических узлов в кластере, добавлен флаг `AuthorizeByCertificate` использования сертификата при регистрации.
+* [Добавлены](https://github.com/ydb-platform/ydb/pull/11775) приоритеты проверки аутентификационных тикетов [с использованием стороннего IAM-провайдера](./security/authentication#iam), с самым высоким приоритетом обрабатываются запросы от новых пользователей.
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/13748) возможность настраивать шаг планирования координатора c помощью [динамически обновляемой настройки](./maintenance/manual/dynamic-config#dynamic-kinds) `immediate_controls_config`.
 
 #### Производительность
 
@@ -24,12 +24,12 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/12221) ошибка, из-за которой при чтении из топика маленьких сообщений маленькими порциями значительно увеличивалась назгрузка на CPU. Это могло приводить к задержкам в чтении/записи в этот топик.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/12915) ошибка восстановления из резервной копии, сохраненной в хранилище S3 с Path-style адресацией.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/13222) ошибка восстановления из резервной копии, которая была создана в момент автоматического разделения таблицы.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/12601) ошибка в сериализации `Uuid` для [CDC](https://ydb.tech/docs/ru/concepts/cdc).
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/12018) потенциальная поломка ["замороженных" блокировок](https://ydb.tech/docs/ru/contributor/datashard-locks-and-change-visibility#vzaimodejstvie-s-raspredelyonnymi-tranzakciyami), к которой могли приводить массовые операции (например, удаление по TTL).
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/12804) ​​ошибка, из-за которой чтение подписчиков таблетки иногда приводило к сбоям во время автоматического разделения таблицы.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/12807) ошибка, при которой отключенные прокси-серверы неожиданно регистрировались в службе координации.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/11593) ошибка, возникающие при открытии в интерфейсе вкладки с информацией о [группах распределенного хранилища](https://ydb.tech/docs/ru/concepts/glossary#storage-group).
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/12448) [ошибка](https://github.com/ydb-platform/ydb/issues/12443), из-за которой [Health Check](https://ydb.tech/docs/ru/reference/ydb-sdk/health-check-api) не сообщал о проблемах в синхронизации времени.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/12601) ошибка в сериализации `Uuid` для [CDC](./concepts/cdc).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/12018) потенциальная поломка ["замороженных" блокировок](./contributor/datashard-locks-and-change-visibility#vzaimodejstvie-s-raspredelyonnymi-tranzakciyami), к которой могли приводить массовые операции (например, удаление по TTL).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/12804) ​​ошибка, из-за которой чтение на подписчиках таблетки могло приводиит к сбоям во время автоматического разделения таблицы.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/12807) ошибка, при которой [узел координации](./concepts/datamodel/coordination-node) успешно регистрировал прокси-серверы несмотря на разрыв связи.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/11593) ошибка, возникающие при открытии в интерфейсе вкладки с информацией о [группах распределенного хранилища](./concepts/glossary#storage-group).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/12448) [ошибка](https://github.com/ydb-platform/ydb/issues/12443), из-за которой [Health Check](./reference/ydb-sdk/health-check-api) не сообщал о проблемах в синхронизации времени.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/11658) редкая проблема, которая приводила к ошибкам при выполнении запроса на чтение.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/13501) редкая проблема, которая приводила к утечкам незакоммиченных изменений.
 

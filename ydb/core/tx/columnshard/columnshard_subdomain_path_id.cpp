@@ -102,6 +102,7 @@ static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(10);
 
 void TColumnShard::StartFindSubDomainPathId(bool delayFirstRequest) {
     if (!FindSubDomainPathIdActor &&
+        CurrentSchemeShardId != 0 &&
         (!SubDomainPathId))
     {
         FindSubDomainPathIdActor = Register(CreateFindSubDomainPathIdActor(SelfId(), TabletID(), CurrentSchemeShardId, delayFirstRequest, MaxFindSubDomainPathIdDelay));

@@ -226,6 +226,8 @@ public:
     void BecomeUnknown(TNodeInfo* node);
     bool Kick();
     const TVector<i64>& GetTabletAllowedMetricIds() const;
+    static bool HasAllowedMetric(const TVector<i64>& allowedMetricIds, EResourceToBalance resource);
+    bool HasAllowedMetric(EResourceToBalance resource) const;
 
     void UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics);
     TResourceRawValues GetResourceCurrentValues() const;
@@ -236,18 +238,18 @@ public:
     void ActualizeCounter();
 
     template <typename ResourcesType>
-    static double GetUsage(const ResourcesType& current, const ResourcesType& maximum, EResourceToBalance resource = EResourceToBalance::Dominant) {
+    static double GetUsage(const ResourcesType& current, const ResourcesType& maximum, EResourceToBalance resource = EResourceToBalance::ComputeResources) {
         auto normValues = NormalizeRawValues(current, maximum);
         return ExtractResourceUsage(normValues, resource);
     }
 
-    static double ExtractResourceUsage(const TResourceNormalizedValues& normValues, EResourceToBalance resource = EResourceToBalance::Dominant) {
+    static double ExtractResourceUsage(const TResourceNormalizedValues& normValues, EResourceToBalance resource = EResourceToBalance::ComputeResources) {
         switch (resource) {
         case EResourceToBalance::CPU: return std::get<NMetrics::EResource::CPU>(normValues);
         case EResourceToBalance::Memory: return std::get<NMetrics::EResource::Memory>(normValues);
         case EResourceToBalance::Network: return std::get<NMetrics::EResource::Network>(normValues);
         case EResourceToBalance::Counter: return std::get<NMetrics::EResource::Counter>(normValues);
-        case EResourceToBalance::Dominant: return max(normValues);
+        case EResourceToBalance::ComputeResources: return max(normValues);
         }
     }
 

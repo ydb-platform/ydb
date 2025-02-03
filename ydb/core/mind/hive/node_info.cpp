@@ -207,7 +207,7 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet) const {
 
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {
     if (tablet.IsAliveOnLocal(Local)) {
-        return !IsOverloaded();
+        return !(IsOverloaded() && tablet.HasAllowedMetric(EResourceToBalance::ComputeResources));
     }
     if (tablet.IsLeader()) {
         const TLeaderTabletInfo& leader = tablet.AsLeader();
@@ -283,7 +283,7 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
         }
     }
 
-    if (tablet.IsAlive() && IsOverloaded()) {
+    if (tablet.IsAlive() && IsOverloaded() && tablet.HasAllowedMetric(EResourceToBalance::ComputeResources)) {
         // we don't move already running tablet to another overloaded node
         if (debugState) {
             debugState->NodesWithoutResources++;
@@ -400,7 +400,7 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet) const {
 
 double TNodeInfo::GetNodeUsage(const TResourceNormalizedValues& normValues, EResourceToBalance resource) const {
     double usage = TTabletInfo::ExtractResourceUsage(normValues, resource);
-    if (resource == EResourceToBalance::Dominant && AveragedNodeTotalUsage.IsValueStable()) {
+    if (resource == EResourceToBalance::ComputeResources && AveragedNodeTotalUsage.IsValueStable()) {
         usage = std::max(usage, AveragedNodeTotalUsage.GetValue());
     }
     return usage;

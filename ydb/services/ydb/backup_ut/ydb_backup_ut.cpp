@@ -545,7 +545,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(RestoreViewQueryText) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -567,7 +566,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(RestoreViewReferenceTable) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -602,8 +600,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         // query client lives on the node 0, so it is enough to enable the views only on it
         server.GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
-        // export would happen on the node 0
-        server.GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViewExport(true);
 
         const TString view = JoinFsPaths(alice, "view");
         const TString table = JoinFsPaths(alice, "a", "b", "c", "table");
@@ -624,7 +620,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(RestoreViewContent) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();

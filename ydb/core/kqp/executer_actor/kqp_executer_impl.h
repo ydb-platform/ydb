@@ -123,8 +123,9 @@ struct TEvPrivate {
 };
 
 template <class TDerived, EExecType ExecType>
-class TKqpExecuterBase : public TActorBootstrapped<TDerived> {
+class TKqpExecuterBase : public TActor<TDerived> {
     static_assert(ExecType == EExecType::Data || ExecType == EExecType::Scan);
+
 public:
     TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
@@ -133,7 +134,8 @@ public:
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr)
-        : Request(std::move(request))
+        : NActors::TActor<TDerived>(&TDerived::ReadyState)
+        , Request(std::move(request))
         , BufferActorId(bufferActorId)
         , TxManager(txManager)
         , Database(database)
@@ -159,9 +161,7 @@ public:
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
 
         CheckDuplicateRows = tableServiceConfig.GetEnableRowsDuplicationCheck();
-    }
 
-    void Bootstrap() {
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
@@ -171,11 +171,10 @@ public:
         }
 
         LOG_T("Bootstrap done, become ReadyState");
-        this->Become(&TKqpExecuterBase::ReadyState);
     }
 
     TActorId SelfId() {
-       return TActorBootstrapped<TDerived>::SelfId();
+       return TActor<TDerived>::SelfId();
     }
 
     TString BuildMemoryLimitExceptionMessage() const {
@@ -209,12 +208,16 @@ protected:
         KqpTableResolverId = {};
 
         if (reply.Status != Ydb::StatusIds::SUCCESS) {
-            ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds_StatusCode_Name(reply.Status));
+            if (ExecuterStateSpan) {
+                ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds_StatusCode_Name(reply.Status));
+            }
             ReplyErrorAndDie(reply.Status, reply.Issues);
             return false;
         }
 
-        ExecuterStateSpan.EndOk();
+        if (ExecuterStateSpan) {
+            ExecuterStateSpan.EndOk();
+        }
 
         return true;
     }
@@ -228,14 +231,18 @@ protected:
         // TODO: count resolve time in CpuTime
 
         if (reply.Status != Ydb::StatusIds::SUCCESS) {
-            ExecuterStateSpan.EndError(Ydb::StatusIds_StatusCode_Name(reply.Status));
+            if (ExecuterStateSpan) {
+                ExecuterStateSpan.EndError(Ydb::StatusIds_StatusCode_Name(reply.Status));
+            }
 
             LOG_W("Shards nodes resolve failed, status: " << Ydb::StatusIds_StatusCode_Name(reply.Status)
                 << ", issues: " << reply.Issues.ToString());
             ReplyErrorAndDie(reply.Status, reply.Issues);
             return false;
         }
-        ExecuterStateSpan.EndOk();
+        if (ExecuterStateSpan) {
+            ExecuterStateSpan.EndOk();
+        }
 
         LOG_D("Shards nodes resolved, success: " << reply.ShardNodes.size() << ", failed: " << reply.Unresolved);
 
@@ -971,7 +978,7 @@ protected:
                 settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);
             }
             if (!settings.GetInconsistentTx() && TasksGraph.GetMeta().LockMode) {
-                settings.SetLockMode(*TasksGraph.GetMeta().LockMode);   
+                settings.SetLockMode(*TasksGraph.GetMeta().LockMode);
             }
 
             output.SinkSettings.ConstructInPlace();
@@ -1084,7 +1091,7 @@ protected:
         }
 
         std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {
-                return CompareBorders<false, false>(
+                return CompareBorders<true, true>(
                     lhs.Ranges->GetRightBorder().first->GetCells(),
                     rhs.Ranges->GetRightBorder().first->GetCells(),
                     lhs.Ranges->GetRightBorder().second,
@@ -1305,8 +1312,13 @@ protected:
                         settings->SetShardIdHint(*shardsRangesForTask[0].ShardId);
                     }
 
+                    bool hasRanges = false;
                     for (const auto& shardRanges : shardsRangesForTask) {
-                        shardRanges.Ranges->SerializeTo(settings);
+                        hasRanges |= shardRanges.Ranges->HasRanges();
+                    }
+
+                    for (const auto& shardRanges : shardsRangesForTask) {
+                        shardRanges.Ranges->SerializeTo(settings, !hasRanges);
                     }
                 }
             }
@@ -1859,8 +1871,12 @@ protected:
 
         LWTRACK(KqpBaseExecuterReplyErrorAndDie, ResponseEv->Orbit, TxId);
 
-        ExecuterSpan.EndError(response.DebugString());
-        ExecuterStateSpan.EndError(response.DebugString());
+        if (ExecuterSpan) {
+            ExecuterSpan.EndError(response.DebugString());
+        }
+        if (ExecuterStateSpan) {
+            ExecuterStateSpan.EndError(response.DebugString());
+        }
 
         this->Shutdown();
     }
@@ -1898,6 +1914,8 @@ protected:
     void PassAway() override {
         YQL_ENSURE(AlreadyReplied && ResponseEv);
 
+        ResponseEv->ParticipantNodes = std::move(ParticipantNodes);
+
         // Fill response stats
         {
             auto& response = *ResponseEv->Record.MutableResponse();
@@ -1923,10 +1941,6 @@ protected:
                 if (!txPlansWithStats.empty()) {
                     LOG_I("Full stats: " << response.GetResult().GetStats());
                 }
-            }
-
-            for (const auto nodeId : ParticipantNodes) {
-                response.MutableResult()->AddParticipantNodes(nodeId);
             }
         }
 

@@ -11,7 +11,7 @@
 
 #include <memory>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 template<typename T>
 class TClientImplCommon

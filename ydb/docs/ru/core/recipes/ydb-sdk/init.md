@@ -99,6 +99,30 @@
 
   {% endcut %}
 
+- Java
+
+  ```java
+  public void work() {
+      GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+              .build());
+      // Работа с transport
+      doWork(transport);
+      transport.close();
+  }
+  ```
+
+- JDBC Driver
+
+  ```java
+  public void work() {
+      // JDBC Driver должен быть доступен в classpath для автоматической загрузки
+      Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
+      // Работа с connection
+      doWork(connection);
+      connection.close();
+  }
+  ```
+
 - Python
 
   ```python
@@ -162,6 +186,14 @@
   ];
 
   $ydb = new Ydb($config);
+  ```
+
+- Rust
+
+  ```rust
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+        .with_credentials(AccessTokenCredentials::from("..."))
+        .client()?
   ```
 
 {% endlist %}

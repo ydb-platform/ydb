@@ -10,6 +10,8 @@
 #include "configs_dispatcher.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
@@ -190,7 +192,7 @@ private:
             HandleUnauthorized(ev, ctx);
         };
 
-        if (CheckRights(ev->Get()->Record.GetUserToken())) {
+        if (IsAdministrator(AppData(ctx), ev->Get()->Record.GetUserToken())) {
             Handle(ev, ctx);
         } else {
             if constexpr (HasHandleUnauthorized) {

@@ -4,11 +4,9 @@
 
 #include <yt/cpp/mapreduce/http/retry_request.h>
 
+#include <yt/cpp/mapreduce/interface/raw_batch_request.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
 
 #include <library/cpp/iterator/functools.h>
 

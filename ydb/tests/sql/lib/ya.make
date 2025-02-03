@@ -4,10 +4,9 @@ ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 
 PY_SRCS(
     test_base.py
-    test_lib.py
+    helpers.py
     test_query.py
     test_s3.py
-    test_wm.py
 )
 
 PEERDIR(

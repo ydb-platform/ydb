@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     audit_log.cpp
     audit_dml_operations.cpp
@@ -145,8 +149,8 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/lib/fq
-    ydb/public/lib/operation_id
-    ydb/public/sdk/cpp/client/resources
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/client/resources
     ydb/services/ext_index/common
 )
 

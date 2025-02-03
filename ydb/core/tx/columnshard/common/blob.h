@@ -194,6 +194,7 @@ public:
 
     TBlobRange RestoreRange(const TUnifiedBlobId& blobId) const;
     bool CheckBlob(const TUnifiedBlobId& blobId) const;
+    TString GetBlobData(const TString& blob) const;
 };
 
 struct TBlobRange {

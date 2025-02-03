@@ -24,7 +24,15 @@ struct TQueryRequest {
 struct TCreateSessionRequest {
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Event;
     ui32 TargetNode;
-    ui8 VerboseLevel;
+    TYdbSetupSettings::EVerbose VerboseLevel;
+};
+
+struct TWaitResourcesSettings {
+    i32 ExpectedNodeCount;
+    TYdbSetupSettings::EHealthCheck HealthCheckLevel;
+    TDuration HealthCheckTimeout;
+    TYdbSetupSettings::EVerbose VerboseLevel;
+    TString Database;
 };
 
 struct TEvPrivate {
@@ -83,7 +91,7 @@ NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPr
 
 NActors::IActor* CreateAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings);
 
-NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount);
+NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, const TWaitResourcesSettings& settings);
 
 NActors::IActor* CreateSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise);
 

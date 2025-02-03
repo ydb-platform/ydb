@@ -1,12 +1,31 @@
 #include "type_ann_match_recognize.h"
+
 #include <yql/essentials/core/sql_types/match_recognize.h>
 #include <yql/essentials/core/yql_match_recognize.h>
 
 namespace NYql::NTypeAnnImpl {
 
-IGraphTransformer::TStatus
-MatchRecognizeWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &output, TContext &ctx) {
-    Y_UNUSED(output);
+namespace {
+
+const TStructExprType* GetMatchedRowsRangesType(const TExprNode::TPtr& patternVars, TContext &ctx) {
+    const auto itemType = ctx.Expr.MakeType<TStructExprType>(TVector{
+            ctx.Expr.MakeType<TItemExprType>("From", ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)),
+            ctx.Expr.MakeType<TItemExprType>("To", ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64))
+    });
+
+    TVector<const TItemExprType*> items;
+    for (const auto& var : patternVars->Children()) {
+        items.push_back(ctx.Expr.MakeType<TItemExprType>(
+            var->Content(),
+            ctx.Expr.MakeType<TListExprType>(itemType)
+        ));
+    }
+    return ctx.Expr.MakeType<TStructExprType>(items);
+}
+
+} // anonymous namespace
+
+IGraphTransformer::TStatus MatchRecognizeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
     if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -15,7 +34,7 @@ MatchRecognizeWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &output, TCo
     const auto partitionColumns = input->Child(2);
     const auto sortTraits = input->Child(3);
     const auto params = input->Child(4);
-    Y_UNUSED(source, sortTraits);
+    Y_UNUSED(sortTraits);
     auto status = ConvertToLambda(partitionKeySelector, ctx.Expr, 1, 1);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
@@ -53,9 +72,65 @@ MatchRecognizeWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &output, TCo
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus
-MatchRecognizeParamsWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &output, TContext &ctx) {
-    Y_UNUSED(output);
+IGraphTransformer::TStatus MatchRecognizeMeasuresAggregatesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
+    if (!EnsureMinArgsCount(*input, 4, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    const auto inputRowType = input->Child(0);
+    const auto patternVars = input->Child(1);
+    const auto names = input->Child(2);
+    const auto vars = input->Child(3);
+    constexpr size_t FirstLambdaIndex = 4;
+
+    if (!EnsureType(*inputRowType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!EnsureTupleOfAtoms(*patternVars, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!EnsureTupleOfAtoms(*names, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!EnsureTupleOfAtoms(*vars, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!EnsureArgsCount(*vars, names->ChildrenSize(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!EnsureArgsCount(*input, FirstLambdaIndex + names->ChildrenSize(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TVector<const TItemExprType*> items;
+    for (size_t i = 0; i < names->ChildrenSize(); ++i) {
+        auto lambda = input->Child(FirstLambdaIndex + i);
+        if (const auto varName = vars->Child(i)->Content()) {
+            const auto traits = input->Child(FirstLambdaIndex + i);
+            if (!EnsureTupleMinSize(*traits, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!EnsureTupleMaxSize(*traits, 3, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!EnsureAtom(traits->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            lambda = traits->Child(1)->Child(NNodes::TCoAggregationTraits::idx_FinishHandler);
+        }
+        if (auto type = lambda->GetTypeAnn()) {
+            if (type->GetKind() != ETypeAnnotationKind::Optional) {
+                type = ctx.Expr.MakeType<TOptionalExprType>(type);
+            }
+            items.push_back(ctx.Expr.MakeType<TItemExprType>(names->Child(i)->Content(), type));
+        } else {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+    }
+    input->SetTypeAnn(ctx.Expr.MakeType<TStructExprType>(items));
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus MatchRecognizeParamsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
     if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -64,36 +139,22 @@ MatchRecognizeParamsWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &outpu
     return IGraphTransformer::TStatus::Ok;
 }
 
-namespace {
-
-const TStructExprType* GetMatchedRowsRangesType(const TExprNode::TPtr& pattern, TContext &ctx) {
-    auto vars = GetPatternVars(NYql::NMatchRecognize::ConvertPattern(pattern, ctx.Expr, 0));
-    TVector<const TItemExprType*> items;
-    for (const auto& var: vars) {
-        const auto& item = ctx.Expr.MakeType<TStructExprType>(TVector<const TItemExprType*>{
-                        ctx.Expr.MakeType<TItemExprType>("From", ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)),
-                        ctx.Expr.MakeType<TItemExprType>("To", ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64))
-                });
-        items.push_back(ctx.Expr.MakeType<TItemExprType>(var, ctx.Expr.MakeType<TListExprType>(item)));
-    }
-    return ctx.Expr.MakeType<TStructExprType>(items);
-}
-
-}//namespace {
-
-IGraphTransformer::TStatus
-MatchRecognizeMeasuresWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-                                 TContext &ctx) {
-    Y_UNUSED(output);
+IGraphTransformer::TStatus MatchRecognizeMeasuresWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
     if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
     const auto inputRowType = input->Child(0);
-    const auto pattern = input->Child(1);
+    const auto patternVars = input->Child(1);
     const auto names = input->Child(2);
     constexpr size_t FirstLambdaIndex = 3;
 
-    if (!EnsureTupleOfAtoms(*names, ctx.Expr))  {
+    if (!EnsureType(*inputRowType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!EnsureTupleOfAtoms(*patternVars, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!EnsureTupleOfAtoms(*names, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -111,7 +172,7 @@ MatchRecognizeMeasuresWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& out
             MeasureInputDataSpecialColumnName(EMeasureInputDataSpecialColumns::MatchNumber),
             ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
     auto lambdaInputRowType = ctx.Expr.MakeType<TStructExprType>(lambdaInputRowColumns);
-    const auto& matchedRowsRanges = GetMatchedRowsRangesType(pattern, ctx);
+    const auto& matchedRowsRanges = GetMatchedRowsRangesType(patternVars, ctx);
     YQL_ENSURE(matchedRowsRanges);
     TVector<const TItemExprType*> items;
     for (size_t i = 0; i != names->ChildrenSize(); ++i) {
@@ -139,27 +200,27 @@ MatchRecognizeMeasuresWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& out
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus
-MatchRecognizePatternWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-                              TContext &ctx) {
-    Y_UNUSED(output);
+IGraphTransformer::TStatus MatchRecognizePatternWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
     input->SetTypeAnn(ctx.Expr.MakeType<TVoidExprType>());
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus
-MatchRecognizeDefinesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-                                 TContext &ctx) {
-    Y_UNUSED(output);
+IGraphTransformer::TStatus MatchRecognizeDefinesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext &ctx) {
     if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
     const auto inputRowType = input->Child(0);
-    const auto pattern = input->Child(1);
+    const auto patternVars = input->Child(1);
     const auto names = input->Child(2);
-    const size_t FirstLambdaIndex = 3;
+    constexpr size_t FirstLambdaIndex = 3;
 
-    if (!EnsureTupleOfAtoms(*names, ctx.Expr))  {
+    if (!EnsureType(*inputRowType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!EnsureTupleOfAtoms(*patternVars, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!EnsureTupleOfAtoms(*names, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -167,7 +228,7 @@ MatchRecognizeDefinesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& outp
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto matchedRowsRanges = GetMatchedRowsRangesType(pattern, ctx);
+    const auto matchedRowsRanges = GetMatchedRowsRangesType(patternVars, ctx);
     TVector<const TItemExprType*> items;
     for (size_t i = 0; i != names->ChildrenSize(); ++i) {
         auto& lambda = input->ChildRef(FirstLambdaIndex + i);
@@ -230,11 +291,9 @@ bool ValidateSettings(const TExprNode::TPtr& settings, TExprContext& ctx) {
     return true;
 }
 
-} //namespace
+} // anonymous namespace
 
-IGraphTransformer::TStatus
-MatchRecognizeCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-    Y_UNUSED(output);
+IGraphTransformer::TStatus MatchRecognizeCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TExtContext& ctx) {
     if (not ctx.Types.MatchRecognize) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "MATCH_RECOGNIZE is disabled"));
         return IGraphTransformer::TStatus::Error;
@@ -253,7 +312,7 @@ MatchRecognizeCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     }
 
     if (not ValidateSettings(settings, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;;
+        return IGraphTransformer::TStatus::Error;
     }
 
     if (!EnsureFlowType(*source, ctx.Expr)) {

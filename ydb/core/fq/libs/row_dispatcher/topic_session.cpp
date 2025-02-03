@@ -9,7 +9,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/queue.h>
 
@@ -121,7 +123,7 @@ private:
             return ReadActorId;
         }
 
-        TMaybe<ui64> GetNextMessageOffset() const override {
+        std::optional<ui64> GetNextMessageOffset() const override {
             return NextMessageOffset;
         }
 
@@ -191,7 +193,7 @@ private:
         ui64 UnreadRows = 0;
         ui64 UnreadBytes = 0;
         bool DataArrivedSent = false;
-        TMaybe<ui64> NextMessageOffset;                 // offset to restart topic session
+        std::optional<ui64> NextMessageOffset;          // offset to restart topic session
         TMaybe<ui64> ProcessedNextMessageOffset;        // offset of fully processed data (to save to checkpoint)
 
         // Metrics
@@ -284,9 +286,10 @@ private:
     void CreateTopicSession();
     void CloseTopicSession();
     void SubscribeOnNextEvent();
-    void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
+    void SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void SendData(TClientsInfo& info);
-    void FatalError(TStatus status);
+    void FatalError(const TStatus& status);
+    void ThrowFatalError(const TStatus& status);
     void SendDataArrived(TClientsInfo& client);
     void StopReadSession();
     TString GetSessionId() const;
@@ -308,6 +311,7 @@ private:
     TMaybe<ui64> GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings);
     void SendSessionError(TActorId readActorId, TStatus status);
     void RestartSessionIfOldestClient(const TClientsInfo& info);
+    void RefreshParsers();
 
 private:
 
@@ -330,7 +334,8 @@ private:
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
-        IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);,
+        IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
+        IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);,
         ExceptionFunc(std::exception, HandleException)
     )
 };
@@ -497,6 +502,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
     LOG_ROW_DISPATCHER_DEBUG("Reconnect topic session, " << TopicPathPartition
         << ", StartingMessageTimestamp " << minTime
         << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
+    RefreshParsers();
     StopReadSession();
     CreateTopicSession();
     Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
@@ -525,7 +531,7 @@ void TTopicSession::HandleNewEvents() {
             LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << UnreadBytes << " bytes), stop reading from yds");
             break;
         }
-        TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+        std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
         if (!event) {
             break;
         }
@@ -565,16 +571,16 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClose
     const TString message = TStringBuilder() << "Read session to topic \"" << Self.TopicPathPartition << "\" was closed";
     LOG_ROW_DISPATCHER_DEBUG(message << ": " << ev.DebugString());
 
-    Self.FatalError(TStatus::Fail(
+    Self.ThrowFatalError(TStatus::Fail(
         NYql::NDq::YdbStatusToDqStatus(static_cast<Ydb::StatusIds::StatusCode>(ev.GetStatus())),
-        ev.GetIssues()
+        NYdb::NAdapters::ToYqlIssues(ev.GetIssues())
     ).AddParentIssue(message));
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
     LOG_ROW_DISPATCHER_DEBUG("StartPartitionSessionEvent received");
 
-    TMaybe<ui64> minOffset;
+    std::optional<ui64> minOffset;
     for (const auto& [actorId, info] : Self.Clients) {
         if (!minOffset || (info->NextMessageOffset && *info->NextMessageOffset < *minOffset)) {
             minOffset = info->NextMessageOffset;
@@ -598,10 +604,10 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 }
 
 TString TTopicSession::GetSessionId() const {
-    return ReadSession ? ReadSession->GetSessionId() : TString{"empty"};
+    return ReadSession ? TString{ReadSession->GetSessionId()} : TString{"empty"};
 }
 
-void TTopicSession::SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
+void TTopicSession::SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
     LOG_ROW_DISPATCHER_TRACE("SendToParsing, messages: " << messages.size());
     for (const auto& [_, formatHandler] : FormatHandlers) {
         if (formatHandler->HasClients()) {
@@ -751,7 +757,7 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     if (!ReadSession || !info.NextMessageOffset) {
         return;
     }
-    TMaybe<ui64> minMessageOffset;
+    std::optional<ui64> minMessageOffset;
     for (auto& [readActorId, clientPtr] : Clients) {
         if (info.ReadActorId == readActorId || !clientPtr->NextMessageOffset) {
             continue;
@@ -773,6 +779,7 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     Metrics.RestartSessionByOffsets->Inc();
     ++RestartSessionByOffsets;
     info.RestartSessionByOffsetsByQuery->Inc();
+    RefreshParsers();
     StopReadSession();
 
     if (!ReadSession) {
@@ -780,7 +787,7 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     }
 }
 
-void TTopicSession::FatalError(TStatus status) {
+void TTopicSession::FatalError(const TStatus& status) {
     LOG_ROW_DISPATCHER_ERROR("FatalError: " << status.GetErrorMessage());
 
     for (auto& [readActorId, info] : Clients) {
@@ -789,7 +796,11 @@ void TTopicSession::FatalError(TStatus status) {
     }
     StopReadSession();
     Become(&TTopicSession::ErrorState);
-    ythrow yexception() << "FatalError: " << status.GetErrorMessage();    // To exit from current stack and call once PassAway() in HandleException().
+}
+
+void TTopicSession::ThrowFatalError(const TStatus& status) {
+    FatalError(status);
+    ythrow yexception() << "FatalError: " << status.GetErrorMessage();
 }
 
 void TTopicSession::SendSessionError(TActorId readActorId, TStatus status) {
@@ -852,8 +863,8 @@ void TTopicSession::SendStatistics() {
         clientStatistic.Offset = info.ProcessedNextMessageOffset.GetOrElse(0);
         clientStatistic.FilteredReadBytes = info.FilteredStat.Bytes;
         clientStatistic.ReadBytes = Statistics.Bytes;
-        clientStatistic.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.GetOrElse(0);
-        clientStatistic.ReadLagMessages = info.NextMessageOffset.GetOrElse(0) - LastMessageOffset - 1;
+        clientStatistic.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.value_or(0);
+        clientStatistic.ReadLagMessages = info.NextMessageOffset.value_or(0) - LastMessageOffset - 1;
         clientStatistic.InitialOffset = info.InitialOffset;
         info.FilteredStat.Clear();
         sessionStatistic.Clients.emplace_back(std::move(clientStatistic));
@@ -900,6 +911,12 @@ TMaybe<ui64> TTopicSession::GetOffset(const NFq::NRowDispatcherProto::TEvStartSe
         return p.GetOffset();
     }
     return Nothing();
+}
+
+void TTopicSession::RefreshParsers() {
+    for (const auto& [_, formatHandler] : FormatHandlers) {
+        formatHandler->ForceRefresh();
+    }
 }
 
 }  // anonymous namespace

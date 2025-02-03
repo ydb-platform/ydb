@@ -1,5 +1,9 @@
 PROGRAM()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     appdata.h
     log_impl.h
@@ -19,8 +23,8 @@ PEERDIR(
     ydb/core/local_pgwire
     ydb/core/protos
     ydb/public/api/grpc
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/draft
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/draft
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy
 )

@@ -237,7 +237,6 @@ public:
         , FunctionRegistry(functionRegistry)
         , HttpGateway(std::move(httpGateway))
     {
-        Config->EnableKqpScanQueryStreamLookup = true;
         Config->EnablePreparedDdl = true;
         Config->EnableAntlr4Parser = enableAntlr4Parser;
     }
@@ -312,7 +311,7 @@ private:
         }
     }
     void Continue() {
-        TActorSystem* actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
+        TActorSystem* actorSystem = TActivationContext::ActorSystem();
         TActorId selfId = SelfId();
         auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
             bool finished = future.GetValue();
@@ -631,7 +630,7 @@ private:
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
 
         Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, Query->DatabaseId, std::move(loader),
-            TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
+            TActivationContext::ActorSystem(), SelfId().NodeId(), counters);
         auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
             federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);

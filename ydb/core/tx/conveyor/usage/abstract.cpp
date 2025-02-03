@@ -1,6 +1,9 @@
 #include "abstract.h"
+#include "events.h"
+
 #include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/actors/core/log.h>
+
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
@@ -34,6 +37,15 @@ TConclusionStatus ITask::Execute(std::shared_ptr<TTaskSignals> signals, const st
 
 void ITask::DoOnCannotExecute(const TString& reason) {
     AFL_VERIFY(false)("problem", "cannot execute conveyor task")("reason", reason);
+}
+
+void TProcessGuard::Finish() {
+    AFL_VERIFY(!Finished);
+    Finished = true;
+    if (ServiceActorId && NActors::TlsActivationContext) {
+        auto& context = NActors::TActorContext::AsActorContext();
+        context.Send(*ServiceActorId, new NConveyor::TEvExecution::TEvUnregisterProcess(ProcessId));
+    }
 }
 
 }

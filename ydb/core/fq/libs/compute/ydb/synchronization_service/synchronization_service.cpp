@@ -13,8 +13,9 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -278,7 +279,7 @@ public:
         }
         if (!status.IsSuccess()) {
             LOG_E("Create resource pool response (error): " << ProcessedResourcePools << " of " << WorkloadManagerConfig.ResourcePoolSize() << ", issues = " << status.GetIssues().ToOneLineString());
-            Issues.AddIssues(status.GetIssues());
+            Issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
             ProcessCreateResourcePool();
             return;
         }
@@ -613,7 +614,7 @@ private:
         try {
             return std::move(future.GetValueSync()); // can throw an exception
         } catch (...) {
-            return NYdb::TStatus{NYdb::EStatus::BAD_REQUEST, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}};
+            return NYdb::TStatus{NYdb::EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}};
         }
     }
 
@@ -627,13 +628,15 @@ private:
                         CREATE RESOURCE POOL `{resource_pool_name}` WITH (
                             CONCURRENT_QUERY_LIMIT="{concurrent_query_limit}",
                             QUEUE_SIZE="{queue_size}",
-                            DATABASE_LOAD_CPU_THRESHOLD="{database_load_cpu_threshold}"
+                            DATABASE_LOAD_CPU_THRESHOLD="{database_load_cpu_threshold}",
+                            TOTAL_CPU_LIMIT_PERCENT_PER_NODE="{total_cpu_limit_percent_per_node}"
                         );
                     )",
                     "resource_pool_name"_a = resourcePool.GetName(),
                     "concurrent_query_limit"_a = resourcePool.GetConcurrentQueryLimit(),
                     "queue_size"_a = resourcePool.GetQueueSize(),
-                    "database_load_cpu_threshold"_a = resourcePool.GetDatabaseLoadCpuThreshold()));
+                    "database_load_cpu_threshold"_a = resourcePool.GetDatabaseLoadCpuThreshold(),
+                    "total_cpu_limit_percent_per_node"_a = resourcePool.GetTotalCpuLimitPercentPerNode()));
                 })
                 .Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId(), i](const NYdb::TAsyncStatus& future) {
                     actorSystem->Send(self, new TEvYdbCompute::TEvCreateResourcePoolResponse(ExtractStatus(future)), 0, i);
@@ -646,7 +649,7 @@ private:
     }
 
     static bool IsPathExistsIssue(const NYdb::TStatus& status) {
-        return status.GetIssues().ToOneLineString().Contains("error: path exist");
+        return status.GetIssues().ToOneLineString().contains("error: path exist");
     }
 
     bool AlterResourcePool(size_t index) {
@@ -663,13 +666,16 @@ private:
                     ALTER RESOURCE POOL `{resource_pool_name}` SET (
                         CONCURRENT_QUERY_LIMIT="{concurrent_query_limit}",
                         QUEUE_SIZE="{queue_size}",
-                        DATABASE_LOAD_CPU_THRESHOLD="{database_load_cpu_threshold}"
+                        DATABASE_LOAD_CPU_THRESHOLD="{database_load_cpu_threshold}",
+                        TOTAL_CPU_LIMIT_PERCENT_PER_NODE="{total_cpu_limit_percent_per_node}"
                     );
                 )",
                 "resource_pool_name"_a = resourcePool.GetName(),
                 "concurrent_query_limit"_a = resourcePool.GetConcurrentQueryLimit(),
                 "queue_size"_a = resourcePool.GetQueueSize(),
-                "database_load_cpu_threshold"_a = resourcePool.GetDatabaseLoadCpuThreshold()));
+                "database_load_cpu_threshold"_a = resourcePool.GetDatabaseLoadCpuThreshold(),
+                "total_cpu_limit_percent_per_node"_a = resourcePool.GetTotalCpuLimitPercentPerNode()
+                ));
             })
             .Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId(), index](const NYdb::TAsyncStatus& future) {
                 actorSystem->Send(self, new TEvYdbCompute::TEvCreateResourcePoolResponse(ExtractStatus(future)), 0, index);

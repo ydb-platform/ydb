@@ -8,7 +8,7 @@
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/server/grpc_server.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
@@ -248,6 +248,10 @@ namespace Tests {
             return *this;
         }
 
+        TServerSettings& SetColumnShardAlterObjectEnabled(bool enable) {
+            AppConfig->MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
+            return *this;
+        }
 
         // Add additional grpc services
         template <typename TService>
@@ -280,6 +284,7 @@ namespace Tests {
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
             FeatureFlags.SetEnableWritePortionsOnInsert(true);
             FeatureFlags.SetEnableFollowerStats(true);
+            FeatureFlags.SetEnableColumnStore(true);
         }
 
         TServerSettings(const TServerSettings& settings) = default;

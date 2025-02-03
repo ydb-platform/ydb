@@ -115,7 +115,6 @@ SRCS(
     logging/zstd_compression.cpp
 
     misc/arithmetic_formula.cpp
-    GLOBAL misc/assert.cpp
     misc/backoff_strategy.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
@@ -126,7 +125,7 @@ SRCS(
     misc/codicil.cpp
     misc/config.cpp
     misc/coro_pipe.cpp
-    misc/crash_handler.cpp
+    GLOBAL misc/crash_handler.cpp
     misc/digest.cpp
     misc/error.cpp
     misc/fs.cpp
@@ -269,6 +268,7 @@ SRCS(
     yson/string_merger.cpp
     yson/ypath_designated_consumer.cpp
     yson/ypath_filtering_consumer.cpp
+    yson/yson_builder.cpp
     yson/depth_limiting_yson_consumer.cpp
     yson/list_verb_lazy_yson_consumer.cpp
     yson/attributes_stripper.cpp

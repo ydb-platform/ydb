@@ -2,8 +2,8 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -465,6 +465,18 @@ Y_UNIT_TEST_SUITE(TFqYdbTest) {
         NYql::TIssues issues = future2.GetValueSync();
         UNIT_ASSERT(issues.Size() == 1);
         UNIT_ASSERT(issues.ToString().Contains(text));
+    }
+
+    Y_UNIT_TEST(ShouldStatusToIssuesProcessEmptyIssues)
+    {
+        auto promise = NThreading::NewPromise<NYdb::TStatus>();
+        auto future = promise.GetFuture();
+        promise.SetValue(TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{}));
+        NThreading::TFuture<NYql::TIssues> future2 = NFq::StatusToIssues(future);
+
+        NYql::TIssues issues = future2.GetValueSync();
+        UNIT_ASSERT_C(issues.Size() == 1, issues.ToString());
+        UNIT_ASSERT(issues.ToString().Contains("empty issues"));
     }
 }
 

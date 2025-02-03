@@ -197,7 +197,7 @@ public:
         context.DbChanges.PersistTxState(OperationId);
 
         dstPath.MaterializeLeaf(owner, viewPathId);
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         result->SetPathId(viewPathId.LocalPathId);

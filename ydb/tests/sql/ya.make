@@ -7,7 +7,7 @@ TEST_SRCS(
     test_inserts.py
 )
 
-SIZE(SMALL)
+SIZE(MEDIUM)
 
 DEPENDS(
     ydb/apps/ydb

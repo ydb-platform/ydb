@@ -22,6 +22,7 @@ public:
     }
 
     TNodePtr Build(const TRule_expr& node);
+    TNodePtr Build(const TRule_lambda_or_parameter& node);
 
     void SetSmartParenthesisMode(ESmartParenthesis mode) {
         SmartParenthesisMode = mode;
@@ -108,7 +109,7 @@ private:
 
     TNodePtr BinOperList(const TString& opName, TVector<TNodePtr>::const_iterator begin, TVector<TNodePtr>::const_iterator end) const;
 
-    TNodePtr RowPatternVarAccess(const TString& alias, const TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2 block);
+    TNodePtr RowPatternVarAccess(TString var, const TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2 block);
 
     struct TCaseBranch {
         TNodePtr Pred;

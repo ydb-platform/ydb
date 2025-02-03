@@ -31,9 +31,14 @@ private:
     virtual bool DoParse(TColumnShard& owner, const TString& data) override final {
         NKikimrTxColumnShard::TCommitWriteTxBody commitTxBody;
         if (!commitTxBody.ParseFromString(data)) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("event", "cannot_parse_proto");
             return false;
         }
         LockId = commitTxBody.GetLockId();
+        if (!LockId) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("event", "zero_lock_id")("proto", commitTxBody);
+            return false;
+        }
         return DoParseImpl(owner, commitTxBody);
     }
 

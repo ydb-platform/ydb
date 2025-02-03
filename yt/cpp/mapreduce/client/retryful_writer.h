@@ -14,8 +14,6 @@
 
 #include <yt/cpp/mapreduce/io/helpers.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-
 #include <library/cpp/threading/blocking_queue/blocking_queue.h>
 
 #include <util/generic/buffer.h>

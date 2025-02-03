@@ -7,8 +7,14 @@ SRCS(
 
 PEERDIR(
     ydb/library/workload/abstract
+    library/cpp/json
+    library/cpp/resource
 )
 
-GENERATE_ENUM_SERIALIZATION_WITH_HEADER(log.h)
+RESOURCE(
+    select_queries.sql workload_logs_select_queries.sql
+)
+
+GENERATE_ENUM_SERIALIZATION(log.h)
 
 END()

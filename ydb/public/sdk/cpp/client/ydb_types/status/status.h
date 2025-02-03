@@ -1,5 +1,8 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/client/ydb_types/fwd.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers/handlers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/ydb.h>
@@ -8,7 +11,7 @@
 
 #include <library/cpp/threading/future/future.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 //! Internal status representation
 struct TPlainStatus;
@@ -45,5 +48,28 @@ public:
     TStreamPartStatus(TStatus&& status);
     bool EOS() const;
 };
+
+namespace NStatusHelpers {
+
+class TYdbErrorException : public TYdbException {
+public:
+    TYdbErrorException(TStatus status)
+        : Status_(std::move(status))
+    {
+        *this << status;
+    }
+
+    friend IOutputStream& operator<<(IOutputStream& out, const TYdbErrorException& e) {
+        return out << e.Status_;
+    }
+
+private:
+    TStatus Status_;
+};
+
+void ThrowOnError(TStatus status, std::function<void(TStatus)> onSuccess = [](TStatus) {});
+void ThrowOnErrorOrPrintIssues(TStatus status);
+
+}
 
 } // namespace NYdb

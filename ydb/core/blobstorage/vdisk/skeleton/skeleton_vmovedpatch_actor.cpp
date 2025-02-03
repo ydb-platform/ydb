@@ -104,7 +104,7 @@ namespace NKikimr {
                         << " OriginalBlobId# " << OriginalId
                         << " PatchedBlobId# " << PatchedId
                         << " ErrorReason# " << ErrorReason
-                        << " Marker# BSVSP01");
+                        << " Marker# BSVSP00");
                 SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), Event->Cookie, VCtx);
                 PassAway();
             }

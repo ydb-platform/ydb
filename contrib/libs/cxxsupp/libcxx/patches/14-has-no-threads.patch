@@ -1,8 +1,8 @@
 diff --git a/include/__memory/shared_ptr.h b/include/__memory/shared_ptr.h
-index d90e144..e78f281 100644
+index a8ff189..fa25116 100644
 --- a/include/__memory/shared_ptr.h
 +++ b/include/__memory/shared_ptr.h
-@@ -54,7 +54,7 @@
+@@ -53,7 +53,7 @@
  #include <new>
  #include <typeinfo>
  #if !defined(_LIBCPP_HAS_NO_ATOMIC_HEADER)
@@ -11,7 +11,7 @@ index d90e144..e78f281 100644
  #endif
  
  #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
-@@ -138,7 +138,12 @@ class _LIBCPP_EXPORTED_FROM_ABI __shared_count {
+@@ -137,7 +137,12 @@ class _LIBCPP_EXPORTED_FROM_ABI __shared_count {
    __shared_count& operator=(const __shared_count&);
  
  protected:
@@ -25,7 +25,7 @@ index d90e144..e78f281 100644
    virtual ~__shared_count();
  
  private:
-@@ -151,20 +156,41 @@ public:
+@@ -150,20 +155,41 @@ public:
    void __add_shared() noexcept;
    bool __release_shared() noexcept;
  #else
@@ -70,7 +70,7 @@ index d90e144..e78f281 100644
  
  public:
    _LIBCPP_HIDE_FROM_ABI explicit __shared_weak_count(long __refs = 0) _NOEXCEPT
-@@ -181,7 +207,13 @@ public:
+@@ -180,7 +206,13 @@ public:
    void __release_shared() noexcept;
  #else
    _LIBCPP_HIDE_FROM_ABI void __add_shared() _NOEXCEPT { __shared_count::__add_shared(); }

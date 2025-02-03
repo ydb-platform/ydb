@@ -78,6 +78,7 @@ enum class ERequestType: size_t {
     PING_KQP,
     PING_SCHEME_CACHE,
     PING_TX_PROXY,
+    PING_ACTOR_CHAIN,
 
     // Requests inside write session
     TOPIC_STREAMWRITE,

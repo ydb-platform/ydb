@@ -176,32 +176,6 @@ message TDynamicNameserviceConfig {
     optional uint32 MinDynamicNodeId = 4 [default = 50000];
 }
 
-message TSecurityConfig {
-    optional bool EnforceUserTokenRequirement = 1 [default = false];
-    optional bool EnforceUserTokenCheckRequirement = 7 [default = false]; // Check if a token was specified // If not, or if the token was incorrect or access was denied, the request will be handled as if no token was provided
-    repeated string MonitoringAllowedSIDs = 2;
-    repeated string AdministrationAllowedSIDs = 3;
-    repeated string DefaultUserSIDs = 4;
-    optional string AllAuthenticatedUsers = 5;
-    repeated string ViewerAllowedSIDs = 6;
-    repeated string RegisterDynamicNodeAllowedSIDs = 8;
-
-    message TUser {
-        optional string Name = 1;
-        optional string Password = 2;
-    }
-
-    message TGroup {
-        optional string Name = 1;
-        repeated string Members = 2;
-    }
-
-    repeated TUser DefaultUsers = 15;
-    repeated TGroup DefaultGroups = 16;
-    repeated string DefaultAccess = 17;
-    optional string AllUsersGroup = 18;
-}
-
 message TDomainsConfig {
     message TStateStorage {
         message TRing {
@@ -261,14 +235,42 @@ message TDomainsConfig {
         optional NKikimrCompaction.TCompactionPolicy Policy = 2;
     }
 
+    message TSecurityConfig {
+        optional bool EnforceUserTokenRequirement = 1 [default = false];
+        optional bool EnforceUserTokenCheckRequirement = 7 [default = false]; // Check if a token was specified // If not, or if the token was incorrect or access was denied, the request will be handled as if no token was provided
+        repeated string MonitoringAllowedSIDs = 2;
+        repeated string AdministrationAllowedSIDs = 3;
+        repeated string DefaultUserSIDs = 4;
+        optional string AllAuthenticatedUsers = 5;
+        repeated string ViewerAllowedSIDs = 6;
+        repeated string RegisterDynamicNodeAllowedSIDs = 8;
+
+        message TUser {
+            optional string Name = 1;
+            optional string Password = 2;
+        }
+
+        message TGroup {
+            optional string Name = 1;
+            repeated string Members = 2;
+        }
+
+        repeated TUser DefaultUsers = 15;
+        repeated TGroup DefaultGroups = 16;
+        repeated string DefaultAccess = 17;
+        optional string AllUsersGroup = 18;
+        optional bool DisableBuiltinSecurity = 19;
+        optional bool DisableBuiltinGroups = 20;
+        optional bool DisableBuiltinAccess = 21;
+    }
+
     repeated TDomain Domain = 1;
     repeated TStateStorage StateStorage = 2;
     repeated TExecLevel ExecLevel = 3;
     repeated THiveConfig HiveConfig = 4;
     repeated TNamedCompactionPolicy NamedCompactionPolicy = 5;
+    optional TSecurityConfig SecurityConfig = 6;
     optional bool ForbidImplicitStoragePools = 7 [default = true];
-    reserved 6;
-    reserved "SecurityConfig";
 }
 
 message TBlobStorageConfig {
@@ -1266,6 +1268,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 86400000,
             DefaultValue: 50 }];
+        optional uint64 MinPlanResolutionMs = 5 [(ControlOptions) = {
+            Description: "Minimum plan resolution override in milliseconds, which includes volatile planning (0 when not overridden)",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 0 }];
     }
 
     message TSchemeShardControls {
@@ -1810,6 +1817,8 @@ message TColumnShardConfig {
     optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 128000000];
     optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
     optional int32 DefaultCompressionLevel = 37;
+    optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
+    optional bool AlterObjectEnabled = 39 [default = false];
 }
 
 message TSchemeShardConfig {
@@ -2213,8 +2222,6 @@ message TAppConfig {
 
     optional TConfigVersion Version = 102;
     repeated TLabel Labels = 103;
-    optional TSecurityConfig SecurityConfig = 104;
-    optional bool DisableBuiltinSecurity = 105;
 }
 
 message TYdbVersion {

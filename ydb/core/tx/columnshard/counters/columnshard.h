@@ -5,6 +5,7 @@
 #include "common/owner.h"
 
 #include <ydb/core/tx/columnshard/counters/tablet_counters.h>
+#include <ydb/core/tx/data_events/common/signals_flow.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/hash_set.h>
@@ -30,18 +31,19 @@ private:
     NMonitoring::THistogramPtr HistogramDurationQueueWait;
     NMonitoring::THistogramPtr HistogramBatchDataCount;
     NMonitoring::THistogramPtr HistogramBatchDataSize;
+    YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteFlowCounters>, WriteFlowCounters);
 
 public:
     const NMonitoring::TDynamicCounters::TCounterPtr QueueWaitSize;
 
-    void OnWritingTaskDequeue(const TDuration d){ 
+    void OnWritingTaskDequeue(const TDuration d) {
         HistogramDurationQueueWait->Collect(d.MilliSeconds());
     }
 
     TWriteCounters(TCommonCountersOwner& owner)
         : TBase(owner, "activity", "writing")
-        , QueueWaitSize(TBase::GetValue("Write/Queue/Size"))
-    {
+        , WriteFlowCounters(std::make_shared<NEvWrite::TWriteFlowCounters>())
+        , QueueWaitSize(TBase::GetValue("Write/Queue/Size")) {
         VolumeWriteData = TBase::GetDeriviative("Write/Incoming/Bytes");
         HistogramBytesWriteDataCount = TBase::GetHistogram("Write/Incoming/ByBytes/Count", NMonitoring::ExponentialHistogram(18, 2, 100));
         HistogramBytesWriteDataBytes = TBase::GetHistogram("Write/Incoming/ByBytes/Bytes", NMonitoring::ExponentialHistogram(18, 2, 100));

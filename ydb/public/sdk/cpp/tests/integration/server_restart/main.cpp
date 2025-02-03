@@ -7,6 +7,8 @@
 
 #include <grpcpp/grpcpp.h>
 
+#include <util/string/cast.h>
+
 #include <thread>
 
 using namespace NYdb;
@@ -180,7 +182,7 @@ TEST_F(ServerRestartTest, RestartOnGetSession) {
         std::optional<TStatus> status;
         while (!closed.load()) {
             status = client.RetryQuerySync([](NYdb::NQuery::TSession session) {
-                return session.ExecuteQuery("SELECT 1", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                return session.ExecuteQuery("SELECT 1", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             });
 
             ASSERT_LE(client.GetActiveSessionCount(), 1);

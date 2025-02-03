@@ -27,22 +27,42 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
 
 public:
+    class TTaskCounters: NColumnShard::TCommonCountersOwner {
+        using TBase = NColumnShard::TCommonCountersOwner;
+
+    private:
+        NMonitoring::TDynamicCounters::TCounterPtr Tasks;
+        NMonitoring::TDynamicCounters::TCounterPtr WritePortions;
+
+    public:
+        void Inc(const ui64 writePortions) const {
+            Tasks->Inc();
+            WritePortions->Add(writePortions);
+        }
+
+        TTaskCounters(const NColumnShard::TCommonCountersOwner& owner, const TString& sensorPrefix)
+            : TBase(owner)
+            , Tasks(TBase::GetDeriviative(TStringBuilder() << sensorPrefix << "Tasks"))
+            , WritePortions(TBase::GetDeriviative(TStringBuilder() << sensorPrefix << "WritePortions")) {
+        }
+    };
+
     class TStageCounters: NColumnShard::TCommonCountersOwner {
     private:
         using TBase = NColumnShard::TCommonCountersOwner;
-        std::array<NMonitoring::TDynamicCounters::TCounterPtr, (ui64)EStage::COUNT> Stages;
+        std::array<std::shared_ptr<TTaskCounters>, (ui64)EStage::COUNT> Stages;
 
     public:
         TStageCounters(const NColumnShard::TCommonCountersOwner& owner, const NBlobOperations::EConsumer consumerId)
             : TBase(owner, "consumer", ToString(consumerId)) {
             for (size_t i = 0; i < (ui64)EStage::COUNT; ++i) {
-                Stages[i] = TBase::GetDeriviative(TStringBuilder() << "Changes/Stage/" << static_cast<EStage>(i));
+                Stages[i] = std::make_shared<TTaskCounters>(TBase::CreateSubGroup("stage", ToString(static_cast<EStage>(i))), "Changes/Stage/");
             }
         }
 
-        void OnStageChanged(const EStage stage) const {
+        void OnStageChanged(const EStage stage, const ui64 writePortions) const {
             AFL_VERIFY(static_cast<size_t>(stage) < Stages.size())("index", stage)("size", Stages.size());
-            Stages[static_cast<size_t>(stage)]->Inc();
+            Stages[static_cast<size_t>(stage)]->Inc(writePortions);
         }
     };
 

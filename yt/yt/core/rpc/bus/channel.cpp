@@ -343,8 +343,10 @@ private:
             }
 
             for (const auto& existingRequest : existingRequests) {
+                const auto& requestControl = std::get<0>(existingRequest);
+                requestControl->ProfileError(error);
                 NotifyError(
-                    std::get<0>(existingRequest),
+                    requestControl,
                     std::get<1>(existingRequest),
                     TStringBuf("Request failed due to channel termination"),
                     error);
@@ -1087,18 +1089,19 @@ private:
 
                 requestControl = it->second;
                 requestControl->ResetAcknowledgementTimeoutCookie();
-                if (!error.IsOK()) {
-                    responseHandler = requestControl->Finalize(guard);
-                    bucket->ActiveRequestMap.erase(it);
-                } else {
+                if (error.IsOK()) {
                     requestControl->ProfileAcknowledgement();
                     responseHandler = requestControl->GetResponseHandler(guard);
+                } else {
+                    responseHandler = requestControl->Finalize(guard);
+                    bucket->ActiveRequestMap.erase(it);
                 }
             }
 
             if (error.IsOK()) {
                 NotifyAcknowledgement(requestId, responseHandler);
             } else {
+                requestControl->ProfileError(error);
                 NotifyError(
                     requestControl,
                     responseHandler,

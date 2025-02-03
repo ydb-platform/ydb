@@ -14,6 +14,7 @@
 #include "flat_exec_commit.h"
 #include "flat_executor_misc.h"
 #include "flat_executor_compaction_logic.h"
+#include "flat_executor_data_cleanup_logic.h"
 #include "flat_executor_gclogic.h"
 #include "flat_bio_events.h"
 #include "flat_bio_stats.h"
@@ -434,6 +435,7 @@ class TExecutor
     THolder<TExecutorGCLogic> GcLogic;
     THolder<TCompactionLogic> CompactionLogic;
     THolder<TExecutorBorrowLogic> BorrowLogic;
+    THolder<TDataCleanupLogic> DataCleanupLogic;
 
     TLoadBlobQueue PendingBlobQueue;
 
@@ -563,6 +565,7 @@ class TExecutor
     void Handle(NBlockIO::TEvStat::TPtr &ev, const TActorContext &ctx);
     void Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled);
     void Handle(TEvBlobStorage::TEvGetResult::TPtr&, const TActorContext&);
+    void Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);
@@ -636,6 +639,8 @@ public:
     ui64 CompactMemTable(ui32 tableId) override;
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
+
+    void CleanupData() override;
 
     void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
     void Handle(NMemory::TEvMemTableCompact::TPtr &ev);

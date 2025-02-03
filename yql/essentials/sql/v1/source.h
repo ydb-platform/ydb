@@ -239,7 +239,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped);
     TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1);
     TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos);
-    TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false);
+    TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false, bool withTables = false);
     TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);
     TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom = false, bool inSubquery = false);
     TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList = false, bool wrapByTableSource = false);

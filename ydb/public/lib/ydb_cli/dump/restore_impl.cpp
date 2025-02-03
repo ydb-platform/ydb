@@ -59,7 +59,11 @@ Ydb::Table::ChangefeedDescription ReadChangefeedDescription(const TFsPath& fsDir
 }
 
 Ydb::Topic::DescribeTopicResult ReadTopicDescription(const TFsPath& fsDirPath, const TLog* log) {
-    return ReadProtoFromFile<Ydb::Topic::DescribeTopicResult>(fsDirPath, log, NDump::NFiles::Topic());
+    return ReadProtoFromFile<Ydb::Topic::DescribeTopicResult>(fsDirPath, log, NDump::NFiles::TopicDescription());
+}
+
+Ydb::Topic::CreateTopicRequest ReadTopicCreationRequest(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadProtoFromFile<Ydb::Topic::CreateTopicRequest>(fsDirPath, log, NDump::NFiles::CreateTopic());
 }
 
 TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTableRequest& proto) {
@@ -131,6 +135,37 @@ TRestoreResult CombineResults(const TVector<TRestoreResult>& results) {
 bool IsDatabase(TSchemeClient& client, const TString& path) {
     auto result = DescribePath(client, path);
     return result.GetStatus() == EStatus::SUCCESS && result.GetEntry().Type == ESchemeEntryType::SubDomain;
+}
+
+TMaybe<TRestoreResult> ErrorOnIncomplete(const TFsPath& fsPath) {
+    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
+        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath().Quote()
+        );
+    }
+    return Nothing();
+}
+
+TRestoreResult CheckExistenceAndType(TSchemeClient& client, const TString& dbPath, NScheme::ESchemeEntryType expectedType) {
+    auto pathDescription = DescribePath(client, dbPath);
+    if (!pathDescription.IsSuccess()) {
+        return Result<TRestoreResult>(dbPath, std::move(pathDescription));
+    }
+    if (pathDescription.GetEntry().Type != expectedType) {
+        return Result<TRestoreResult>(dbPath, EStatus::SCHEME_ERROR,
+            TStringBuilder() << "Expected a " << expectedType << ", but got: " << pathDescription.GetEntry().Type
+        );
+    }
+
+    return Result<TRestoreResult>();
+}
+
+TStatus CreateTopic(NTopic::TTopicClient& client, const TString& dbPath, const Ydb::Topic::CreateTopicRequest& creationRequest) {
+    const auto settings = NTopic::TCreateTopicSettings(creationRequest);
+    auto creationResult = NConsoleClient::RetryFunction([&]() {
+        return client.CreateTopic(dbPath, settings).ExtractValueSync();
+    });
+    return creationResult;
 }
 
 } // anonymous
@@ -349,9 +384,8 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
             TStringBuilder() << "Specified folder is not a directory: " << fsPath.GetPath());
     }
 
-    if (IsFileExists(fsPath.Child(NFiles::Incomplete().FileName))) {
-        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
-            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
     }
 
     const TString objectDbPath = Join('/', dbPath, fsPath.GetName());
@@ -364,6 +398,10 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
         // delay view restoration
         ViewRestorationCalls.emplace_back(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, oldEntries.contains(objectDbPath));
         return Result<TRestoreResult>();
+    }
+
+    if (IsFileExists(fsPath.Child(NFiles::CreateTopic().FileName))) {
+        return RestoreTopic(fsPath, objectDbPath, settings, oldEntries.contains(objectDbPath));
     }
 
     if (IsFileExists(fsPath.Child(NFiles::Empty().FileName))) {
@@ -383,6 +421,8 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
         } else if (IsFileExists(child.Child(NFiles::CreateView().FileName))) {
             // delay view restoration
             ViewRestorationCalls.emplace_back(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries.contains(childDbPath));
+        } else if (IsFileExists(child.Child(NFiles::CreateTopic().FileName))) {
+            result = RestoreTopic(child, childDbPath, settings, oldEntries.contains(childDbPath));
         } else if (child.IsDirectory()) {
             result = RestoreFolder(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries);
         }
@@ -410,10 +450,8 @@ TRestoreResult TRestoreClient::RestoreView(
 ) {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
-        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
-            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath().Quote()
-        );
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
     }
 
     const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
@@ -430,17 +468,7 @@ TRestoreResult TRestoreClient::RestoreView(
     }
 
     if (settings.DryRun_) {
-        auto pathDescription = DescribePath(SchemeClient, dbPath);
-        if (!pathDescription.IsSuccess()) {
-            return Result<TRestoreResult>(dbPath, std::move(pathDescription));
-        }
-        if (pathDescription.GetEntry().Type != NScheme::ESchemeEntryType::View) {
-            return Result<TRestoreResult>(dbPath, EStatus::SCHEME_ERROR,
-                TStringBuilder() << "expected a view, got: " << pathDescription.GetEntry().Type
-            );
-        }
-
-        return Result<TRestoreResult>();
+        return CheckExistenceAndType(SchemeClient, dbPath, NScheme::ESchemeEntryType::View);
     }
 
     LOG_D("Executing view creation query: " << query.Quote());
@@ -467,14 +495,39 @@ TRestoreResult TRestoreClient::RestoreView(
     return Result<TRestoreResult>(dbPath, std::move(creationResult));
 }
 
+TRestoreResult TRestoreClient::RestoreTopic(
+    const TFsPath& fsPath,
+    const TString& dbPath,
+    const TRestoreSettings& settings,
+    bool isAlreadyExisting
+) {
+    LOG_D("Process " << fsPath.GetPath().Quote());
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
+    }
+    LOG_I("Restore topic " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
+
+    if (settings.DryRun_) {
+        return CheckExistenceAndType(SchemeClient, dbPath, NScheme::ESchemeEntryType::Topic);
+    }
+
+    const auto creationRequest = ReadTopicCreationRequest(fsPath, Log.get());
+    auto creationResult = CreateTopic(TopicClient, dbPath, creationRequest);
+    if (creationResult.IsSuccess()) {
+        LOG_D("Creation of the topic " << dbPath.Quote() << " succeeded");
+        return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
+    }
+    LOG_E("Creation of the topic: " << dbPath.Quote() << " failed");
+    return Result<TRestoreResult>(dbPath, std::move(creationResult));
+}
+
 TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath,
     const TRestoreSettings& settings, bool isAlreadyExisting)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
-        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
-            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
     }
 
     auto scheme = ReadTableScheme(fsPath, Log.get());
@@ -802,9 +855,8 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
 
 TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const TString& dbPath) {
     LOG_D("Process " << fsPath.GetPath().Quote());
-    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
-        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
-            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
     }
 
     auto changefeedProto = ReadChangefeedDescription(fsPath, Log.get());
@@ -851,9 +903,8 @@ TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const 
 TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const TString& dbPath,
     const TRestoreSettings& settings, bool isAlreadyExisting)
 {
-    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
-        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
-            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
     }
 
     if (!settings.RestoreACL_) {
@@ -879,9 +930,8 @@ TRestoreResult TRestoreClient::RestoreEmptyDir(const TFsPath& fsPath, const TStr
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
-        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
-            TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
     }
 
     LOG_I("Restore empty directory " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());

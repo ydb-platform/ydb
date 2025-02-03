@@ -170,12 +170,14 @@ struct TMaxInnerProductSimilarity: TMetric<T> {
 
 template <typename TMetric>
 struct TCalculation: TMetric {
-    ui32 FindClosest(std::span<const TString> clusters, const char* embedding) const
+    ui32 FindClosest(std::span<const TString> clusters, TArrayRef<const char> embedding) const
     {
+        Y_DEBUG_ABORT_UNLESS(this->IsExpectedSize(embedding));
         auto min = this->Init();
         ui32 closest = std::numeric_limits<ui32>::max();
         for (size_t i = 0; const auto& cluster : clusters) {
-            auto distance = this->Distance(cluster.data(), embedding);
+            Y_DEBUG_ABORT_UNLESS(this->IsExpectedSize(cluster));
+            auto distance = this->Distance(cluster.data(), embedding.data());
             if (distance < min) {
                 min = distance;
                 closest = i;
@@ -195,7 +197,7 @@ ui32 FeedEmbedding(const TCalculation<TMetric>& calculation, std::span<const TSt
     if (!calculation.IsExpectedSize(embedding)) {
         return std::numeric_limits<ui32>::max();
     }
-    return calculation.FindClosest(clusters, embedding.data());
+    return calculation.FindClosest(clusters, embedding);
 }
 
 void AddRowMain2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row);

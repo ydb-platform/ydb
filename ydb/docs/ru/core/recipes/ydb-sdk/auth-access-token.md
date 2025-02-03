@@ -100,19 +100,39 @@
 - Java
 
   ```java
-  public void work(String connectionString, String accessToken) {
+  public void work(String accessToken) {
       AuthProvider authProvider = new TokenAuthProvider(accessToken);
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+      GrpcTransport transport = GrpcTransport.forConnectionString("grpcs://localohost:2135/local")
               .withAuthProvider(authProvider)
               .build());
 
-      TableClient tableClient = TableClient.newClient(transport).build();
+      QueryClient queryClient = QueryClient.newClient(transport).build();
 
-      doWork(tableClient);
+      doWork(queryClient);
 
-      tableClient.close();
+      queryClient.close();
       transport.close();
+  }
+  ```
+
+- JDBC
+
+  ```java
+  public void work() {
+      // Подключение с указанием значения токена аутентификации
+      Properties props1 = new Properties();
+      props1.setProperty("token", "AQAD-XXXXXXXXXXXXXXXXXXXX");
+      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props1)) {
+        doWork(connection);
+      }
+
+      // Подключение с чтением токена аутентификации из указанного файла
+      Properties props2 = new Properties();
+      props2.setProperty("tokenFile", "~/.ydb_token");
+      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props2)) {
+        doWork(connection);
+      }
   }
   ```
 

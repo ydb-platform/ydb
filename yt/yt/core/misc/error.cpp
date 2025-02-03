@@ -40,7 +40,7 @@ namespace {
 struct TExtensionData
 {
     NConcurrency::TFiberId Fid = NConcurrency::InvalidFiberId;
-    const char* HostName = nullptr;
+    TStringBuf HostName;
     TTraceId TraceId = InvalidTraceId;
     TSpanId SpanId = InvalidSpanId;
 };
@@ -141,9 +141,9 @@ TOriginAttributes::TErasedExtensionData GetExtensionDataOverride()
 {
     TExtensionData result;
     result.Fid = NConcurrency::GetCurrentFiberId();
-    result.HostName = NNet::ReadLocalHostName();
+    result.HostName = NNet::GetLocalHostNameRaw();
 
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         result.TraceId = traceContext->GetTraceId();
         result.SpanId = traceContext->GetSpanId();
     }

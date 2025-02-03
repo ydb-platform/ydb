@@ -24,13 +24,14 @@ struct TQueryRequest {
 struct TCreateSessionRequest {
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Event;
     ui32 TargetNode;
-    ui8 VerboseLevel;
+    TYdbSetupSettings::EVerbose VerboseLevel;
 };
 
 struct TWaitResourcesSettings {
     i32 ExpectedNodeCount;
-    ui8 HealthCheckLevel;
-    ui8 VerboseLevel;
+    TYdbSetupSettings::EHealthCheck HealthCheckLevel;
+    TDuration HealthCheckTimeout;
+    TYdbSetupSettings::EVerbose VerboseLevel;
     TString Database;
 };
 

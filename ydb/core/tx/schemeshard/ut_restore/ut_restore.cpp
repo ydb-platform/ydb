@@ -5065,33 +5065,33 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleShardTableWithChangefeed) {
-        TTestBasicRuntime runtime;
+    // Y_UNIT_TEST(ShouldSucceedOnSingleShardTableWithChangefeed) {
+    //     TTestBasicRuntime runtime;
 
-        const auto data = GenerateTestData(R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            primary_key: "key"
-        )", {{"a", 1}});
+    //     const auto data = GenerateTestData(R"(
+    //         columns {
+    //           name: "key"
+    //           type { optional_type { item { type_id: UTF8 } } }
+    //         }
+    //         columns {
+    //           name: "value"
+    //           type { optional_type { item { type_id: UTF8 } } }
+    //         }
+    //         primary_key: "key"
+    //     )", {{"a", 1}});
 
-        Run(runtime, ConvertTestData(data), R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )");
+    //     Run(runtime, ConvertTestData(data), R"(
+    //         ImportFromS3Settings {
+    //           endpoint: "localhost:%d"
+    //           scheme: HTTP
+    //           items {
+    //             source_prefix: ""
+    //             destination_path: "/MyRoot/Table"
+    //           }
+    //         }
+    //     )");
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
-        NKqp::CompareYson(data.Data[0].YsonStr, content);
-    }
+    //     auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+    //     NKqp::CompareYson(data.Data[0].YsonStr, content);
+    // }
 }

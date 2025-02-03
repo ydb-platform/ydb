@@ -86,7 +86,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     return CreateTablePropose(ss, txId, importInfo, itemIdx, unused);
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose( TSchemeShard* ss, TTxId txId, const TImportInfo::TItem& item) {
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo::TItem& item
+) {
     Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.size());
     const auto& [changefeed, topic] = item.Changefeeds[item.NextChangefeedIdx];
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
@@ -99,7 +103,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose( TSc
 
     auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
 
-    Y_ABORT_UNLESS(FillChangefeedDescription(cdcStreamDescription, changefeed, status, error));
+    if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
+        return nullptr;
+    }
         
     cdcStream.SetRetentionPeriodSeconds(topic.Getretention_period().seconds());
     

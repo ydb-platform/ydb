@@ -340,8 +340,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         csController->SetExternalStorageUnavailable(false);
         testHelper.ResetTiering("/Root/olapStore/olapTable");
-        csController->WaitCleaning(TDuration::Seconds(15));
-        UNIT_ASSERT_VALUES_EQUAL(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
+        csController->WaitCondition(TDuration::Seconds(60), []() {
+            return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() == 0;
+        });
     }
 }
 

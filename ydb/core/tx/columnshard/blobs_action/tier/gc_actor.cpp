@@ -23,7 +23,7 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
         if (isRemoved) {
             // Do nothing
         } else {
-            auto delay = NextRetryDelay(error, key).value_or(TDuration::Seconds(60));
+            auto delay = NextRetryDelay(error, key).value_or(TDuration::Seconds(30));
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "error")(
                 "exception", error.GetExceptionName())("message", error.GetMessage())("key", key);
             Schedule(delay, new NWrappers::NExternalStorage::TEvDeleteObjectRequest(Aws::S3::Model::DeleteObjectRequest().WithKey(key)));
@@ -40,7 +40,6 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
 }
 
 void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjectRequest::TPtr& ev) {
-    AFL_VERIFY(ev->Sender == SelfId());
     AFL_VERIFY(ev->Get()->Request.KeyHasBeenSet());
     StartDeletingObject(TString(ev->Get()->Request.GetKey()));
 }

@@ -1,100 +1,14 @@
 #pragma once
 
 #include "mkql_match_recognize_save_load.h"
-#include "mkql_match_recognize_version.h"
 
 #include <yql/essentials/minikql/defs.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/public/udf/udf_value.h>
 #include <unordered_map>
 
 namespace NKikimr::NMiniKQL::NMatchRecognize {
-
-class TSimpleList {
-public:
-    ///Range that includes starting and ending points
-    ///Can not be empty
-    class TRange {
-    public:
-        TRange()
-        : FromIndex(Max())
-        , ToIndex(Max())
-        , NfaIndex_(Max())
-        {
-        }
-
-        explicit TRange(ui64 index)
-            : FromIndex(index)
-            , ToIndex(index)
-            , NfaIndex_(Max())
-        {
-        }
-
-        TRange(ui64 from, ui64 to)
-            : FromIndex(from)
-            , ToIndex(to)
-            , NfaIndex_(Max())
-        {
-            MKQL_ENSURE(FromIndex <= ToIndex, "Internal logic error");
-        }
-
-        bool IsValid() const {
-            return FromIndex != Max<size_t>() && ToIndex != Max<size_t>();
-        }
-
-        size_t From() const {
-            MKQL_ENSURE(IsValid(), "Internal logic error");
-            return FromIndex;
-        }
-
-        size_t To() const {
-            MKQL_ENSURE(IsValid(), "Internal logic error");
-            return ToIndex;
-        }
-
-        [[nodiscard]] size_t NfaIndex() const {
-            MKQL_ENSURE(IsValid(), "Internal logic error");
-            return NfaIndex_;
-        }
-
-        size_t Size() const {
-            MKQL_ENSURE(IsValid(), "Internal logic error");
-            return ToIndex - FromIndex + 1;
-        }
-
-        void Extend() {
-            MKQL_ENSURE(IsValid(), "Internal logic error");
-            ++ToIndex;
-        }
-
-    private:
-        size_t FromIndex;
-        size_t ToIndex;
-        size_t NfaIndex_;
-    };
-
-    TRange Append(NUdf::TUnboxedValue&& value) {
-        TRange result(Rows.size());
-        Rows.push_back(std::move(value));
-        return result;
-    }
-
-    size_t Size() const {
-        return Rows.size();
-    }
-
-    bool Empty() const {
-        return Size() == 0;
-    }
-
-    NUdf::TUnboxedValue Get(size_t i) const {
-        return Rows.at(i);
-    }
-private:
-    TUnboxedValueVector Rows;
-};
 
 ///Stores only locked items
 ///Locks are holds by TRange
@@ -108,22 +22,41 @@ class TSparseList {
     class TContainer: public TSimpleRefCount<TContainer> {
     public:
         using TPtr = TIntrusivePtr<TContainer>;
+        //TODO consider to replace hash table with contiguous chunks
+        using TStorage = TMKQLHashMap<size_t, TItem>;
+        using iterator = TStorage::const_iterator;
 
-        void Add(size_t index, NUdf::TUnboxedValue&& value) {
-            const auto& [iter, newOne] = Storage.emplace(index, TItem{std::move(value), 1});
-            MKQL_ENSURE(newOne, "Internal logic error");
+        [[nodiscard]] iterator Begin() const noexcept {
+            return Storage.begin();
         }
 
-        size_t Size() const {
+        [[nodiscard]] iterator End() const noexcept {
+            return Storage.end();
+        }
+
+        [[nodiscard]] size_t Size() const noexcept {
             return Storage.size();
         }
 
-        NUdf::TUnboxedValue Get(size_t i) const {
+        [[nodiscard]] size_t Empty() const noexcept {
+            return Storage.empty();
+        }
+
+        [[nodiscard]] bool Contains(size_t i) const noexcept {
+            return Storage.find(i) != Storage.cend();
+        }
+
+        [[nodiscard]] NUdf::TUnboxedValue Get(size_t i) const {
             if (const auto it = Storage.find(i); it != Storage.cend()) {
                 return it->second.Value;
             } else {
                 return NUdf::TUnboxedValue{};
             }
+        }
+
+        void Add(size_t index, NUdf::TUnboxedValue&& value) {
+            const auto& [iter, newOne] = Storage.emplace(index, TItem{std::move(value), 1});
+            MKQL_ENSURE(newOne, "Internal logic error");
         }
 
         void LockRange(size_t from, size_t to) {
@@ -165,17 +98,8 @@ class TSparseList {
         }
 
     private:
-        //TODO consider to replace hash table with contiguous chunks
-        using TStorage = std::unordered_map<
-            size_t,
-            TItem,
-            std::hash<size_t>,
-            std::equal_to<size_t>,
-            TMKQLAllocator<std::pair<const size_t, TItem>, EMemorySubPool::Temporary>>;
-
         TStorage Storage;
     };
-    using TContainerPtr = TContainer::TPtr;
 
 public:
     ///Range that includes starting and ending points
@@ -303,7 +227,7 @@ public:
         }
 
     private:
-        TRange(TContainerPtr container, size_t index)
+        TRange(TContainer::TPtr container, size_t index)
             : Container(container)
             , FromIndex(index)
             , ToIndex(index)
@@ -329,35 +253,48 @@ public:
             NfaIndex_ = Max();
         }
 
-        TContainerPtr Container;
+        TContainer::TPtr Container;
         size_t FromIndex;
         size_t ToIndex;
         size_t NfaIndex_;
     };
 
-public:
     TRange Append(NUdf::TUnboxedValue&& value) {
         const auto index = ListSize++;
         Container->Add(index, std::move(value));
         return TRange(Container, index);
     }
 
-    NUdf::TUnboxedValue Get(size_t i) const {
-        return Container->Get(i);
+    using iterator = TContainer::iterator;
+
+    [[nodiscard]] iterator Begin() const noexcept {
+        return Container->Begin();
+    }
+
+    [[nodiscard]] iterator End() const noexcept {
+        return Container->End();
     }
 
     ///Return total size of sparse list including absent values
-    size_t Size() const {
+    size_t LastRowIndex() const noexcept {
         return ListSize;
     }
 
     ///Return number of present values in sparse list
-    size_t Filled() const {
+    size_t Size() const noexcept {
         return Container->Size();
     }
 
-    bool Empty() const {
-        return Size() == 0;
+    [[nodiscard]] bool Empty() const noexcept {
+        return Container->Empty();
+    }
+
+    [[nodiscard]] bool Contains(size_t i) const noexcept {
+        return Container->Contains(i);
+    }
+
+    [[nodiscard]] NUdf::TUnboxedValue Get(size_t i) const {
+        return Container->Get(i);
     }
 
     void Save(TMrOutputSerializer& serializer) const {
@@ -369,46 +306,32 @@ public:
     }
 
 private:
-    TContainerPtr Container = MakeIntrusive<TContainer>();
+    TContainer::TPtr Container = MakeIntrusive<TContainer>();
     size_t ListSize = 0; //impl: max index ever stored + 1
 };
 
-template<typename L>
-class TListValue: public TComputationValue<TListValue<L>> {
+class TListValue final : public TComputationValue<TListValue> {
 public:
-    TListValue(TMemoryUsageInfo* memUsage, const L& list)
-        : TComputationValue<TListValue<L>>(memUsage)
-        , List(list)
-    {
-    }
+    TListValue(TMemoryUsageInfo* memUsage, const TSparseList& list);
 
-    //TODO https://st.yandex-team.ru/YQL-16508
-    //NUdf::TUnboxedValue GetListIterator() const override;
+    bool HasFastListLength() const final;
+    ui64 GetListLength() const final;
+    ui64 GetEstimatedListLength() const final;
+    NUdf::TUnboxedValue GetListIterator() const final;
+    bool HasListItems() const final;
 
-    bool HasFastListLength() const override {
-        return !List.Empty();
-    }
+    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const final;
 
-    ui64 GetListLength() const override {
-        return List.Size();
-    }
-
-    bool HasListItems() const override {
-        return !List.Empty();
-    }
-
-    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override {
-        Y_UNUSED(builder);
-        return const_cast<TListValue*>(this);
-    }
-
-    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
-        return List.Get(key.Get<ui64>());
-    }
+    ui64 GetDictLength() const final;
+    NUdf::TUnboxedValue GetDictIterator() const final;
+    NUdf::TUnboxedValue GetKeysIterator() const final;
+    NUdf::TUnboxedValue GetPayloadsIterator() const final;
+    bool Contains(const NUdf::TUnboxedValuePod& key) const final;
+    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const final;
+    bool HasDictItems() const final;
 
 private:
-    L List;
+    TSparseList List;
 };
 
-}//namespace NKikimr::NMiniKQL::NMatchRecognize
-
+} // namespace NKikimr::NMiniKQL::NMatchRecognize

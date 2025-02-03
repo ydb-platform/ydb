@@ -12924,7 +12924,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WideSkipBlocks"] = &WideSkipTakeBlocksWrapper;
         Functions["WideTakeBlocks"] = &WideSkipTakeBlocksWrapper;
         Functions["BlockCompress"] = &BlockCompressWrapper;
-        Functions["BlockExpandChunked"] = &BlockExpandChunkedWrapper;
         Functions["WideTopBlocks"] = &WideTopBlocksWrapper;
         Functions["WideTopSortBlocks"] = &WideTopBlocksWrapper;
         Functions["WideSortBlocks"] = &WideSortBlocksWrapper;
@@ -12953,7 +12952,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockDecimalDiv"] = &BlockDecimalBinaryWrapper;
 
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
-        ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
 
         Functions["BlockMapJoinCore"] = &BlockMapJoinCoreWrapper;
 
@@ -12983,6 +12981,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["NextValue"] = &NextValueWrapper;
 
         Functions["MatchRecognize"] = &MatchRecognizeWrapper;
+        Functions["MatchRecognizeMeasuresAggregates"] = &MatchRecognizeMeasuresAggregatesWrapper;
         Functions["MatchRecognizeParams"] = &MatchRecognizeParamsWrapper;
         Functions["MatchRecognizeMeasures"] = &MatchRecognizeMeasuresWrapper;
         Functions["MatchRecognizePattern"] = &MatchRecognizePatternWrapper;

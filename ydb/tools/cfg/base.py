@@ -5,7 +5,9 @@ import copy
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from ydb.tools.cfg import types, validation, walle
+from ydb.tools.cfg import types, validation, walle, utils
+
+from ydb.core.protos import config_pb2
 
 DEFAULT_LOG_LEVEL = types.LogLevels.NOTICE
 
@@ -285,13 +287,9 @@ class ClusterDetailsProvider(object):
         if host_info_provider is not None:
             self._host_info_provider = host_info_provider
         else:
-            self._host_info_provider = walle.NopHostsInformationProvider
+            self._host_info_provider = walle.NopHostsInformationProvider()
 
         self.__translated_storage_pools_deprecated = None
-        self.__translated_hosts = None
-        self.__racks = {}
-        self.__bodies = {}
-        self.__dcs = {}
         self.use_new_style_kikimr_cfg = self.__cluster_description.get("use_new_style_kikimr_cfg", use_new_style_cfg)
         self.need_generate_app_config = self.__cluster_description.get("need_generate_app_config", False)
         self.need_txt_files = self.__cluster_description.get("need_txt_files", True)
@@ -303,9 +301,10 @@ class ClusterDetailsProvider(object):
         self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
         self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
-        self.memory_controller_config = self.__cluster_description.get("memory_controller_config", {})
+        self.memory_controller_config = self.__cluster_description.get("memory_controller_config")
         self.channel_profile_config = self.__cluster_description.get("channel_profile_config")
         self.immediate_controls_config = self.__cluster_description.get("immediate_controls_config")
+        self.cms_config = self.__cluster_description.get("cms_config")
         self.pdisk_key_config = self.__cluster_description.get("pdisk_key_config", {})
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:
             assert "cannot remove txt files without new style kikimr cfg!"
@@ -368,8 +367,8 @@ class ClusterDetailsProvider(object):
         return self.__cluster_description.get("security_settings", {})
 
     @property
-    def forbid_implicit_storage_pools(self):
-        return self.__cluster_description.get("forbid_implicit_storage_pools", False)
+    def security_config(self):
+        return self.__cluster_description.get("security_config", {})
 
     def _get_datacenter(self, host_description):
         if host_description.get("datacenter") is not None:
@@ -622,6 +621,16 @@ class ClusterDetailsProvider(object):
             )
         return domains
 
+    @property
+    def domains_config(self):
+        domains_config_dict = self.__cluster_description.get("domains_config", {})
+        if domains_config_dict == {}:
+            return None
+
+        domains_config = config_pb2.TDomainsConfig()
+        utils.wrap_parse_dict(domains_config_dict, domains_config)
+        return domains_config
+
     @staticmethod
     def _get_domain_tenants(domain_description):
         tenants = domain_description.get("databases", [])
@@ -662,6 +671,16 @@ class ClusterDetailsProvider(object):
     # Log Stuff
     @property
     def log_config(self):
+        # `config.yaml` style
+        log_config_dict = self.__cluster_description.get("log_config", {})
+        if log_config_dict != {}:
+            log_config = config_pb2.TLogConfig()
+            if "default_level" not in log_config_dict:
+                log_config["default_level"] = self.default_log_level
+            utils.wrap_parse_dict(log_config_dict, log_config)
+            return log_config
+
+        # Old, `template.yaml` style
         log_config = copy.deepcopy(self.__cluster_description.get("log", {}))
 
         if "entries" in log_config:
@@ -689,7 +708,12 @@ class ClusterDetailsProvider(object):
 
     @property
     def grpc_config(self):
-        return merge_with_default(GRPC_DEFAULT_CONFIG, self.__cluster_description.get("grpc", {}))
+        grpc_config = merge_with_default(GRPC_DEFAULT_CONFIG, self.__cluster_description.get("grpc", {}))
+        # specifying both `port` and `ssl_port` leads to erroneous behavior in ydbd, half of the incoming
+        # connections use tls, half do not, so this is prohibited
+        if grpc_config.get("ssl_port") is not None:
+            del grpc_config["port"]
+        return grpc_config
 
     @property
     def dynamicnameservice_config(self):

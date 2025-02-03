@@ -347,5 +347,3 @@
   - emscripten/websocket.h: contrib/restricted/emscripten/system/include/emscripten/websocket.h
 
   - stdc-predef.h: contrib/restricted/emscripten/system/lib/libc/musl/include/stdc-predef.h
-
-  - cxxabi.h: contrib/libs/cxxsupp/libcxxabi/include/cxxabi.h

@@ -8,6 +8,14 @@ namespace NYT::NScheduler {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NProto {
+
+class TSpecPatch;
+
+} // namespace NProto
+
+////////////////////////////////////////////////////////////////////////////////
+
 YT_DEFINE_STRONG_TYPEDEF(TJobTraceId, TGuid);
 
 extern const TJobTraceId NullJobTraceId;
@@ -177,6 +185,9 @@ DEFINE_ENUM(EAutoMergeMode,
 );
 
 DECLARE_REFCOUNTED_CLASS(TOperationCache)
+
+DECLARE_REFCOUNTED_CLASS(TSpecPatch);
+using TSpecPatchList = std::vector<TSpecPatchPtr>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

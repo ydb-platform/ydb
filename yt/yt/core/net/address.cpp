@@ -1051,7 +1051,7 @@ public:
         TAsyncExpiringCache::Reconfigure(Config_);
 
         if (Config_->LocalHostNameOverride) {
-            WriteLocalHostName(*Config_->LocalHostNameOverride);
+            SetLocalHostName(*Config_->LocalHostNameOverride);
             YT_LOG_INFO("Localhost name configured via config override (LocalHostName: %v)",
                 Config_->LocalHostNameOverride);
         }
@@ -1281,7 +1281,7 @@ std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName)
     return {cluster};
 }
 
-std::optional<TString> InferYPClusterFromHostName(TStringBuf hostName)
+std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName)
 {
     if (auto rawResult = InferYPClusterFromHostNameRaw(hostName)) {
         return TString{*rawResult};
@@ -1303,7 +1303,7 @@ std::optional<TStringBuf> InferYTClusterFromClusterUrlRaw(TStringBuf clusterUrl)
     return clusterUrl;
 }
 
-std::optional<TString> InferYTClusterFromClusterUrl(TStringBuf clusterUrl)
+std::optional<std::string> InferYTClusterFromClusterUrl(TStringBuf clusterUrl)
 {
     if (auto rawResult = InferYTClusterFromClusterUrlRaw(clusterUrl)) {
         return TString{*rawResult};

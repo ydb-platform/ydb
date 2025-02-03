@@ -19,7 +19,7 @@ public:
         auto localRequest = MakeHolder<NActors::TEvInterconnect::TEvListNodes>();
 
         auto replyTo = ev->Sender;
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+        auto* actorSystem = ctx.ActorSystem();
 
         auto callback = MakeHolder<NActors::TActorFutureCallback<NActors::TEvInterconnect::TEvNodesInfo>>(
             [replyTo, actorSystem] (TAutoPtr<NActors::TEventHandle<NActors::TEvInterconnect::TEvNodesInfo>>& event) {

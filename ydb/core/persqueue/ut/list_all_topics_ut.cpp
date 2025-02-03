@@ -56,9 +56,9 @@ Y_UNIT_TEST_SUITE(TListAllTopicsTests) {
         resp = GetListing(runtime, false);
         UNIT_ASSERT_VALUES_EQUAL(resp->Topics.size(), 2);
 
-        CreateTopic(pqClient, NKikimr::JoinPath({db, "topic3"}), false);
+        CreateTopic(pqClient, NKikimr::JoinPath({db, "topic3"}), true);
         resp = GetListing(runtime, false);
-        UNIT_ASSERT_VALUES_EQUAL(resp->Topics.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(resp->Topics.size(), 3);
     }
 
     Y_UNIT_TEST(RecursiveList) {

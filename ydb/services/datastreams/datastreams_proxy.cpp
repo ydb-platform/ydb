@@ -972,13 +972,8 @@ namespace NKikimr::NDataStreams::V1 {
         Sort(topics.begin(), topics.end());
         Ydb::DataStreams::V1::ListStreamsResult result;
 
-        int limit = GetProtoRequest()->limit() == 0 ? 100 : GetProtoRequest()->limit();
-
-        result.set_has_more_streams(topics.size() > (ui32)limit);
+        result.set_has_more_streams(ev->Get()->HaveMoreTopics);
         for (const auto& streamName : topics) {
-            if (result.stream_names().size() >= limit) {
-                break;
-            }
             result.add_stream_names(streamName);
         }
 

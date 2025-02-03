@@ -26,7 +26,7 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/13222) ошибка восстановления из резервной копии, которая была создана в момент автоматического разделения таблицы.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/12601) ошибка в сериализации `Uuid` для [CDC](./concepts/cdc).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/12018) потенциальная поломка ["замороженных" блокировок](./contributor/datashard-locks-and-change-visibility#vzaimodejstvie-s-raspredelyonnymi-tranzakciyami), к которой могли приводить массовые операции (например, удаление по TTL).
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/12804) ​​ошибка, из-за которой чтение на подписчиках таблетки могло приводиит к сбоям во время автоматического разделения таблицы.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/12804) ​​ошибка, из-за которой чтение на подписчиках таблетки могло приводить к сбоям во время автоматического разделения таблицы.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/12807) ошибка, при которой [узел координации](./concepts/datamodel/coordination-node) успешно регистрировал прокси-серверы несмотря на разрыв связи.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/11593) ошибка, возникающие при открытии в интерфейсе вкладки с информацией о [группах распределенного хранилища](./concepts/glossary#storage-group).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/12448) [ошибка](https://github.com/ydb-platform/ydb/issues/12443), из-за которой [Health Check](./reference/ydb-sdk/health-check-api) не сообщал о проблемах в синхронизации времени.

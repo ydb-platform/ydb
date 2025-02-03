@@ -689,6 +689,7 @@ private:
     TMessageQueue QuotaWaitingRequests;
 
     std::deque<TString> DeletedHeadKeys;
+    std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
 
     THead Head;
     THead NewHead;

@@ -3434,7 +3434,8 @@ void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue:
 
     for (auto it = HeadKeys.rbegin(); it != HeadKeys.rend(); ++it) {
         if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
-            it->BlobKeyToken = nullptr;
+            PQ_LOG_D("schedule delete key " << it->BlobKeyToken->Key << " from head");
+            DefferedKeysForDeletion.push_back(std::move(it->BlobKeyToken));
 
             Y_UNUSED(request);
         } else {

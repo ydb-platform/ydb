@@ -2463,6 +2463,8 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
     };
     tc.Runtime->SetObserverFunc(observe);
 
+    Cerr << ">>> write #1" << Endl;
+
     TVector<std::pair<ui64, TString>> data;
     data.resize(1);
 
@@ -2470,9 +2472,13 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
     data[0].second = TString(1_KB, 'x');
     CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 0);
 
+    Cerr << ">>> write #2" << Endl;
+
     ++data[0].first;
     data[0].second = TString(1_MB, 'x');
     CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 1);
+
+    Cerr << ">>> wait for CmdDeleteRange" << Endl;
 
     TDispatchOptions options;
     options.CustomFinalCondition = [&] { return foundCmdDeleteFirstMessage; };
@@ -2484,11 +2490,17 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
 
     needDropCmdDeleteFirstMessage = false;
 
+    Cerr << ">>> restart" << Endl;
+
     PQTabletRestart(tc);
+
+    Cerr << ">>> write #3" << Endl;
 
     ++data[0].first;
     data[0].second = TString(1_KB, 'x');
     CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 2);
+
+    Cerr << ">>> write #1" << Endl;
 
     keys = GetTabletKeys(tc);
     UNIT_ASSERT_C(!keys.contains(firstMessageKey),

@@ -23,10 +23,6 @@
 
 #include "single_thread_ic_mock.h"
 
-namespace NActors {
-    class TExecutorThread;
-}
-
 namespace NKikimr {
 
 void RegisterActorName(const TActorId& actorId, const TString& name);

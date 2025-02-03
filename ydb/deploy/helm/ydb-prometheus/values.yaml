@@ -102,7 +102,6 @@ ydb:
         format: prometheus
         tenant: "{{ .target.path }}"
       skipNameRelabeling: true
-    - counter: dsproxy_mon
 
   # Cluster which will be monitored
   clusters: []

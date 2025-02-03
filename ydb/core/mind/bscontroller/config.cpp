@@ -43,8 +43,6 @@ namespace NKikimr::NBsController {
                         ApplyPDiskDeleted(overlay->first, *base->second);
                     } else if (!base) {
                         ApplyPDiskCreated(overlay->first, *overlay->second);
-                    } else {
-                        ApplyPDiskDiff(overlay->first, *base->second, *overlay->second);
                     }
                 }
                 for (auto&& [base, overlay] : State.VSlots.Diff()) {
@@ -72,14 +70,6 @@ namespace NKikimr::NBsController {
                     // don't create static PDisks as they are already created
                     NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, pdiskInfo);
                     pdisk->SetEntityStatus(NKikimrBlobStorage::CREATE);
-                }
-            }
-
-            void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
-                if (prev.PDiskConfig != cur.PDiskConfig) {
-                    // PDisk's config has changed
-                    NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, cur);
-                    pdisk->SetEntityStatus(NKikimrBlobStorage::RESTART);
                 }
             }
 

@@ -592,7 +592,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
 
 TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
         const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
-        TBlobRefCounters* blobRefCounters
+        TBlobKeyTokens* blobKeyTokens
 ) {
     PQ_LOG_D("GetReadRequestFromBody: " <<
              "startOffset=" << startOffset <<
@@ -640,7 +640,7 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
                                    it->Key.GetInternalPartsCount(), it->Size, TString(), it->Key);
             blobs.push_back(reqBlob);
 
-            blobRefCounters->Append(it->RefCount);
+            blobKeyTokens->Append(it->BlobKeyToken);
 
             ++it;
             if (it == DataKeysBody.end())
@@ -1011,7 +1011,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
 
     TVector<TRequestedBlob> blobs = GetReadRequestFromBody(
             info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
-            &info.BlobRefCounters
+            &info.BlobKeyTokens
     );
     info.Blobs = blobs;
     PQ_LOG_D("info.Blobs.size=" << info.Blobs.size());
@@ -1029,7 +1029,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         PQ_LOG_D("info.Cached.size=" << info.Cached.size());
         info.CachedOffset = insideHeadOffset;
     }
-    Y_ABORT_UNLESS(info.BlobRefCounters.Size() == info.Blobs.size());
+    Y_ABORT_UNLESS(info.BlobKeyTokens.Size() == info.Blobs.size());
     if (info.Destination != 0) {
         ++userInfo.ActiveReads;
         userInfo.UpdateReadingTimeAndState(EndOffset, ctx.Now());

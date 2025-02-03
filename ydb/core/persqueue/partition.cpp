@@ -467,13 +467,6 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
         BodySize -= firstKey.Size;
 
-        Y_ABORT_UNLESS(firstKey.RefCount.GetUseCount() > 0,
-                       "Key: %s",
-                       firstKey.Key.ToString().data());
-        firstKey.RefCount.Dec();
-
-        PQ_LOG_D("schedule delete body key " << firstKey.Key.ToString());
-        DeletedHeadKeys.push_back(std::move(DataKeysBody.front()));
         DataKeysBody.pop_front();
 
         if (!GapOffsets.empty() && nextKey.GetOffset() == GapOffsets.front().second) {
@@ -498,15 +491,6 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         ++StartOffset;
 
         if (StartOffset == EndOffset) {
-            auto& firstKey = DataKeysBody.front();
-
-            Y_ABORT_UNLESS(firstKey.RefCount.GetUseCount() > 0,
-                           "Key: %s",
-                           firstKey.Key.ToString().data());
-            firstKey.RefCount.Dec();
-
-            PQ_LOG_D("schedule delete body key " << firstKey.Key.ToString());
-            DeletedHeadKeys.push_back(std::move(firstKey));
             DataKeysBody.pop_front();
         }
     }
@@ -2100,20 +2084,15 @@ void TPartition::TryAddDeleteHeadKeysToPersistRequest()
 {
     while (!DeletedHeadKeys.empty()) {
         auto& k = DeletedHeadKeys.back();
-        if (k.RefCount.GetUseCount() > 0) {
-            // the blob has already been repackaged and is still being read
-            PQ_LOG_D("wait for key " << k.Key.ToString());
-            break;
-        }
 
-        PQ_LOG_D("delete key " << k.Key.ToString());
+        PQ_LOG_D("delete key " << k);
 
         auto* cmd = PersistRequest->Record.AddCmdDeleteRange();
         auto* range = cmd->MutableRange();
 
-        range->SetFrom(k.Key.Data(), k.Key.Size());
+        range->SetFrom(k.data(), k.size());
         range->SetIncludeFrom(true);
-        range->SetTo(k.Key.Data(), k.Key.Size());
+        range->SetTo(k.data(), k.size());
         range->SetIncludeTo(true);
 
         DeletedHeadKeys.pop_back();
@@ -2142,6 +2121,18 @@ void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& requ
         PQ_LOG_D(cmd.GetOldKey() << ", " << cmd.GetNewKey());
     }
     PQ_LOG_D("===========================");
+}
+
+TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
+{
+    auto ptr = std::make_unique<TBlobKeyToken>(key);
+
+    auto deleter = [this](TBlobKeyToken* token) {
+        DeletedHeadKeys.emplace_back(std::move(token->Key));
+        delete token;
+    };
+
+    return {ptr.release(), std::move(deleter)};
 }
 
 void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
@@ -3437,18 +3428,13 @@ void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue:
     PQ_LOG_D("=== ClearOldHead ===");
     PQ_LOG_D("offset=" << offset << ", partNo=" << partNo);
     for (const auto& v : HeadKeys) {
-        PQ_LOG_D("key=" << v.Key.ToString() << ", refs=" << v.RefCount.GetUseCount());
+        PQ_LOG_D("key=" << v.Key.ToString() << ", refs=" << v.BlobKeyToken.use_count());
     }
     PQ_LOG_D("====================");
 
     for (auto it = HeadKeys.rbegin(); it != HeadKeys.rend(); ++it) {
         if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
-            Y_ABORT_UNLESS(it->RefCount.GetUseCount() > 0,
-                           "Key: %s",
-                           it->Key.ToString().data());
-            it->RefCount.Dec();
-
-            PQ_LOG_D("blob " << it->Key.ToString() << " will be deleted");
+            it->BlobKeyToken = nullptr;
 
             Y_UNUSED(request);
         } else {

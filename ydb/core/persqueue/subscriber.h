@@ -44,7 +44,7 @@ struct TReadInfo {
     ui64 LastOffset = 0;
     bool Error = false;
 
-    TBlobRefCounters BlobRefCounters;
+    TBlobKeyTokens BlobKeyTokens;
 
     TReadInfo() = delete;
     TReadInfo(

@@ -385,14 +385,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
     if (!CompactedKeys.empty()) {
-        PQ_LOG_D("clear head keys");
-        for (auto& k : HeadKeys) {
-            // The keys are queued. They will be deleted later when the `RefCount' value is reset.
-            PQ_LOG_D("schedule delete head key " << k.Key.ToString());
-            DeletedHeadKeys.push_back(std::move(k));
-        }
         HeadKeys.clear();
-        PQ_LOG_D("head keys cleared");
     }
 
     if (NewHeadKey.Size > 0) {
@@ -401,9 +394,6 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
                 (HeadKeys.back().Key.GetOffset() == NewHeadKey.Key.GetOffset() && HeadKeys.back().Key.GetPartNo() >= NewHeadKey.Key.GetPartNo()))) {
             auto k = std::move(HeadKeys.back());
             HeadKeys.pop_back();
-            PQ_LOG_D("schedule delete head key " << k.Key.ToString());
-            // The key is placed in the queue. It will be deleted later when the `RefCount` value is reset.
-            DeletedHeadKeys.push_back(std::move(k));
         }
 
         PQ_LOG_D("add new head key " << NewHeadKey.Key.ToString());
@@ -444,7 +434,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
                                   ck.second,
                                   ctx.Now(),
                                   DataKeysBody.empty() ? 0 : DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size,
-                                  1);
+                                  MakeBlobKeyToken(ck.first.ToString()));
 
         CompactedKeys.pop_front();
     } // head cleared, all data moved to body
@@ -1524,7 +1514,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
         NewHead.PartNo = 0;
     } else {
         Y_ABORT_UNLESS(NewHeadKey.Size == 0);
-        NewHeadKey = {key, res.second, CurrentTimestamp, 0, 1};
+        NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
     }
     WriteCycleSize += write->GetValue().size();
     UpdateWriteBufferIsFullState(ctx.Now());

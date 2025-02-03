@@ -77,7 +77,7 @@ namespace NPQ {
         ui32 Size = 0;
         TInstant Timestamp;
         ui64 CumulativeSize = 0;
-        TBlobRefCounter RefCount{};
+        TBlobKeyTokenPtr BlobKeyToken = nullptr;
     };
 
     struct TErrorInfo {

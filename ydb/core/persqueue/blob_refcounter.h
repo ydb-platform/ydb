@@ -1,36 +1,24 @@
 #pragma once
 
+#include <util/generic/string.h>
+
 #include <memory>
 #include <vector>
 #include <cstddef>
 
 namespace NKikimr::NPQ {
 
-class TBlobRefCounter {
-public:
-    TBlobRefCounter() = default;
-    TBlobRefCounter(size_t count);
-    TBlobRefCounter(const TBlobRefCounter& rhs);
-    TBlobRefCounter(TBlobRefCounter&& rhs) = default;
-    ~TBlobRefCounter();
-
-    TBlobRefCounter& operator=(const TBlobRefCounter& rhs);
-    TBlobRefCounter& operator=(TBlobRefCounter&& rhs) = default;
-
-    size_t GetUseCount() const;
-
-    void Inc() const;
-    void Dec() const;
-
-private:
-    std::shared_ptr<size_t> Counter;
+struct TBlobKeyToken {
+    TString Key;
 };
 
-struct TBlobRefCounters {
-    void Append(const TBlobRefCounter& counter);
-    size_t Size() const { return Counters.size(); }
+using TBlobKeyTokenPtr = std::shared_ptr<TBlobKeyToken>;
 
-    std::vector<TBlobRefCounter> Counters;
+struct TBlobKeyTokens {
+    void Append(TBlobKeyTokenPtr token) { Tokens.push_back(std::move(token)); }
+    size_t Size() const { return Tokens.size(); }
+
+    std::vector<TBlobKeyTokenPtr> Tokens;
 };
 
 }

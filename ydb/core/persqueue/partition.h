@@ -296,7 +296,7 @@ private:
     // will return rcount and rsize also
     TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
                                                    const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
-                                                   TBlobRefCounters* blobRefCounters);
+                                                   TBlobKeyTokens* blobKeyTokens);
     TVector<TClientBlob>    GetReadRequestFromHead(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
                                                    const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount,
                                                    ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset);
@@ -688,6 +688,8 @@ private:
     TMessageQueue PendingRequests;
     TMessageQueue QuotaWaitingRequests;
 
+    std::deque<TString> DeletedHeadKeys;
+
     THead Head;
     THead NewHead;
     TPartitionedBlob PartitionedBlob;
@@ -700,7 +702,6 @@ private:
     std::deque<TDataKey> DataKeysBody;
     TVector<TKeyLevel> DataKeysHead;
     std::deque<TDataKey> HeadKeys;
-    std::deque<TDataKey> DeletedHeadKeys;
 
     std::deque<std::pair<ui64,ui64>> GapOffsets;
     ui64 GapSize;
@@ -982,6 +983,8 @@ private:
 
     void TryAddDeleteHeadKeysToPersistRequest();
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
+
+    TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);
 };
 
 } // namespace NKikimr::NPQ

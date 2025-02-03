@@ -596,7 +596,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
         TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
         if (!actualKeys.contains(pair.GetKey())) {
             PQ_LOG_D("schedule delete key " << k.ToString());
-            Partition()->DeletedHeadKeys.emplace_back(k, 0, TInstant(), 0);
+            Partition()->DeletedHeadKeys.emplace_back(k.ToString());
             continue;
         }
         if (dataKeysBody.empty()) { //no data - this is first pair of first range
@@ -624,7 +624,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
                                   pair.GetValueSize(),
                                   TInstant::Seconds(pair.GetCreationUnixTime()),
                                   dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size,
-                                  1);
+                                  Partition()->MakeBlobKeyToken(k.ToString()));
     }
 
     Y_ABORT_UNLESS(endOffset >= startOffset);

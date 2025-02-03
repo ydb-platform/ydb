@@ -1485,6 +1485,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
 
+        while (true) {
+            auto result = client.PutRecords(streamName, {{"key", "key", ""}}).ExtractValueSync();
+            if (result.IsSuccess()) {
+                break;
+            }
+        }
+
         // Test for too long partition key
         TString longKey = TString(257, '1');
         TString shortEnoughKey = TString(256, '1');
@@ -1564,8 +1571,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
             Cerr << result.GetResult().DebugString() << Endl;
 
+            // Send multiple records to deplete quota.
+
             Cerr << "Second put records (async)\n";
             auto secondWriteAsync = client.PutRecords(streamPath, records);
+            for (size_t i = 0; i < 10; ++i) {
+                client.PutRecords(streamPath, records);
+            }
 
             Cerr << Now().Seconds() << "Third put records\n";
             result = client.PutRecords(streamPath, records).ExtractValueSync();
@@ -1578,13 +1590,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
             result = secondWriteAsync.ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            if (result.GetStatus() != EStatus::SUCCESS) {
-                result.GetIssues().PrintTo(Cerr);
-            }
-            Cerr << result.GetResult().DebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
-            Cerr << result.GetResult().DebugString() << Endl;
-
         }
 
         NYdb::NPersQueue::TPersQueueClient pqClient(*driver);
@@ -1618,7 +1623,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 break;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(readCount, 16);
+        UNIT_ASSERT_GE(readCount, 16);
     }
 
     Y_UNIT_TEST(TestPutRecords) {

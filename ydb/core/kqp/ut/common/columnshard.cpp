@@ -55,7 +55,7 @@ namespace NKqp {
             UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
             CREATE EXTERNAL DATA SOURCE `)" + tierName + R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
-                LOCATION="http://fake.fake/fake",
+                LOCATION="http://fake.fake/olap-)" + tierName + R"(",
                 AUTH_METHOD="AWS",
                 AWS_ACCESS_KEY_ID_SECRET_NAME="accessKey",
                 AWS_SECRET_ACCESS_KEY_SECRET_NAME="secretKey",

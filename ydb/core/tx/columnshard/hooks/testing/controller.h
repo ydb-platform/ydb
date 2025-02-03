@@ -1,10 +1,13 @@
 #pragma once
 #include "ro_controller.h"
-#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/wrappers/unavailable_storage.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -26,7 +29,8 @@ private:
     YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
     YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
     YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
-    
+    YDB_FLAG_ACCESSOR(ExternalStorageUnavailable, false);
+
     YDB_ACCESSOR_DEF(std::optional<NKikimrProto::EReplyStatus>, OverrideBlobPutResultOnWriteValue);
 
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
@@ -223,6 +227,15 @@ protected:
     virtual THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> GetExternalDataLocks() const override {
         TGuard<TMutex> g(Mutex);
         return ExternalLocks;
+    }
+
+    virtual NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetStorageOperatorOverride(
+        const ::NKikimr::NColumnShard::NTiers::TExternalStorageId& /*storageId*/) const override {
+        if (ExternalStorageUnavailableFlag) {
+            return std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
+                "unavailable", "disabled by test controller");
+        }
+        return nullptr;
     }
 
 public:

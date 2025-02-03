@@ -6,10 +6,11 @@ Database node authentication and authorization are performed in the following or
 
 1. The database node being started opens a gRPC connection to one of the cluster storage nodes specified in the `--node-broker` command-line option. The connection uses the TLS protocol, and the certificate of the running node is used as the client certificate for the connection.
 2. The storage node and the database node perform mutual authentication checks using the TLS protocol: the certificate trust chain is checked, and the hostname is matched against the value of the "Subject Name" field of the certificate.
-3. The storage node checks the "Subject" field of the certificate for compliance with the requirements set in the static configuration.
-4. If the above checks are successful, the connection from the database node is considered authenticated, and it is assigned a special [SID](../../concepts/glossary.md#access-sid) determined by the settings.
-5. The database node uses the established gRPC connection to register with the cluster and obtain the dynamic configuration through the corresponding service requests.
-6. The storage node checks whether the SID assigned to the connection is in the list of acceptable ones. If this check is successful, the storage node performs the requested action.
+3. The storage node checks the "Subject" field of the certificate for compliance with the requirements [set up through settings](../../reference/configuration/node-authentication.md) in the static configuration.
+4. If the above checks are successful, the connection from the database node is considered authenticated, and it is assigned a security identifier - [SID](../../concepts/glossary.md#access-sid), which is determined by the settings.
+5. The database node uses the established gRPC connection to register with the cluster through the corresponding service request. When registering, the database node sends its network address intended to be used for communication with other cluster nodes.
+6. The storage node checks whether the SID assigned to the gRPC connection is in the list of acceptable ones. If this check is successful, the storage node registers the database node within the cluster, saving the association between the network address of the registered node and its identifier.
+7. The database node joins the cluster by connecting via its network address and providing the node ID it received during registration. Attempts to join the cluster by nodes with unknown network addresses or IDs are blocked by other nodes.
 
 Below are the steps required to enable the node authentication and authorization feature.
 

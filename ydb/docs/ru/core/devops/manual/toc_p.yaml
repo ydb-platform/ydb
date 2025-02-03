@@ -19,14 +19,14 @@ items:
     href: ../../maintenance/manual/config-overview.md
   - name: Статическая конфигурация кластера
     href: ../../reference/configuration/index.md
-  - name: Аутентификация и авторизация узлов баз данных
-    href: node-authorization.md
   - name: Динамическая конфигурация кластера
     href: ../../maintenance/manual/dynamic-config.md
   - name: DSL конфигурации кластера
     href: ../../maintenance/manual/dynamic-config-selectors.md
   - name: Временная конфигурация
     href: ../../maintenance/manual/dynamic-config-volatile-config.md
+  - name: Аутентификация и авторизация узлов баз данных
+    href: node-authorization.md
   - name: Изменение конфигураций через CMS
     href: ../../maintenance/manual/cms.md
   - name: Изменение конфигурации актор-системы

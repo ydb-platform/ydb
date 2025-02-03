@@ -70,11 +70,25 @@
 - Java
 
   ```java
-  this.tableClient = TableClient.newClient(transport)
+  this.queryClient = QueryClient.newClient(transport)
           // 10 - minimum number of active sessions to keep in the pool during the cleanup
           // 500 - maximum number of sessions in the pool
-          .sessionPoolSize(10, 500)
+          .sessionPoolMinSize(10)
+          .sessionPoolMaxSize(500)
           .build();
   ```
+
+- JDBC Driver
+
+  При работе с JDBC, как правило, используются внешние пулы соединений, такие как [HikariCP](https://github.com/brettwooldridge/HikariCP) или [C3p0](https://github.com/swaldman/c3p0). В режиме работы по умолчанию {{ ydb-short-name }} JDBC драйвер определяет количество соединений, открытых внешним пулом, и самостоятельно подстраивает размер пула сессий. Поэтому для настройки пула сессий достаточно корректно настроить `HikariCP` или `C3p0`.
+
+  Пример настройки пула HikariCP в конфигурационном файле Spring:
+
+  ```properties
+    spring.datasource.url=jdbc:ydb:grpc://localhost:2136/local
+    spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
+    spring.datasource.hikari.maximum-pool-size=100 # maximum size of JDBC connections
+  ```
+
 
 {% endlist %}

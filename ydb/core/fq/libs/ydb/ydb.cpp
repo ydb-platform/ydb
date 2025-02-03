@@ -203,6 +203,11 @@ NYql::TIssues StatusToIssues(const NYdb::TStatus& status) {
     TIssues issues;
     if (!status.IsSuccess()) {
         issues = status.GetIssues();
+        if (!issues) {
+            TStringStream str;
+            str << "Internal error: empty issues with failed status (" << status.GetStatus() << ")";
+            issues.AddIssue(str.Str());
+        }
     }
     return issues;
 }

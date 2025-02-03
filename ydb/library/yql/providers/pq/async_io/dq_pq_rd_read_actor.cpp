@@ -876,7 +876,11 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvPrintState::TPtr&) {
 }
 
 void TDqPqRdReadActor::PrintInternalState() {
-    SRC_LOG_I(GetInternalState());
+    auto str = GetInternalState();
+    auto buf = TStringBuf(str);
+    for (ui64 offset = 0; offset < buf.size(); offset += PrintStateToLogSplitSize) {
+        SRC_LOG_I(buf.SubString(offset, PrintStateToLogSplitSize));
+    }
 }
 
 TString TDqPqRdReadActor::GetInternalState() {

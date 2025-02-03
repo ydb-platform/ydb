@@ -2199,7 +2199,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 ORDER BY {} {}
                 LIMIT 3;
             )", target, metric, direction)));
-            const TString indexQuery(Q1_(std::format(R"({}
+            const TString indexQuery(Q1_(std::format(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "3";
+                {}
                 SELECT * FROM `/Root/TestTable` VIEW index
                 ORDER BY {} {}
                 LIMIT 3;
@@ -2214,6 +2216,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 LIMIT 3;
             )", target, metric, metric, direction)));
             const TString indexQuery(Q1_(std::format(R"({}
+                pragma ydb.KMeansTreeSearchTopSize = "2";
                 SELECT {}, `/Root/TestTable`.* FROM `/Root/TestTable` VIEW index
                 ORDER BY {} {}
                 LIMIT 3;
@@ -2227,7 +2230,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 ORDER BY m {}
                 LIMIT 3;
             )", target, metric, direction)));
-            const TString indexQuery(Q1_(std::format(R"({}
+            const TString indexQuery(Q1_(std::format(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                {}
                 SELECT {} AS m, `/Root/TestTable`.* FROM `/Root/TestTable` VIEW index
                 ORDER BY m {}
                 LIMIT 3;
@@ -2241,18 +2246,18 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         std::string_view function,
         std::string_view direction) {
         // target is left, member is right
-        // DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "$target", "emb");
+        DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "$target", "emb");
         // target is right, member is left
         DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "emb", "$target");
     }
 
     void DoPositiveQueriesVectorIndexOrderByCosine(TSession& session) {
         // distance, default direction
-        // DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "");
+        DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "");
         // distance, asc direction
         DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "ASC");
         // similarity, desc direction
-        // DoPositiveQueriesVectorIndexOrderBy(session, "CosineSimilarity", "DESC");
+        DoPositiveQueriesVectorIndexOrderBy(session, "CosineSimilarity", "DESC");
     }
 
     TSession DoCreateTableForVectorIndex(TTableClient& db, bool nullable) {
@@ -2272,6 +2277,13 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .AddNonNullableColumn("data", EPrimitiveType::String);
             }
             tableBuilder.SetPrimaryKeyColumns({"pk"});
+            tableBuilder.BeginPartitioningSettings()
+                .SetMinPartitionsCount(3)
+            .EndPartitioningSettings();
+            auto partitions = TExplicitPartitions{}
+                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(4).EndTuple().Build())
+                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(6).EndTuple().Build());
+            tableBuilder.SetPartitionAtKeys(partitions);
             auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

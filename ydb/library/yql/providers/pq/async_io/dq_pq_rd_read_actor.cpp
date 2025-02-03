@@ -103,11 +103,13 @@ struct TEvPrivate {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvPrintState = EvBegin + 20,
         EvProcessState = EvBegin + 21,
+        EvNotifyCA = EvBegin + 22,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvProcessState : public NActors::TEventLocal<TEvProcessState, EvProcessState> {};
+    struct TEvNotifyCA : public NActors::TEventLocal<TEvNotifyCA, EvNotifyCA> {};
 };
 
 class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase {
@@ -115,6 +117,7 @@ class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::
     const ui64 PrintStatePeriodSec = 300;
     const ui64 ProcessStatePeriodSec = 1;
     const ui64 PrintStateToLogSplitSize = 64000;
+    const ui64 NotifyCAPeriodSec = 10;
 
     struct TReadyBatch {
     public:
@@ -263,6 +266,7 @@ public:
     void Handle(const NFq::TEvRowDispatcher::TEvHeartbeat::TPtr&);
     void Handle(TEvPrivate::TEvPrintState::TPtr&);
     void Handle(TEvPrivate::TEvProcessState::TPtr&);
+    void Handle(TEvPrivate::TEvNotifyCA::TPtr&);
 
     STRICT_STFUNC(StateFunc, {
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
@@ -283,6 +287,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvHeartbeat, Handle);
         hFunc(TEvPrivate::TEvPrintState, Handle);
         hFunc(TEvPrivate::TEvProcessState, Handle);
+        hFunc(TEvPrivate::TEvNotifyCA, Handle);
     })
 
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
@@ -379,6 +384,7 @@ void TDqPqRdReadActor::Init() {
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
 
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
+    Schedule(TDuration::Seconds(NotifyCAPeriodSec), new TEvPrivate::TEvNotifyCA());
     Inited = true;
 }
 
@@ -1002,6 +1008,11 @@ void TDqPqRdReadActor::UpdateSessions() {
         ReadActorByEventQueueId[queueId] = rowDispatcherActorId;
     }
     LastUsedPartitionDistribution = LastReceivedPartitionDistribution;
+}
+
+void TDqPqRdReadActor::Handle(TEvPrivate::TEvNotifyCA::TPtr&) {
+    Schedule(TDuration::Seconds(NotifyCAPeriodSec), new TEvPrivate::TEvNotifyCA());
+    NotifyCA();
 }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(

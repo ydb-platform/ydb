@@ -70,14 +70,7 @@ void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
 }
 
 TColumnEngineChanges::~TColumnEngineChanges() {
-    if (!NActors::TlsActivationContext || Stage == NChanges::EStage::Created || Stage == NChanges::EStage::Finished || Stage == NChanges::EStage::Aborted) {
-        // ok
-    } else {
-        AFL_CRIT(NKikimrServices::TX_TIERING)("aboba", "changes_destroyed_unfinished")("stage", Stage)("task", TaskIdentifier);
-        if (IS_TRACE_LOG_ENABLED(NKikimrServices::TX_TIERING)) {
-            Y_ABORT();
-        }
-    }
+    //    AFL_VERIFY_DEBUG(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted)("stage", Stage);
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {

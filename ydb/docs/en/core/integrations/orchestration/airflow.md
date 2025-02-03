@@ -1,40 +1,40 @@
 # {{ airflow-name }}
 
-Integration of {{ ydb-short-name }} with [{{ airflow-name }}](https://airflow.apache.org) allows you to automate and manage complex workflows. {{ airflow-name }} provides features for scheduling tasks, monitoring their execution, and managing dependencies between them, such as orchestration. Using Airflow o orchestrate tasks such as uploading data to {{ydb-short-name}}, query execution, and transaction management allows you to automate and optimize operational processes. This is especially important for ETL tasks where large amounts of data require regular extraction, transformation, and loading.
+Integration of {{ ydb-short-name }} with [{{ airflow-name }}](https://airflow.apache.org) allows you to automate and manage complex workflows. {{ airflow-name }} provides features for scheduling tasks, monitoring their execution, and managing dependencies between them, such as orchestration. Using Airflow to orchestrate tasks such as uploading data to {{ ydb-short-name }}, executing queries, and managing transactions allows you to automate and optimize operational processes. This is especially important for ETL tasks, where large amounts of data require regular extraction, transformation, and loading.
 
-To work under {{ airflow-name }}, {{ ydb-full-name }} provides a [provider's package](https://airflow.apache.org/docs/apache-airflow-providers) [apache-airflow-providers-ydb](https://pypi.org/project/apache-airflow-providers-ydb/). [{{ airflow-name }} tasks](https://airflow.apache.org/docs/apache-airflow/stable/index.html) are Python applications consisting of a set of [{{ airflow-name }} operators](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/operators.html) and their [dependencies](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html), defining the order of execution.
+{{ ydb-short-name }} [provider package](https://airflow.apache.org/docs/apache-airflow-providers) [apache-airflow-providers-ydb](https://pypi.org/project/apache-airflow-providers-ydb/) allows to work with {{ ydb-short-name }} from {{ airflow-name }}. [{{ airflow-name }} tasks](https://airflow.apache.org/docs/apache-airflow/stable/index.html) are Python applications consisting of a set of [{{ airflow-name }} operators](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/operators.html) and their [dependencies](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html), defining the order of execution.
 
 ## Setup {#setup}
 
-For the `apache-airflow-providers-ydb` package to work correctly, the following command must be executed on all {{ airflow-name }} hosts:
+Execute the following command on all {{ airflow-name }} hosts to install the `apache-airflow-providers-ydb` package:
 
 ```shell
 pip install ydb apache-airflow-providers-ydb
 ```
 
-Python version 3.8 or higher is required to work.
+Python version 3.8 or higher is required.
 
-## Object Model {#object_model}
+## Object model {#object_model}
 
 The `airflow.providers.ydb` package contains a set of components for interacting with {{ ydb-full-name }}:
 
-- Operator [YDBExecuteQueryOperator](#ydb_execute_query_operator) for integrating tasks into the {{ airflow-name }} scheduler.
-- Hook [YDBHook](#ydb_hook) for direct interaction with {{ ydb-name }}.
+- Operator [`YDBExecuteQueryOperator`](#ydb_execute_query_operator) for integrating tasks into the {{ airflow-name }} scheduler.
+- Hook [`YDBHook`](#ydb_hook) for direct interaction with {{ ydb-name }}.
 
 ### YDBExecuteQueryOperator {#ydb_execute_query_operator}
 
-To make requests to {{ ydb-full-name }} the {{ airflow-name }} operator `YDBExecuteQueryOperator` is used.
+To make requests to {{ ydb-full-name }}, use the {{ airflow-name }} operator `YDBExecuteQueryOperator`.
 
-Required arguments:
+#### Required arguments
 
-* `task_id` — is the name of the {{ airflow-name }} task.
-* `sql` — is the text of the SQL query to be executed in {{ ydb-full-name }}.
+- `task_id` — the name of the {{ airflow-name }} task.
+- `sql` — the text of the SQL query to be executed in {{ ydb-full-name }}.
 
-Optional arguments:
+#### Optional arguments
 
-* `ydb_conn_id` — is the connection identifier with the `YDB` type, containing the connection parameters with {{ ydb-full-name }}.  If omitted, a connection named [`ydb_default`](#ydb_default) is used. The `ydb_default` connection is preinstalled as part of {{ airflow-name }}, and it does not need to be configured separately.
-* `is_ddl` — indicates that [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) is running. If omitted or set to `False`, then [SQL DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) is running.
-* `params` — dictionary of [query parameters](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/params.html).
+- `ydb_conn_id` — the connection identifier with the `YDB` type, containing the connection parameters for {{ ydb-full-name }}. If omitted, a connection named [`ydb_default`](#ydb_default) is used. The `ydb_default` connection is preinstalled as part of {{ airflow-name }} and does not need to be configured separately.
+- `is_ddl` — indicates that [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) is running. If omitted or set to `False`, then [SQL DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) is running.
+- `params` — a dictionary of [query parameters](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/params.html).
 
 Example:
 
@@ -49,26 +49,25 @@ In this example, a {{ airflow-name }} task is created with the ID `ydb_operator`
 
 The {{ airflow-name }} class `YDBHook` is used to execute low-level commands in {{ ydb-full-name }}.
 
-Optional arguments:
+#### Optional arguments
 
-* `ydb_conn_id` — is the connection identifier with the `YDB` type, containing the connection parameters with {{ ydb-full-name }}.  If omitted, a connection named [`ydb_default`](#ydb_default) is used. The `ydb_default` connection is preinstalled as part of {{ airflow-name }}, and it does not need to be configured separately.
-* `is_ddl` — indicates that [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) is running. If omitted or set to `False`, then [SQL DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) is running.
+- `ydb_conn_id` — the connection identifier with the `YDB` type, containing the connection parameters for {{ ydb-full-name }}. If omitted, a connection named [`ydb_default`](#ydb_default) is used. The `ydb_default` connection is preinstalled as part of {{ airflow-name }} and does not need to be configured separately.
+- `is_ddl` — indicates that [SQL DDL](https://en.wikipedia.org/wiki/Data_definition_language) is running. If omitted or set to `False`, then [SQL DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) is running.
 
 `YDBHook` supports the following methods:
 
-- [bulk_upsert](#bulk_upsert);
-- [get_conn](#get_conn).
+- [`bulk_upsert`](#bulk_upsert)
+- [`get_conn`](#get_conn)
 
 #### bulk_upsert {#bulk_upsert}
 
 Performs [batch data insertion](../../recipes/ydb-sdk/bulk-upsert.md) into {{ ydb-full-name }} tables.
 
-Required arguments:
+#### Required arguments
 
-* `table_name` — name of the {{ ydb-full-name }} table where the data will be inserted..
-* `rows` — an array of rows to insert.
-* `column_types` — description of column types.
-
+- `table_name` — the name of the {{ ydb-full-name }} table where the data will be inserted.
+- `rows` — an array of rows to insert.
+- `column_types` — a description of column types.
 
 Example:
 
@@ -90,11 +89,11 @@ rows = [
 hook.bulk_upsert("pet", rows=rows, column_types=column_types)
 ```
 
-In this example, a `YDBHook` object is created through which the `bulk_upsert` batch data insertion operation is performed.
+In this example, a `YDBHook` object is created, through which the `bulk_upsert` batch data insertion operation is performed.
 
 #### get_conn {#get_conn}
 
-Returns the `YDBConnection` object implementing the [`DbApiConnection` interface](https://pypi.python.org/pep-0249/#connection-objects) for working with data. The `DbApiConnection` class provides a standardized interface for interacting with the database, allowing operations such as connection, SQL query execution, and transaction management, regardless of the specific database management system.
+Returns the `YDBConnection` object, which implements the [`DbApiConnection` interface](https://pypi.python.org/pep-0249/#connection-objects) for working with data. The `DbApiConnection` class provides a standardized interface for interacting with the database, allowing operations such as establishing connections, executing SQL queries, and managing transactions, regardless of the specific database management system.
 
 Example:
 
@@ -115,45 +114,45 @@ cursor.close()
 connection.close()
 ```
 
-In this example, a `YDBHook` object is created, and a `YDBConnection` object is requested from the created object, through which data is read and a list of columns is obtained.
+In this example, a `YDBHook` object is created, and a `YDBConnection` object is requested from the created object. This connection is then used to read data and retrieve a list of columns.
 
 ## Connection to {{ ydb-full-name }} {#ydb_default}
 
-To connect to {{ ydb-full-name }}, you must create a new one or edit an existing one [{{ airflow-name }} connection](https://airflow.apache.org/docs/apache-airflow/stable/howto/connection.html) with `YDB` type.
+To connect to {{ ydb-full-name }}, you must create a new or edit an existing [{{ airflow-name }} connection](https://airflow.apache.org/docs/apache-airflow/stable/howto/connection.html) with the `YDB` type.
 
 ![](_assets/ydb_connection.png)
 
 Where:
 
-- `Connection Id` - {{ airflow-name }} connection identifier.
-- `Host` - {{ ydb-full-name }} protocol and cluster address.
-- `Port` - {{ ydb-full-name }} port.
-- `Database name` - the name of {{ ydb-full-name }} database.
+- `Connection Id` — the {{ airflow-name }} connection identifier.
+- `Host` — the protocol and cluster address of {{ ydb-full-name }}.
+- `Port` — the port of {{ ydb-full-name }}.
+- `Database name` — the name of the {{ ydb-full-name }} database.
 
-Specify the details for one of the following authentication methods on the cluster {{ ydb-full-name }}:
+Specify the details for one of the following authentication methods on the {{ ydb-full-name }} cluster:
 
-- `Login` и `Password` - specify user credentials for using [static credentials](../../security/authentication.md#static-credentials).
-- `Service account auth JSON` - specify value of [`Service Account Key`](../../security/authentication.md#iam).
-- `Service account auth JSON file path` - specify path to `Service Account Key` file.
-- `IAM token` - specify [IAM token](../../security/authentication.md#iam).
-- `Use VM metadata` - marker to use [virtual machine metadata](../../security/authentication.md#iam).
+- `Login` and `Password` — specify user credentials for using [static credentials](../../security/authentication.md#static-credentials).
+- `Service account auth JSON` — specify the value of the [`Service Account Key`](../../security/authentication.md#iam).
+- `Service account auth JSON file path` — specify the path to the `Service Account Key` file.
+- `IAM token` — specify the [IAM token](../../security/authentication.md#iam).
+- `Use VM metadata` — enable this option to use [virtual machine metadata](../../security/authentication.md#iam).
 
 ## Matching between YQL and Python types
 
 Below are the rules for converting YQL types to Python results. Types not listed below are not supported.
 
-### Scalar Types {#scalars-types}
+### Scalar types {#scalars-types}
 
 | YQL type | Python type | Example in Python |
 | --- | --- | --- |
 | `Int8`, `Int16`, `Int32`, `Uint8`, `Uint16`, `Uint32`, `Int64`, `Uint64` | `int` | `647713` |
-| `Bool` | `bool` | True |
+| `Bool` | `bool` | `True` |
 | `Float`, `float` | `float`<br/>NaN and Inf are represented as `None` | `7.88731023`<br/>`None` |
 | `Decimal` | `Decimal` | `45.23410083` |
-| `Utf8` | `str` | `Text of string` |
-| `String` | `str` | `Text of string` |
+| `Utf8` | `str` | `"Text of string"` |
+| `String` | `str` | `"Text of string"` |
 
-### Complex Types {#complex-types}
+### Complex types {#complex-types}
 
 | YQL type | Python type | Example in Python |
 | --- | --- | --- |
@@ -161,7 +160,7 @@ Below are the rules for converting YQL types to Python results. Types not listed
 | `Date` | `datetime.date` | `2022-02-09` |
 | `Datetime`, `Timestamp` | `datetime.datetime` | `2022-02-09 10:13:11` |
 
-### Optional Types {#optional-types}
+### Optional types {#optional-types}
 
 | YQL type | Python type | Example in Python |
 | --- | --- | --- |
@@ -172,12 +171,12 @@ Below are the rules for converting YQL types to Python results. Types not listed
 | YQL type | Python type | Example in Python |
 | --- | --- | --- |
 | `List<Type>` | `list` | `[1,2,3,4]` |
-| `Dict<KeyType, ValueType>` | `dict` | `{key1: "value1", key2: "value2"}` |
-| `Set<KeyType>` | `set` | `set(key_value1, key_value2)` |
+| `Dict<KeyType, ValueType>` | `dict` | `{"key1": "value1", "key2": "value2"}` |
+| `Set<KeyType>` | `set` | `{"key_value1", "key_value2"}` |
 | `Tuple<Type1, Type2>` | `tuple` | `(element1, element2)` |
-| `Struct<Name:Utf8,Age:Int32>`| `dict` | `{ "Name": "value1", "Age": value2 }` |
+| `Struct<Name:Utf8, Age:Int32>` | `dict` | `{"Name": "value1", "Age": value2}` |
 
-### Special Types {#special-types}
+### Special types {#special-types}
 
 | YQL type | Python type |
 | --- | --- |
@@ -187,13 +186,13 @@ Below are the rules for converting YQL types to Python results. Types not listed
 
 ## Example {#example}
 
-To make requests to {{ ydb-full-name }} the package contains the operator {{ airflow-name }} [`YDBExecuteQueryOperator`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/_api/airflow/providers/ydb/operators/ydb/index.html) and hook [`YDBHook`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/_api/airflow/providers/ydb/hooks/ydb/index.html).
+To make requests to {{ ydb-full-name }}, the package provides the {{ airflow-name }} operator [`YDBExecuteQueryOperator`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/_api/airflow/providers/ydb/operators/ydb/index.html) and hook [`YDBHook`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/_api/airflow/providers/ydb/hooks/ydb/index.html).
 
-In the example below, a `create_pet_table` task is created that creates a table in {{ ydb-full-name }}. After successful creation of the table, the `populate_pet_table` task is called, which fills the table with data using the `UPSERT` commands, and the `populate_pet_table_via_bulk_upsert` task, which fills the table using the [`bulk_upsert`](../../recipes/ydb-sdk/bulk-upsert.md). After data insertion is performed, a read operation is performed using the `get_all_pets` task and the `get_birth_date` task for parameterized data reading.
+In the example below, a `create_pet_table` task is launched to create a table in {{ ydb-full-name }}. After the table is successfully created, the `populate_pet_table` task runs to populate the table with data using `UPSERT` commands. Additionally, the `populate_pet_table_via_bulk_upsert` task fills the table using [`bulk_upsert`](../../recipes/ydb-sdk/bulk-upsert.md). After data insertion, a read operation is performed using the `get_all_pets` task and the `get_birth_date` task for parameterized data reading.
 
 ![](_assets/airflow_dag.png)
 
-To perform queries to the {{ ydb-short-name }} a pre-created connection with {{ ydb-short-name }} type [YDB Connection](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/connections/ydb.html) with `test_ydb_connection` name is used.
+To execute queries in {{ ydb-short-name }}, a pre-created connection of type [YDB Connection](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/connections/ydb.html) named `test_ydb_connection` is used.
 
 ```python
 from __future__ import annotations

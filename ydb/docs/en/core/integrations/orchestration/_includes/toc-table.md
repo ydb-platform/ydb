@@ -1,5 +1,5 @@
-# Оркестрация
+# Orchestration
 
-| Delivery System | Instruction |
+| System | Instruction |
 | --- | --- |
 | [{{ airflow-name }}](https://airflow.apache.org) | [Instruction](../airflow.md) |

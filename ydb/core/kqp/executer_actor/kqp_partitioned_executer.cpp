@@ -1,27 +1,19 @@
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/client/minikql_compile/db_key_resolver.h>
-#include <ydb/core/kqp/common/buffer/events.h>
-#include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/common/kqp_tx_manager.h>
-#include <ydb/library/wilson_ids/wilson.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
-#include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/runtime/kqp_transport.h>
-#include <ydb/core/kqp/opt/kqp_query_plan.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/data_events/common/error_codes.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/kqp/common/buffer/buffer.h>
+#include <ydb/core/tx/replication/ydb_proxy/partition_end_watcher_ut.cpp>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/persqueue/events/global.h>
 
-#include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
-#include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/core/pg_settings/guc_settings.h>
 
 namespace NKikimr {
 namespace NKqp {

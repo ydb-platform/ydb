@@ -90,7 +90,7 @@
     PROBE(SessionStatistic, \
         GROUPS(), \
         TYPES(TString, TString, TString, TString, TString, ui32, ui64, ui64, ui64, ui64, ui64), \
-        NAMES("sender", "readGroup", "endpoint","database", "partitionId", "readBytes", "unreadBytes", "restartSessionByOffsets", "readEvents", "lastReadedOffset")) \
+        NAMES("sender", "readGroup", "endpoint","database", "partitionId", "readBytes", "queuedBytes", "restartSessionByOffsets", "readEvents", "lastReadedOffset")) \
     PROBE(GetInternalState, \
         GROUPS(), \
         TYPES(TString, ui64), \

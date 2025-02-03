@@ -10,7 +10,7 @@ namespace NKikimr::NOlap {
 void TColumnEngineChanges::SetStage(const NChanges::EStage stage) {
     AFL_VERIFY(stage >= Stage);
     if (Stage != stage) {
-        Counters->OnStageChanged(stage);
+        Counters->OnStageChanged(stage, GetWritePortionsCount());
     }
     Stage = stage;
 }

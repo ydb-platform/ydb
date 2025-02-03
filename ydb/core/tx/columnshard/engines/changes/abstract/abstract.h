@@ -355,7 +355,7 @@ public:
     TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
         : Counters(NChanges::TChangesCounters::GetStageCounters(consumerId))
         , BlobsAction(storagesManager, consumerId) {
-        Counters->OnStageChanged(Stage);
+        Counters->OnStageChanged(Stage, 0);
     }
 
     TConclusionStatus ConstructBlobs(TConstructionContext& context) noexcept;

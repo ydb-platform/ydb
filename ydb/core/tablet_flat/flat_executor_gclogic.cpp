@@ -160,14 +160,6 @@ void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
     AllowGarbageCollection = true;
 }
 
-TGCTime TExecutorGCLogic::GetCommitedGcBarrier(ui32 channel) {
-    if (const auto* info = ChannelInfo.FindPtr(channel)) {
-        return info->CommitedGcBarrier;
-    } else {
-        return TGCTime();
-    }
-}
-
 void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
     for (const TLogoBlobID &blobId : delta.Created) {
         auto &channel = ChannelInfo[blobId.Channel()];

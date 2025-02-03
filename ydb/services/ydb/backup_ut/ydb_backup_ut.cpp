@@ -172,9 +172,42 @@ auto CreateMinPartitionsChecker(ui32 expectedMinPartitions, const TString& debug
 auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType) {
     return [=](const TTableDescription& tableDescription) {
         for (const auto& indexDesc : tableDescription.GetIndexDescriptions()) {
-            if (indexDesc.GetIndexName() == indexName && indexDesc.GetIndexType() == indexType) {
+            if (indexDesc.GetIndexName() != indexName) {
+                continue;
+            }
+            if (indexDesc.GetIndexType() != indexType) {
+                continue;
+            }
+            if (indexDesc.GetIndexColumns().size() != 1) {
+                continue;
+            }
+            if (indexDesc.GetDataColumns().size() != 0) {
+                continue;
+            }
+            if (indexDesc.GetIndexColumns()[0] != "Value") {
+                continue;
+            }
+            if (indexType != NYdb::NTable::EIndexType::GlobalVectorKMeansTree) {
                 return true;
             }
+            auto* settings = std::get_if<TKMeansTreeSettings>(&indexDesc.GetIndexSettings());
+            UNIT_ASSERT(settings);
+            if (settings->Settings.Metric != NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct) {
+                continue;
+            }
+            if (settings->Settings.VectorType != NYdb::NTable::TVectorIndexSettings::EVectorType::Float) {
+                continue;
+            }
+            if (settings->Settings.VectorDimension != 768) {
+                continue;
+            }
+            if (settings->Levels != 2) {
+                continue;
+            }
+            if (settings->Clusters != 80) {
+                continue;
+            }
+            return true;
         }
         return false;
     };
@@ -485,16 +518,27 @@ void TestRestoreTableWithIndex(
     const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, TSession& session,
     TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
-    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+    TString query;
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+        query = Sprintf(R"(CREATE TABLE `%s` (
+            Key Uint32,
+            Value String,
+            PRIMARY KEY (Key),
+            INDEX %s GLOBAL USING vector_kmeans_tree
+                ON (Value)
+                WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+        );)", table, index);
+    } else {
+        query = Sprintf(R"(
             CREATE TABLE `%s` (
                 Key Uint32,
                 Value Uint32,
                 PRIMARY KEY (Key),
                 INDEX %s %s ON (Value)
             );
-        )",
-        table, index, ConvertIndexTypeToSQL(indexType)
-    ));
+        )", table, index, ConvertIndexTypeToSQL(indexType));
+    }
+    ExecuteDataDefinitionQuery(session, query);
 
     backup();
 
@@ -877,7 +921,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+        TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
+
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
@@ -1030,12 +1077,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
+            case EIndexTypeGlobalVectorKmeansTree:
                 TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeGlobalUnique:
                 break; // https://github.com/ydb-platform/ydb/issues/10468
-            case EIndexTypeGlobalVectorKmeansTree:
-                break; // https://github.com/ydb-platform/ydb/issues/10469
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -1072,7 +1118,12 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     public:
         TS3TestEnv()
-            : Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())))
+            : Server([&] {
+                    NKikimrConfig::TAppConfig appConfig;
+                    appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+                    return appConfig;
+                }())
+            , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())))
             , TableClient(Driver)
             , TableSession(TableClient.CreateSession().ExtractValueSync().GetSession())
             , QueryClient(Driver)
@@ -1507,12 +1558,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
+            case EIndexTypeGlobalVectorKmeansTree:
                 TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeGlobalUnique:
                 break; // https://github.com/ydb-platform/ydb/issues/10468
-            case EIndexTypeGlobalVectorKmeansTree:
-                break; // https://github.com/ydb-platform/ydb/issues/10469
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

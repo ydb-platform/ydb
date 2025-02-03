@@ -42,7 +42,7 @@ DECLARE_REFCOUNTED_CLASS(TClient)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFuture<std::optional<TString>> GetDataCenterByClient(const IClientPtr& client)
+TFuture<std::optional<std::string>> GetDataCenterByClient(const IClientPtr& client)
 {
     TListNodeOptions options;
     options.MaxSize = 1;
@@ -51,10 +51,10 @@ TFuture<std::optional<TString>> GetDataCenterByClient(const IClientPtr& client)
         .Apply(BIND([] (const NYson::TYsonString& items) {
             auto itemsList = NYTree::ConvertTo<NYTree::IListNodePtr>(items);
             if (!itemsList->GetChildCount()) {
-                return std::optional<TString>();
+                return std::optional<std::string>();
             }
             auto host = itemsList->GetChildren()[0];
-            return NNet::InferYPClusterFromHostName(host->GetValue<TString>());
+            return NNet::InferYPClusterFromHostName(host->GetValue<std::string>());
         }));
 }
 

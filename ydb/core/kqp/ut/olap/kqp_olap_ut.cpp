@@ -232,9 +232,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 "ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`)",
                 NYdb::NQuery::TTxControl::BeginTx().CommitTx()
             ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            //ALTER OBJECT is not supported via QueryService. When supported, this unit test must be revised
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Prepare operations for TABLE objects are not supported", result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Error: ALTER OBJECT is disabled for column tables", result.GetIssues().ToString());
 
             //1.2 Check that ALTER TABLE is still working for column tables
             {

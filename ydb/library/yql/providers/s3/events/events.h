@@ -6,13 +6,11 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
-
-#include <ydb/core/kqp/common/kqp_tx.h>
 
 #include <arrow/api.h>
 
@@ -243,17 +241,6 @@ struct TEvS3Provider {
         const bool Failure;
         IHTTPGateway::TContent Result;
         const TIssues Issues;
-    };
-
-    struct TEvCacheSourceStart : public NActors::TEventLocal<TEvCacheSourceStart, EvCacheSourceStart> {
-
-        TEvCacheSourceStart(NActors::TActorId sourceId, const TTxId& txId, std::shared_ptr<arrow::Schema> schema)
-            : SourceId(sourceId), TxId(txId), Schema(schema) {
-        }
- 
-        NActors::TActorId SourceId;
-        TTxId TxId;
-        std::shared_ptr<arrow::Schema> Schema;
     };
 
     struct TEvCacheCheckRequest : public NActors::TEventLocal<TEvCacheCheckRequest, EvCacheCheckRequest> {

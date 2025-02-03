@@ -6,12 +6,12 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/uuid/uuid.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/uuid/uuid.h>
+#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <util/generic/serialized_enum.h>

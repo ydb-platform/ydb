@@ -3,14 +3,14 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <memory>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/public/udf/udf_string_ref.h>
-#include <ydb/library/yql/public/udf/udf_type_ops.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_value_builder.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_string_ref.h>
+#include <yql/essentials/public/udf/udf_type_ops.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_value_builder.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_nested.h>
@@ -44,7 +44,7 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
         case NUdf::EDataSlot::Uint16:
             return NUdf::TUnboxedValuePod(static_cast<ui16>(value % (1 << 16)));
         case NUdf::EDataSlot::Int32:
-            return NUdf::TUnboxedValuePod(static_cast<i32>(-(value % ((1 << 31) - 1))));
+            return NUdf::TUnboxedValuePod(static_cast<i32>(-(value % ((1ULL << 31) - 1))));
         case NUdf::EDataSlot::Uint32:
             return NUdf::TUnboxedValuePod(static_cast<ui32>(value % (1 << 31)));
         case NUdf::EDataSlot::Int64:

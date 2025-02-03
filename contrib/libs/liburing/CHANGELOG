@@ -1,3 +1,19 @@
+liburing-2.8 release
+- Add support for incrementally/partially consumed provided buffers,
+  usable with the provided buffer ring support.
+- Add support for foo_and_wait_min_timeout(), where it's possible to
+  define a minimum timeout for waiting to get batches of completions,
+  but if that fails, extend for a longer timeout without having any
+  extra context switches.
+- Add support for using different clock sources for completion waiting.
+- Great increase coverage of test cases, test case improvements and
+  fixes.
+- Man page updates
+- Don't leak _GNU_SOURCE via pkb-config --cflags
+- Support for address sanitizer
+- Add examples/kdigest sample program
+- Add discard helper, test, and man page
+
 liburing-2.7 release
 
 - Man page updates

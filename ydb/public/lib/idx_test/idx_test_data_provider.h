@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 #include <util/system/types.h>
 #include <util/generic/string.h>
 
@@ -94,7 +94,7 @@ private:
 
 NYdb::TValue CreateOptionalValue(const NYdb::TColumn& column, const TRandomValueProvider& rvp);
 NYdb::TValue CreateValue(const NYdb::TColumn& column, const TRandomValueProvider& rvp);
-NYdb::TValue CreateRow(const TVector<NYdb::TColumn>& columns, const TRandomValueProvider& rvp);
+NYdb::TValue CreateRow(const std::vector<NYdb::TColumn>& columns, const TRandomValueProvider& rvp);
 NYdb::TParams CreateParamsAsItems(const TVector<NYdb::TValue>& values, const TVector<TString>& paramNames);
 NYdb::TParams CreateParamsAsList(const TVector<NYdb::TValue>& batch, const TString& paramName);
 void AddParamsAsList(NYdb::TParamsBuilder& paramsBuilder, const TVector<NYdb::TValue>& batch, const TString& paramName);

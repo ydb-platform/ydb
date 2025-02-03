@@ -1,10 +1,5 @@
 #pragma once
 
-#include "schemeshard.h"
-#include "schemeshard_private.h"
-#include "schemeshard_tx_infly.h"
-#include "schemeshard__operation.h"
-
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 namespace NKikimr {

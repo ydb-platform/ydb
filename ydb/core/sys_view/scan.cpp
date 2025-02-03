@@ -2,6 +2,11 @@
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 
+#include <ydb/core/sys_view/auth/group_members.h>
+#include <ydb/core/sys_view/auth/groups.h>
+#include <ydb/core/sys_view/auth/owners.h>
+#include <ydb/core/sys_view/auth/permissions.h>
+#include <ydb/core/sys_view/auth/users.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/sys_view/nodes/nodes.h>
@@ -35,7 +40,8 @@ public:
         const TTableId& tableId,
         const TString& tablePath,
         TVector<TSerializedTableRange> ranges,
-        const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+        const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
         : TBase(&TSysViewRangesReader::ScanState)
         , OwnerId(ownerId)
         , ScanId(scanId)
@@ -43,6 +49,7 @@ public:
         , TablePath(tablePath)
         , Ranges(std::move(ranges))
         , Columns(columns.begin(), columns.end())
+        , UserToken(std::move(userToken))
     {
     }
 
@@ -77,7 +84,7 @@ public:
             if (CurrentRange < Ranges.size()) {
                 auto actor = CreateSystemViewScan(
                     SelfId(), ScanId, TableId, TablePath, Ranges[CurrentRange].ToTableRange(),
-                    Columns);
+                    Columns, UserToken);
                 ScanActorId = Register(actor.Release());
                 CurrentRange += 1;
             } else {
@@ -140,6 +147,7 @@ private:
     TString TablePath;
     TVector<TSerializedTableRange> Ranges;
     TVector<NMiniKQL::TKqpComputeContextBase::TColumn> Columns;
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 
     ui64 CurrentRange = 0;
     TMaybe<TActorId> ScanActorId;
@@ -151,12 +159,13 @@ THolder<NActors::IActor> CreateSystemViewScan(
     const TTableId& tableId,
     const TString& tablePath,
     TVector<TSerializedTableRange> ranges,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken
 ) {
     if (ranges.size() == 1) {
-        return CreateSystemViewScan(ownerId, scanId, tableId, tablePath, ranges[0].ToTableRange(), columns);
+        return CreateSystemViewScan(ownerId, scanId, tableId, tablePath, ranges[0].ToTableRange(), columns, std::move(userToken));
     } else {
-        return MakeHolder<TSysViewRangesReader>(ownerId, scanId, tableId, tablePath, ranges, columns);
+        return MakeHolder<TSysViewRangesReader>(ownerId, scanId, tableId, tablePath, ranges, columns, std::move(userToken));
     }
 }
 
@@ -166,7 +175,8 @@ THolder<NActors::IActor> CreateSystemViewScan(
     const TTableId& tableId,
     const TString& tablePath,
     const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken
 ) {
     if (tableId.SysViewInfo == PartitionStatsName) {
         return CreatePartitionStatsScan(ownerId, scanId, tableId, tableRange, columns);
@@ -233,8 +243,29 @@ THolder<NActors::IActor> CreateSystemViewScan(
     if (tableId.SysViewInfo == InformationSchemaTablesName) {
         return CreateInformationSchemaTablesScan(ownerId, scanId, tableId, tablePath, tableRange, columns);
     }
-        if (tableId.SysViewInfo == PgClassName) {
+        
+    if (tableId.SysViewInfo == PgClassName) {
         return CreatePgClassScan(ownerId, scanId, tableId, tablePath, tableRange, columns);
+    }
+
+    {
+        using namespace NAuth;
+        if (tableId.SysViewInfo == UsersName) {
+            return CreateUsersScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
+        }
+        if (tableId.SysViewInfo == NAuth::GroupsName) {
+            return NAuth::CreateGroupsScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
+        }
+        if (tableId.SysViewInfo == GroupMembersName) {
+            return NAuth::CreateGroupMembersScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
+        }
+        if (tableId.SysViewInfo == OwnersName) {
+            return NAuth::CreateOwnersScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
+        }
+        if (tableId.SysViewInfo == PermissionsName || tableId.SysViewInfo == EffectivePermissionsName) {
+            return NAuth::CreatePermissionsScan(tableId.SysViewInfo == EffectivePermissionsName,
+                ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
+        }
     }
 
     return {};

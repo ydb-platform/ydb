@@ -226,10 +226,6 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
 
-    NColumnShard::TLoadTimeSignals PortionsLoadingTimeCounters;
-    NColumnShard::TLoadTimeSignals ColumnsLoadingTimeCounters;
-    NColumnShard::TLoadTimeSignals IndexesLoadingTimeCounters;
-
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;

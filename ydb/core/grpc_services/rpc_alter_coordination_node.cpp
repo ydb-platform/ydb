@@ -1,5 +1,6 @@
 #include "service_coordination.h"
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 

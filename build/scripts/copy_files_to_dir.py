@@ -1,9 +1,13 @@
 import argparse
 import errno
 import os
+import sys
+
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 import shutil
-import sys
 
 
 def parse_args():

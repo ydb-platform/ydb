@@ -8,7 +8,7 @@
 
 #include <util/generic/buffer.h>
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 namespace NTests {
     class TSimpleWriteSessionTestAdapter;
@@ -89,9 +89,6 @@ protected:
 
 private:
     TMaybe<TContinuationToken> WaitForToken(const TDuration& timeout);
-    void HandleAck(TWriteSessionEvent::TAcksEvent&);
-    void HandleReady(TWriteSessionEvent::TReadyToAcceptEvent&);
-    void HandleClosed(const TSessionClosedEvent&);
 
     std::atomic_bool Closed = false;
 };

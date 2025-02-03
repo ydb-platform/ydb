@@ -10,6 +10,8 @@
 #include <aws/common/common.h>
 #include <aws/common/thread.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 #define AWS_LOG_LEVEL_NONE 0
 #define AWS_LOG_LEVEL_FATAL 1
 #define AWS_LOG_LEVEL_ERROR 2
@@ -94,6 +96,13 @@ struct aws_log_formatter;
 struct aws_log_channel;
 struct aws_log_writer;
 
+#ifdef _MSC_VER
+#    pragma warning(push)
+#    pragma warning(disable : 4623) /* default constructor was implicitly defined as deleted */
+#    pragma warning(disable : 4626) /* assignment operator was implicitly defined as deleted */
+#    pragma warning(disable : 5027) /* move assignment operator was implicitly defined as deleted */
+#endif
+
 /**
  * We separate the log level function from the log call itself so that we can do the filter check in the macros (see
  * below)
@@ -116,6 +125,10 @@ struct aws_logger_vtable {
     void (*const clean_up)(struct aws_logger *logger);
     int (*set_log_level)(struct aws_logger *logger, enum aws_log_level);
 };
+
+#ifdef _MSC_VER
+#    pragma warning(pop)
+#endif
 
 struct aws_logger {
     struct aws_logger_vtable *vtable;
@@ -339,5 +352,6 @@ int aws_logger_init_noalloc(
     struct aws_logger_standard_options *options);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_LOGGING_H */

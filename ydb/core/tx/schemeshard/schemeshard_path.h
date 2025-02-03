@@ -59,6 +59,7 @@ public:
         const TChecker& IsColumnTable(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSequence(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsReplication(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsTransfer(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsCommonSensePath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsInsideTableIndexPath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsInsideCdcStreamPath(EStatus status = EStatus::StatusNameConflict) const;
@@ -103,9 +104,11 @@ public:
         const TChecker& FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusPreconditionFailed) const;
         const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsBackupCollection(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsSupportedInExports(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:
+    struct TSplitChildTag {};
     explicit TPath(TSchemeShard* ss);
     TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss);
 
@@ -143,6 +146,7 @@ public:
     bool IsDomain() const;
     TPath& Dive(const TString& name);
     TPath Child(const TString& name) const;
+    TPath Child(const TString& name, TSplitChildTag) const;
     TPathElement::TPtr Base() const;
     TPathElement* operator->() const;
     bool IsDeleted() const;
@@ -171,6 +175,7 @@ public:
     bool IsCdcStream() const;
     bool IsSequence() const;
     bool IsReplication() const;
+    bool IsTransfer() const;
     ui32 Depth() const;
     ui64 Shards() const;
     const TString& LeafName() const;

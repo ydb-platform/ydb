@@ -6,6 +6,7 @@
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/core/jaeger_tracing/settings.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NConsole {
 
@@ -17,7 +18,7 @@ public:
         return NKikimrServices::TActivity::JAEGER_TRACING_CONFIGURATOR;
     }
 
-    TJaegerTracingConfigurator(TSamplingThrottlingConfigurator tracingConfigurator,
+    TJaegerTracingConfigurator(TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
                                NKikimrConfig::TTracingConfig cfg);
 
     void Bootstrap(const TActorContext& ctx);
@@ -35,12 +36,12 @@ private:
     static TMaybe<TString> GetDatabase(const NKikimrConfig::TTracingConfig::TSelectors& selectors);
     static TSettings<double, TWithTag<TThrottlingSettings>> GetSettings(const NKikimrConfig::TTracingConfig& cfg);
 
-    TSamplingThrottlingConfigurator TracingConfigurator;
+    TIntrusivePtr<TSamplingThrottlingConfigurator> TracingConfigurator;
     NKikimrConfig::TTracingConfig initialConfig;
 };
 
 TJaegerTracingConfigurator::TJaegerTracingConfigurator(
-    TSamplingThrottlingConfigurator tracingConfigurator,
+    TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
     NKikimrConfig::TTracingConfig cfg)
     : TracingConfigurator(std::move(tracingConfigurator))
     , initialConfig(std::move(cfg))
@@ -73,7 +74,7 @@ void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest
 
 void TJaegerTracingConfigurator::ApplyConfigs(const NKikimrConfig::TTracingConfig& cfg) {
     auto settings = GetSettings(cfg);
-    return TracingConfigurator.UpdateSettings(std::move(settings));
+    return TracingConfigurator->UpdateSettings(std::move(settings));
 }
 
 TVector<ERequestType> TJaegerTracingConfigurator::GetRequestTypes(const NKikimrConfig::TTracingConfig::TSelectors& selectors) {
@@ -132,15 +133,16 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
 
         ui64 level = samplingRule.GetLevel();
         double fraction = samplingRule.GetFraction();
-        if (level > 15) {
+        if (level > TComponentTracingLevels::MostVerbose) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "sampling level exceeds maximum allowed value (" << level
-                       << " provided, maximum is 15). Lowering the level");
-            level = 15;
+                       << " provided, maximum is " << static_cast<ui32>(TComponentTracingLevels::MostVerbose)
+                       << "). Lowering the level");
+            level = TComponentTracingLevels::MostVerbose;
         }
         if (fraction < 0 || fraction > 1) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "provided fraction " << fraction
                        << " violated range [0; 1]. Clamping it to the range");
-            fraction = std::min(1.0, std::max(0.0, fraction));
+            fraction = std::clamp(fraction, 0.0, 1.0);
         }
 
         TSamplingRule<double, TWithTag<TThrottlingSettings>> rule {
@@ -176,6 +178,14 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
             continue;
         }
 
+        ui64 level = throttlingRule.HasLevel() ? throttlingRule.GetLevel() : TComponentTracingLevels::ProductionVerbose;
+        if (level > TComponentTracingLevels::MostVerbose) {
+            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "sampling level exceeds maximum allowed value (" << level
+                       << " provided, maximum is " << static_cast<ui32>(TComponentTracingLevels::MostVerbose)
+                       << "). Lowering the level");
+            level = TComponentTracingLevels::MostVerbose;
+        }
+
         if (!throttlingRule.HasMaxTracesPerMinute()) {
             ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required field max_traces_per_minute in rule "
                        << throttlingRule.ShortDebugString() << ". Skipping the rule");
@@ -190,6 +200,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         ui64 maxRatePerMinute = throttlingRule.GetMaxTracesPerMinute();
         ui64 maxBurst = throttlingRule.GetMaxTracesBurst();
         TExternalThrottlingRule<TWithTag<TThrottlingSettings>> rule {
+            .Level = static_cast<ui8>(level),
             .Throttler = TWithTag<TThrottlingSettings> {
                 .Value = TThrottlingSettings {
                     .MaxTracesPerMinute = maxRatePerMinute,
@@ -213,7 +224,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
     return settings;
 }
 
-IActor* CreateJaegerTracingConfigurator(TSamplingThrottlingConfigurator tracingConfigurator,
+IActor* CreateJaegerTracingConfigurator(TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
                                         NKikimrConfig::TTracingConfig cfg) {
     return new TJaegerTracingConfigurator(std::move(tracingConfigurator), std::move(cfg));
 }

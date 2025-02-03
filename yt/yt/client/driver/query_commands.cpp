@@ -153,7 +153,7 @@ void TReadQueryResultCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<std::string>>>(
         "columns",
         [] (TThis* command) -> auto& {
             return command->Options.Columns;
@@ -184,6 +184,7 @@ void TReadQueryResultCommand::DoExecute(ICommandContextPtr context)
         context->GetOutputFormat(),
         rowset->GetNameTable(),
         {rowset->GetSchema()},
+        {Options.Columns},
         context->Request().OutputStream,
         /*enableContextSaving*/ false,
         New<TControlAttributesConfig>(),

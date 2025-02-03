@@ -1,0 +1,11 @@
+--- contrib/python/moto/py3/moto/s3/models.py
++++ contrib/python/moto/py3/moto/s3/models.py
+@@ -561,6 +561,8 @@ def get_canned_acl(acl):
+     grants = [FakeGrant([owner_grantee], [PERMISSION_FULL_CONTROL])]
+     if acl == "private":
+         pass  # no other permissions
++    elif acl == "public-write":
++        grants.append(FakeGrant([ALL_USERS_GRANTEE], [PERMISSION_WRITE]))
+     elif acl == "public-read":
+         grants.append(FakeGrant([ALL_USERS_GRANTEE], [PERMISSION_READ]))
+     elif acl == "public-read-write":

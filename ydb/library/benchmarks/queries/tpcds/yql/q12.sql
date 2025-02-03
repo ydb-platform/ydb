@@ -16,10 +16,10 @@ from
     	cross join {{date_dim}} as date_dim
 where
 	web_sales.ws_item_sk = item.i_item_sk
-  	and item.i_category in ('Electronics', 'Books', 'Women')
+  	and item.i_category in ('Sports', 'Books', 'Home')
   	and web_sales.ws_sold_date_sk = date_dim.d_date_sk
-	and cast(date_dim.d_date as date) between cast('1998-01-06' as date)
-				and (cast('1998-01-06' as date) + cast('P30D' as interval))
+	and cast(date_dim.d_date as date) between cast('1999-02-22' as date)
+				and (cast('1999-02-22' as date) + cast('P30D' as interval))
 group by
 	item.i_item_id
         ,item.i_item_desc

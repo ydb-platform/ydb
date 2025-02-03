@@ -10,9 +10,9 @@
 
 #include <yt/yt/core/ytree/convert.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/library/quantile_digest/config.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT::NTableClient {
 
@@ -464,6 +464,8 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("enable_column_meta_in_chunk_meta", &TThis::EnableColumnMetaInChunkMeta)
         .Default(true);
+    registrar.Parameter("consider_min_row_range_data_weight", &TThis::ConsiderMinRowRangeDataWeight)
+        .Default(true);
 
     registrar.Parameter("schema_modification", &TThis::SchemaModification)
         .Default(ETableSchemaModification::None);
@@ -471,6 +473,11 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("max_heavy_columns", &TThis::MaxHeavyColumns)
         .Default(0);
+
+    registrar.Parameter("block_size", &TThis::BlockSize)
+        .Default();
+    registrar.Parameter("buffer_size", &TThis::BufferSize)
+        .Default();
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->ValidateUniqueKeys && !config->ValidateSorted) {

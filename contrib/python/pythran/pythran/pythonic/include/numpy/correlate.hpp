@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_CORRELATE_HPP
 #define PYTHONIC_INCLUDE_NUMPY_CORRELATE_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -15,7 +15,7 @@ namespace numpy
 
   NUMPY_EXPR_TO_NDARRAY0_DECL(correlate)
   DEFINE_FUNCTOR(pythonic::numpy, correlate)
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

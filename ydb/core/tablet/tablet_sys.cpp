@@ -1241,6 +1241,7 @@ void TTablet::CheckEntry(TGraph::TIndex::iterator it) {
                     entry->ConfirmedOnSend,
                     std::move(entry->YellowMoveChannels),
                     std::move(entry->YellowStopChannels),
+                    std::move(entry->ApproximateFreeSpaceShareByChannel),
                     std::move(entry->GroupWrittenBytes),
                     std::move(entry->GroupWrittenOps)),
                 0, entry->SourceCookie);
@@ -1560,6 +1561,7 @@ void TTablet::Handle(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
             entry->BlobStorageConfirmed = true;
             entry->YellowMoveChannels = std::move(msg->YellowMoveChannels);
             entry->YellowStopChannels = std::move(msg->YellowStopChannels);
+            entry->ApproximateFreeSpaceShareByChannel = std::move(msg->ApproximateFreeSpaceShareByChannel);
             entry->GroupWrittenBytes = std::move(msg->GroupWrittenBytes);
             entry->GroupWrittenOps = std::move(msg->GroupWrittenOps);
 

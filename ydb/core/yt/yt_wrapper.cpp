@@ -4,10 +4,10 @@
 
 #include "yt_wrapper.h"
 
-#include <contrib/ydb/library/services/services.pb.h>
-
-#include <contrib/ydb/library/actors/core/actor.h>
-#include <contrib/ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <yt/yt/client/api/rpc_proxy/connection.h>
 #include <yt/yt/client/api/table_writer.h>

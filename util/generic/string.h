@@ -11,6 +11,7 @@
 #include <util/system/compiler.h>
 #include <util/system/yassert.h>
 
+#include "iterator.h"
 #include "ptr.h"
 #include "utility.h"
 #include "explicit_type.h"
@@ -191,7 +192,7 @@ public:
         size_t Size;
     };
 
-    static size_t max_size() noexcept {
+    size_t max_size() noexcept {
         static size_t res = TStringType().max_size();
 
         return res;
@@ -463,8 +464,7 @@ public:
         : TBasicString(pc, TBase::StrLen(pc))
     {
     }
-    // TODO thegeorg@: uncomment and fix clients
-    // TBasicString(std::nullptr_t) = delete;
+    TBasicString(std::nullptr_t) = delete;
 
     TBasicString(const TCharType* pc, size_t n)
 #ifdef TSTRING_IS_STD_STRING
@@ -520,7 +520,7 @@ public:
     }
 
     TBasicString(const TCharType* b, const TCharType* e)
-        : TBasicString(b, e - b)
+        : TBasicString(b, NonNegativeDistance(b, e))
     {
     }
 
@@ -657,7 +657,7 @@ public:
     }
 
     TBasicString& assign(const TCharType* first, const TCharType* last) Y_LIFETIME_BOUND {
-        return assign(first, last - first);
+        return assign(first, NonNegativeDistance(first, last));
     }
 
     TBasicString& assign(const TCharType* pc, size_t pos, size_t n) Y_LIFETIME_BOUND {
@@ -1196,6 +1196,10 @@ public:
     bool to_lower(size_t pos = 0, size_t n = TBase::npos);
     bool to_upper(size_t pos = 0, size_t n = TBase::npos);
     bool to_title(size_t pos = 0, size_t n = TBase::npos);
+
+    constexpr const TCharType* Data() const noexcept = delete;
+    constexpr size_t Size() noexcept = delete;
+    Y_PURE_FUNCTION constexpr bool Empty() const noexcept = delete;
 
 public:
     /**

@@ -63,6 +63,9 @@ NYdb::TValue CreateOptionalValue(const TColumn& column, const TRandomValueProvid
                 value.OptionalJson(TString(sb));
             }
             break;
+        case EPrimitiveType::Uuid:
+            value.OptionalUuid(TUuidValue(rvp.RandomUi64(), rvp.RandomUi64()));
+            break;
         default:
                 Y_ABORT_UNLESS(false, "unimplemented");
     }
@@ -127,7 +130,7 @@ NYdb::TValue CreateValue(const TColumn& column, const TRandomValueProvider& rvp)
     return value.Build();
 }
 
-NYdb::TValue CreateRow(const TVector<TColumn>& columns, const TRandomValueProvider& rvp) {
+NYdb::TValue CreateRow(const std::vector<TColumn>& columns, const TRandomValueProvider& rvp) {
     NYdb::TValueBuilder value;
     value.BeginStruct();
     for (const NYdb::TColumn& col : columns) {

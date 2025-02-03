@@ -1,7 +1,8 @@
 #include "dq_tasks_runner.h"
+#include "dq_tasks_counters.h"
 
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_multihopping.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
@@ -10,19 +11,20 @@
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/parser/pg_wrapper/interface/utils.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/core/user_data/yql_user_data.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/core/user_data/yql_user_data.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <util/generic/scope.h>
 
@@ -140,7 +142,8 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 #define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
-    TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory, TDqMeteringStats::TInputStatsMeter stats)
+    TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory, TDqMeteringStats::TInputStatsMeter stats,
+    NUdf::IPgBuilder* pgBuilder)
 {
     switch (inputDesc.GetTypeCase()) {
         case NYql::NDqProto::TTaskInput::kSource:
@@ -154,7 +157,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
             GetSortColumnsInfo(type, protoSortCols, sortColsInfo);
             YQL_ENSURE(!sortColsInfo.empty());
 
-            return CreateInputMergeValue(type, std::move(inputs), std::move(sortColsInfo), holderFactory, stats);
+            return CreateInputMergeValue(type, std::move(inputs), std::move(sortColsInfo), holderFactory, stats, pgBuilder);
         }
         default:
             YQL_ENSURE(false, "Unknown input type: " << (ui32) inputDesc.GetTypeCase());
@@ -163,7 +166,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& outputs)
+    TVector<IDqOutput::TPtr>&& outputs,NUdf::IPgBuilder* pgBuilder, TMaybe<ui8> minFillPercentage)
 {
     TMaybe<ui32> outputWidth;
     if (type->IsMulti()) {
@@ -184,7 +187,7 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
             GetColumnsInfo(type, outputDesc.GetHashPartition().GetKeyColumns(), keyColumns);
             YQL_ENSURE(!keyColumns.empty());
             YQL_ENSURE(outputDesc.GetHashPartition().GetPartitionsCount() == outputDesc.ChannelsSize());
-            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), type, holderFactory);
+            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), type, holderFactory, minFillPercentage, pgBuilder);
         }
 
         case NDqProto::TTaskOutput::kBroadcast: {
@@ -205,11 +208,18 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
     }
 }
 
+IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    TVector<IDqOutput::TPtr>&& channels, TMaybe<ui8> minFillPercentage)
+{
+    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(channels), nullptr, minFillPercentage);
+}
+
 IDqOutputConsumer::TPtr TDqTaskRunnerExecutionContextBase::CreateOutputConsumer(const TTaskOutput& outputDesc,
     const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext*, const TTypeEnvironment& typeEnv,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<IDqOutput::TPtr>&& outputs) const
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const
 {
-    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs));
+    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs), pgBuilder, {});
 }
 
 inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode statsMode) {
@@ -240,10 +250,10 @@ public:
 
         if (Context.TypeEnv) {
             YQL_ENSURE(std::addressof(alloc) == std::addressof(TypeEnv().GetAllocator()));
-        } else {            
+        } else {
             AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(alloc);
         }
-        
+
     }
 
     ~TDqTaskRunner() {
@@ -261,7 +271,7 @@ public:
     }
 
     const TDqMeteringStats* GetMeteringStats() const override {
-        return &BillingStats;
+        return &MeteringStats;
     }
 
     ui64 GetTaskId() const override {
@@ -303,7 +313,7 @@ public:
 
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
-            AllocatedHolder->ProgramParsed.StatsRegistry.Get());
+            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr);
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -521,7 +531,10 @@ public:
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
-            auto& inputStats = BillingStats.AddInputs();
+            TDqMeteringStats::TInputStats* inputStats = nullptr; 
+            if (task.EnableMetering()) {
+                inputStats = &MeteringStats.AddInputs();
+            }
 
             TVector<IDqInput::TPtr> inputs{Reserve(std::max<ui64>(inputDesc.ChannelsSize(), 1))}; // 1 is for "source" type of input.
             TInputTransformInfo* transform = nullptr;
@@ -579,16 +592,16 @@ public:
 
             auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, true);
             if (transform) {
-                transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, {});
+                transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, {}, PgBuilder_.get());
                 inputs.clear();
                 inputs.emplace_back(transform->TransformOutput);
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
                     CreateInputUnionValue(transform->TransformOutput->GetInputType(), std::move(inputs), holderFactory,
-                        {&inputStats, transform->TransformOutputType}));
+                        {inputStats, transform->TransformOutputType}));
             } else {
                 entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
                     DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory,
-                        {&inputStats, entry->InputItemTypes[i]}));
+                        {inputStats, entry->InputItemTypes[i]}, PgBuilder_.get()));
             }
         }
 
@@ -659,7 +672,7 @@ public:
             if (transform) {
                 auto guard = BindAllocator();
                 transform->TransformOutput = execCtx.CreateOutputConsumer(outputDesc, transform->TransformOutputType,
-                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs));
+                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs), PgBuilder_.get());
 
                 outputs.clear();
                 outputs.emplace_back(transform->TransformInput);
@@ -668,7 +681,7 @@ public:
             {
                 auto guard = BindAllocator();
                 outputConsumers[i] = execCtx.CreateOutputConsumer(outputDesc, entry->OutputItemTypes[i],
-                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs));
+                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs), PgBuilder_.get());
             }
         }
 
@@ -739,6 +752,11 @@ public:
                 AllocatedHolder->ProgramParsed.StatsRegistry->ForEachStat([this](const TStatKey& key, i64 value) {
                     Stats->MkqlStats.emplace_back(TMkqlStat{key, value});
                 });
+            }
+
+            Stats->OperatorStat.clear();
+            for (auto& [_, opStat] : CountersProvider.OperatorStat) {
+                Stats->OperatorStat.push_back(opStat);
             }
         }
 
@@ -828,7 +846,7 @@ public:
     const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override {
         return AllocatedHolder->ProgramParsed.CompGraph->GetHolderFactory();
     }
-    
+
     NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() const override {
         return Alloc();
     }
@@ -952,6 +970,8 @@ private:
     TDqTaskRunnerSettings Settings;
     TLogFunc LogFunc;
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
+    TDqTaskCountersProvider CountersProvider;
+
     struct TInputTransformInfo {
         NUdf::TUnboxedValue TransformInput;
         IDqAsyncInputBuffer::TPtr TransformOutput;
@@ -998,13 +1018,15 @@ private:
     bool TaskHasEffects = false;
 
     std::unique_ptr<TDqTaskRunnerStats> Stats;
-    TDqMeteringStats BillingStats;
+    TDqMeteringStats MeteringStats;
     TDuration RunComputeTime;
 
 private:
     // statistics support
     std::optional<TInstant> StartWaitInputTime;
     std::optional<TInstant> StartWaitOutputTime;
+
+    std::unique_ptr<NUdf::IPgBuilder> PgBuilder_ = CreatePgBuilder();
 
     void StartWaitingInput() {
         if (!StartWaitInputTime) {

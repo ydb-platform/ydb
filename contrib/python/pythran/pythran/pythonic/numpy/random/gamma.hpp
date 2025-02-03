@@ -30,9 +30,9 @@ namespace numpy
     }
 
     inline auto gamma(double shape, double scale, long size)
-        -> decltype(gamma(shape, scale, types::array<long, 1>{{size}}))
+        -> decltype(gamma(shape, scale, types::array_tuple<long, 1>{{size}}))
     {
-      return gamma(shape, scale, types::array<long, 1>{{size}});
+      return gamma(shape, scale, types::array_tuple<long, 1>{{size}});
     }
 
     inline double gamma(double shape, double scale, types::none_type d)

@@ -1,13 +1,13 @@
 #pragma once
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/data_sharing/common/transactions/tx_extension.h>
+#include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/session/destination.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
-class TTxFinishFromSource: public TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTxFinishFromSource: public NColumnShard::TExtendedTransactionBase {
 private:
-    using TBase = TExtendedTransactionBase<NColumnShard::TColumnShard>;
+    using TBase = NColumnShard::TExtendedTransactionBase;
     std::shared_ptr<TDestinationSession> Session;
     const TTabletId SourceTabletId;
     bool Finished = false;

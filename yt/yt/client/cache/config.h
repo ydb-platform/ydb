@@ -44,4 +44,4 @@ DEFINE_REFCOUNTED_TYPE(TClientsCacheAuthentificationOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NClient::NHedging::NRpc
+} // namespace NYT::NClient::NCache

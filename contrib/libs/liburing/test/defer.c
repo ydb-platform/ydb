@@ -97,7 +97,7 @@ static int test_canceled_userdata(struct io_uring *ring)
 	if (init_context(&ctx, ring, nr, OP_NOP))
 		return 1;
 
-	for (i = 0; i < nr; i++)
+	for (i = 0; i < nr - 1; i++)
 		ctx.sqes[i]->flags |= IOSQE_IO_LINK;
 
 	ret = io_uring_submit(ring);
@@ -131,7 +131,7 @@ static int test_thread_link_cancel(struct io_uring *ring)
 	if (init_context(&ctx, ring, nr, OP_REMOVE_BUFFERS))
 		return 1;
 
-	for (i = 0; i < nr; i++)
+	for (i = 0; i < nr - 1; i++)
 		ctx.sqes[i]->flags |= IOSQE_IO_LINK;
 
 	ret = io_uring_submit(ring);

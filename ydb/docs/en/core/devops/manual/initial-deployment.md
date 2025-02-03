@@ -105,7 +105,7 @@ sudo usermod -aG disk ydb
   sudo chown -R root:bin /opt/ydb
   ```
 
-## Prepare and format disks on each server {#prepare-disks}
+## Prepare and clear disks on each server {#prepare-disks}
 
 {% include [_includes/storage-device-requirements.md](../../_includes/storage-device-requirements.md) %}
 
@@ -131,7 +131,13 @@ sudo usermod -aG disk ydb
 
   To streamline the next setup step, it makes sense to use the same disk labels on cluster servers having the same disk configuration.
 
-2. Format the disk by this command built-in the `ydbd` executable:
+2. Clear the disk by this command built-in the `ydbd` executable:
+
+{% note warning %}
+
+After executing this command, data on the disk will be erased.
+
+{% endnote %}
 
   ```bash
   sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
@@ -250,7 +256,7 @@ sudo chmod 700 /opt/ydb/certs
 
 ## Start static nodes {#start-storage}
 
-{% list tabs %}
+{% list tabs group=manual-systemd %}
 
 - Manually
 
@@ -315,7 +321,7 @@ To initialize the cluster, you'll need the `ca.crt` file issued by the Certifica
 
 Cluster initialization actions depend on whether the user authentication mode is enabled in the {{ ydb-short-name }} configuration file.
 
-{% list tabs %}
+{% list tabs group=authentication %}
 
 - Authentication enabled
 
@@ -364,7 +370,7 @@ When creating your database, you set an initial number of storage groups that de
 
 The database creation procedure depends on whether you enabled user authentication in the {{ ydb-short-name }} configuration file.
 
-{% list tabs %}
+{% list tabs group=authentication %}
 
 - Authentication enabled
 
@@ -402,7 +408,7 @@ The command example above uses the following parameters:
 
 ## Run dynamic nodes {#start-dynnode}
 
-{% list tabs %}
+{% list tabs group=manual-systemd %}
 
 - Manually
 
@@ -478,7 +484,7 @@ Run additional dynamic nodes on other servers to ensure database scalability and
 
 If authentication mode is enabled in the cluster configuration file, initial account setup must be done before working with the {{ ydb-short-name }} cluster.
 
-The initial installation of the {{ ydb-short-name }} cluster automatically creates a `root` account with a blank password, as well as a standard set of user groups described in the [Access management](../../security/access-management.md) section.
+The initial installation of the {{ ydb-short-name }} cluster automatically creates a `root` account with a blank password, as well as a standard set of user groups described in the [{#T}](../../yql/reference/syntax/alter-group.md#builtin) section.
 
 To perform initial account setup in the created {{ ydb-short-name }} cluster, run the following operations:
 

@@ -69,7 +69,7 @@ def parse_args():
 
         args = override_parser.parse_args(argv, namespace=args)
 
-        udfs_prefix = args.ydb_root / "ydb" / "library" / "yql" / "udfs" / "common"
+        udfs_prefix = args.ydb_root / "yql" / "essentials" / "udfs" / "common"
         args.udfs_dir = [udfs_prefix / name for name in ["set", "url_base", "datetime2", "re2", "math", "unicode_base"]]
 
         return args
@@ -105,11 +105,12 @@ class Runner:
         if self.args.clean_old or not self.queries_dir.exists():
             self.prepare_queries_dir([
                 f"dq.MaxTasksPerStage={self.args.tasks}",
-                "dq.OptLLVM=ON"
-            ] + [
+                "dq.OptLLVM=ON",
                 "dq.UseFinalizeByKey=true",
+            ] + ([
+                "dq.EnableSpillingInChannels=true",
                 "dq.EnableSpillingNodes=All",
-            ] if self.enable_spilling else [])
+            ] if self.enable_spilling else []))
         self.tpc_dir = pathlib.Path(f"{self.args.downloaders_dir}/tpc/{self.args.variant}/{self.args.datasize}")
         if not self.tpc_dir.exists():
             self.prepare_tpc_dir()

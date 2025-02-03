@@ -103,6 +103,12 @@ public:
             MTYPE(TBusHiveCreateTablet)
             MTYPE(TBusOldHiveCreateTablet)
             MTYPE(TBusHiveCreateTabletResult)
+            MTYPE(TBusLocalEnumerateTablets)
+            MTYPE(TBusOldLocalEnumerateTablets)
+            MTYPE(TBusLocalEnumerateTabletsResult)
+            MTYPE(TBusKeyValue)
+            MTYPE(TBusOldKeyValue)
+            MTYPE(TBusKeyValueResponse)
             MTYPE(TBusPersQueue)
             MTYPE(TBusTabletKillRequest)
             MTYPE(TBusTabletStateRequest)
@@ -118,7 +124,6 @@ public:
             MTYPE(TBusNodeRegistrationRequest)
             MTYPE(TBusCmsRequest)
             MTYPE(TBusChooseProxy)
-            MTYPE(TBusSqsRequest)
             MTYPE(TBusStreamRequest)
             MTYPE(TBusInterconnectDebug)
             MTYPE(TBusConsoleRequest)
@@ -494,8 +499,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     const ui32 msgType = msg.GetMessage()->GetHeader()->Type;
 
     switch (msgType) {
-    case MTYPE_CLIENT_REQUEST:
-        return ClientProxyRequest<TEvBusProxy::TEvRequest>(msg);
     case MTYPE_CLIENT_SCHEME_INITROOT:
         return ClientProxyRequest<TEvBusProxy::TEvInitRoot>(msg);
     case MTYPE_CLIENT_SCHEME_NAVIGATE:
@@ -505,6 +508,12 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     case MTYPE_CLIENT_HIVE_CREATE_TABLET:
     case MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET:
         return ClientActorRequest(CreateMessageBusHiveCreateTablet, msg);
+    case MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS:
+    case MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS:
+        return ClientActorRequest(CreateMessageBusLocalEnumerateTablets, msg);
+    case MTYPE_CLIENT_KEYVALUE:
+    case MTYPE_CLIENT_OLD_KEYVALUE:
+        return ClientActorRequest(CreateMessageBusKeyValue, msg);
     case MTYPE_CLIENT_PERSQUEUE:
         return ClientProxyRequest<TEvBusProxy::TEvPersQueue>(msg);
     case MTYPE_CLIENT_CHOOSE_PROXY:
@@ -536,8 +545,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusResolveNode, msg);
     case MTYPE_CLIENT_CMS_REQUEST:
         return ClientActorRequest(CreateMessageBusCmsRequest, msg);
-    case MTYPE_CLIENT_SQS_REQUEST:
-        return ClientActorRequest(CreateMessageBusSqsRequest, msg);
     case MTYPE_CLIENT_INTERCONNECT_DEBUG:
         return ClientActorRequest(CreateMessageBusInterconnectDebug, msg);
     case MTYPE_CLIENT_CONSOLE_REQUEST:

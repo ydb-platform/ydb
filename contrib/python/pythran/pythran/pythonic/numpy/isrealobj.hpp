@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/isrealobj.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
 #include "pythonic/types/traits.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -16,7 +16,7 @@ namespace numpy
   {
     return !types::is_complex<typename E::dtype>::value;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

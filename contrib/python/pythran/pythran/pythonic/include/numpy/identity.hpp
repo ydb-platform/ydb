@@ -13,7 +13,7 @@ namespace numpy
   auto identity(long n, dtype d = dtype()) -> decltype(eye(n, n, 0, d));
 
   DEFINE_FUNCTOR(pythonic::numpy, identity);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -114,6 +114,9 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/ram.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/nvme.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/mirror-3dc-9-nodes.yaml.result.json"
         },
         {
@@ -121,6 +124,9 @@
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/mirror-3dc-3-nodes-distconf.yaml.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/drive.yaml.result.json"
@@ -143,6 +149,9 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/ram.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/nvme.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/mirror-3dc-9-nodes.yaml.result.json"
         },
         {
@@ -150,6 +159,9 @@
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/mirror-3dc-3-nodes-distconf.yaml.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/drive.yaml.result.json"

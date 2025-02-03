@@ -283,7 +283,7 @@ def net_connections(kind, _pid=-1):
         if type_ not in types:
             continue
         # TODO: refactor and use _common.conn_to_ntuple.
-        if fam in (AF_INET, AF_INET6):
+        if fam in {AF_INET, AF_INET6}:
             if laddr:
                 laddr = _common.addr(*laddr)
             if raddr:
@@ -387,7 +387,7 @@ def wrap_exceptions(fun):
 class Process:
     """Wrapper class around underlying C implementation."""
 
-    __slots__ = ["pid", "_name", "_ppid", "_procfs_path", "_cache"]
+    __slots__ = ["_cache", "_name", "_ppid", "_procfs_path", "pid"]
 
     def __init__(self, pid):
         self.pid = pid
@@ -476,7 +476,7 @@ class Process:
 
     @wrap_exceptions
     def nice_set(self, value):
-        if self.pid in (2, 3):
+        if self.pid in {2, 3}:
             # Special case PIDs: internally setpriority(3) return ESRCH
             # (no such process), no matter what.
             # The process actually exists though, as it has a name,
@@ -678,7 +678,7 @@ class Process:
             os.stat('%s/%s' % (self._procfs_path, self.pid))
 
         # UNIX sockets
-        if kind in ('all', 'unix'):
+        if kind in {'all', 'unix'}:
             ret.extend([
                 _common.pconn(*conn)
                 for conn in self._get_unix_sockets(self.pid)

@@ -178,9 +178,9 @@ curl = GNUMakeNixProject(
         "nspr.h",
         "netinet/in6.h",
         "nettle/",
-        "nghttp3/",
-        "ngtcp2.h",
-        "ngtcp2/",
+        "ngtcp2/ngtcp2_crypto_boringssl.h",
+        "ngtcp2/ngtcp2_crypto_gnutls.h",
+        "ngtcp2/ngtcp2_crypto_wolfssl.h",
         "nwconio.h",
         # NB: openssl/core_names.h appeared in OpenSSL 3.0, while we have only 1.1.1l at the time
         "openssl/core_names.h",

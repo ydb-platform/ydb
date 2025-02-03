@@ -7,14 +7,20 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
+class TPortionToMerge;
+
+class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges,
+                                          public NColumnShard::TMonitoringObjectsCounter<TGeneralCompactColumnEngineChanges> {
 private:
     YDB_ACCESSOR(ui64, PortionExpectedSize, 1.5 * (1 << 20));
     using TBase = TCompactColumnEngineChanges;
     std::shared_ptr<NPrioritiesQueue::TAllocationGuard> PrioritiesAllocationGuard;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     NArrow::NMerger::TIntervalPositions CheckPoints;
-    void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept;
+
+    [[nodiscard]] std::vector<TWritePortionInfoWithBlobsResult> BuildAppendedPortionsByChunks(TConstructionContext& context,
+        std::vector<TPortionToMerge>&& portionsToMerge,
+        const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats) noexcept;
 
     std::shared_ptr<NArrow::TColumnFilter> BuildPortionFilter(const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual,
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage,
@@ -47,29 +53,12 @@ public:
     }
     using TBase::TBase;
 
-    class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
-    private:
-        ui64 SumMemory = 0;
-
-    public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
-            for (auto&& i : portionInfo.GetRecords()) {
-                SumMemory += i.BlobRange.Size;
-                SumMemory += 2 * i.GetMeta().GetRawBytes();
-            }
-            return SumMemory;
-        }
-    };
-
     class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
     private:
-        ui64 SumMemoryDelta = 0;
         ui64 SumMemoryFix = 0;
-        ui32 PortionsCount = 0;
-        THashMap<ui32, ui64> MaxMemoryByColumnChunk;
-
+        ui64 SumMemoryRaw = 0;
     public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override;
+        virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) override;
     };
 
     static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor();

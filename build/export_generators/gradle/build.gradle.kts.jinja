@@ -1,6 +1,6 @@
 {%- set publish = target.publish -%}
 {%- set mainClass = target.app_main_class -%}
-{%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
+{%- set has_junit5_test = extra_targets|selectattr('junit5_test') -%}
 plugins {
 {%  if mainClass -%}
     `application`
@@ -34,7 +34,7 @@ java {
 }
 
 dependencies {
-{%  if hasJunit5Test -%}
+{%  if has_junit5_test -%}
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")
     api("org.apache.commons:commons-math3:3.6.1")
     api("com.google.guava:guava:31.0.1-jre")
@@ -71,7 +71,7 @@ dependencies {
 {%  endfor -%}
 }
 
-{%  if hasJunit5Test -%}
+{%  if has_junit5_test -%}
 tasks.named<Test>("test") {
     useJUnitPlatform()
 }

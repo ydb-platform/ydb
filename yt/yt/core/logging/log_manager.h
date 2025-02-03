@@ -2,8 +2,6 @@
 
 #include "log.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/tracing/public.h>
 
 #include <yt/yt/core/ytree/public.h>

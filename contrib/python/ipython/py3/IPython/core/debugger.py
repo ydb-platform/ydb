@@ -19,7 +19,7 @@ Global Configuration
 --------------------
 
 The IPython debugger will by read the global ``~/.pdbrc`` file.
-That is to say you can list all comands supported by ipdb in your `~/.pdbrc`
+That is to say you can list all commands supported by ipdb in your `~/.pdbrc`
 configuration file, to globally configure pdb.
 
 Example::
@@ -177,7 +177,7 @@ def BdbQuit_excepthook(et, ev, tb, excepthook=None):
     parameter.
     """
     raise ValueError(
-        "`BdbQuit_excepthook` is deprecated since version 5.1. It is still arround only because it is still imported by ipdb.",
+        "`BdbQuit_excepthook` is deprecated since version 5.1. It is still around only because it is still imported by ipdb.",
     )
 
 
@@ -550,7 +550,7 @@ class Pdb(OldPdb):
         So if frame is self.current_frame we instead return self.curframe_locals
 
         """
-        if frame is self.curframe:
+        if frame is getattr(self, "curframe", None):
             return self.curframe_locals
         else:
             return frame.f_locals

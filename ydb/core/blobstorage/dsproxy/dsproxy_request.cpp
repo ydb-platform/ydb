@@ -112,7 +112,7 @@ namespace NKikimr {
                         },
                         .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo),
                         .AccelerationParams = GetAccelerationParams(),
-                        .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
+                        .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
                     }),
                     ev->Get()->Deadline
                 );
@@ -151,6 +151,29 @@ namespace NKikimr {
         EnsureMonitoring(true);
         const ui64 bytes = ev->Get()->Buffer.size();
         Mon->CountPutEvent(bytes);
+
+        auto replyError = [&](TString errorReason) {
+            std::unique_ptr<TEvBlobStorage::TEvPutResult> result(
+                    new TEvBlobStorage::TEvPutResult(NKikimrProto::ERROR, ev->Get()->Id, 0, GroupId, 0.f));
+            result->ErrorReason = errorReason;
+            result->ExecutionRelay = std::move(ev->Get()->ExecutionRelay);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                    "HandleNormal ev# " << ev->Get()->Print(false)
+                    << " result# " << result->Print(false)
+                    << " Marker# DSP54");
+            Send(ev->Sender, result.release(), 0, ev->Cookie);
+        };
+
+        // Make sure blob size is greater than 0
+        if (ev->Get()->Id.BlobSize() == 0) {
+            TStringStream str;
+            str << "Blob size must be greater than 0, LogoBlobId# " << ev->Get()->Id
+                << " Group# " << GroupId
+                << " Marker# DSP55";
+            replyError(str.Str());
+            return;
+        }
+
         // Make sure actual data size matches one in the logoblobid.
         if (bytes != ev->Get()->Id.BlobSize()) {
             TStringStream str;
@@ -158,15 +181,7 @@ namespace NKikimr {
                 << " does not match LogoBlobId# " << ev->Get()->Id
                 << " Group# " << GroupId
                 << " Marker# DSP53";
-            std::unique_ptr<TEvBlobStorage::TEvPutResult> result(
-                    new TEvBlobStorage::TEvPutResult(NKikimrProto::ERROR, ev->Get()->Id, 0, GroupId, 0.f));
-            result->ErrorReason = str.Str();
-            result->ExecutionRelay = std::move(ev->Get()->ExecutionRelay);
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
-                    "HandleNormal ev# " << ev->Get()->Print(false)
-                    << " result# " << result->Print(false)
-                    << " Marker# DSP54");
-            Send(ev->Sender, result.release(), 0, ev->Cookie);
+            replyError(str.Str());
             return;
         }
 
@@ -178,10 +193,13 @@ namespace NKikimr {
         Send(MonActor, new TEvThroughputAddRequest(ev->Get()->HandleClass, bytes));
         EnableWilsonTracing(ev, Mon->PutSamplePPM);
 
-        Y_DEBUG_ABORT_UNLESS(MinREALHugeBlobInBytes);
+        Y_DEBUG_ABORT_UNLESS(MinHugeBlobInBytes);
         const ui32 partSize = Info->Type.PartSize(ev->Get()->Id);
 
-        if (EnablePutBatching && partSize < MinREALHugeBlobInBytes && partSize <= MaxBatchedPutSize) {
+        TInstant now = TActivationContext::Now();
+
+        if (Controls.EnablePutBatching.Update(now) && partSize < MinHugeBlobInBytes &&
+                partSize <= MaxBatchedPutSize) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
             Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);
@@ -226,7 +244,7 @@ namespace NKikimr {
                     .Stats = PerDiskStats,
                     .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                     .AccelerationParams = GetAccelerationParams(),
-                    .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
+                    .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
                 }),
                 ev->Get()->Deadline
             );
@@ -238,6 +256,29 @@ namespace NKikimr {
         Mon->EventBlock->Inc();
         PushRequest(CreateBlobStorageGroupBlockRequest(
             TBlobStorageGroupBlockParameters{
+                .Common = {
+                    .GroupInfo = Info,
+                    .GroupQueues = Sessions->GroupQueues,
+                    .Mon = Mon,
+                    .Source = ev->Sender,
+                    .Cookie = ev->Cookie,
+                    .Now = TActivationContext::Monotonic(),
+                    .StoragePoolCounters = StoragePoolCounters,
+                    .RestartCounter = ev->Get()->RestartCounter,
+                    .TraceId = std::move(ev->TraceId),
+                    .Event = ev->Get(),
+                    .ExecutionRelay = ev->Get()->ExecutionRelay
+                }
+            }),
+            ev->Get()->Deadline
+        );
+    }
+
+    void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvGetBlock::TPtr &ev) {
+        EnsureMonitoring(true);
+        Mon->EventGetBlock->Inc();
+        PushRequest(CreateBlobStorageGroupGetBlockRequest(
+            TBlobStorageGroupGetBlockParameters{
                 .Common = {
                     .GroupInfo = Info,
                     .GroupQueues = Sessions->GroupQueues,
@@ -279,7 +320,7 @@ namespace NKikimr {
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 },
-                .UseVPatch = static_cast<bool>(EnableVPatch.Update(TActivationContext::Now()))
+                .UseVPatch = static_cast<bool>(Controls.EnableVPatch.Update(TActivationContext::Now()))
             }),
             ev->Get()->Deadline
         );
@@ -500,7 +541,7 @@ namespace NKikimr {
                             .Stats = PerDiskStats,
                             .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                             .AccelerationParams = GetAccelerationParams(),
-                            .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
+                            .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
                         }),
                         ev->Get()->Deadline
                     );
@@ -523,7 +564,7 @@ namespace NKikimr {
                             .Tactic = tactic,
                             .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                             .AccelerationParams = GetAccelerationParams(),
-                            .LongRequestThreshold = TDuration::MilliSeconds(LongRequestThresholdMs.Update(TActivationContext::Now())),
+                            .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
                         }),
                         TInstant::Max()
                     );
@@ -557,7 +598,7 @@ namespace NKikimr {
         ++*Mon->EventStopPutBatching;
         LWPROBE(DSProxyBatchedPutRequest, BatchedPutRequestCount, GroupId.GetRawId());
         BatchedPutRequestCount = 0;
-        EnablePutBatching.Update(TActivationContext::Now());
+        Controls.EnablePutBatching.Update(TActivationContext::Now());
     }
 
     void TBlobStorageGroupProxy::Handle(TEvStopBatchingGetRequests::TPtr& ev) {
@@ -805,6 +846,7 @@ namespace NKikimr {
 
             XX(Put)
             XX(Get)
+            XX(GetBlock)
             XX(Block)
             XX(Discover)
             XX(Range)
@@ -826,7 +868,7 @@ namespace NKikimr {
 
         // ensure that we are dying for the first time
         Y_ABORT_UNLESS(!Dead);
-        if (RequestHandleClass && PoolCounters) {
+        if (RequestHandleClass && PoolCounters && FirstResponse) {
             PoolCounters->GetItem(*RequestHandleClass, RequestBytes).Register(
                 RequestBytes, GeneratedSubrequests, GeneratedSubrequestBytes, Timer.Passed());
         }
@@ -857,6 +899,7 @@ namespace NKikimr {
 
         // send the reply to original request sender
         Send(source, ev.release(), 0, cookie);
+        FirstResponse = false;
     };
 
     void TBlobStorageGroupRequestActor::SendResponse(std::unique_ptr<IEventBase>&& ev, TBlobStorageGroupProxyTimeStats *timeStats) {

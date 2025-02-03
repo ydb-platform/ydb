@@ -47,3 +47,14 @@ ci:
               branch_suffix: ${context.version_info.full}
               push_from_user: false
             sb_resources: ${(tasks.*.resources[])[?type == 'PLATFORM_MAPPING']}
+        write-info-comment:
+          title: Write comment about flow info
+          needs: create-pr
+          task: projects/devtools/write_pr_comment/write_pr_comment
+          input:
+            config:
+              data: "From hash: [${context.target_revision.hash}](https://a.yandex-team.ru/arcadia/commit/${context.target_revision.hash})\n
+              From revision: [${context.target_revision.number}](https://a.yandex-team.ru/arcadia/commit/${context.target_revision.number})\n
+              [CI flow](${context.ci_url})\n
+              Flow triggered by user: [${context.flow_triggered_by}](https://staff.yandex-team.ru/${context.flow_triggered_by})"
+              pr_id: ${tasks.create-pr.result.pr_id}

@@ -4,7 +4,6 @@
             "AFL-2.0",
             "Amazon-SL",
             "APSL-1.0",
-            "Artistic-1.0-Perl",
             "Artistic-2.0",
             "ASM-BSD-3-Clause",
             "BCL",
@@ -71,6 +70,7 @@
             "IPL-1.0",
             "JAMon-BSD-3-Clause",
             "jQuery-MIT",
+            "LGPL-2.0-or-later WITH WxWindows-exception-3.1",
             "LGPL-3.0-or-later WITH ZeroMQ-Exception",
             "LicenseRef-scancode-afpl-9.0",
             "LicenseRef-scancode-amd-historical",
@@ -158,14 +158,17 @@
             "AGPL-3.0-only",
             "AGPL-3.0-or-later",
             "Artistic-1.0",
-            "confluent-community-1.0"
+            "Artistic-1.0-Perl",
+            "confluent-community-1.0",
+            "Moderne-Source-Available-License"
         ]
     },
     "NDA": {
         "default": [
             "Intel-NDA",
             "mimepp",
-            "OracleOebs"
+            "OracleOebs",
+            "Custom-cryptopro-client"
         ]
     },
     "REQUIRE_CITATION": {
@@ -279,7 +282,6 @@
             "MPL-2.0",
             "NCSA",
             "NetCDF",
-            "Not-Applicable",
             "NTP",
             "Nvidia",
             "OGC-1.0",
@@ -320,7 +322,6 @@
             "Unicode-DFS-2016",
             "Unicode-Icu-58",
             "Unicode-Mappings",
-            "Unittest-Permissive-License",
             "Unlicense",
             "Unrar",
             "UPL-1.0",
@@ -331,9 +332,7 @@
             "X11",
             "X11-Lucent",
             "X11-XConsortium-Veillard",
-            "YandexOpen",
             "Zlib",
-            "zlib-acknowledgement",
             "ZPL-2.1"
         ]
     },
@@ -367,6 +366,7 @@
             "Service-Default-License",
             "Service-Dll-Harness",
             "Service-Py23-Proxy",
+            "Service-Sourceless-Library",
             "Service-Unknown-License-Java"
         ]
     },

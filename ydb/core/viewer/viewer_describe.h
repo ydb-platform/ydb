@@ -8,7 +8,7 @@
 namespace NKikimr::NViewer {
 
 using namespace NActors;
-using NSchemeShard::TEvSchemeShard;
+namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 class TJsonDescribe : public TViewerPipeClient {

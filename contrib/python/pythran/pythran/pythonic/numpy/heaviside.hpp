@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/cos.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/numpy_traits.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -26,12 +26,12 @@ namespace numpy
         return 1;
       return x0; // NaN
     }
-  }
+  } // namespace details
 
 #define NUMPY_NARY_FUNC_NAME heaviside
 #define NUMPY_NARY_FUNC_SYM details::heaviside
 #include "pythonic/types/numpy_nary_expr.hpp"
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

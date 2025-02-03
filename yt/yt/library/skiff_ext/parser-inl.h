@@ -4,9 +4,9 @@
 #include "parser.h"
 #endif
 
-#include <library/cpp/skiff/skiff.h>
-
 #include <yt/yt/core/concurrency/coroutine.h>
+
+#include <library/cpp/skiff/skiff.h>
 
 namespace NYT::NSkiffExt {
 
@@ -22,8 +22,8 @@ public:
         TConsumer* consumer,
         TSkiffSchemaList skiffSchemaList,
         const std::vector<TSkiffTableColumnIds>& tablesColumnIds,
-        const TString& rangeIndexColumnName,
-        const TString& rowIndexColumnName)
+        const std::string& rangeIndexColumnName,
+        const std::string& rowIndexColumnName)
         : Consumer_(consumer)
         , SkiffSchemaList_(std::move(skiffSchemaList))
     {
@@ -183,8 +183,8 @@ TSkiffMultiTableParser<TConsumer>::TSkiffMultiTableParser(
     TConsumer* consumer,
     TSkiffSchemaList schemaList,
     const std::vector<TSkiffTableColumnIds>& tablesColumnIds,
-    const TString& rangeIndexColumnName,
-    const TString& rowIndexColumnName)
+    const std::string& rangeIndexColumnName,
+    const std::string& rowIndexColumnName)
     : ParserImpl_(new TImpl(consumer,
         schemaList,
         tablesColumnIds,

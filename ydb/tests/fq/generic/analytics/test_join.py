@@ -7,12 +7,12 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.fq.generic.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 import conftest
 
 
 one_time_waiter = OneTimeWaiter(
-    data_source_kind=EDataSourceKind.YDB,
+    data_source_kind=EGenericDataSourceKind.YDB,
     docker_compose_file_path=conftest.docker_compose_file_path,
     expected_tables=["join_table", "dummy_table"],
 )
@@ -72,7 +72,8 @@ class TestJoinAnalytics:
             JOIN {ydb_conn_name}.{table_name} AS ydb
             ON pg.id = ydb.id
             JOIN {gp_conn_name}.{table_name} AS gp
-            ON pg.id = gp.id;
+            ON pg.id = gp.id
+            ORDER BY data_pg;
             """
 
         query_id = fq_client.create_query(query_name, sql, type=query_type).result.query_id

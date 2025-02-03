@@ -6,6 +6,7 @@ from six import iteritems
 
 from .utils import build_pj_path
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,7 +19,8 @@ class PackageJson(object):
     DEV_DEP_KEY = "devDependencies"
     PEER_DEP_KEY = "peerDependencies"
     OPT_DEP_KEY = "optionalDependencies"
-    DEP_KEYS = (DEP_KEY, DEV_DEP_KEY, PEER_DEP_KEY, OPT_DEP_KEY)
+    PNPM_OVERRIDES_KEY = "pnpm.overrides"
+    DEP_KEYS = (DEP_KEY, DEV_DEP_KEY, PEER_DEP_KEY, OPT_DEP_KEY, PNPM_OVERRIDES_KEY)
 
     WORKSPACE_SCHEMA = "workspace:"
 
@@ -92,12 +94,16 @@ class PackageJson(object):
 
     def dependencies_iter(self):
         for key in self.DEP_KEYS:
-            deps = self.data.get(key)
+            if key == self.PNPM_OVERRIDES_KEY:
+                deps = self.data.get("pnpm", {}).get("overrides", {})
+            else:
+                deps = self.data.get(key)
+
             if not deps:
                 continue
 
             for name, spec in iteritems(deps):
-                yield (name, spec)
+                yield name, spec
 
     def has_dependencies(self):
         first_dep = next(self.dependencies_iter(), None)
@@ -247,3 +253,6 @@ class PackageJson(object):
             messages.extend([f"  - {key}" for key in missing_overrides])
 
         return (not messages, messages)
+
+    def get_pnpm_patched_dependencies(self) -> dict[str, str]:
+        return self.data.get("pnpm", {}).get("patchedDependencies", {})

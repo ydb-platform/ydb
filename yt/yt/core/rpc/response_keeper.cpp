@@ -253,7 +253,7 @@ public:
 
     bool IsWarmingUp() const override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         return NProfiling::GetCpuInstant() < WarmupDeadline_;
     }
@@ -290,7 +290,7 @@ private:
 
     TFuture<TSharedRefArray> DoTryBeginRequest(TMutationId id, bool isRetry)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         auto result = DoFindRequest(id, isRetry);
         if (!result) {
@@ -301,7 +301,7 @@ private:
 
     TFuture<TSharedRefArray> DoFindRequest(TMutationId id, bool isRetry) const
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
         YT_ASSERT(id);
 
         if (!Started_) {
@@ -380,7 +380,7 @@ bool ValidateHeaderAndParseRememberOption(const TSharedRefArray& responseMessage
 {
     NProto::TResponseHeader header;
     YT_VERIFY(TryParseResponseHeader(responseMessage, &header));
-    return FromProto<EErrorCode>(header.error().code()) != EErrorCode::Unavailable;
+    return header.error().code() != ToUnderlying(NRpc::EErrorCode::Unavailable);
 }
 
 void ValidateRetry(TMutationId mutationId, bool isRetry)

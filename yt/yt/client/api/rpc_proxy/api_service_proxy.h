@@ -109,6 +109,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ResumeOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CompleteOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, UpdateOperationParameters);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PatchOperationSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListOperations);
 
@@ -213,7 +214,6 @@ public:
 
     // Shuffle service
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartShuffle);
-    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishShuffle);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteShuffleData,
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ReadShuffleData,

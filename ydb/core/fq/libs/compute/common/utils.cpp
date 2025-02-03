@@ -4,10 +4,10 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NFq {
 
@@ -159,9 +159,9 @@ struct TDurationParser {
         return res;
     }
 
-    constexpr ui32 ConsumeNumberPortion() noexcept {
-        ui32 dec = 1;
-        ui32 res = 0;
+    constexpr ui64 ConsumeNumberPortion() noexcept {
+        ui64 dec = 1;
+        ui64 res = 0;
         while (!Src.empty() && IsDigit(Src.back())) {
             res += (Src.back() - '0') * dec;
             dec *= 10;

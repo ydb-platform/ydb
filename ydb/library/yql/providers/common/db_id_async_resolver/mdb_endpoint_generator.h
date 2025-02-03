@@ -13,7 +13,7 @@ namespace NYql {
             NYql::EDatabaseType DatabaseType;
             TString MdbHost;
             bool UseTls;
-            NConnector::NApi::EProtocol Protocol;
+            NYql::EGenericProtocol Protocol;
         };
 
         using TPtr = std::shared_ptr<IMdbEndpointGenerator>;

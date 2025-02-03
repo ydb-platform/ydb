@@ -17,11 +17,11 @@ select  item.i_item_id,
        ss_item_sk = i_item_sk and
        ss_store_sk = s_store_sk and
        ss_cdemo_sk = cd_demo_sk and
-       cd_gender = 'F' and
-       cd_marital_status = 'U' and
-       cd_education_status = '2 yr Degree' and
-       d_year = 2000 and
-       s_state in ('AL','IN', 'SC', 'NY', 'OH', 'FL')
+       cd_gender = 'M' and
+       cd_marital_status = 'S' and
+       cd_education_status = 'College' and
+       d_year = 2002 and
+       s_state in ('TN','TN', 'TN', 'TN', 'TN', 'TN')
  group by rollup (item.i_item_id, store.s_state)
  order by item.i_item_id
          ,store.s_state

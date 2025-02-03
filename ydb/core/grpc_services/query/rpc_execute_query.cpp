@@ -8,10 +8,13 @@
 #include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/wilson_ids/wilson.h>
+
 
 namespace NKikimr::NGRpcService {
 
@@ -26,6 +29,23 @@ struct TProducerState {
     TMaybe<ui64> LastSeqNo;
     i64 AckedFreeSpaceBytes = 0;
     TActorId ActorId;
+    ui64 ChannelId = 0;
+
+    void SendAck(const NActors::TActorIdentity& actor) const {
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo, ChannelId);
+        resp->Record.SetFreeSpace(AckedFreeSpaceBytes);
+
+        actor.Send(ActorId, resp.Release());
+    }
+
+    bool ResumeIfStopped(const NActors::TActorIdentity& actor, i64 freeSpaceBytes) {
+        if (LastSeqNo && AckedFreeSpaceBytes <= 0) {
+            AckedFreeSpaceBytes = freeSpaceBytes;
+            SendAck(actor);
+            return true;
+        }
+        return false;
+    }
 };
 
 bool FillTxSettings(const Ydb::Query::TransactionSettings& from, Ydb::Table::TransactionSettings& to,
@@ -44,6 +64,9 @@ bool FillTxSettings(const Ydb::Query::TransactionSettings& from, Ydb::Table::Tra
             break;
         case Ydb::Query::TransactionSettings::kSnapshotReadOnly:
             to.mutable_snapshot_read_only();
+            break;
+        case Ydb::Query::TransactionSettings::kSnapshotReadWrite:
+            to.mutable_snapshot_read_write();
             break;
         default:
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
@@ -164,7 +187,9 @@ public:
 
     TExecuteQueryRPC(TEvExecuteQueryRequest* request, ui64 inflightLimitBytes)
         : Request_(request)
-        , FlowControl_(inflightLimitBytes) {}
+        , FlowControl_(inflightLimitBytes)
+        , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
+                "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END) {}
 
     void Bootstrap(const TActorContext &ctx) {
         this->Become(&TExecuteQueryRPC::StateWork);
@@ -190,6 +215,7 @@ private:
                 HFunc(TEvents::TEvWakeup, Handle);
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+                hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
                 HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
                 hFunc(NKikimr::NGRpcService::TEvSubscribeGrpcCancel, Handle);
                 default:
@@ -257,7 +283,9 @@ private:
             settings,
             req->pool_id());
 
-        if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
+        ev->SetProgressStatsPeriod(TDuration::MilliSeconds(req->stats_period_ms()));
+
+        if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId())) {
             NYql::TIssues issues;
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
             ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, std::move(issues));
@@ -288,38 +316,26 @@ private:
         }
 
         const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
-
-        for (auto& pair : StreamChannels_) {
-            const auto& channelId = pair.first;
-            auto& channel = pair.second;
-
-            if (freeSpaceBytes > 0 && channel.LastSeqNo && channel.AckedFreeSpaceBytes <= 0) {
-                LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Resume execution, "
-                    << ", channel: " << channelId
-                    << ", seqNo: " << channel.LastSeqNo
-                    << ", freeSpace: " << freeSpaceBytes);
-
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-                resp->Record.SetSeqNo(*channel.LastSeqNo);
-                resp->Record.SetFreeSpace(freeSpaceBytes);
-                resp->Record.SetChannelId(channelId);
-
-                ctx.Send(channel.ActorId, resp.Release());
-
-                channel.AckedFreeSpaceBytes = freeSpaceBytes;
+        if (freeSpaceBytes > 0) {
+            for (auto& [channelId, channel] : StreamChannels_) {
+                if (channel.ResumeIfStopped(SelfId(), freeSpaceBytes)) {
+                    LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Resume execution, "
+                        << ", channel: " << channelId
+                        << ", seqNo: " << channel.LastSeqNo
+                        << ", freeSpace: " << freeSpaceBytes);
+                }
             }
         }
-
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
-        Ydb::Query::ExecuteQueryResponsePart response;
-        response.set_status(Ydb::StatusIds::SUCCESS);
-        response.set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
-        response.mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
+        Ydb::Query::ExecuteQueryResponsePart *response = ev->Get()->Arena->Allocate<Ydb::Query::ExecuteQueryResponsePart>();
+        response->set_status(Ydb::StatusIds::SUCCESS);
+        response->set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
+        response->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
         TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+        Y_PROTOBUF_SUPPRESS_NODISCARD response->SerializeToString(&out);
 
         FlowControl_.PushResponse(out.size());
         const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
@@ -330,6 +346,7 @@ private:
         channel.ActorId = ev->Sender;
         channel.LastSeqNo = ev->Get()->Record.GetSeqNo();
         channel.AckedFreeSpaceBytes = freeSpaceBytes;
+        channel.ChannelId = ev->Get()->Record.GetChannelId();
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Send stream data ack"
             << ", seqNo: " << ev->Get()->Record.GetSeqNo()
@@ -337,12 +354,28 @@ private:
             << ", to: " << ev->Sender
             << ", queue: " << FlowControl_.QueueSize());
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
-        resp->Record.SetFreeSpace(freeSpaceBytes);
-        resp->Record.SetChannelId(ev->Get()->Record.GetChannelId());
+        channel.SendAck(SelfId());
+    }
 
-        ctx.Send(channel.ActorId, resp.Release());
+    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+
+        Ydb::Query::ExecuteQueryResponsePart response;
+        response.set_status(Ydb::StatusIds::SUCCESS);
+
+        if (NeedReportStats(*Request_->GetProtoRequest())) {
+            if (record.HasQueryStats()) {
+                FillQueryStats(*response.mutable_exec_stats(), record.GetQueryStats());
+                response.mutable_exec_stats()->set_query_plan(NKqp::SerializeAnalyzePlan(record.GetQueryStats()));
+            }
+        }
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+
+        FlowControl_.PushResponse(out.size());
+
+        Request_->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
@@ -419,6 +452,7 @@ private:
     void ReplySerializedAndFinishStream(Ydb::StatusIds::StatusCode status, TString&& buf) {
         const auto finishStreamFlag = NYdbGrpc::IRequestContextBase::EStreamCtrl::FINISH;
         Request_->SendSerializedResult(std::move(buf), status, finishStreamFlag);
+        NWilson::EndSpanWithStatus(Span_, status);
         this->PassAway();
     }
 
@@ -457,6 +491,7 @@ private:
         } else {
             Request_->FinishStream(status);
         }
+        NWilson::EndSpanWithStatus(Span_, status);
         this->PassAway();
     }
 
@@ -483,6 +518,8 @@ private:
     NKikimrKqp::EQueryAction QueryAction;
     TRpcFlowControlState FlowControl_;
     TMap<ui64, TProducerState> StreamChannels_;
+
+    NWilson::TSpan Span_;
 };
 
 } // namespace

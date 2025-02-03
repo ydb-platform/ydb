@@ -218,17 +218,15 @@ private:
     const TPathId PathId;
     const ui64 StatType;
     const ui32 ColumnTag;
-    const ui64 Cookie;
 
     std::optional<TString> Data;
 
 public:
-    TLoadStatisticsQuery(const TString& database, const TPathId& pathId, ui64 statType, ui32 columnTag, ui64 cookie)
+    TLoadStatisticsQuery(const TString& database, const TPathId& pathId, ui64 statType, ui32 columnTag)
         : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
         , PathId(pathId)
         , StatType(statType)
         , ColumnTag(columnTag)
-        , Cookie(cookie)
     {}
 
     void OnRunQuery() override {
@@ -287,7 +285,6 @@ public:
         response->Status = status;
         response->Issues = std::move(issues);
         response->Success = (status == Ydb::StatusIds::SUCCESS);
-        response->Cookie = Cookie;
         if (response->Success) {
             response->Data = Data;
         }
@@ -302,21 +299,19 @@ private:
     const TPathId PathId;
     const ui64 StatType;
     const ui32 ColumnTag;
-    const ui64 Cookie;
 
 public:
     using TLoadRetryingQuery = TQueryRetryActor<
         TLoadStatisticsQuery, TEvStatistics::TEvLoadStatisticsQueryResponse,
-        const TString&, const TPathId&, ui64, ui32, ui64>;
+        const TString&, const TPathId&, ui64, ui32>;
 
     TLoadStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
-        const TPathId& pathId, ui64 statType, ui32 columnTag, ui64 cookie)
+        const TPathId& pathId, ui64 statType, ui32 columnTag)
         : ReplyActorId(replyActorId)
         , Database(database)
         , PathId(pathId)
         , StatType(statType)
         , ColumnTag(columnTag)
-        , Cookie(cookie)
     {}
 
     void Bootstrap() {
@@ -326,7 +321,7 @@ public:
                 TLoadRetryingQuery::Retryable, TDuration::MilliSeconds(10),
                 TDuration::MilliSeconds(200), TDuration::Seconds(1),
                 std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
-            Database, PathId, StatType, ColumnTag, Cookie
+            Database, PathId, StatType, ColumnTag
         ));
         Become(&TLoadStatisticsRetryingQuery::StateFunc);
     }
@@ -342,9 +337,9 @@ public:
 };
 
 NActors::IActor* CreateLoadStatisticsQuery(const NActors::TActorId& replyActorId,
-    const TString& database, const TPathId& pathId, ui64 statType, ui32 columnTag, ui64 cookie)
+    const TString& database, const TPathId& pathId, ui64 statType, ui32 columnTag)
 {
-    return new TLoadStatisticsRetryingQuery(replyActorId, database, pathId, statType, columnTag, cookie);
+    return new TLoadStatisticsRetryingQuery(replyActorId, database, pathId, statType, columnTag);
 }
 
 

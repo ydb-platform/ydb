@@ -14,7 +14,6 @@ import yatest
 
 import logging
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
 
@@ -36,7 +35,7 @@ _filter_format_function = Callable[[List[str]], str]
 _filter_formatter: Optional[_filter_format_function] = None
 _tests_folder: Optional[str] = None
 _test_results: Optional[Dict[str, TestCase]] = None
-_kikimr_factory: KiKiMR = kikimr_cluster_factory()
+_kikimr_factory: Optional[KiKiMR] = None
 _integration_tests: Optional[List[str]] = None
 _skip_tests: Dict[str, str] = dict()  # [test name: reason]
 
@@ -111,6 +110,8 @@ def _run_ydb() -> int:
     """
     Run YDB cluster and return pgwire port number.
     """
+    global _kikimr_factory
+    _kikimr_factory = KiKiMR()
     _kikimr_factory.start()
     node = _kikimr_factory.nodes[1]
     print("rekby: pgwire port", node.pgwire_port)
@@ -118,7 +119,9 @@ def _run_ydb() -> int:
 
 
 def _stop_ydb():
+    global _kikimr_factory
     _kikimr_factory.stop()
+    _kikimr_factory = None
 
 
 def _prepare_docker_env(pgwire_port: str, test_names: List[str]) -> List[str]:

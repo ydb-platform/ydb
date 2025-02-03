@@ -6,9 +6,9 @@ from moto.core.utils import (
     iso_8601_datetime_with_nanoseconds,
     BackendDict,
 )
+from moto.moto_api._internal import mock_random
 from datetime import datetime, timedelta
 from dateutil.tz import tzutc
-from uuid import uuid4
 
 from .exceptions import (
     InvalidFormat,
@@ -20,7 +20,6 @@ from .exceptions import (
 from .utils import make_arn_for_dashboard, make_arn_for_alarm
 from dateutil import parser
 
-from moto.core import get_account_id
 from ..utilities.tagging_service import TaggingService
 
 _EMPTY_LIST = tuple()
@@ -37,9 +36,6 @@ class Dimension(object):
                 self.value is None or item.value is None or self.value == item.value
             )
         return False
-
-    def __ne__(self, item):  # Only needed on Py2; Py3 defines it implicitly
-        return self != item
 
     def __lt__(self, other):
         return self.name < other.name and self.value < other.name
@@ -103,6 +99,7 @@ def daterange(start, stop, step=timedelta(days=1), inclusive=False):
 class FakeAlarm(BaseModel):
     def __init__(
         self,
+        account_id,
         region_name,
         name,
         namespace,
@@ -129,7 +126,7 @@ class FakeAlarm(BaseModel):
     ):
         self.region_name = region_name
         self.name = name
-        self.alarm_arn = make_arn_for_alarm(region_name, get_account_id(), name)
+        self.alarm_arn = make_arn_for_alarm(region_name, account_id, name)
         self.namespace = namespace
         self.metric_name = metric_name
         self.metric_data_queries = metric_data_queries
@@ -238,9 +235,9 @@ class MetricDatum(BaseModel):
 
 
 class Dashboard(BaseModel):
-    def __init__(self, name, body):
+    def __init__(self, account_id, name, body):
         # Guaranteed to be unique for now as the name is also the key of a dictionary where they are stored
-        self.arn = make_arn_for_dashboard(get_account_id(), name)
+        self.arn = make_arn_for_dashboard(account_id, name)
         self.name = name
         self.body = body
         self.last_modified = datetime.now()
@@ -327,7 +324,7 @@ class CloudWatchBackend(BaseBackend):
         providers = CloudWatchMetricProvider.__subclasses__()
         md = []
         for provider in providers:
-            md.extend(provider.get_cloudwatch_metrics())
+            md.extend(provider.get_cloudwatch_metrics(self.account_id))
         return md
 
     def put_metric_alarm(
@@ -370,6 +367,7 @@ class CloudWatchBackend(BaseBackend):
             )
 
         alarm = FakeAlarm(
+            account_id=self.account_id,
             region_name=self.region_name,
             name=name,
             namespace=namespace,
@@ -544,7 +542,6 @@ class CloudWatchBackend(BaseBackend):
         unit=None,
     ):
         period_delta = timedelta(seconds=period)
-        # TODO: Also filter by unit and dimensions
         filtered_data = [
             md
             for md in self.get_all_metrics()
@@ -591,7 +588,7 @@ class CloudWatchBackend(BaseBackend):
         return self.metric_data + self.aws_metric_data
 
     def put_dashboard(self, name, body):
-        self.dashboards[name] = Dashboard(name, body)
+        self.dashboards[name] = Dashboard(self.account_id, name, body)
 
     def list_dashboards(self, prefix=""):
         for key, value in self.dashboards.items():
@@ -681,7 +678,7 @@ class CloudWatchBackend(BaseBackend):
 
     def _get_paginated(self, metrics):
         if len(metrics) > 500:
-            next_token = str(uuid4())
+            next_token = str(mock_random.uuid4())
             self.paged_metric_data[next_token] = metrics[500:]
             return next_token, metrics[0:500]
         else:

@@ -16,6 +16,8 @@ public:
     static std::shared_ptr<arrow::RecordBatch> CutNulls(const std::shared_ptr<arrow::RecordBatch>& batch);
 
     std::shared_ptr<arrow::RecordBatch> Batch;
+    bool IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const;
+    bool IsEqualTo(const TPredicate& item) const;
 
     NArrow::ECompareType GetCompareType() const {
         if (Operation == EOperation::GreaterEqual) {

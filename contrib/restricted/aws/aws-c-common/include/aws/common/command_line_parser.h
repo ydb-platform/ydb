@@ -6,6 +6,8 @@
  */
 #include <aws/common/common.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 enum aws_cli_options_has_arg {
     AWS_CLI_OPTIONS_NO_ARGUMENT = 0,
     AWS_CLI_OPTIONS_REQUIRED_ARGUMENT = 1,
@@ -101,5 +103,6 @@ AWS_COMMON_API int aws_cli_dispatch_on_subcommand(
     int table_length,
     void *user_data);
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_COMMAND_LINE_PARSER_H */

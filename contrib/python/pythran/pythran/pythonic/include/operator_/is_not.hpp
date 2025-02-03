@@ -13,7 +13,7 @@ namespace operator_
                                         builtins::id(std::forward<B>(b)));
 
   DEFINE_FUNCTOR(pythonic::operator_, is_not);
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

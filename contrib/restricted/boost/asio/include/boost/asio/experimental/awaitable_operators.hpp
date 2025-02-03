@@ -2,7 +2,7 @@
 // experimental/awaitable_operators.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -27,7 +27,6 @@
 #include <boost/asio/experimental/parallel_group.hpp>
 #include <boost/asio/multiple_exceptions.hpp>
 #include <boost/asio/this_coro.hpp>
-#include <boost/asio/use_awaitable.hpp>
 
 #include <boost/asio/detail/push_options.hpp>
 
@@ -39,28 +38,28 @@ namespace detail {
 
 template <typename T, typename Executor>
 awaitable<T, Executor> awaitable_wrap(awaitable<T, Executor> a,
-    typename constraint<is_constructible<T>::value>::type* = 0)
+    constraint_t<is_constructible<T>::value>* = 0)
 {
   return a;
 }
 
 template <typename T, typename Executor>
 awaitable<std::optional<T>, Executor> awaitable_wrap(awaitable<T, Executor> a,
-    typename constraint<!is_constructible<T>::value>::type* = 0)
+    constraint_t<!is_constructible<T>::value>* = 0)
 {
   co_return std::optional<T>(co_await std::move(a));
 }
 
 template <typename T>
-T& awaitable_unwrap(typename conditional<true, T, void>::type& r,
-    typename constraint<is_constructible<T>::value>::type* = 0)
+T& awaitable_unwrap(conditional_t<true, T, void>& r,
+    constraint_t<is_constructible<T>::value>* = 0)
 {
   return r;
 }
 
 template <typename T>
-T& awaitable_unwrap(std::optional<typename conditional<true, T, void>::type>& r,
-    typename constraint<!is_constructible<T>::value>::type* = 0)
+T& awaitable_unwrap(std::optional<conditional_t<true, T, void>>& r,
+    constraint_t<!is_constructible<T>::value>* = 0)
 {
   return *r;
 }
@@ -84,7 +83,7 @@ awaitable<void, Executor> operator&&(
       co_spawn(ex, std::move(u), deferred)
     ).async_wait(
       wait_for_one_error(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   if (ex0 && ex1)
@@ -113,7 +112,7 @@ awaitable<U, Executor> operator&&(
       co_spawn(ex, detail::awaitable_wrap(std::move(u)), deferred)
     ).async_wait(
       wait_for_one_error(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   if (ex0 && ex1)
@@ -142,7 +141,7 @@ awaitable<T, Executor> operator&&(
       co_spawn(ex, std::move(u), deferred)
     ).async_wait(
       wait_for_one_error(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   if (ex0 && ex1)
@@ -171,7 +170,7 @@ awaitable<std::tuple<T, U>, Executor> operator&&(
       co_spawn(ex, detail::awaitable_wrap(std::move(u)), deferred)
     ).async_wait(
       wait_for_one_error(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   if (ex0 && ex1)
@@ -202,7 +201,7 @@ awaitable<std::tuple<T..., std::monostate>, Executor> operator&&(
       co_spawn(ex, std::move(u), deferred)
     ).async_wait(
       wait_for_one_error(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   if (ex0 && ex1)
@@ -231,7 +230,7 @@ awaitable<std::tuple<T..., U>, Executor> operator&&(
       co_spawn(ex, detail::awaitable_wrap(std::move(u)), deferred)
     ).async_wait(
       wait_for_one_error(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   if (ex0 && ex1)
@@ -262,7 +261,7 @@ awaitable<std::variant<std::monostate, std::monostate>, Executor> operator||(
       co_spawn(ex, std::move(u), deferred)
     ).async_wait(
       wait_for_one_success(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   if (order[0] == 0)
@@ -304,7 +303,7 @@ awaitable<std::variant<std::monostate, U>, Executor> operator||(
       co_spawn(ex, detail::awaitable_wrap(std::move(u)), deferred)
     ).async_wait(
       wait_for_one_success(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   if (order[0] == 0)
@@ -348,7 +347,7 @@ awaitable<std::variant<T, std::monostate>, Executor> operator||(
       co_spawn(ex, std::move(u), deferred)
     ).async_wait(
       wait_for_one_success(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   if (order[0] == 0)
@@ -392,7 +391,7 @@ awaitable<std::variant<T, U>, Executor> operator||(
       co_spawn(ex, detail::awaitable_wrap(std::move(u)), deferred)
     ).async_wait(
       wait_for_one_success(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   if (order[0] == 0)
@@ -458,7 +457,7 @@ awaitable<std::variant<T..., std::monostate>, Executor> operator||(
       co_spawn(ex, std::move(u), deferred)
     ).async_wait(
       wait_for_one_success(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   using widen = detail::widen_variant<T..., std::monostate>;
@@ -501,7 +500,7 @@ awaitable<std::variant<T..., U>, Executor> operator||(
       co_spawn(ex, detail::awaitable_wrap(std::move(u)), deferred)
     ).async_wait(
       wait_for_one_success(),
-      use_awaitable_t<Executor>{}
+      deferred
     );
 
   using widen = detail::widen_variant<T..., U>;

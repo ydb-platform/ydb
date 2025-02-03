@@ -8,8 +8,8 @@
 #include <util/string/printf.h>
 #include "bitset.h"
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
-#include <ydb/library/yql/core/yql_cost_function.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h> 
+#include <yql/essentials/core/yql_cost_function.h>
 #include <library/cpp/iterator/zip.h>
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 

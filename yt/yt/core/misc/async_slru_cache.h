@@ -10,6 +10,7 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 #include <atomic>
@@ -26,20 +27,26 @@ class TAsyncCacheValueBase
     : public virtual TRefCounted
 {
 public:
+    using TCache = TAsyncSlruCacheBase<TKey, TValue, THash>;
+
     virtual ~TAsyncCacheValueBase();
 
     const TKey& GetKey() const;
 
     void UpdateWeight() const;
 
+    TIntrusivePtr<TCache> TryGetCache() const;
+    void SetCache(TWeakPtr<TCache> cache);
+    void ResetCache();
+
 protected:
     explicit TAsyncCacheValueBase(const TKey& key);
 
 private:
-    using TCache = TAsyncSlruCacheBase<TKey, TValue, THash>;
-    friend class TAsyncSlruCacheBase<TKey, TValue, THash>;
+    friend TCache;
 
-    TWeakPtr<TCache> Cache_;
+    NThreading::TAtomicObject<TWeakPtr<TCache>> Cache_;
+
     TKey Key_;
     typename TCache::TItem* Item_ = nullptr;
 };
@@ -225,6 +232,8 @@ protected:
     // If item weight ever changes, UpdateWeight() should be called to apply the changes.
     virtual i64 GetWeight(const TValuePtr& value) const;
 
+    // These methods are executed under the cache write lock.
+    // Therefore, these methods should not perform heavy operations.
     virtual void OnAdded(const TValuePtr& value);
     virtual void OnRemoved(const TValuePtr& value);
 
@@ -410,8 +419,8 @@ private:
         TGhostShard SmallGhost;
         TGhostShard LargeGhost;
 
-        //! Trims the lists and releases the guard. Returns the list of evicted items.
-        std::vector<TValuePtr> Trim(NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard);
+        //! Returns the list of evicted items.
+        std::vector<TValuePtr> Trim(const TIntrusiveListWithAutoDelete<TItem, TDelete>& evictedItems);
 
     protected:
         void OnYoungerUpdated(i64 deltaCount, i64 deltaWeight);
@@ -451,7 +460,11 @@ private:
     //! Calls OnAdded on OnRemoved for the values evicted with Trim(). If the trim was caused by insertion, then
     //! insertedValue must be the value, insertion of which caused trim. Otherwise, insertedValue must be nullptr.
     //! If the trim was causes by weight update or weighted cookie, then weightDelta represents weight changes.
-    void NotifyOnTrim(const std::vector<TValuePtr>& evictedValues, const TValuePtr& insertedValue, i64 weightDelta = 0);
+    std::vector<TValuePtr> TrimWithNotify(
+        TShard* shard,
+        NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard,
+        const TValuePtr& insertedValue,
+        i64 weightDelta = 0);
 
     void UpdateCookieWeight(const TInsertCookie& insertCookie, i64 newWeight);
     void EndInsert(const TInsertCookie& insertCookie, TValuePtr value);

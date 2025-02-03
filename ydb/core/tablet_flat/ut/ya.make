@@ -3,11 +3,9 @@ UNITTEST_FOR(ydb/core/tablet_flat)
 FORK_SUBTESTS()
 
 IF (WITH_VALGRIND)
-    TIMEOUT(2400)
     TAG(ya:fat)
     SIZE(LARGE)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -69,7 +67,7 @@ PEERDIR(
     ydb/core/tablet_flat/test/libs/exec
     ydb/core/tablet_flat/test/libs/table
     ydb/core/testlib/default
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 END()

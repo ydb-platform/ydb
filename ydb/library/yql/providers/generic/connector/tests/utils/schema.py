@@ -5,7 +5,7 @@ from typing import TypeAlias, List, Any, Optional, Sequence, Dict
 from yt import yson
 from yt.yson.yson_types import YsonEntity
 import ydb.public.api.protos.ydb_value_pb2 as ydb_value
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.public.api.protos.ydb_value_pb2 import Type, OptionalType
 
 import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
@@ -27,20 +27,20 @@ class DataSourceType:
     pg: postgresql.Type = None
     ydb: Ydb.Type = None
 
-    def pick(self, kind: EDataSourceKind.ValueType) -> str:
+    def pick(self, kind: EGenericDataSourceKind.ValueType) -> str:
         target = None
         match kind:
-            case EDataSourceKind.CLICKHOUSE:
+            case EGenericDataSourceKind.CLICKHOUSE:
                 target = self.ch
-            case EDataSourceKind.MS_SQL_SERVER:
+            case EGenericDataSourceKind.MS_SQL_SERVER:
                 target = self.ms
-            case EDataSourceKind.MYSQL:
+            case EGenericDataSourceKind.MYSQL:
                 target = self.my
-            case EDataSourceKind.ORACLE:
+            case EGenericDataSourceKind.ORACLE:
                 target = self.ora
-            case EDataSourceKind.POSTGRESQL:
+            case EGenericDataSourceKind.POSTGRESQL:
                 target = self.pg
-            case EDataSourceKind.YDB:
+            case EGenericDataSourceKind.YDB:
                 target = self.ydb
             case _:
                 raise Exception(f'invalid data source: {kind}')
@@ -192,7 +192,7 @@ class Column:
             case _:
                 raise Exception(f"invalid type '{primitive_type_id}' for value '{value}'")
 
-    def format_for_data_source(self, kind: EDataSourceKind.ValueType) -> str:
+    def format_for_data_source(self, kind: EGenericDataSourceKind.ValueType) -> str:
         return f'{self.name} {self.data_source_type.pick(kind)}'
 
 
@@ -349,7 +349,7 @@ class Schema:
     def from_json(cls, src: Dict):
         return cls(columns=ColumnList(*map(Column.from_json, src)))
 
-    def yql_column_list(self, kind: EDataSourceKind.ValueType) -> str:
+    def yql_column_list(self, kind: EGenericDataSourceKind.ValueType) -> str:
         return ", ".join(map(lambda col: col.format_for_data_source(kind), self.columns))
 
     def select_every_column(self) -> SelectWhat:

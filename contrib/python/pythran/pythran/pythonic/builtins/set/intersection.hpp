@@ -3,8 +3,8 @@
 
 #include "pythonic/include/builtins/set/intersection.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/set.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -16,7 +16,7 @@ namespace builtins
 
     template <typename T, typename... Types>
     typename __combined<types::set<T>, Types...>::type
-    intersection(types::set<T> const &set, Types const &... others)
+    intersection(types::set<T> const &set, Types const &...others)
     {
       return set.intersection(others...);
     }
@@ -29,11 +29,11 @@ namespace builtins
      */
     template <typename... Types>
     types::empty_set intersection(types::empty_set const &set,
-                                  Types const &... others)
+                                  Types const &...others)
     {
       return types::empty_set();
     }
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

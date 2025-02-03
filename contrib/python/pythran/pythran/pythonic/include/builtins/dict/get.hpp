@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_BUILTIN_DICT_GET_HPP
 #define PYTHONIC_INCLUDE_BUILTIN_DICT_GET_HPP
 
-#include "pythonic/include/types/dict.hpp"
 #include "pythonic/include/types/NoneType.hpp"
+#include "pythonic/include/types/dict.hpp"
 #include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -28,8 +28,8 @@ namespace builtins
     typename __combined<T, J>::type get(::dict_container<T>, I, J);
 
     DEFINE_FUNCTOR(pythonic::builtins::dict, get);
-  }
-}
+  } // namespace dict
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

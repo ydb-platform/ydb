@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-namespace NKikimr::NCache {
+namespace NKikimr::NSharedCache {
 
 template <typename TItem>
 struct ICacheCache {

@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:7:49: Info: Cannot execute self join in DQ
-        	select a.* without a.key, a.value from Input as a left semi join Input as b using(key) order by subkey;
-	                                                ^

@@ -15,6 +15,7 @@
 
 #include <yt/yt/core/misc/async_expiring_cache.h>
 #include <yt/yt/core/misc/fs.h>
+#include <yt/yt/core/misc/configurable_singleton_def.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -106,6 +107,13 @@ TStringBuf GetServiceHostName(TStringBuf address)
     TStringBuf result;
     ParseServiceAddress(address, &result, nullptr);
     return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString FormatNetworkAddress(TStringBuf address, int port)
+{
+    return Format("[%v]:%v", address, port);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -980,7 +988,7 @@ public:
         : TAsyncExpiringCache(
             config,
             /*logger*/ {},
-            DnsProfiler.WithPrefix("/resolve_cache"))
+            DnsProfiler().WithPrefix("/resolve_cache"))
     {
         Configure(std::move(config));
     }
@@ -1021,10 +1029,12 @@ public:
 
     bool IsLocalAddress(const TNetworkAddress& address)
     {
-        TNetworkAddress localIP{address, 0};
-
+        if (!address.IsIP()) {
+            return false;
+        }
+        TNetworkAddress candidateAddress(address, /*port*/ 0);
         const auto& localAddresses = GetLocalAddresses();
-        return std::find(localAddresses.begin(), localAddresses.end(), localIP) != localAddresses.end();
+        return std::find(localAddresses.begin(), localAddresses.end(), candidateAddress) != localAddresses.end();
     }
 
     void PurgeCache()
@@ -1041,7 +1051,7 @@ public:
         TAsyncExpiringCache::Reconfigure(Config_);
 
         if (Config_->LocalHostNameOverride) {
-            WriteLocalHostName(*Config_->LocalHostNameOverride);
+            SetLocalHostName(*Config_->LocalHostNameOverride);
             YT_LOG_INFO("Localhost name configured via config override (LocalHostName: %v)",
                 Config_->LocalHostNameOverride);
         }
@@ -1271,7 +1281,7 @@ std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName)
     return {cluster};
 }
 
-std::optional<TString> InferYPClusterFromHostName(TStringBuf hostName)
+std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName)
 {
     if (auto rawResult = InferYPClusterFromHostNameRaw(hostName)) {
         return TString{*rawResult};
@@ -1293,7 +1303,7 @@ std::optional<TStringBuf> InferYTClusterFromClusterUrlRaw(TStringBuf clusterUrl)
     return clusterUrl;
 }
 
-std::optional<TString> InferYTClusterFromClusterUrl(TStringBuf clusterUrl)
+std::optional<std::string> InferYTClusterFromClusterUrl(TStringBuf clusterUrl)
 {
     if (auto rawResult = InferYTClusterFromClusterUrlRaw(clusterUrl)) {
         return TString{*rawResult};

@@ -6,7 +6,7 @@ import logging
 
 from hamcrest import assert_that, is_, not_
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common import types
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -23,7 +23,7 @@ class TestDiscoveryExtEndpoint(object):
         cls.ext_port_2 = conf.port_allocator.get_node_port_allocator(1).ext_port
         conf.clone_grpc_as_ext_endpoint(cls.ext_port_1, "extserv1")
         conf.clone_grpc_as_ext_endpoint(cls.ext_port_2, "extserv2")
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             configurator=conf
         )
         cls.cluster.start()
@@ -112,7 +112,7 @@ class TestDiscoveryExtEndpoint(object):
 class AbstractTestDiscoveryFaultInjection(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.database_name = '/Root/database'
         cls.logger = logger.getChild(cls.__name__)
@@ -214,7 +214,7 @@ class TestDiscoveryFaultInjectionSlotStop(AbstractTestDiscoveryFaultInjection):
 class TestMirror3DCDiscovery(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(erasure=types.Erasure.MIRROR_3_DC, use_in_memory_pdisks=False))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=types.Erasure.MIRROR_3_DC, use_in_memory_pdisks=False))
         cls.cluster.start()
 
     @classmethod

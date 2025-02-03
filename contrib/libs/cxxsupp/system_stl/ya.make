@@ -4,12 +4,11 @@ WITHOUT_LICENSE_TEXTS()
 
 VERSION(Service-proxy-version)
 
-LICENSE(YandexOpen)
+LICENSE(Service-Sourceless-Library)
 
 SUBSCRIBER(
     g:contrib
     g:cpp-contrib
-    somov
 )
 
 NO_PLATFORM()

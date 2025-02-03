@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/protos/whiteboard_disk_states.pb.h>
+#include <ydb/core/protos/whiteboard_flags.pb.h>
 #include <ydb/core/protos/memory_stats.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/library/actors/interconnect/events_local.h>
@@ -429,28 +431,8 @@ struct TEvWhiteboard{
 
     struct TEvSystemStateResponse : public TEventPB<TEvSystemStateResponse, NKikimrWhiteboard::TEvSystemStateResponse, EvSystemStateResponse> {};
 
-    struct TEvClockSkewUpdate : TEventPB<TEvClockSkewUpdate, NKikimrWhiteboard::TNodeClockSkew, EvClockSkewUpdate> {
-        TEvClockSkewUpdate() = default;
-
-        TEvClockSkewUpdate(const ui32 peerNodeId, i64 clockSkewUs) {
-            Record.SetPeerNodeId(peerNodeId);
-            Record.SetClockSkewUs(clockSkewUs);
-        }
-    };
-
     struct TEvNodeStateUpdate : TEventPB<TEvNodeStateUpdate, NKikimrWhiteboard::TNodeStateInfo, EvNodeStateUpdate> {
         TEvNodeStateUpdate() = default;
-
-        TEvNodeStateUpdate(const TString& peerName, bool connected) {
-            Record.SetPeerName(peerName);
-            Record.SetConnected(connected);
-        }
-
-        TEvNodeStateUpdate(const TString& peerName, bool connected, NKikimrWhiteboard::EFlag connectStatus) {
-            Record.SetPeerName(peerName);
-            Record.SetConnected(connected);
-            Record.SetConnectStatus(connectStatus);
-        }
     };
 
     struct TEvNodeStateDelete : TEventPB<TEvNodeStateDelete, NKikimrWhiteboard::TNodeStateInfo, EvNodeStateDelete> {

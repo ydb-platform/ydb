@@ -54,7 +54,7 @@ The `dropTable` changeset - delete a table. For example: `<dropTable tableName="
 
 `addColumn` - add a column to a table. For example:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 
@@ -100,7 +100,7 @@ The `dropTable` changeset - delete a table. For example: `<dropTable tableName="
 
 `createIndex` - create a secondary index. For example:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 
@@ -157,7 +157,7 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 `dropIndex` - drop a secondary index. For example:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 
@@ -195,7 +195,7 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 `insert` is a changeset that performs a single insert into a table using the [INSERT INTO](../../yql/reference/syntax/insert_into.md) command. For example:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 
@@ -555,4 +555,4 @@ List of different authentication options through URL parameters:
 
 Also, if your cluster is configured using username and password, authentication is done through Liquibase parameters.
 
-For more info about different authentication settings, refer to the [section](../../concepts/auth.md).
+For more info about different authentication settings, refer to the [section](../../security/authentication.md).

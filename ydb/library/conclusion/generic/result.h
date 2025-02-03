@@ -1,5 +1,6 @@
 #pragma once
 #include <util/generic/singleton.h>
+#include <util/generic/string.h>
 #include <util/system/yassert.h>
 
 #include <optional>
@@ -55,13 +56,13 @@ public:
 
     const TResult& GetResult() const {
         auto result = std::get_if<TResult>(&Result);
-        Y_ABORT_UNLESS(result, "incorrect object for result request");
+        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorMessage().data());
         return *result;
     }
 
     TResult& MutableResult() {
         auto result = std::get_if<TResult>(&Result);
-        Y_ABORT_UNLESS(result, "incorrect object for result request");
+        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorMessage().data());
         return *result;
     }
 
@@ -91,13 +92,10 @@ public:
         return GetError();
     }
 
-    const TString& GetErrorMessage() const {
+    TString GetErrorMessage() const {
         auto* status = std::get_if<TStatus>(&Result);
-        if (!status) {
-            return Default<TString>();
-        } else {
-            return status->GetErrorMessage();
-        }
+        Y_ABORT_UNLESS(status, "incorrect object for extracting error message");
+        return status->GetErrorMessage();
     }
 
     auto GetStatus() const {

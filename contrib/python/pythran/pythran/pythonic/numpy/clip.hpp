@@ -36,12 +36,12 @@ namespace numpy
       else
         return v;
     }
-  }
+  } // namespace wrapper
 
 #define NUMPY_NARY_FUNC_NAME clip
 #define NUMPY_NARY_FUNC_SYM wrapper::clip
 #include "pythonic/types/numpy_nary_expr.hpp"
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

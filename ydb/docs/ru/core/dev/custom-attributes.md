@@ -14,7 +14,7 @@
 
 ## Установите пользовательский атрибут при создании таблицы {#create}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go
 
@@ -37,7 +37,7 @@
 
 ## Установите пользовательский атрибут для существующей таблицы {#add}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go
 
@@ -65,7 +65,7 @@
 
 ## Измените пользовательский атрибут {#alter}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go
 
@@ -94,7 +94,7 @@
 
 ## Просмотрите пользовательские атрибуты {#view}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go
 
@@ -140,7 +140,7 @@
 
 ## Удалите пользовательский атрибут {#drop}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go
 

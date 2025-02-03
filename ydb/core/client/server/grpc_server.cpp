@@ -444,6 +444,8 @@ void TGRpcService::SetupIncomingRequests() {
     // actor requests
     ADD_ACTOR_REQUEST(BlobStorageConfig,         TBlobStorageConfigRequest,         MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST)
     ADD_ACTOR_REQUEST(HiveCreateTablet,          THiveCreateTablet,                 MTYPE_CLIENT_HIVE_CREATE_TABLET)
+    ADD_ACTOR_REQUEST(LocalEnumerateTablets,     TLocalEnumerateTablets,            MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS)
+    ADD_ACTOR_REQUEST(KeyValue,                  TKeyValueRequest,                  MTYPE_CLIENT_KEYVALUE)
     ADD_ACTOR_REQUEST(TabletStateRequest,        TTabletStateRequest,               MTYPE_CLIENT_TABLET_STATE_REQUEST)
     ADD_ACTOR_REQUEST(LocalMKQL,                 TLocalMKQL,                        MTYPE_CLIENT_LOCAL_MINIKQL)
     ADD_ACTOR_REQUEST(LocalSchemeTx,             TLocalSchemeTx,                    MTYPE_CLIENT_LOCAL_SCHEME_TX)
@@ -466,12 +468,6 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_REQUEST(CmsRequest, TCmsRequest, TCmsResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CMS_REQUEST));
         RegisterRequestActor(CreateMessageBusCmsRequest(msg));
-    })
-
-    // SQS request
-    ADD_REQUEST(SqsRequest, TSqsRequest, TSqsResponse, {
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST));
-        RegisterRequestActor(CreateMessageBusSqsRequest(msg));
     })
 
     // Console request
@@ -497,7 +493,6 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_PROXY_REQUEST(SchemeInitRoot,  TSchemeInitRoot,  TEvBusProxy::TEvInitRoot,            MTYPE_CLIENT_SCHEME_INITROOT)
 
     ADD_PROXY_REQUEST(PersQueueRequest, TPersQueueRequest, TEvBusProxy::TEvPersQueue,           MTYPE_CLIENT_PERSQUEUE)
-    ADD_PROXY_REQUEST(Request,          TRequest,          TEvBusProxy::TEvRequest,             MTYPE_CLIENT_REQUEST)
     ADD_PROXY_REQUEST(SchemeOperation,  TSchemeOperation,  TEvBusProxy::TEvFlatTxRequest,       MTYPE_CLIENT_FLAT_TX_REQUEST)
     ADD_PROXY_REQUEST(SchemeDescribe,   TSchemeDescribe,   TEvBusProxy::TEvFlatDescribeRequest, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST)
 }

@@ -5,6 +5,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/console_tenants_manager.h>
 
+#include <google/protobuf/util/message_differencer.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -97,6 +98,7 @@ struct TCreateTenantRequest {
     EType Type;
     TAttrsCont Attrs;
     Ydb::Cms::DatabaseQuotas DatabaseQuotas;
+    Ydb::Cms::ScaleRecommenderPolicies ScaleRecommenderPolicies;
     // Common & Shared
     TPoolsCont Pools;
     TSlotsCont Slots;
@@ -126,6 +128,13 @@ struct TCreateTenantRequest {
         Ydb::Cms::DatabaseQuotas parsedQuotas;
         UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(quotas, &parsedQuotas), quotas);
         DatabaseQuotas = std::move(parsedQuotas);
+        return *this;
+    }
+
+    TSelf& WithScaleRecommenderPolicies(const TString& policies) {
+        Ydb::Cms::ScaleRecommenderPolicies parsedPolicies;
+        UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(policies, &parsedPolicies), policies);
+        ScaleRecommenderPolicies = std::move(parsedPolicies);
         return *this;
     }
 
@@ -311,6 +320,45 @@ inline void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path,
     CheckTenantStatus(runtime, path, false, code, state, poolTypes, unitRegistrations, args...);
 }
 
+inline void CheckTenantScaleRecommenderPolicies(TTenantTestRuntime &runtime, const TString &path,
+                                                const TString &policies)
+{
+    auto *event = new NConsole::TEvConsole::TEvGetTenantStatusRequest;
+    event->Record.MutableRequest()->set_path(path);
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.SendToConsole(event);
+    auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(handle);
+    auto &operation = reply->Record.GetResponse().operation();
+    UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::SUCCESS);
+
+    Ydb::Cms::GetDatabaseStatusResult status;
+    UNIT_ASSERT(operation.result().UnpackTo(&status));
+
+    if (!policies.empty()) {
+        Ydb::Cms::ScaleRecommenderPolicies expectedPolicies;
+        UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(policies, &expectedPolicies), policies);
+        UNIT_ASSERT_C(NProtoBuf::util::MessageDifferencer::Equals(status.scale_recommender_policies(), expectedPolicies),
+                      TStringBuilder() << "Expected: " << policies << ", got: " << status.scale_recommender_policies().ShortDebugString());
+    } else {
+        UNIT_ASSERT(!status.has_scale_recommender_policies());
+    }
+}
+
+inline void AlterScaleRecommenderPolicies(TTenantTestRuntime &runtime, const TString &path,
+                                          Ydb::StatusIds::StatusCode code, const TString &policies)
+{
+    auto *event = new NConsole::TEvConsole::TEvAlterTenantRequest;
+    event->Record.MutableRequest()->set_path(path);
+
+    auto *requestPolicies = event->Record.MutableRequest()->mutable_scale_recommender_policies();
+    UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(policies, requestPolicies), policies);
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.SendToConsole(event);
+    auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvAlterTenantResponse>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
+}
 
 inline void CheckCreateTenant(TTenantTestRuntime &runtime,
                        const TString &token,
@@ -355,6 +403,7 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
     }
     
     event->Record.MutableRequest()->mutable_database_quotas()->CopyFrom(request.DatabaseQuotas);
+    event->Record.MutableRequest()->mutable_scale_recommender_policies()->CopyFrom(request.ScaleRecommenderPolicies);
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);

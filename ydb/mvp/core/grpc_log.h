@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <util/system/hp_timer.h>
 #include "mvp_log.h"
 #include "appdata.h"

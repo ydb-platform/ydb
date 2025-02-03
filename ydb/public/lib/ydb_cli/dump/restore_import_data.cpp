@@ -94,7 +94,7 @@ public:
     ui64 MemSize() const {
         switch (GetType()) {
         case EType::String:
-            return sizeof(Value) + std::get<TString>(Value).size();
+            return sizeof(Value) + std::get<std::string>(Value).size();
         default:
             return sizeof(Value);
         }
@@ -104,7 +104,7 @@ private:
     std::variant<
         TInf,
         TNull,
-        TString,
+        std::string,
         bool,
         ui8,
         i32,
@@ -351,7 +351,7 @@ public:
 using TSplitPoint = TKey;
 
 class TKeyBuilder {
-    static auto MakeKeyColumnIds(const TVector<TString>& keyColumns) {
+    static auto MakeKeyColumnIds(const std::vector<std::string>& keyColumns) {
         THashMap<TString, ui32> keyColumnIds;
 
         for (ui32 i = 0; i < keyColumns.size(); ++i) {
@@ -379,19 +379,26 @@ class TKeyBuilder {
     }
 
 public:
-    explicit TKeyBuilder(const TVector<TColumn>& columns, const TVector<TString>& keyColumns)
+    explicit TKeyBuilder(
+            const std::vector<TColumn>& columns,
+            const std::vector<std::string>& keyColumns,
+            const std::shared_ptr<TLog>& log)
         : Columns(columns)
         , KeyColumnIds(MakeKeyColumnIds(keyColumns))
+        , Log(log)
     {
     }
 
-    TKey Build(TStringBuf line) const {
+    TKey Build(const NPrivate::TLine& line) const {
         TMap<ui32, TValue> values;
 
-        const TStringBuf origLine = line;
+        TStringBuf buf = line;
         for (const auto& column : Columns) {
-            TStringBuf value = line.NextTok(',');
-            Y_ENSURE(value, "Empty token on line: " << origLine);
+            TStringBuf value = buf.NextTok(',');
+            if (!value) {
+                LOG_E("Empty token: " << line.GetLocation());
+                return {};
+            }
 
             auto it = KeyColumnIds.find(column.Name);
             if (it == KeyColumnIds.end()) {
@@ -411,8 +418,9 @@ public:
     }
 
 private:
-    const TVector<TColumn> Columns;
+    const std::vector<TColumn> Columns;
     const THashMap<TString, ui32> KeyColumnIds;
+    const std::shared_ptr<TLog> Log;
 
 }; // TKeyBuilder
 
@@ -446,7 +454,7 @@ public:
         return RecordsSizeCounter;
     }
 
-    bool Add(TKey&& key, TString&& record) {
+    bool Add(TKey&& key, NPrivate::TLine&& record) {
         auto ret = Rows.emplace(std::move(key), std::move(record));
         if (!ret.second) {
             return ret.second;
@@ -468,8 +476,8 @@ public:
         return ret;
     }
 
-    TString Serialize(ui64 maxSize) {
-        TStringBuilder result;
+    NPrivate::TBatch Serialize(ui64 maxSize) {
+        NPrivate::TBatch result;
 
         if (Empty()) {
             return result;
@@ -477,7 +485,7 @@ public:
 
         auto handle = Pop();
         do {
-            result << handle.mapped() << "\n";
+            result.Add(handle.mapped());
 
             if (Empty()) {
                 return result;
@@ -491,7 +499,7 @@ public:
     }
 
 private:
-    TMap<TKey, TString> Rows;
+    TMap<TKey, NPrivate::TLine> Rows;
     ui64 MemSizeCounter;
     ui64 RecordsSizeCounter;
 
@@ -509,7 +517,7 @@ class TTableRows {
     using TRows = TMap<TSplitPoint, TPartitionRows>;
     using TRowsBy = TMap<ui64, THashSet<TRows::iterator, TIteratorHash<TRows::iterator>>, TGreater<ui64>>;
 
-    static auto MakeSplitPoints(const TVector<TKeyRange>& keyRanges) {
+    static auto MakeSplitPoints(const std::vector<TKeyRange>& keyRanges) {
         Y_ENSURE(!keyRanges.empty());
 
         TVector<TSplitPoint> splitPoints;
@@ -518,7 +526,7 @@ class TTableRows {
         while (++it != keyRanges.end()) {
             const auto& from = it->From();
 
-            Y_ENSURE(from.Defined());
+            Y_ENSURE(from.has_value());
             Y_ENSURE(from->IsInclusive());
 
             TValueParser parser(from->GetValue());
@@ -553,7 +561,7 @@ class TTableRows {
         return it;
     }
 
-    static auto Add(TRows& emplaceTo, TKey&& key, TString&& record) {
+    static auto Add(TRows& emplaceTo, TKey&& key, NPrivate::TLine&& record) {
         auto it = FindPartition(emplaceTo, key);
         Y_ENSURE(it != emplaceTo.end());
 
@@ -576,7 +584,7 @@ class TTableRows {
     }
 
 public:
-    explicit TTableRows(const TVector<TKeyRange>& keyRanges)
+    explicit TTableRows(const std::vector<TKeyRange>& keyRanges)
         : ByPartition(MakeEmptyRows(MakeSplitPoints(keyRanges)))
         , MemSize(0)
     {
@@ -597,7 +605,9 @@ public:
         return true;
     }
 
-    void Add(TKey&& key, TString&& record) {
+    void Add(TKey&& key, NPrivate::TLine&& record) {
+        Y_ENSURE(key);
+
         const ui64 recordSize = record.size();
         const ui64 memSize = key.MemSize() + recordSize;
 
@@ -620,7 +630,7 @@ public:
         }
     }
 
-    void Reshard(const TVector<TKeyRange>& keyRanges) {
+    void Reshard(const std::vector<TKeyRange>& keyRanges) {
         auto newByPartition = MakeEmptyRows(MakeSplitPoints(keyRanges));
 
         for (auto& [_, rows] : ByPartition) {
@@ -663,7 +673,7 @@ public:
         return false;
     }
 
-    TString GetData(ui64 memLimit, ui64 batchSize, bool force = false) {
+    NPrivate::TBatch GetData(ui64 memLimit, ui64 batchSize, bool force = false) {
         Y_ENSURE(HasData(memLimit, batchSize, force));
         Y_ENSURE(!ByMemSize.empty());
         Y_ENSURE(!ByRecordsSize.empty());
@@ -712,22 +722,40 @@ public:
     explicit TDataAccumulator(
             const TTableDescription& dumpedDesc,
             const TTableDescription& actualDesc,
-            const TRestoreSettings& settings)
-        : KeyBuilder(dumpedDesc.GetColumns(), dumpedDesc.GetPrimaryKeyColumns())
-        , Rows(actualDesc.GetKeyRanges())
+            const TRestoreSettings& settings,
+            const std::shared_ptr<TLog>& log)
+        : KeyBuilder(dumpedDesc.GetColumns(), dumpedDesc.GetPrimaryKeyColumns(), log)
         , MemLimit(settings.MemLimit_)
         , BatchSize(settings.BytesPerRequest_)
+        , Rows(actualDesc.GetKeyRanges())
     {
     }
 
-    bool Fits(const TString& line) const override {
+    EStatus Check(const NPrivate::TLine& line) const override {
         TGuard<TMutex> lock(Mutex);
-        return Rows.CanAdd(KeyBuilder.Build(line), line, MemLimit, BatchSize);
+        if (const auto key = KeyBuilder.Build(line)) {
+            return Rows.CanAdd(key, line, MemLimit, BatchSize) ? OK : FULL;
+        } else {
+            return ERROR;
+        }
     }
 
-    void Feed(TString&& line) override {
+    void Feed(NPrivate::TLine&& line) override {
         TGuard<TMutex> lock(Mutex);
         Rows.Add(KeyBuilder.Build(line), std::move(line));
+    }
+
+    void Feed(const NPrivate::TBatch& data) {
+        TGuard<TMutex> lock(Mutex);
+
+        TStringInput input(data.GetData());
+        TString line;
+
+        ui64 idx = 0;
+        while (input.ReadLine(line)) {
+            auto l = NPrivate::TLine(std::move(line), data.GetLocation(idx++));
+            Rows.Add(KeyBuilder.Build(l), std::move(l));
+        }
     }
 
     bool Ready(bool force) const override {
@@ -735,30 +763,24 @@ public:
         return Rows.HasData(MemLimit, BatchSize, force);
     }
 
-    TString GetData(bool force) override {
+    NPrivate::TBatch GetData(bool force) override {
         TGuard<TMutex> lock(Mutex);
-        return Rows.GetData(MemLimit, BatchSize, force);
+        auto batch = Rows.GetData(MemLimit, BatchSize, force);
+        batch.SetOriginAccumulator(this);
+        return batch;
     }
 
-    void Reshard(const TVector<TKeyRange>& keyRanges, const TString& data) {
+    void Reshard(const std::vector<TKeyRange>& keyRanges) {
         TGuard<TMutex> lock(Mutex);
         Rows.Reshard(keyRanges);
-
-        TStringInput input(data);
-        TString line;
-
-        while (input.ReadLine(line)) {
-            Rows.Add(KeyBuilder.Build(line), std::move(line));
-        }
     }
 
 private:
     const TKeyBuilder KeyBuilder;
-    TTableRows Rows;
-
     const ui64 MemLimit;
     const ui64 BatchSize;
 
+    TTableRows Rows;
     TMutex Mutex;
 
 }; // TDataAccumulator
@@ -775,7 +797,7 @@ class TDataWriter: public NPrivate::IDataWriter {
         return importDataSettings;
     }
 
-    bool Write(const TString& data) {
+    bool Write(const NPrivate::TBatch& data) {
         const ui32 maxRetries = 10;
         TDuration retrySleep = TDuration::MilliSeconds(500);
 
@@ -793,28 +815,35 @@ class TDataWriter: public NPrivate::IDataWriter {
 
             RequestLimiter.Use(1);
 
-            auto importResult = ImportClient.ImportData(Path, data, Settings).GetValueSync();
+            auto importResult = ImportClient.ImportData(Path, TString{data}, Settings).GetValueSync();
 
             if (importResult.IsSuccess()) {
                 return true;
             }
 
             if (retryNumber == maxRetries) {
-                LOG_E("There is no retries left, last result: " << importResult.GetIssues().ToOneLineString());
+                LOG_E("There is no retries left, last result: " << importResult);
                 return false;
             }
 
             switch (importResult.GetStatus()) {
                 case EStatus::PRECONDITION_FAILED: {
-                    // table's partitioning has been changed
+                    LOG_D("Partitioning of " << Path.Quote() << " has been changed while importing: " << data.GetLocation());
                     TMaybe<TTableDescription> desc;
                     auto descResult = DescribeTable(TableClient, Path, desc);
                     if (!descResult.IsSuccess()) {
-                        LOG_E("Describe table " << Path.Quote() << " failed: " << descResult.GetIssues().ToOneLineString());
+                        LOG_E("Error describing table " << Path.Quote() << ": " << descResult.GetIssues().ToOneLineString());
                         return false;
                     }
 
-                    Accumulator->Reshard(desc->GetKeyRanges(), data);
+                    for (auto* acc : Accumulators) {
+                        acc->Reshard(desc->GetKeyRanges());
+                    }
+
+                    auto* originAcc = dynamic_cast<TDataAccumulator*>(data.GetOriginAccumulator());
+                    Y_ENSURE(originAcc);
+                    originAcc->Feed(data);
+
                     return true;
                 }
 
@@ -835,6 +864,9 @@ class TDataWriter: public NPrivate::IDataWriter {
                     break;
 
                 default:
+                    LOG_E("Can't import data to " << Path.Quote()
+                          << " at location " << data.GetLocation() 
+                          << ", result: " << importResult);
                     return false;
             }
         }
@@ -857,26 +889,31 @@ public:
             const TRestoreSettings& settings,
             TImportClient& importClient,
             TTableClient& tableClient,
-            NPrivate::IDataAccumulator* accumulator,
+            const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators,
             const std::shared_ptr<TLog>& log)
         : Path(path)
         , Settings(MakeSettings(settings, desc))
         , ImportClient(importClient)
         , TableClient(tableClient)
-        , Accumulator(dynamic_cast<TDataAccumulator*>(accumulator))
+        , Accumulators(accumulators.size())
         , Log(log)
         , RateLimiterSettings(settings.RateLimiterSettings_)
         , RequestLimiter(RateLimiterSettings.GetRps(), RateLimiterSettings.GetRps())
+        , Stopped(0)
     {
-        Y_ENSURE(Accumulator);
+        Y_ENSURE(!accumulators.empty());
+        for (size_t i = 0; i < accumulators.size(); ++i) {
+            Accumulators[i] = dynamic_cast<TDataAccumulator*>(accumulators[i].Get());
+            Y_ENSURE(Accumulators[i]);
+        }
 
         TasksQueue = MakeHolder<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
         TasksQueue->Start(settings.InFly_, settings.InFly_ + 1);
     }
 
-    bool Push(TString&& data) override {
-        if (data.size() >= TRestoreSettings::MaxBytesPerRequest) {
-            LOG_E("Data is too long");
+    bool Push(NPrivate::TBatch&& data) override {
+        if (data.size() > TRestoreSettings::MaxBytesPerRequest) {
+            LOG_E("Too much data: " << data.GetLocation());
             return false;
         }
 
@@ -890,7 +927,7 @@ public:
             }
         };
 
-        return TasksQueue->AddFunc(func);
+        return TasksQueue->AddFunc(std::move(func));
     }
 
     void Wait() override {
@@ -902,7 +939,7 @@ private:
     const TImportYdbDumpDataSettings Settings;
     TImportClient& ImportClient;
     TTableClient& TableClient;
-    TDataAccumulator* Accumulator;
+    TVector<TDataAccumulator*> Accumulators;
     const std::shared_ptr<TLog> Log;
 
     const TRateLimiterSettings RateLimiterSettings;
@@ -920,8 +957,9 @@ private:
 NPrivate::IDataAccumulator* CreateImportDataAccumulator(
         const NTable::TTableDescription& dumpedDesc,
         const NTable::TTableDescription& actualDesc,
-        const TRestoreSettings& settings) {
-    return new TDataAccumulator(dumpedDesc, actualDesc, settings);
+        const TRestoreSettings& settings,
+        const std::shared_ptr<TLog>& log) {
+    return new TDataAccumulator(dumpedDesc, actualDesc, settings, log);
 }
 
 NPrivate::IDataWriter* CreateImportDataWriter(
@@ -929,10 +967,10 @@ NPrivate::IDataWriter* CreateImportDataWriter(
         const TTableDescription& desc,
         TImportClient& importClient,
         TTableClient& tableClient,
-        NPrivate::IDataAccumulator* accumulator,
+        const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators,
         const TRestoreSettings& settings,
         const std::shared_ptr<TLog>& log) {
-    return new TDataWriter(path, desc, settings, importClient, tableClient, accumulator, log);
+    return new TDataWriter(path, desc, settings, importClient, tableClient, accumulators, log);
 }
 
 } // NDump

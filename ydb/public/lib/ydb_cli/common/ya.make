@@ -19,6 +19,7 @@ SRCS(
     print_utils.cpp
     profile_manager.cpp
     progress_bar.cpp
+    progress_indication.cpp
     query_stats.cpp
     recursive_list.cpp
     recursive_remove.cpp
@@ -28,9 +29,18 @@ SRCS(
     sys.cpp
     tabbed_table.cpp
     waiting_bar.cpp
-    ydb_updater.cpp
     yt.cpp
 )
+
+IF (YDB_CERTIFIED)
+    CFLAGS(
+        -DDISABLE_UPDATE
+    )
+ELSE()
+    SRCS(
+        ydb_updater.cpp
+    )
+ENDIF ()
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
@@ -40,16 +50,17 @@ PEERDIR(
     library/cpp/yaml/as
     library/cpp/string_utils/csv
     ydb/public/lib/json_value
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/client/draft
-    ydb/public/sdk/cpp/client/ydb_result
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
-    ydb/public/sdk/cpp/client/ydb_topic
-    ydb/public/sdk/cpp/client/ydb_types
-    ydb/public/sdk/cpp/client/ydb_types/credentials
-    ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange
+    ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/result
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/types
+    ydb/public/sdk/cpp/src/client/types/credentials
+    ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange
     ydb/library/arrow_parquet
 )
 

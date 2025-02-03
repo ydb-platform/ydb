@@ -77,12 +77,12 @@ struct TLeaderElectionMetrics {
     explicit TLeaderElectionMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
         : Counters(counters) {
         Errors = Counters->GetCounter("LeaderElectionErrors", true);
-        LeaderChangedCount = Counters->GetCounter("LeaderElectionChangedCount");
+        LeaderChanged = Counters->GetCounter("LeaderChanged", true);
     }
 
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChangedCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChanged;
 };
 
 class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
@@ -223,7 +223,7 @@ void TLeaderElection::Bootstrap() {
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString());
     if (Config.GetLocalMode()) {
-        TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorId));
+        TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorId, 0));
         return;
     }
     ProcessState();
@@ -445,18 +445,20 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
         // Wait OnChanged.
         return;
     }
-    TString data = description.GetOwners()[0].GetData();
+    const auto& session = description.GetOwners()[0];
+    auto data = TString{session.GetData()};
+    auto generation = session.GetOrderId();
     NActorsProto::TActorId protoId;
     if (!protoId.ParseFromString(data)) {
         Y_ABORT("ParseFromString");
     }
 
     NActors::TActorId id = ActorIdFromProto(protoId);
-    LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully described: coordinator id " << id);
+    LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully described: coordinator id " << id << " generation " << generation);
     if (!LeaderActorId || (*LeaderActorId != id)) {
         LOG_ROW_DISPATCHER_INFO("Send TEvCoordinatorChanged to " << ParentId);
-        TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(id));
-        Metrics.LeaderChangedCount->Inc();
+        TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(id, generation));
+        Metrics.LeaderChanged->Inc();
     }
     LeaderActorId = id;
 }

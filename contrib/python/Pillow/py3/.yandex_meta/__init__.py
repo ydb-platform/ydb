@@ -47,8 +47,8 @@ def post_install(self):
                 {
                     "NOT OPENSOURCE": Linkable(
                         CFLAGS=["-DHAVE_LIBIMAGEQUANT"],
-                        PEERDIR=['contrib/libs/libimagequant'],
-                        ADDINCL=['contrib/libs/libimagequant'],
+                        PEERDIR=["contrib/libs/libimagequant"],
+                        ADDINCL=["contrib/libs/libimagequant"],
                     ),
                 }
             ),

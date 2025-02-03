@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/any.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/builtins/ValueError.hpp"
 #include "pythonic/numpy/add.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -67,7 +67,8 @@ namespace numpy
   template <class E>
   typename std::enable_if<
       E::value != 1,
-      types::ndarray<typename E::dtype, types::array<long, E::value - 1>>>::type
+      types::ndarray<typename E::dtype,
+                     types::array_tuple<long, E::value - 1>>>::type
   any(E const &array, long axis)
   {
     constexpr long N = E::value;
@@ -75,25 +76,26 @@ namespace numpy
     if (axis < 0 || axis >= long(N))
       throw types::ValueError("axis out of bounds");
     if (axis == 0) {
-      types::array<long, N> shp;
+      types::array_tuple<long, N> shp;
       shp[0] = 1;
       sutils::copy_shape<1, 0>(shp, array, utils::make_index_sequence<N - 1>());
-      types::ndarray<bool, types::array<long, N>> out(shp, false);
+      types::ndarray<bool, types::array_tuple<long, N>> out(shp, false);
       return std::accumulate(array.begin(), array.end(), *out.begin(),
                              numpy::functor::add());
     } else {
-      types::array<long, N - 1> shp;
+      types::array_tuple<long, N - 1> shp;
       sutils::copy_shape<0, 0>(shp, array, utils::make_index_sequence<N - 1>());
-      types::ndarray<bool, types::array<long, N - 1>> anyy(shp, builtins::None);
+      types::ndarray<bool, types::array_tuple<long, N - 1>> anyy(
+          shp, builtins::None);
       std::transform(
           array.begin(), array.end(), anyy.begin(),
-          [=](types::ndarray<T, types::array<long, N - 1>> const &other) {
+          [=](types::ndarray<T, types::array_tuple<long, N - 1>> const &other) {
             return any(other, axis - 1);
           });
       return anyy;
     }
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

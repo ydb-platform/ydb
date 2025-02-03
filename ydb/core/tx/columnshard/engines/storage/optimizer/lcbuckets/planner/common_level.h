@@ -33,7 +33,7 @@ private:
         if (Portions.empty()) {
             return std::nullopt;
         }
-        std::vector<std::shared_ptr<TPortionInfo>> result;
+        std::vector<TPortionInfo::TConstPtr> result;
         auto itFrom = Portions.upper_bound(from);
         auto itTo = Portions.upper_bound(to);
         if (itFrom != Portions.begin()) {
@@ -67,6 +67,10 @@ private:
         }
     }
 
+    virtual TInstant DoGetWeightExpirationInstant() const override {
+        return TInstant::Max();
+    }
+
 public:
     TLevelPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,
         const std::shared_ptr<IPortionsLevel>& nextLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& summaryPortionsInfo,
@@ -86,7 +90,7 @@ public:
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
         for (auto&& i : Portions) {
-            if (locksManager->IsLocked(*i.GetPortion())) {
+            if (locksManager->IsLocked(*i.GetPortion(), NDataLocks::ELockCategory::Compaction)) {
                 return true;
             }
         }
@@ -113,8 +117,7 @@ public:
         return result;
     }
 
-    virtual void DoModifyPortions(
-        const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) override;
+    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override;
 
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 

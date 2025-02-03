@@ -3,8 +3,8 @@
 
 from hamcrest import assert_that
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.harness.kikimr_http_client import HiveClient, SwaggerClient
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.clients.kikimr_http_client import HiveClient, SwaggerClient
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 
@@ -14,7 +14,7 @@ TIMEOUT_SECONDS = 480
 class TestChannelsOps(object):
     @classmethod
     def setup_class(cls):
-        cls.kikimr_cluster = kikimr_cluster_factory()
+        cls.kikimr_cluster = KiKiMR()
         cls.kikimr_cluster.start()
         cls.client = cls.kikimr_cluster.client
         cls.kv_client = cls.kikimr_cluster.kv_client

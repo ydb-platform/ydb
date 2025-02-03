@@ -20,7 +20,7 @@ def _testIReadMapping(self, inst, state, absent):
     for key in state:
         self.assertEqual(inst[key], state[key])
         self.assertEqual(inst.get(key, None), state[key])
-        self.assertTrue(key in inst)
+        self.assertIn(key, inst)
 
     for key in absent:
         self.assertEqual(inst.get(key, None), None)

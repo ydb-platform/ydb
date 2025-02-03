@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_ITERTOOLS_COUNT_HPP
 #define PYTHONIC_INCLUDE_ITERTOOLS_COUNT_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/combined.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 #include <iterator>
 
@@ -38,7 +38,7 @@ namespace itertools
       iterator const &begin() const;
       iterator end() const;
     };
-  }
+  } // namespace details
 
   template <typename T0, typename T1 = T0>
   details::count<typename __combined<T0, T1>::type> count(T0 start,
@@ -47,7 +47,7 @@ namespace itertools
   details::count<long> count();
 
   DEFINE_FUNCTOR(pythonic::itertools, count);
-}
+} // namespace itertools
 PYTHONIC_NS_END
 
 /* type inference stuff  {*/

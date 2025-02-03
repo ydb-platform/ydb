@@ -11,7 +11,7 @@ namespace math
   long ceil(T x);
 
   DEFINE_FUNCTOR(pythonic::math, ceil);
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

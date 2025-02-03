@@ -9,7 +9,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
@@ -419,7 +419,7 @@ private:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         LOG_T("TS3ReadActor", "Handle undelivered FileQueue ");
-        if (!FileQueueEvents.HandleUndelivered(ev)) {
+        if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
             TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
         }

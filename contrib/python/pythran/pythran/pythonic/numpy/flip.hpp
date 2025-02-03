@@ -14,12 +14,12 @@ namespace numpy
   namespace details
   {
     template <class E, class S, size_t... I>
-    auto flip(E const &expr, S const &slices, utils::index_sequence<I...>)
-        -> decltype(expr(slices[I]...))
+    auto flip(E const &expr, S const &slices,
+              utils::index_sequence<I...>) -> decltype(expr(slices[I]...))
     {
       return expr(slices[I]...);
     }
-  }
+  } // namespace details
 
   template <class E>
   auto flip(E const &expr, long axis)
@@ -30,7 +30,7 @@ namespace numpy
     slices[axis].step = -1;
     return details::flip(expr, slices, utils::make_index_sequence<E::value>{});
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

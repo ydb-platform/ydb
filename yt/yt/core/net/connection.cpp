@@ -48,6 +48,10 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static constexpr auto& Logger = NetLogger;
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace {
 
 int GetLastNetworkError()
@@ -93,39 +97,40 @@ ssize_t WriteToFD(TFileDescriptor fd, const char* buffer, size_t length)
 #endif
 }
 
-enum class EPipeReadStatus
-{
-    PipeEmpty,
-    PipeNotEmpty,
-    NotSupportedError,
-};
-
-EPipeReadStatus CheckPipeReadStatus(const TString& pipePath)
+TErrorOr<int> CheckPipeBytesLeftToRead(const TString& pipePath) noexcept
 {
 #ifdef _linux_
     int bytesLeft = 0;
+
+    auto makeSystemError = [&] (TFormatString<> message) {
+        return TError(message)
+            << TError::FromSystem()
+            << TErrorAttribute("pipe_path", pipePath);
+    };
 
     {
         int flags = O_RDONLY | O_CLOEXEC | O_NONBLOCK;
         int fd = HandleEintr(::open, pipePath.c_str(), flags);
 
-        int ret = ::ioctl(fd, FIONREAD, &bytesLeft);
-        if (ret == -1 && errno == EINVAL) {
-            // Some linux platforms do not support
-            // FIONREAD call. In such cases we
-            // expect EINVAL error.
-            return EPipeReadStatus::NotSupportedError;
+        if (fd == -1) {
+            return makeSystemError("Failed to open file descriptor");
         }
 
-        SafeClose(fd, /*ignoreBadFD*/ false);
+        int ret = ::ioctl(fd, FIONREAD, &bytesLeft);
+
+        if (ret == -1) {
+            return makeSystemError("ioctl failed");
+        }
+
+        if (!TryClose(fd, /*ignoreBadFD*/ false)) {
+            return makeSystemError("Failed to close file descriptor");
+        }
     }
 
-    return bytesLeft == 0
-        ? EPipeReadStatus::PipeEmpty
-        : EPipeReadStatus::PipeNotEmpty;
+    return bytesLeft;
 #else
     Y_UNUSED(pipePath);
-    return EPipeReadStatus::NotSupportedError;
+    return TError("Unsupported platform");
 #endif
 }
 
@@ -340,13 +345,19 @@ public:
     {
         auto result = TWriteOperation::PerformIO(fd);
         if (IsWriteComplete(result)) {
-            auto pipeReadStatus = CheckPipeReadStatus(PipePath_);
-            if (pipeReadStatus == EPipeReadStatus::NotSupportedError) {
-                return TError("Delivery fenced write failed: FIONDREAD is not supported on your platform")
-                    << TError::FromSystem();
+            auto bytesLeftOrError = CheckPipeBytesLeftToRead(PipePath_);
+
+
+            if (!bytesLeftOrError.IsOK()) {
+                YT_LOG_ERROR(bytesLeftOrError, "Delivery fenced write failed");
+                return std::move(bytesLeftOrError).Wrap();
+            } else {
+                YT_LOG_DEBUG("Delivery fenced write pipe check finished (BytesLeft: %v)", bytesLeftOrError.Value());
             }
 
-            result.Value().Retry = (pipeReadStatus != EPipeReadStatus::PipeEmpty);
+            result.Value().Retry = (bytesLeftOrError.Value() != 0);
+        } else {
+            YT_LOG_DEBUG("Delivery fenced write to pipe step finished (Result: %v)", result);
         }
 
         return result;
@@ -503,7 +514,7 @@ public:
         return impl;
     }
 
-    const TString& GetLoggingTag() const override
+    const std::string& GetLoggingTag() const override
     {
         return LoggingTag_;
     }
@@ -752,7 +763,7 @@ public:
 private:
     const TConnectionId Id_ = TConnectionId::Create();
     const TString Endpoint_;
-    const TString LoggingTag_;
+    const std::string LoggingTag_;
     const NLogging::TLogger Logger;
     const TNetworkAddress LocalAddress_;
     const TNetworkAddress RemoteAddress_;
@@ -907,7 +918,7 @@ private:
     TDelayedExecutorCookie ReadTimeoutCookie_;
     TDelayedExecutorCookie WriteTimeoutCookie_;
 
-    static TString MakeLoggingTag(TConnectionId id, const TString& endpoint)
+    static std::string MakeLoggingTag(TConnectionId id, const TString& endpoint)
     {
        return Format("ConnectionId: %v, Endpoint: %v",
             id,
@@ -1225,7 +1236,7 @@ public:
 
     TFuture<void> Abort() override
     {
-        return Impl_->Abort(TError(EErrorCode::Aborted, "Connection aborted"));
+        return Impl_->Abort(TError(NNet::EErrorCode::Aborted, "Connection aborted"));
     }
 
     TFuture<void> CloseRead() override
@@ -1294,7 +1305,8 @@ namespace {
 
 TFileDescriptor CreateWriteFDForConnection(
     const TString& pipePath,
-    std::optional<int> capacity)
+    std::optional<int> capacity,
+    bool useDeliveryFence)
 {
 #ifdef _unix_
     int flags = O_WRONLY | O_CLOEXEC;
@@ -1308,6 +1320,10 @@ TFileDescriptor CreateWriteFDForConnection(
     try {
         if (capacity) {
             SafeSetPipeCapacity(fd, *capacity);
+        }
+
+        if (useDeliveryFence) {
+            SafeEnableEmptyPipeEpollEvent(fd);
         }
 
         SafeMakeNonblocking(fd);
@@ -1410,7 +1426,7 @@ IConnectionWriterPtr CreateOutputConnectionFromPath(
     bool useDeliveryFence)
 {
     return New<TFDConnection>(
-        CreateWriteFDForConnection(pipePath, capacity),
+        CreateWriteFDForConnection(pipePath, capacity, useDeliveryFence),
         std::move(pipePath),
         std::move(poller),
         pipeHolder,

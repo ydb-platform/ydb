@@ -25,7 +25,7 @@ namespace numpy
   {
     return asarray(t);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

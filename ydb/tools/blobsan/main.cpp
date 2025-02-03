@@ -5,7 +5,6 @@
 #include <ydb/core/blobstorage/vdisk/query/query_stream.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <library/cpp/streams/bzip2/bzip2.h>
-#include <library/cpp/pop_count/popcount.h>
 #include <util/generic/buffer.h>
 #include <util/generic/hash.h>
 #include <util/stream/buffer.h>
@@ -16,6 +15,7 @@
 #include <util/system/thread.h>
 #include <util/system/mutex.h>
 #include <util/system/condvar.h>
+#include <bit>
 #include <deque>
 #include <map>
 #include <unordered_map>
@@ -514,7 +514,7 @@ int main(int argc, char **argv) {
 
             const ui32 numParts = getNumParts(blob.Info.Layout);
             const ui32 numLocalParts = getNumParts(blob.Info.LocalLayout);
-            const ui32 numNodes = PopCount(blob.Info.Nodes);
+            const ui32 numNodes = std::popcount(blob.Info.Nodes);
 
             auto isFull = [&](const TSubgroupPartLayout& layout) {
                 return checker.GetBlobState(layout, failed) == TBlobStorageGroupInfo::EBS_FULL;
@@ -559,7 +559,7 @@ int main(int argc, char **argv) {
                 // looks like phantom blob -- count found parts as trash
                 for (ui32 partIdx = 0; partIdx < TotalPartCount; ++partIdx) {
                     if (const ui32 disks = blob.Info.LocalLayout.GetDisksWithPart(partIdx)) {
-                        trashSize += type.PartSize(blobId) * PopCount(disks);
+                        trashSize += type.PartSize(blobId) * std::popcount(disks);
                     }
                 }
                 continue;
@@ -585,9 +585,9 @@ int main(int argc, char **argv) {
                 << "\n\tNumNodes#           " << numNodes
                 << "\n\tNodes#              " << FormatBitMask(blob.Info.Nodes, BlobSubgroupSize)
                 << "\n\tSeenDisks#          " << FormatBitMask(seenDisks, BlobSubgroupSize)
-                << "\n\tNumUnderBarrier#    " << PopCount(blob.UnderBarrierMask)
+                << "\n\tNumUnderBarrier#    " << std::popcount(blob.UnderBarrierMask)
                 << "\n\tUnderBarrierMask#   " << FormatBitMask(blob.UnderBarrierMask, BlobSubgroupSize)
-                << "\n\tNumDiscard#         " << PopCount(blob.DiscardMask)
+                << "\n\tNumDiscard#         " << std::popcount(blob.DiscardMask)
                 << "\n\tDiscardMask#        " << FormatBitMask(blob.DiscardMask, BlobSubgroupSize)
                 << "\n\tKeepMask#           " << FormatBitMask(blob.KeepMask, BlobSubgroupSize)
                 << "\n\tDoNotKeepMask#      " << FormatBitMask(blob.DoNotKeepMask, BlobSubgroupSize)

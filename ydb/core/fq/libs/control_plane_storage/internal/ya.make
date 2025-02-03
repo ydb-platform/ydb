@@ -29,11 +29,11 @@ PEERDIR(
     ydb/core/mon
     ydb/library/protobuf_printer
     ydb/library/security
-    ydb/library/yql/public/issue
-    ydb/library/yql/utils
+    yql/essentials/public/issue
+    yql/essentials/utils
     ydb/public/lib/fq
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_value
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/value
 )
 
 YQL_LAST_ABI_VERSION()

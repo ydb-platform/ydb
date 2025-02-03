@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_types.h>
 
 #include <util/generic/buffer.h>
 

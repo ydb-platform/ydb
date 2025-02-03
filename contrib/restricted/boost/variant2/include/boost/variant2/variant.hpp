@@ -83,7 +83,7 @@ struct monostate
 {
 };
 
-#if !BOOST_WORKAROUND(BOOST_MSVC, < 1940)
+#if !BOOST_WORKAROUND(BOOST_MSVC, < 1950)
 
 constexpr bool operator<(monostate, monostate) noexcept { return false; }
 constexpr bool operator>(monostate, monostate) noexcept { return false; }

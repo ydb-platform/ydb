@@ -94,8 +94,8 @@ class Test(unittest.TestCase):
         self.assertEqual([i.getName() for i in providedBy(c).flattened()],
                          ['I4', 'I31', 'I3', 'I1', 'I2', 'Interface']
                          )
-        self.assertTrue(I1 in providedBy(c))
-        self.assertFalse(I3 in providedBy(c))
+        self.assertIn(I1, providedBy(c))
+        self.assertNotIn(I3, providedBy(c))
         self.assertTrue(providedBy(c).extends(I3))
         self.assertTrue(providedBy(c).extends(I31))
         self.assertFalse(providedBy(c).extends(I5))
@@ -116,8 +116,8 @@ class Test(unittest.TestCase):
                          ['I4', 'I5', 'I31'])
         self.assertEqual([i.getName() for i in providedBy(c).flattened()],
                          ['I4', 'I5', 'I31', 'I3', 'Interface'])
-        self.assertFalse(I1 in providedBy(c))
-        self.assertFalse(I3 in providedBy(c))
+        self.assertNotIn(I1, providedBy(c))
+        self.assertNotIn(I3, providedBy(c))
         self.assertTrue(providedBy(c).extends(I3))
         self.assertFalse(providedBy(c).extends(I1))
         self.assertTrue(providedBy(c).extends(I31))
@@ -138,8 +138,8 @@ class Test(unittest.TestCase):
                          ['I4', 'I5', 'I31'])
         self.assertEqual([i.getName() for i in providedBy(c).flattened()],
                          ['I4', 'I5', 'I31', 'I3', 'Interface'])
-        self.assertFalse(I1 in providedBy(c))
-        self.assertFalse(I3 in providedBy(c))
+        self.assertNotIn(I1, providedBy(c))
+        self.assertNotIn(I3, providedBy(c))
         self.assertTrue(providedBy(c).extends(I3))
         self.assertFalse(providedBy(c).extends(I1))
         self.assertTrue(providedBy(c).extends(I31))
@@ -211,19 +211,19 @@ class Test(unittest.TestCase):
 
         ob = C()
         directlyProvides(ob, I1, I2)
-        self.assertTrue(I1 in providedBy(ob))
-        self.assertTrue(I2 in providedBy(ob))
-        self.assertTrue(IA1 in providedBy(ob))
-        self.assertTrue(IA2 in providedBy(ob))
-        self.assertTrue(IB in providedBy(ob))
-        self.assertTrue(IC in providedBy(ob))
+        self.assertIn(I1, providedBy(ob))
+        self.assertIn(I2, providedBy(ob))
+        self.assertIn(IA1, providedBy(ob))
+        self.assertIn(IA2, providedBy(ob))
+        self.assertIn(IB, providedBy(ob))
+        self.assertIn(IC, providedBy(ob))
 
         directlyProvides(ob, directlyProvidedBy(ob) - I2)
-        self.assertTrue(I1 in providedBy(ob))
-        self.assertFalse(I2 in providedBy(ob))
-        self.assertFalse(I2 in providedBy(ob))
+        self.assertIn(I1, providedBy(ob))
+        self.assertNotIn(I2, providedBy(ob))
+        self.assertNotIn(I2, providedBy(ob))
         directlyProvides(ob, directlyProvidedBy(ob), I2)
-        self.assertTrue(I2 in providedBy(ob))
+        self.assertIn(I2, providedBy(ob))
 
     # see above
     # def TODO_test_classProvides_fails_for_odd_class(self):

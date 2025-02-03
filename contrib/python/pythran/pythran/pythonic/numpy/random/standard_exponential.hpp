@@ -26,9 +26,9 @@ namespace numpy
     }
 
     inline auto standard_exponential(long size)
-        -> decltype(standard_exponential(types::array<long, 1>{{size}}))
+        -> decltype(standard_exponential(types::array_tuple<long, 1>{{size}}))
     {
-      return standard_exponential(types::array<long, 1>{{size}});
+      return standard_exponential(types::array_tuple<long, 1>{{size}});
     }
 
     inline double standard_exponential(types::none_type d)

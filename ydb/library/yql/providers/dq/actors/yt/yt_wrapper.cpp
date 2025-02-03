@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events/events.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -254,7 +254,7 @@ namespace NYql {
 
         template<typename T>
         TWeakPtr<T> NewRequest(ui64 id, TActorId sender, const TActorContext& ctx) {
-            auto req = New<T>(SelfId(), sender, ctx.ExecutorThread.ActorSystem, id);
+            auto req = New<T>(SelfId(), sender, ctx.ActorSystem(), id);
             Requests.emplace(req);
             return NYT::MakeWeak(req);
         }

@@ -15,8 +15,8 @@ namespace numpy
     {
       return t(v);
     }
-  }
-}
+  } // namespace dtype
+} // namespace numpy
 
 PYTHONIC_NS_END
 

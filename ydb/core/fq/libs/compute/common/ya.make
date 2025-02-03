@@ -13,8 +13,7 @@ PEERDIR(
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/grpc
     ydb/core/fq/libs/shared_resources
-    ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
+    yql/essentials/public/issue
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/generic/connector/api/service/protos

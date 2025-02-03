@@ -12,6 +12,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+#include <ydb/library/actors/util/queue_oneone_inplace.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/bt_exception.h>
@@ -295,18 +296,13 @@ namespace NActors {
         }
 
         // for threads
-        ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override {
+        TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override {
             Y_UNUSED(wctx);
             Y_UNUSED(revolvingCounter);
             Y_ABORT();
         }
 
-        void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) override {
-            Y_UNUSED(workerId);
-            Node->MailboxTable->ReclaimMailbox(mailboxType, hint, revolvingCounter);
-        }
-
-        TMailboxHeader *ResolveMailbox(ui32 hint) override {
+        TMailbox* ResolveMailbox(ui32 hint) override {
             return Node->MailboxTable->Get(hint);
         }
 
@@ -390,7 +386,7 @@ namespace NActors {
                     const NActors::TActorId loggerActorId = NActors::TActorId(nodeId, "logger");
                     TActorId logger = node->ActorSystem->LookupLocalService(loggerActorId);
                     if (ev->GetRecipientRewrite() == logger) {
-                        TMailboxHeader* mailbox = node->MailboxTable->Get(mailboxHint);
+                        TMailbox* mailbox = node->MailboxTable->Get(mailboxHint);
                         IActor* recipientActor = mailbox->FindActor(ev->GetRecipientRewrite().LocalId());
                         if (recipientActor) {
                             TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), ev->GetRecipientRewrite());
@@ -414,16 +410,16 @@ namespace NActors {
             return true;
         }
 
-        void ScheduleActivation(ui32 activation) override {
-            Y_UNUSED(activation);
+        void ScheduleActivation(TMailbox* mailbox) override {
+            Y_UNUSED(mailbox);
         }
 
-        void SpecificScheduleActivation(ui32 activation) override {
-            Y_UNUSED(activation);
+        void SpecificScheduleActivation(TMailbox* mailbox) override {
+            Y_UNUSED(mailbox);
         }
 
-        void ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) override {
-            Y_UNUSED(activation);
+        void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingCounter) override {
+            Y_UNUSED(mailbox);
             Y_UNUSED(revolvingCounter);
         }
 
@@ -432,8 +428,20 @@ namespace NActors {
             return Runtime->Register(actor, NodeIndex, PoolId, mailboxType, revolvingCounter, parentId);
         }
 
-        TActorId Register(IActor *actor, TMailboxHeader *mailbox, ui32 hint, const TActorId& parentId) override {
-            return Runtime->Register(actor, NodeIndex, PoolId, mailbox, hint, parentId);
+        TActorId Register(IActor *actor, TMailboxCache&, ui64 revolvingCounter, const TActorId& parentId) override {
+            return Runtime->Register(actor, NodeIndex, PoolId, TMailboxType::Simple, revolvingCounter, parentId);
+        }
+
+        TActorId Register(IActor *actor, TMailbox *mailbox, const TActorId& parentId) override {
+            return Runtime->Register(actor, NodeIndex, PoolId, mailbox, parentId);
+        }
+
+        TActorId RegisterAlias(TMailbox* mailbox, IActor* actor) override {
+            return Runtime->RegisterAlias(mailbox, actor, NodeIndex, PoolId);
+        }
+
+        void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) override {
+            mailbox->DetachAlias(actorId.LocalId());
         }
 
         // lifecycle stuff
@@ -544,9 +552,12 @@ namespace NActors {
     bool TTestActorRuntimeBase::AllowSendFrom(TNodeDataBase* node, TAutoPtr<IEventHandle>& ev) {
         ui64 senderLocalId = ev->Sender.LocalId();
         ui64 senderMailboxHint = ev->Sender.Hint();
-        TMailboxHeader* senderMailbox = node->MailboxTable->Get(senderMailboxHint);
+        TMailbox* senderMailbox = node->MailboxTable->Get(senderMailboxHint);
         if (senderMailbox) {
             IActor* senderActor = senderMailbox->FindActor(senderLocalId);
+            if (!senderActor) {
+                senderActor = senderMailbox->FindAlias(senderLocalId);
+            }
             TTestDecorator *decorator = dynamic_cast<TTestDecorator*>(senderActor);
             return !decorator || decorator->BeforeSending(ev);
         }
@@ -910,71 +921,37 @@ namespace NActors {
         }
 
         // first step - find good enough mailbox
-        ui32 hint = 0;
-        TMailboxHeader *mailbox = nullptr;
+        TMailbox *mailbox = node->MailboxTable->Allocate();
 
-        {
-            ui32 hintBackoff = 0;
-
-            while (hint == 0) {
-                hint = node->MailboxTable->AllocateMailbox(mailboxType, ++revolvingCounter);
-                mailbox = node->MailboxTable->Get(hint);
-
-                if (!mailbox->LockFromFree()) {
-                    node->MailboxTable->ReclaimMailbox(mailboxType, hintBackoff, ++revolvingCounter);
-                    hintBackoff = hint;
-                    hint = 0;
-                }
-            }
-
-            node->MailboxTable->ReclaimMailbox(mailboxType, hintBackoff, ++revolvingCounter);
-        }
+        mailbox->LockFromFree();
 
         const ui64 localActorId = AllocateLocalId();
         if (VERBOSE) {
-            Cerr << "Register actor " << TypeName(*actor) << " as " << localActorId << ", mailbox: " << hint << "\n";
+            Cerr << "Register actor " << TypeName(*actor) << " as " << localActorId << ", mailbox: " << mailbox->Hint << "\n";
         }
 
         // ok, got mailbox
         mailbox->AttachActor(localActorId, actor);
 
         // do init
-        const TActorId actorId(FirstNodeId + nodeIndex, poolId, localActorId, hint);
+        const TActorId actorId(FirstNodeId + nodeIndex, poolId, localActorId, mailbox->Hint);
         ActorNames[actorId] = TypeName(*actor);
         RegistrationObserver(*this, parentId ? parentId : CurrentRecipient, actorId);
         DoActorInit(node->ActorSystem.Get(), actor, actorId, parentId ? parentId : CurrentRecipient);
 
-        switch (mailboxType) {
-        case TMailboxType::Simple:
-            UnlockFromExecution((TMailboxTable::TSimpleMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
-            break;
-        case TMailboxType::Revolving:
-            UnlockFromExecution((TMailboxTable::TRevolvingMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
-            break;
-        case TMailboxType::HTSwap:
-            UnlockFromExecution((TMailboxTable::THTSwapMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
-            break;
-        case TMailboxType::ReadAsFilled:
-            UnlockFromExecution((TMailboxTable::TReadAsFilledMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
-            break;
-        case TMailboxType::TinyReadAsFilled:
-            UnlockFromExecution((TMailboxTable::TTinyReadAsFilledMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
-            break;
-        default:
-            Y_ABORT("Unsupported mailbox type");
-        }
+        // Note: test actorsystem mailboxes stay permanently locked
 
         return actorId;
     }
 
-    TActorId TTestActorRuntimeBase::Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailboxHeader *mailbox, ui32 hint,
+    TActorId TTestActorRuntimeBase::Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailbox *mailbox,
         const TActorId& parentId) {
         Y_ABORT_UNLESS(nodeIndex < NodeCount);
         TGuard<TMutex> guard(Mutex);
         TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
         if (UseRealThreads) {
             Y_ABORT_UNLESS(node->ExecutorPools.contains(poolId));
-            return node->ExecutorPools[poolId]->Register(actor, mailbox, hint, parentId);
+            return node->ExecutorPools[poolId]->Register(actor, mailbox, parentId);
         }
 
         const ui64 localActorId = AllocateLocalId();
@@ -983,12 +960,32 @@ namespace NActors {
         }
 
         mailbox->AttachActor(localActorId, actor);
-        const TActorId actorId(FirstNodeId + nodeIndex, poolId, localActorId, hint);
+        const TActorId actorId(FirstNodeId + nodeIndex, poolId, localActorId, mailbox->Hint);
         ActorNames[actorId] = TypeName(*actor);
         RegistrationObserver(*this, parentId ? parentId : CurrentRecipient, actorId);
         DoActorInit(node->ActorSystem.Get(), actor, actorId, parentId ? parentId : CurrentRecipient);
 
         return actorId;
+    }
+
+    TActorId TTestActorRuntimeBase::RegisterAlias(TMailbox* mailbox, IActor* actor, ui32 nodeIndex, ui32 poolId) {
+        Y_ABORT_UNLESS(nodeIndex < NodeCount);
+        TGuard<TMutex> guard(Mutex);
+        TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
+        if (UseRealThreads) {
+            Y_ABORT_UNLESS(node->ExecutorPools.contains(poolId));
+            return node->ExecutorPools[poolId]->RegisterAlias(mailbox, actor);
+        }
+
+        Y_ABORT_UNLESS(mailbox->FindActor(actor->SelfId().LocalId()) == actor);
+
+        const ui64 localActorId = AllocateLocalId();
+        if (VERBOSE) {
+            Cerr << "Register actor " << TypeName(*actor) << " with alias " << localActorId << "\n";
+        }
+
+        mailbox->AttachAlias(localActorId, actor);
+        return TActorId(FirstNodeId + nodeIndex, poolId, localActorId, mailbox->Hint);
     }
 
     TActorId TTestActorRuntimeBase::RegisterService(const TActorId& serviceId, const TActorId& actorId, ui32 nodeIndex) {
@@ -1667,8 +1664,16 @@ namespace NActors {
 
         EvCounters[ev->GetTypeRewrite()]++;
 
-        TMailboxHeader* mailbox = node->MailboxTable->Get(mailboxHint);
+        TMailbox* mailbox = node->MailboxTable->Get(mailboxHint);
         IActor* recipientActor = mailbox->FindActor(recipientLocalId);
+        if (!recipientActor) {
+            recipientActor = mailbox->FindAlias(recipientLocalId);
+            if (recipientActor) {
+                // Work as if some alias actor rewrites events and delivers them to the real actor id
+                ev->Rewrite(ev->GetTypeRewrite(), recipientActor->SelfId());
+                recipientLocalId = ev->GetRecipientRewrite().LocalId();
+            }
+        }
         if (recipientActor) {
             // Save actorId by value in order to prevent ctx from being invalidated during another Send call.
             TActorId actorId = ev->GetRecipientRewrite();
@@ -1701,8 +1706,11 @@ namespace NActors {
     IActor* TTestActorRuntimeBase::FindActor(const TActorId& actorId, TNodeDataBase* node) const {
         ui32 mailboxHint = actorId.Hint();
         ui64 localId = actorId.LocalId();
-        TMailboxHeader* mailbox = node->MailboxTable->Get(mailboxHint);
+        TMailbox* mailbox = node->MailboxTable->Get(mailboxHint);
         IActor* actor = mailbox->FindActor(localId);
+        if (!actor) {
+            actor = mailbox->FindAlias(localId);
+        }
         return actor;
     }
 
@@ -1791,10 +1799,8 @@ namespace NActors {
 
         setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(), &InterconnectMock);
 
-        if (UseRealInterconnect) {
-            setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(),
-                NActors::TMailboxType::Simple, InterconnectPoolId()));
-        }
+        setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(),
+            NActors::TMailboxType::Simple, InterconnectPoolId()));
 
         if (!SingleSysEnv) { // Single system env should do this self
             if (LogBackendFactory) {

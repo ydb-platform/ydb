@@ -1,8 +1,13 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     audit_log.cpp
     audit_dml_operations.cpp
+    audit_logins.cpp
     db_metadata_cache.h
     grpc_endpoint_publish_actor.cpp
     grpc_helper.cpp
@@ -17,6 +22,7 @@ SRCS(
     rpc_alter_table.cpp
     rpc_backup.cpp
     rpc_begin_transaction.cpp
+    rpc_bsconfig.cpp
     rpc_calls.cpp
     rpc_cancel_operation.cpp
     rpc_cms.cpp
@@ -61,6 +67,7 @@ SRCS(
     rpc_make_directory.cpp
     rpc_modify_permissions.cpp
     rpc_monitoring.cpp
+    rpc_ping.cpp
     rpc_prepare_data_query.cpp
     rpc_rate_limiter_api.cpp
     rpc_read_columns.cpp
@@ -130,19 +137,20 @@ PEERDIR(
     ydb/core/security
     ydb/core/security/ldap_auth_provider
     ydb/library/aclib
-    ydb/library/binary_json
-    ydb/library/dynumber
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
     ydb/library/mkql_proto
     ydb/library/persqueue/topic_parser
-    ydb/library/yql/parser/pg_wrapper/interface
-    ydb/library/yql/public/types
-    ydb/library/yql/public/issue
+    ydb/library/yaml_config
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/public/types
+    yql/essentials/public/issue
     ydb/library/services
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/lib/fq
-    ydb/public/lib/operation_id
-    ydb/public/sdk/cpp/client/resources
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/client/resources
     ydb/services/ext_index/common
 )
 

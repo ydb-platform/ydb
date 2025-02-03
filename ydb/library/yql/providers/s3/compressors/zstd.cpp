@@ -1,8 +1,8 @@
 #include "zstd.h"
 
 #include <util/generic/size_literals.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/exceptions.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/exceptions.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include "output_queue_impl.h"
 

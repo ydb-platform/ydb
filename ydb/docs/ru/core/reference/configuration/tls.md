@@ -21,7 +21,7 @@ interconnect_config:
 
 ### gRPC
 
-[ОсновнойAPI {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md) основан на [gRPC](https://grpc.io/). Он используется для внешнего взаимодействия с клиентскими приложениями, которые работают напрямую с {{ ydb-short-name }} через [SDK](../../reference/ydb-sdk/index.md) или [CLI](../../reference/ydb-cli/index.md).
+[Основной API {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md) основан на [gRPC](https://grpc.io/). Он используется для внешнего взаимодействия с клиентскими приложениями, которые работают напрямую с {{ ydb-short-name }} через [SDK](../../reference/ydb-sdk/index.md) или [CLI](../../reference/ydb-cli/index.md).
 
 Пример включения TLS для gRPC API:
 
@@ -77,7 +77,7 @@ monitoring_config:
 
 ### LDAP
 
-{{ ydb-short-name }} поддерживает [LDAP](../../concepts/auth.md#ldap) для аутентификации пользователей. Протокол LDAP имеет два варианта включения TLS.
+{{ ydb-short-name }} поддерживает [LDAP](../../security/authentication.md#ldap) для аутентификации пользователей. Протокол LDAP имеет два варианта включения TLS.
 
 Пример включения TLS для LDAP через расширение протокола `StartTls`:
 
@@ -123,6 +123,10 @@ tracing_config:
       service_name: ydb
 ```
 
+{% if feature_async_replication %}
+
 ## Асинхронная репликация
 
 [Асинхронная репликация](../../concepts/async-replication.md) синхронизирует данные между двумя базами данных {{ ydb-short-name }}, одна из которых выступает в роли клиента для другой. Использование TLS при такой коммуникации контролируется параметром `CONNECTION_STRING` в запросах [CREATE ASYNC REPLICATION](../../yql/reference/syntax/create-async-replication.md). Для TLS-соединений используйте протокол `grpcs://`. Изменения в серверной конфигурации не требуются.
+
+{% endif %}

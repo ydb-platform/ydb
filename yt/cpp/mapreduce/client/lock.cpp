@@ -2,18 +2,16 @@
 
 #include "yt_poller.h"
 
-#include <yt/cpp/mapreduce/http/retry_request.h>
-
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
+#include <yt/cpp/mapreduce/http/retry_request.h>
+
+#include <yt/cpp/mapreduce/interface/raw_batch_request.h>
 
 #include <util/string/builder.h>
 
 namespace NYT {
 namespace NDetail {
-
-using namespace NRawClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -26,7 +24,7 @@ public:
         , Acquired_(acquired)
     { }
 
-    void PrepareRequest(TRawBatchRequest* batchRequest) override
+    void PrepareRequest(IRawBatchRequest* batchRequest) override
     {
         LockState_ = batchRequest->Get(TTransactionId(), LockStateYPath_, TGetOptions());
     }

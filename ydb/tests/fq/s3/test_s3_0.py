@@ -8,7 +8,7 @@ import pytest
 import time
 import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
-import ydb.tests.library.common.yatest_common as yatest_common
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_v2, yq_all
 from google.protobuf.struct_pb2 import NullValue
@@ -1092,13 +1092,13 @@ Pear,15,33'''
 
         # Check that checkpointing is finished
         def wait_checkpoints(require_query_is_on=False):
-            deadline = time.time() + yatest_common.plain_or_under_sanitizer(300, 900)
+            deadline = time.time() + plain_or_under_sanitizer(300, 900)
             while True:
                 completed = kikimr.control_plane.get_completed_checkpoints(query_id, require_query_is_on)
                 if completed >= 3:
                     break
                 assert time.time() < deadline, "Completed: {}".format(completed)
-                time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
+                time.sleep(plain_or_under_sanitizer(0.5, 2))
 
         logging.debug("Wait checkpoints")
         wait_checkpoints(True)
@@ -1114,3 +1114,56 @@ Pear,15,33'''
 
         client.abort_query(query_id)
         client.wait_query(query_id)
+
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_double_optional_types_validation(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        fruits = '''Fruit,Price,Weight
+Banana,3,100
+Apple,2,22
+Pear,15,33'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`fruits.csv`
+            WITH (format='csv_with_names', SCHEMA (
+                Name Int32??,
+            ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+
+        assert "Double optional types are not supported" in issues, "Incorrect issues: " + issues
+
+        sql = f'''
+            INSERT INTO `{storage_connection_name}`.`insert/`
+            WITH
+            (
+                FORMAT="csv_with_names"
+            )
+            SELECT CAST(42 AS Int32??) as Weight;'''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+
+        assert "Double optional types are not supported" in issues, "Incorrect issues: " + issues

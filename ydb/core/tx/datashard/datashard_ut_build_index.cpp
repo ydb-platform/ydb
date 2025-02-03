@@ -9,7 +9,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/protos/index_builder.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

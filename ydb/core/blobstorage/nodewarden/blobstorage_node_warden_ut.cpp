@@ -8,7 +8,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_http_request.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/core/util/random.h>
@@ -898,7 +898,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         runtime.RegisterService(pdiskServiceId, pdiskActorId);
 
-        runtime.Send(new IEventHandle(nodeWarden, pdiskActorId, new TEvBlobStorage::TEvAskWardenRestartPDisk(pdiskId), 0, cookie), nodeId);
+        runtime.Send(new IEventHandle(nodeWarden, pdiskActorId, new TEvBlobStorage::TEvAskWardenRestartPDisk(pdiskId, false), 0, cookie), nodeId);
 
         auto responseEvent = new TEvBlobStorage::TEvControllerConfigResponse();
 

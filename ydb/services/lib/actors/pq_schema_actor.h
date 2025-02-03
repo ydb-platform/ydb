@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
@@ -319,7 +320,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             SetDatabase(proposal.get(), *this->Request_);
 
             if (this->Request_->GetSerializedToken().empty()) {
-                if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+                if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                     return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                           "Unauthenticated access is forbidden, please provide credentials");
                 }
@@ -343,7 +344,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 request->UserToken = new NACLib::TUserToken(token);
                 return true;
             }
-            return !(AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
+            return !(AppData()->EnforceUserTokenRequirement || AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
         }
 
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
@@ -548,6 +549,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             return path;
         }
 
+        const TMaybe<TString>& GetCdcStreamName() const {
+            return CdcStreamName;
+        }
+
         void SendDescribeProposeRequest(bool showPrivate = false) {
             return TBase::SendDescribeProposeRequest(this->ActorContext(), showPrivate);
         }
@@ -567,7 +572,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         bool SetRequestToken(NSchemeCache::TSchemeCacheNavigate* request) const override {
             if (Request.Token.empty()) {
-                return !(AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
+                return !(AppData()->EnforceUserTokenRequirement || AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
             } else {
                 request->UserToken = new NACLib::TUserToken(Request.Token);
                 return true;
@@ -603,6 +608,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
                     Y_ABORT_UNLESS(response.ListNodeEntry->Children.size() == 1);
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
+
+                    if (response.Self) {
+                        CdcStreamName = response.Self->Info.GetName();
+                    }
                     SendDescribeProposeRequest(true);
                     return true;
                 }
@@ -620,6 +629,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
         TMaybe<TString> PrivateTopicName;
+        TMaybe<TString> CdcStreamName;
+
     };
 
 }

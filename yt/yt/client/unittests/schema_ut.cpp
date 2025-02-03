@@ -14,13 +14,12 @@
 #include <random>
 
 namespace NYT::NTableClient {
-
-////////////////////////////////////////////////////////////////////////////////
-
 namespace {
 
 using namespace NYson;
 using namespace NYTree;
+
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -377,6 +376,37 @@ TEST(TTableSchemaTest, ColumnSchemaValidation)
             {"foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
             {"bar", SimpleLogicalType(ESimpleLogicalValueType::String)},
         }), ESortOrder::Ascending));
+
+    // Allow some names starting from SystemColumnNamePrefix
+    EXPECT_NO_THROW(
+        ValidateColumnSchema(
+            TColumnSchema(RowIndexColumnName, EValueType::Int64),
+            /*isTableSorted*/ false,
+            /*isTableDynamic*/ false,
+            /*options*/ {.AllowOperationColumns = true})
+    );
+    EXPECT_NO_THROW(
+        ValidateColumnSchema(
+            TColumnSchema(RangeIndexColumnName, EValueType::Int64),
+            /*isTableSorted*/ false,
+            /*isTableDynamic*/ false,
+            /*options*/ {.AllowOperationColumns = true})
+    );
+    EXPECT_THROW(
+        ValidateColumnSchema(
+            TColumnSchema(TableIndexColumnName, EValueType::Int64),
+            /*isTableSorted*/ false,
+            /*isTableDynamic*/ false,
+            /*options*/ {.AllowOperationColumns = true}),
+        std::exception);
+    EXPECT_THROW(
+        ValidateColumnSchema(
+            TColumnSchema(EmptyValueColumnName, EValueType::Int64),
+            /*isTableSorted*/ false,
+            /*isTableDynamic*/ false,
+            /*options*/ {.AllowOperationColumns = true}),
+        std::exception);
+
 }
 
 TEST(TTableSchemaTest, ValidateTableSchemaTest)
@@ -397,7 +427,7 @@ TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
 {
     NProto::TColumnSchema columnSchemaProto;
     columnSchemaProto.set_name("foo");
-    columnSchemaProto.set_type(static_cast<int>(EValueType::Uint64));
+    columnSchemaProto.set_type(ToProto(EValueType::Uint64));
 
     TColumnSchema columnSchema;
     FromProto(&columnSchema, columnSchemaProto);
@@ -407,7 +437,7 @@ TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
     EXPECT_EQ(columnSchema.Name(), "foo");
     EXPECT_EQ(columnSchema.StableName().Underlying(), "foo");
 
-    columnSchemaProto.set_simple_logical_type(static_cast<int>(ESimpleLogicalValueType::Uint32));
+    columnSchemaProto.set_simple_logical_type(ToProto(ESimpleLogicalValueType::Uint32));
     columnSchemaProto.set_name("foo");
     columnSchemaProto.set_stable_name("foo_stable");
     FromProto(&columnSchema, columnSchemaProto);
@@ -535,6 +565,45 @@ TEST(TTableSchemaTest, ValidateTableSchemaNestedColumns)
         TColumnSchema("nv2", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String)))
             .SetAggregate("nested_value(n)"),
     });
+}
+
+TEST(TTableSchemaTest, WithSystemColumns)
+{
+    const auto schema1 = TTableSchema({
+        TColumnSchema("foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)),
+    });
+
+    const auto schema2Ptr = schema1.WithSystemColumns({
+        .EnableRangeIndex = true,
+    });
+
+    EXPECT_EQ(schema2Ptr->Columns().size(), 2u);
+    EXPECT_TRUE(schema2Ptr->FindColumn("foo"));
+    EXPECT_TRUE(schema2Ptr->FindColumn(RangeIndexColumnName));
+
+    const auto schema3Ptr = schema1.WithSystemColumns({
+        .EnableTableIndex = true,
+        .EnableRowIndex = true,
+        .EnableRangeIndex = true,
+    });
+
+    EXPECT_EQ(schema3Ptr->Columns().size(), 4u);
+    EXPECT_TRUE(schema3Ptr->FindColumn("foo"));
+    EXPECT_TRUE(schema3Ptr->FindColumn(TableIndexColumnName));
+    EXPECT_TRUE(schema3Ptr->FindColumn(RowIndexColumnName));
+    EXPECT_TRUE(schema3Ptr->FindColumn(RangeIndexColumnName));
+
+    EXPECT_EQ(*schema3Ptr, *schema2Ptr->WithSystemColumns({
+        .EnableTableIndex = true,
+        .EnableRowIndex = true,
+        .EnableRangeIndex = true,
+    }));
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        TTableSchema({
+            TColumnSchema(RowIndexColumnName, SimpleLogicalType(ESimpleLogicalValueType::String)),
+        }).WithSystemColumns({.EnableRowIndex = true}),
+        "Cannot add column");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

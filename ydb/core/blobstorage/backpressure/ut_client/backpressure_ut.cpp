@@ -1,4 +1,4 @@
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include "skeleton_front_mock.h"
 #include "loader.h"

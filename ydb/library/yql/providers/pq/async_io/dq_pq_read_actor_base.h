@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 namespace NYql::NDq::NInternal {
 
@@ -15,9 +17,10 @@ public:
     const NPq::NProto::TDqPqTopicSource SourceParams;
     TDqAsyncStats IngressStats;
     TInstant StartingMessageTimestamp;
-    const TString LogPrefix;
+    TString LogPrefix;
     const NPq::NProto::TDqReadTaskParams ReadParams;
     const NActors::TActorId ComputeActorId;
+    ui64 TaskId;
 
     TDqPqReadActorBase(
         ui64 inputIndex,
@@ -33,7 +36,8 @@ public:
         , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
         , LogPrefix(TStringBuilder() << "SelfId: " << selfId << ", TxId: " << txId << ", task: " << taskId << ". PQ source. ")
         , ReadParams(std::move(readParams))
-        , ComputeActorId(computeActorId) {
+        , ComputeActorId(computeActorId)
+        , TaskId(taskId) {
      }
 
 public:

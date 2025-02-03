@@ -38,9 +38,9 @@ namespace numpy
     }
 
     inline auto binomial(double n, double p, long size)
-        -> decltype(binomial(n, p, types::array<long, 1>{{size}}))
+        -> decltype(binomial(n, p, types::array_tuple<long, 1>{{size}}))
     {
-      return binomial(n, p, types::array<long, 1>{{size}});
+      return binomial(n, p, types::array_tuple<long, 1>{{size}});
     }
 
     inline long binomial(double n, double p, types::none_type d)

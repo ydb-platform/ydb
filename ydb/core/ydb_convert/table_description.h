@@ -82,6 +82,8 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
+void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
+    const NKikimrSchemeOp::TCdcStreamDescription& in);
 void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 // in
@@ -90,7 +92,7 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
 
 // out
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
-    const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic);
+    const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic, const TMap<ui64, ui64>& nodeMap);
 
 // out
 void FillStorageSettings(Ydb::Table::DescribeTableResult& out,

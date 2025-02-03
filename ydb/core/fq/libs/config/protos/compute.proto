@@ -35,11 +35,16 @@ message TWorkloadManagerConfig {
         int32 ConcurrentQueryLimit = 2;
         int32 QueueSize = 3;
         double DatabaseLoadCpuThreshold = 4;
+        double TotalCpuLimitPercentPerNode = 5;
     }
 
     bool Enable = 1;
     string ExecutionResourcePool = 2;
     repeated TResourcePool ResourcePool = 3;
+}
+
+message TAccessConfig {
+    repeated string ExternalSourcesAccessSID = 1;
 }
 
 message TComputeDatabaseConfig {
@@ -50,6 +55,7 @@ message TComputeDatabaseConfig {
     string Tenant = 2;
     TLoadControlConfig LoadControlConfig = 4;
     TWorkloadManagerConfig WorkloadManagerConfig = 5;
+    TAccessConfig AccessConfig = 8;
 }
 
 message TDatabaseMapping {

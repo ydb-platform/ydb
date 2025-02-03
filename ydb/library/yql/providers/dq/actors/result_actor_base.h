@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
@@ -7,8 +8,8 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
 #include <util/stream/holder.h>
 #include <util/stream/length.h>
@@ -400,8 +401,8 @@ struct TWriteQueue {
             req->Record.SetMessageId(src.MessageId);
             *(req->Record.MutableData()) = std::move(src.Data.Proto);
             req->Record.MutableData()->ClearPayloadId();
-            if (!src.Data.Payload.IsEmpty()) {
-                req->Record.MutableData()->SetPayloadId(req->AddPayload(std::move(src.Data.Payload)));
+            if (!src.Data.Payload.Empty()) {
+                req->Record.MutableData()->SetPayloadId(req->AddPayload(MakeReadOnlyRope(std::move(src.Data.Payload))));
             }
             req->Record.SetFinish(src.IsFinal);
 

@@ -2,7 +2,8 @@
 
 #include "compute_storage.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_spiller_factory.h>
+#include <yql/essentials/minikql/computation/mkql_spiller_factory.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 
 namespace NYql::NDq {
 
@@ -19,7 +20,7 @@ public:
     {
     }
 
-    void SetTaskCounters(TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters) override {
+    void SetTaskCounters(const TIntrusivePtr<TSpillingTaskCounters>& spillingTaskCounters) override {
         SpillingTaskCounters_ = spillingTaskCounters;
     }
 

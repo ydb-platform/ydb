@@ -32,7 +32,7 @@ public:
             return true;
         }
 
-        const auto pathId = PathIdFromPathId(record.GetPathId());
+        const auto pathId = TPathId::FromProto(record.GetPathId());
 
         if (Self->GetPathOwnerId() != pathId.OwnerId) {
             LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -108,7 +108,8 @@ public:
         auto stats = txc.DB.GetCompactionStats(localTid);
         bool isEmpty = stats.PartCount == 0 && stats.MemDataSize == 0;
         bool isSingleParted = stats.PartCount == 1 && stats.MemDataSize == 0;
-        if (isEmpty || isSingleParted && !hasBorrowed && !record.HasCompactSinglePartedShards()) {
+        bool hasSchemaChanges = Self->Executor()->HasSchemaChanges(tableInfo.LocalTid);
+        if (isEmpty || isSingleParted && !hasBorrowed && !hasSchemaChanges && !record.GetCompactSinglePartedShards()) {
             // nothing to compact
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Background compaction of tablet# " << Self->TabletID()
@@ -292,7 +293,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const T
     auto &record = ev->Get()->Record;
     auto response = MakeHolder<TEvDataShard::TEvGetCompactTableStatsResult>();
 
-    const auto pathId = PathIdFromPathId(record.GetPathId());
+    const auto pathId = TPathId::FromProto(record.GetPathId());
 
     const auto& tableId = pathId.LocalPathId;
     auto it = TableInfos.find(tableId);

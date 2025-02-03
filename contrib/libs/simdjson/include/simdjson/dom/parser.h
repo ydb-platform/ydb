@@ -202,6 +202,22 @@ public:
    *   simdjson::dom::parser parser;
    *   simdjson::dom::element element = parser.parse(padded_json_copy.get(), json_len, false);
    *
+   * ### std::string references
+   *
+   * If you pass a mutable std::string reference (std::string&), the parser will seek to extend
+   * its capacity to SIMDJSON_PADDING bytes beyond the end of the string.
+   *
+   * Whenever you pass an std::string reference, the parser will access the bytes beyond the end of
+   * the string but before the end of the allocated memory (std::string::capacity()).
+   * If you are using a sanitizer that checks for reading uninitialized bytes or std::string's
+   * container-overflow checks, you may encounter sanitizer warnings.
+   * You can safely ignore these warnings. Or you can call simdjson::pad(std::string&) to pad the
+   * string with SIMDJSON_PADDING spaces: this function returns a simdjson::padding_string_view
+   * which can be be passed to the parser's parse function:
+   *
+   *    std::string json = R"({ "foo": 1 } { "foo": 2 } { "foo": 3 } )";
+   *    element doc = parser.parse(simdjson::pad(json));
+   *
    * ### Parser Capacity
    *
    * If the parser's current capacity is less than len, it will allocate enough capacity
@@ -549,9 +565,14 @@ public:
   /**
    * The parser instance can use threads when they are available to speed up some
    * operations. It is enabled by default. Changing this attribute will change the
-   * behavior of the parser for future operations.
+   * behavior of the parser for future operations. Set to true by default.
    */
   bool threaded{true};
+#else
+  /**
+   * When SIMDJSON_THREADS_ENABLED is not defined, the parser instance cannot use threads.
+   */
+  bool threaded{false};
 #endif
   /** @private Use the new DOM API instead */
   class Iterator;

@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:8:63: Info: Cannot execute self join in DQ
-        	from (select key, value, key IN $keys as flag from Input1) as a
-	                                                              ^

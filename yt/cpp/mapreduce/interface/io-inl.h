@@ -350,11 +350,11 @@ public:
 
         return TBase::DoGetRowCached(
             /* cacher */ [&] {
-                CachedRow_.Reset(new U);
-                Reader_->ReadRow(CachedRow_.Get());
+                CachedRow_.reset(new U);
+                Reader_->ReadRow(CachedRow_.get());
             },
             /* cacheGetter */ [&] {
-                auto result = dynamic_cast<const U*>(CachedRow_.Get());
+                auto result = dynamic_cast<const U*>(CachedRow_.get());
                 Y_ABORT_UNLESS(result);
                 return result;
             });
@@ -371,7 +371,7 @@ public:
                 Reader_->ReadRow(result);
             },
             /* cacheMover */ [&] (U* result) {
-                auto cast = dynamic_cast<U*>(CachedRow_.Get());
+                auto cast = dynamic_cast<U*>(CachedRow_.get());
                 Y_ABORT_UNLESS(cast);
                 result->Swap(cast);
             });
@@ -394,7 +394,7 @@ public:
 
 private:
     using TBase::Reader_;
-    mutable THolder<Message> CachedRow_;
+    mutable std::unique_ptr<Message> CachedRow_;
 };
 
 template<class... TProtoRowTypes>

@@ -2,7 +2,7 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-NKikimr::NArrow::NMerger::TIntervalPositions TCompactionTaskData::GetCheckPositions(
+NArrow::NMerger::TIntervalPositions TCompactionTaskData::GetCheckPositions(
     const std::shared_ptr<arrow::Schema>& pkSchema, const bool withMoved) {
     NArrow::NMerger::TIntervalPositions result;
     for (auto&& i : GetFinishPoints(withMoved)) {

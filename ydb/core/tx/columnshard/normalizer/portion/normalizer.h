@@ -81,26 +81,29 @@ public:
 };
 
 class TPortionsNormalizerBase: public TNormalizationController::INormalizerComponent {
+private:
+    using TBase = TNormalizationController::INormalizerComponent;
 public:
     TPortionsNormalizerBase(const TNormalizationController::TInitContext& info)
-        : DsGroupSelector(info.GetStorageInfo()) {
+        : TBase(info)
+        , DsGroupSelector(info.GetStorageInfo()) {
     }
 
     TConclusionStatus InitPortions(
-        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions);
     TConclusionStatus InitColumns(
-        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
-    TConclusionStatus InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions);
+    TConclusionStatus InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions);
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
         const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;
 
 protected:
     virtual INormalizerTask::TPtr BuildTask(
-        std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const = 0;
+        std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const = 0;
     virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
 
-    virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionInfo& /*portionInfo*/) const = 0;
+    virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionDataAccessor& portionInfo) const = 0;
 
     virtual std::set<ui32> GetColumnsFilter(const ISnapshotSchema::TPtr& schema) const {
         return schema->GetPkColumnsIds();

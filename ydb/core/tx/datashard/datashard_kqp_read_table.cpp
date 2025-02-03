@@ -7,7 +7,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

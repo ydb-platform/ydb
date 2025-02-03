@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/lexsort.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/pdqsort.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -48,7 +48,7 @@ namespace numpy
         return lexcmp_nth<std::tuple_size<K>::value>{}(keys, i0, i1);
       }
     };
-  }
+  } // namespace details
 
   template <class pS>
   types::ndarray<long, types::pshape<long>> lexsort(pS const &keys)
@@ -62,7 +62,7 @@ namespace numpy
     pdqsort(out.buffer, out.buffer + n, details::lexcmp<pS>(keys));
     return out;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

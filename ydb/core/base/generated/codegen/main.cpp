@@ -9,6 +9,7 @@
 #include <jinja2cpp/template.h>
 #include <jinja2cpp/value.h>
 #include <jinja2cpp/reflected_value.h>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -17,10 +18,10 @@ struct TField;
 
 struct TSlot {
     TString Name;
-    size_t Index;
+    uint64_t Index;
     std::vector<const TField*> Fields;
-    ui64 DefaultValue = 0;
-    ui64 RuntimeFlagsMask = 0;
+    uint64_t DefaultValue = 0;
+    uint64_t RuntimeFlagsMask = 0;
 
     TSlot(const TString& name, size_t index)
         : Name(name)
@@ -31,10 +32,10 @@ struct TSlot {
 struct TField {
     TString Name;
     const TSlot* Slot;
-    ui64 HasMask = 0;
-    ui64 ValueMask = 0;
-    ui64 FullMask = 0;
-    ui64 DefaultValue = 0;
+    uint64_t HasMask = 0;
+    uint64_t ValueMask = 0;
+    uint64_t FullMask = 0;
+    uint64_t DefaultValue = 0;
     bool IsRuntime = false;
 
     TField(const TString& name, const TSlot* slot)

@@ -285,7 +285,7 @@ template <class TTraits> struct SIMDPack {
         ui8 perm[TSimd<ui8>::SIZE];
         std::memset(perm, 0x80, TSimd<ui8>::SIZE);
 
-        size_t iters = std::max(1ul, TSimd<ui8>::SIZE / (col_size + col_pad));
+        size_t iters = std::max(size_t(1u), TSimd<ui8>::SIZE / (col_size + col_pad));
         while (iters--) {
             for (size_t it = col_size; it; --it, ++offset, ++ind) {
                 if (packing) {
@@ -327,7 +327,7 @@ template <class TTraits> struct SIMDPack {
                     const TSimd<ui8> perms[], const size_t start = 0) {
         static constexpr size_t kSIMD_Rem = sizeof(TSimd<ui8>) - StoresPerLoad;
         const ui8 tuples_per_store =
-            std::max(1ul, TSimd<ui8>::SIZE / tuple_size);
+            std::max(size_t(1u), TSimd<ui8>::SIZE / tuple_size);
         const size_t simd_iters = (size > kSIMD_Rem ? size - kSIMD_Rem : 0) /
                                   (tuples_per_store * StoresPerLoad);
 
@@ -376,7 +376,7 @@ template <class TTraits> struct SIMDPack {
                       const TSimd<ui8> perms[], const size_t start = 0) {
         static constexpr size_t kSIMD_Rem = sizeof(TSimd<ui8>) - LoadsPerStore;
         const ui8 tuples_per_load =
-            std::max(1ul, TSimd<ui8>::SIZE / tuple_size);
+            std::max(size_t(1u), TSimd<ui8>::SIZE / tuple_size);
         const size_t simd_iters = (size > kSIMD_Rem ? size - kSIMD_Rem : 0) /
                                   (tuples_per_load * LoadsPerStore);
 

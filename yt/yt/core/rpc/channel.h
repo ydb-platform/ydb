@@ -78,6 +78,7 @@ struct TSendOptions
     bool GenerateAttachmentChecksums = true;
     bool RequestHeavy = false;
     EMultiplexingBand MultiplexingBand = EMultiplexingBand::Default;
+    // Parallelism is adjusted by per-band configuration.
     int MultiplexingParallelism = 1;
     // For testing purposes only.
     std::optional<TDuration> SendDelay;

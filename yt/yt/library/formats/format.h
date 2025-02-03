@@ -64,6 +64,7 @@ ISchemalessFormatWriterPtr CreateStaticTableWriterForFormat(
     const TFormat& format,
     NTableClient::TNameTablePtr nameTable,
     const std::vector<NTableClient::TTableSchemaPtr>& tableSchemas,
+    const std::vector<std::optional<std::vector<std::string>>>& columns,
     NConcurrency::IAsyncOutputStreamPtr output,
     bool enableContextSaving,
     TControlAttributesConfigPtr controlAttributesConfig,

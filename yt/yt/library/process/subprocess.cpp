@@ -21,7 +21,7 @@ using namespace NPipes;
 
 const static size_t PipeBlockSize = 64 * 1024;
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Subprocess");
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Subprocess");
 
 ////////////////////////////////////////////////////////////////////////////////
 

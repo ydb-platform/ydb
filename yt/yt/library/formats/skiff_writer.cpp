@@ -678,7 +678,7 @@ public:
             auto createComplexValueConverter = [&] (const TFieldDescription& skiffField, bool isSparse) -> TUnversionedValueToSkiffConverter {
                 auto columnSchema = indexedSchemas.GetColumnSchema(tableIndex, skiffField.Name());
 
-                // NB: we don't create complex value converter for simple types
+                // NB: We don't create complex value converter for simple types
                 // (column is missing in schema or has simple type).
                 //   1. Complex value converter expects unversioned values of type ANY
                 //      and simple types have other types.
@@ -1096,7 +1096,7 @@ ISchemalessFormatWriterPtr CreateWriterForSkiff(
             std::move(controlAttributesConfig),
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for Skiff format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for Skiff format") << ex;
     }
 }
 

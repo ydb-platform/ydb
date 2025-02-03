@@ -1,11 +1,11 @@
 #include "yql_s3_listing_strategy.h"
 
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_future_algorithms.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/url_builder.h>
 
 #ifdef THROW
 #undef THROW

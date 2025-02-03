@@ -40,6 +40,10 @@ struct TUpdateOperationParametersOptions
     : public TTimeoutOptions
 { };
 
+struct TPatchOperationSpecOptions
+    : public TTimeoutOptions
+{ };
+
 struct TDumpJobContextOptions
     : public TTimeoutOptions
 { };
@@ -166,15 +170,16 @@ struct TPollJobShellResponse
 };
 
 DEFINE_ENUM(EJobSortField,
-    ((None)       (0))
-    ((Type)       (1))
-    ((State)      (2))
-    ((StartTime)  (3))
-    ((FinishTime) (4))
-    ((Address)    (5))
-    ((Duration)   (6))
-    ((Progress)   (7))
-    ((Id)         (8))
+    ((None)             (0))
+    ((Type)             (1))
+    ((State)            (2))
+    ((StartTime)        (3))
+    ((FinishTime)       (4))
+    ((Address)          (5))
+    ((Duration)         (6))
+    ((Progress)         (7))
+    ((Id)               (8))
+    ((TaskName)         (9))
 );
 
 DEFINE_ENUM(EJobSortDirection,
@@ -205,6 +210,11 @@ struct TListJobsOptions
     std::optional<bool> WithMonitoringDescriptor;
     std::optional<TString> TaskName;
 
+    std::optional<TInstant> FromTime;
+    std::optional<TInstant> ToTime;
+
+    std::optional<TString> ContinuationToken;
+
     TDuration RunningJobsLookbehindPeriod = TDuration::Max();
 
     EJobSortField SortField = EJobSortField::None;
@@ -219,6 +229,32 @@ struct TListJobsOptions
     bool IncludeArchive = false;
     EDataSource DataSource = EDataSource::Auto;
 };
+
+struct TListJobsContinuationToken
+    : public TListJobsOptions
+{
+    int Version = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TListJobsContinuationTokenSerializer
+    : public virtual NYTree::TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TListJobsContinuationToken, TListJobsContinuationTokenSerializer);
+
+    static void Register(TRegistrar registrar);
+};
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TListJobsContinuationToken, TListJobsContinuationTokenSerializer);
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString EncodeNewToken(TListJobsOptions&& options, int jobCount);
+TListJobsOptions DecodeListJobsOptionsFromToken(const TString& continuationToken);
+
+////////////////////////////////////////////////////////////////////////////////
 
 struct TAbandonJobOptions
     : public TTimeoutOptions
@@ -386,6 +422,8 @@ struct TListJobsResult
     TListJobsStatistics Statistics;
 
     std::vector<TError> Errors;
+
+    std::optional<TString> ContinuationToken;
 };
 
 struct TGetJobStderrResponse
@@ -440,6 +478,11 @@ struct IOperationClient
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const NYson::TYsonString& parameters,
         const TUpdateOperationParametersOptions& options = {}) = 0;
+
+    virtual TFuture<void> PatchOperationSpec(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const TPatchOperationSpecOptions& options = {}) = 0;
 
     virtual TFuture<TOperation> GetOperation(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -512,4 +555,3 @@ struct IOperationClient
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

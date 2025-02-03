@@ -62,7 +62,7 @@ struct TReadQueryResultOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
 {
-    std::optional<std::vector<TString>> Columns;
+    std::optional<std::vector<std::string>> Columns;
     std::optional<i64> LowerRowIndex;
     std::optional<i64> UpperRowIndex;
 };
@@ -123,6 +123,7 @@ struct TQueryResult
     NTableClient::TTableSchemaPtr Schema;
     NChunkClient::NProto::TDataStatistics DataStatistics;
     bool IsTruncated;
+    std::optional<NYson::TYsonString> FullResult;
 };
 
 void Serialize(const TQueryResult& queryResult, NYson::IYsonConsumer* consumer);

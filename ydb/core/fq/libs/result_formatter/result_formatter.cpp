@@ -1,17 +1,17 @@
 #include "result_formatter.h"
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/codec/yql_json_codec.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/ast/yql_type_string.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/codec/yql_json_codec.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_type_string.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/yson/json2yson.h>
 
@@ -208,7 +208,7 @@ TType MakeType(NYdb::TTypeParser& parser, TContext& env)
             if (!node) {
                 return nullptr;
             }
-            items.push_back({colName, node});
+            items.push_back({TString{colName}, node});
         }
         parser.CloseStruct();
         return MakeStructType(items, env);
@@ -251,7 +251,7 @@ TType MakeType(NYdb::TTypeParser& parser, TContext& env)
     case NYdb::TTypeParser::ETypeKind::Tagged: {
         parser.OpenTagged();
         auto tag = parser.GetTag();
-        auto node = MakeTaggedType(tag, MakeType<TType>(parser, env), env);
+        auto node = MakeTaggedType(TString{tag}, MakeType<TType>(parser, env), env);
         parser.CloseTagged();
         return node;
     }

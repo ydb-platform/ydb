@@ -13,6 +13,9 @@ import traceback
 from contextlib import contextmanager
 from functools import reduce
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 import process_whole_archive_option as pwa
 
@@ -280,6 +283,7 @@ def gen_vet_info(args):
         'Compiler': 'gc',
         'Dir': os.path.join(args.source_root, get_source_path(args)),
         'ImportPath': import_path,
+        'GoVersion': ('go%s' % args.goversion),
         'GoFiles': [x for x in args.go_srcs if x.endswith('.go')],
         'NonGoFiles': [x for x in args.go_srcs if not x.endswith('.go')],
         'ImportMap': import_map,

@@ -2,8 +2,6 @@
 
 #include <yt/yt/core/misc/public.h>
 
-#include <library/cpp/yt/stockpile/stockpile.h>
-
 #include <library/cpp/getopt/last_getopt.h>
 
 #include <yt/yt/core/yson/string.h>
@@ -37,6 +35,12 @@ public:
     [[noreturn]]
     static void Abort(int code) noexcept;
 
+    //! A typed version of #Abort.
+    template <class E>
+        requires std::is_enum_v<E>
+    [[noreturn]]
+    static void Abort(E exitCode) noexcept;
+
 protected:
     NLastGetopt::TOpts Opts_;
     TString Argv0_;
@@ -45,7 +49,7 @@ protected:
     bool PrintBuild_ = false;
     bool UseYson_ = false;
 
-    virtual void DoRun(const NLastGetopt::TOptsParseResult& parseResult) = 0;
+    virtual void DoRun() = 0;
 
     virtual void OnError(const TString& message) noexcept;
 
@@ -70,11 +74,20 @@ protected:
     [[noreturn]]
     void Exit(int code) noexcept;
 
-private:
-    bool CrashOnError_ = false;
+    //! A typed version of #Exit.
+    template <class E>
+        requires std::is_enum_v<E>
+    [[noreturn]]
+    void Exit(E exitCode) noexcept;
 
+    const NLastGetopt::TOptsParseResult& GetOptsParseResult() const;
+
+private:
     // Custom handler for option parsing errors.
     class TOptsParseResult;
+
+    std::unique_ptr<TOptsParseResult> OptsParseResult_;
+    bool CrashOnError_ = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -99,16 +112,19 @@ private:
 //! Helper for TOpt::StoreMappedResult to validate file paths for existence.
 TString CheckPathExistsArgMapper(const TString& arg);
 
-//! Helper for TOpt::StoreMappedResult to parse GUIDs.
-TGuid CheckGuidArgMapper(const TString& arg);
+//! Helper for TOpt::StoreMappedResult to parse types with #FromString.
+template <class T>
+T FromStringArgMapper(TStringBuf arg);
+
+//! Helper for TOpt::StoreMappedResult to parse enums.
+template <class T>
+T ParseEnumArgMapper(TStringBuf arg);
 
 //! Helper for TOpt::StoreMappedResult to parse YSON strings.
 NYson::TYsonString CheckYsonArgMapper(const TString& arg);
 
 //! Drop privileges and save them if running with suid-bit.
 void ConfigureUids();
-
-void ConfigureCoverageOutput();
 
 void ConfigureIgnoreSigpipe();
 
@@ -122,11 +138,6 @@ void ConfigureExitZeroOnSigterm();
 
 struct TAllocatorOptions
 {
-    bool YTAllocEagerMemoryRelease = false;
-
-    bool TCMallocOptimizeSize = false;
-    std::optional<i64> TCMallocGuardedSamplingRate = 128_MB;
-
     std::optional<TDuration> SnapshotUpdatePeriod;
 };
 
@@ -135,3 +146,7 @@ void ConfigureAllocator(const TAllocatorOptions& options = {});
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
+
+#define PROGRAM_INL_H_
+#include "program-inl.h"
+#undef PROGRAM_INL_H_

@@ -6,6 +6,9 @@
 namespace NKikimr::NOlap::NNormalizer::NSpecialColumns {
 
 class TDeleteTrashImpl: public TNormalizationController::INormalizerComponent {
+private:
+    using TBase = TNormalizationController::INormalizerComponent;
+
 public:
     struct TKey {
         ui32 Index;
@@ -20,13 +23,13 @@ public:
     using TKeyBatch = std::vector<TKey>;
 
 private:
-
     std::optional<std::vector<TKeyBatch>> KeysToDelete(NTabletFlatExecutor::TTransactionContext& txc, const size_t maxBatchSize);
 
     virtual std::set<ui64> GetColumnIdsToDelete() const = 0;
 
 public:
-    TDeleteTrashImpl(const TNormalizationController::TInitContext&) {
+    TDeleteTrashImpl(const TNormalizationController::TInitContext& context)
+        : TBase(context) {
     }
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
@@ -36,6 +39,7 @@ public:
 class TRemoveDeleteFlag: public TDeleteTrashImpl {
 private:
     using TBase = TDeleteTrashImpl;
+
 public:
     static TString GetClassNameStatic() {
         return "RemoveDeleteFlag";
@@ -86,9 +90,8 @@ private:
 
 public:
     TRemoveWriteId(const TNormalizationController::TInitContext& context)
-        : TBase(context) 
-    {
+        : TBase(context) {
     }
 };
 
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NNormalizer::NSpecialColumns

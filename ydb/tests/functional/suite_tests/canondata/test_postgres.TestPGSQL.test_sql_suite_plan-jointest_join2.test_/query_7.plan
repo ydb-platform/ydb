@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[Arg.x.x1,Arg.x.x2,Arg.y.y1,Arg.y.y2]"
                                             },
                                             {
                                                 "Condition": "x.x1 = y.y1",
@@ -48,10 +48,19 @@
                                                         "ExternalPlanNodeId": 15
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 13
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 13
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.y1)"
                                             }
                                         ],
                                         "PlanNodeId": 16,
@@ -109,6 +118,7 @@
                                                                                     }
                                                                                 ],
                                                                                 "Name": "TableRangeScan",
+                                                                                "Path": "/Root/postgres_jointest/join2.test_plan/y",
                                                                                 "ReadColumns": [
                                                                                     "y1",
                                                                                     "y2"
@@ -203,6 +213,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join2.test_plan/x",
                                                         "ReadColumns": [
                                                             "x1",
                                                             "x2"

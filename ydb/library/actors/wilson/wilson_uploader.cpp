@@ -132,6 +132,12 @@ namespace NWilson {
             TString ErrStr;
             TString LastCommitTraceErrStr;
 
+            NMonitoring::TDynamicCounters::TCounterPtr DroppedSpansCounter;
+            NMonitoring::TDynamicCounters::TCounterPtr SentSpansCounter;
+            NMonitoring::TDynamicCounters::TCounterPtr SentBytesCounter;
+            NMonitoring::TDynamicCounters::TCounterPtr SentSpanBatchesOkCounter;
+            NMonitoring::TDynamicCounters::TCounterPtr SentSpanBatchesErrCounter;
+
         public:
             TWilsonUploader(TWilsonUploaderParams params)
                 : MaxSpansPerSecond(params.MaxExportedSpansPerSecond)
@@ -146,6 +152,11 @@ namespace NWilson {
                 , RegisterMonPage(params.RegisterMonPage)
                 , GrpcSigner(std::move(params.GrpcSigner))
                 , CurrentBatch(MaxSpansInBatch, MaxBytesInBatch, ServiceName)
+                , DroppedSpansCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderDroppedSpans", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
+                , SentSpansCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentSpans", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
+                , SentBytesCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentBytes", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
+                , SentSpanBatchesOkCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentSpanBatchesOk", "true") : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
+                , SentSpanBatchesErrCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentSpanBatchesErr", "true") : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
             {}
 
             ~TWilsonUploader() {
@@ -203,6 +214,7 @@ namespace NWilson {
 
             void Handle(TEvWilson::TPtr ev) {
                 if (SpansSizeBytes >= MaxPendingSpanBytes) {
+                    DroppedSpansCounter->Inc();
                     ALOG_ERROR(WILSON_SERVICE_ID, "dropped span due to overflow");
                 } else {
                     const TMonotonic now = TActivationContext::Monotonic();
@@ -210,6 +222,7 @@ namespace NWilson {
                     auto& span = ev->Get()->Span;
                     const ui32 size = span.ByteSizeLong();
                     if (size > MaxBytesInBatch) {
+                        DroppedSpansCounter->Inc();
                         ALOG_ERROR(WILSON_SERVICE_ID, "dropped span of size " << size << ", which exceeds max batch size " << MaxBytesInBatch);
                         return;
                     }
@@ -271,6 +284,7 @@ namespace NWilson {
                 }
 
                 if (numSpansDropped) {
+                    DroppedSpansCounter->Add(numSpansDropped);
                     ALOG_ERROR(WILSON_SERVICE_ID,
                         "dropped " << numSpansDropped << " span(s) due to expiration");
                 }
@@ -294,6 +308,8 @@ namespace NWilson {
                         << " ParentSpanId# " << HexEncode(span.parent_span_id())
                         << " Name# " << span.name());
                 }
+                SentSpansCounter->Add(batch.SizeSpans);
+                SentBytesCounter->Add(batch.SizeBytes);
 
                 NextSendTimestamp = now + TDuration::MicroSeconds((batch.SizeSpans * 1'000'000) / MaxSpansPerSecond);
                 SpansSizeBytes -= batch.SizeBytes;
@@ -328,12 +344,15 @@ namespace NWilson {
                     auto node = std::unique_ptr<TExportRequestData>(static_cast<TExportRequestData*>(tag));
                     ALOG_TRACE(WILSON_SERVICE_ID, "finished export request " << (void*)node.get());
                     if (!node->Status.ok()) {
+                        SentSpanBatchesErrCounter->Inc();
                         LastCommitTraceErrStr = node->Status.error_message();
 
                         ALOG_ERROR(WILSON_SERVICE_ID,
                             "failed to commit traces: " << node->Status.error_message());
+                    } else {
+                        SentSpanBatchesOkCounter->Inc();
                     }
-                    
+
                     --ExportRequestsCount;
                     node->Unlink();
                 }
@@ -404,6 +423,12 @@ namespace NWilson {
                         str << "Current batch queue size: " << BatchQueue.size();
                     }
                     PARA() {
+                        str << "Sent spans: " << SentBytesCounter->Val();
+                    }
+                    PARA() {
+                        str << "Dropped spans: " << DroppedSpansCounter->Val();
+                    }
+                    PARA() {
                         std::string state;
                         switch (Channel->GetState(false)) {
                             case GRPC_CHANNEL_IDLE:
@@ -446,7 +471,7 @@ namespace NWilson {
                 }
 
                 auto* result = new NMon::TEvHttpInfoRes(str.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Html);
-                
+
                 Send(ev->Sender, result);
             }
 

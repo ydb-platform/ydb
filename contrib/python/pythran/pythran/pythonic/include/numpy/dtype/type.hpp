@@ -10,8 +10,8 @@ namespace numpy
     template <class T, class V>
     auto type(T const &t, V const &v) -> decltype(t(v));
     DEFINE_FUNCTOR(pythonic::numpy::dtype, type);
-  }
-}
+  } // namespace dtype
+} // namespace numpy
 
 PYTHONIC_NS_END
 

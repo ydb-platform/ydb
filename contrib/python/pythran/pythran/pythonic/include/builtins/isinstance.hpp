@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_BUILTIN_ISINSTANCE_HPP
 #define PYTHONIC_INCLUDE_BUILTIN_ISINSTANCE_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/builtins/pythran/is_none.hpp"
+#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/meta.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -25,7 +25,7 @@ namespace types
   struct isinstance<str, char const *> {
     using type = true_type;
   };
-}
+} // namespace types
 
 namespace builtins
 {
@@ -41,14 +41,14 @@ namespace builtins
     template <class Obj, class... Clss>
     struct isinstance<Obj, std::tuple<Clss...>> {
       using type = typename std::conditional<
-          utils::any_of<
-              std::is_same<typename types::isinstance<
-                               Obj, typename std::decay<decltype(
-                                        std::declval<Clss>()())>::type>::type,
-                           types::true_type>::value...>::value,
+          utils::any_of<std::is_same<
+              typename types::isinstance<
+                  Obj, typename std::decay<
+                           decltype(std::declval<Clss>()())>::type>::type,
+              types::true_type>::value...>::value,
           types::true_type, types::false_type>::type;
     };
-  }
+  } // namespace details
 
   template <class Obj, class Cls>
   typename details::isinstance<Obj, Cls>::type isinstance(Obj, Cls)
@@ -57,7 +57,7 @@ namespace builtins
   }
 
   DEFINE_FUNCTOR(pythonic::builtins, isinstance);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

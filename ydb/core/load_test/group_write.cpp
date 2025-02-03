@@ -20,6 +20,8 @@
 
 namespace NKikimr {
 
+namespace {
+
 class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActor> {
     class TWakeupQueue {
         using TCallback = std::function<void(const TActorContext&)>;
@@ -135,6 +137,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             : SizeGenerator(proto.GetBlobSizes())
             , SizeToWrite(proto.GetTotalSize())
             , BlobsToWrite(proto.GetBlobsNumber())
+            , CollectedBlobsPerMille(std::min(proto.GetCollectedBlobsPerMille(), (ui32)1000))
             , InFlightTracker(proto.GetMaxWritesInFlight(), proto.GetMaxWriteBytesInFlight())
         {
             if (proto.HasPutHandleClass()) {
@@ -183,7 +186,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             Y_DEBUG_ABORT_UNLESS(CanSendRequest());
             ui32 blobSize = SizeGenerator.Generate();
             const TLogoBlobID id(tabletId, gen, step, channel, blobSize, BlobCookie++);
-            const TSharedData buffer = GenerateBuffer<TSharedData>(id);
+            const TSharedData buffer = FastGenDataForLZ4<TSharedData>(id.BlobSize());
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), PutHandleClass);
             InFlightTracker.Request(blobSize);
             return std::move(ev);
@@ -191,17 +194,30 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
         std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> ManageKeepFlags(ui64 tabletId, ui32 gen, ui32 step,
                 ui32 channel, bool keep) {
-            auto blobsWritten = std::make_unique<TVector<TLogoBlobID>>(ConfirmedBlobs);
+            auto blobsToKeep = std::make_unique<TVector<TLogoBlobID>>();
+            auto blobsToCollect = std::make_unique<TVector<TLogoBlobID>>();
 
             if (keep) {
-                return std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, gen, step, channel,
-                        false, gen, step, blobsWritten.release(), nullptr, TInstant::Max(), false);
+                for (const TLogoBlobID& blobId : ConfirmedBlobs) {
+                    if (RandomNumber<ui32>(1000) < CollectedBlobsPerMille) {
+                        blobsToCollect->push_back(blobId);
+                    } else {
+                        blobsToKeep->push_back(blobId);
+                    }
+                }
             } else {
-                ConfirmedDataSize = 0;
-                ConfirmedBlobs.clear();
-                return std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, gen, step, channel,
-                        true, gen, step, nullptr, blobsWritten.release(), TInstant::Max(), false);
+                blobsToCollect->assign(ConfirmedBlobs.begin(), ConfirmedBlobs.end());
             }
+
+            ConfirmedDataSize = 0;
+            ConfirmedBlobs.clear();
+            ConfirmedBlobs.assign(blobsToKeep->begin(), blobsToKeep->end());
+            for (const TLogoBlobID& blobId : ConfirmedBlobs) {
+                ConfirmedDataSize += blobId.BlobSize();
+            }
+
+            return std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, gen, step, channel,
+                    !keep, gen, step, blobsToKeep.release(), blobsToCollect.release(), TInstant::Max(), false);
         }
 
         TLogoBlobID GetRandomBlobId() {
@@ -224,10 +240,11 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         TSizeGenerator SizeGenerator;
         NKikimrBlobStorage::EPutHandleClass PutHandleClass = NKikimrBlobStorage::EPutHandleClass::UserData;
 
-        uint64_t SizeToWrite = 0;
-        uint64_t BlobsToWrite = 0;
-        uint64_t ConfirmedDataSize = 0;
+        ui64 SizeToWrite = 0;
+        ui32 BlobsToWrite = 0;
+        ui64 ConfirmedDataSize = 0;
         TVector<TLogoBlobID> ConfirmedBlobs;
+        ui32 CollectedBlobsPerMille = 0; 
 
         TInFlightTracker InFlightTracker;
 
@@ -244,8 +261,6 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         virtual TString DumpState() const {
             return "";
         }
-
-        virtual TDuration GetDelayForCurrentState() const = 0;
     };
 
     struct TRandomIntervalDelayManager : public TRequestDelayManager {
@@ -262,10 +277,6 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
         void CountResponse() override {}
-
-        virtual TDuration GetDelayForCurrentState() const override {
-            return IntervalGenerator.Generate();
-        }
 
         TIntervalGenerator IntervalGenerator;
     };
@@ -349,10 +360,6 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 << " Now# " << Now;
 
             return str.Str();
-        }
-
-        virtual TDuration GetDelayForCurrentState() const override {
-            return CurrentDelay;
         }
     };
 
@@ -583,7 +590,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             const ui32 size = 1;
             const ui32 lastStep = Max<ui32>();
             const TLogoBlobID id(TabletId, Generation, lastStep, Channel, size, 0);
-            const TSharedData buffer = GenerateBuffer<TSharedData>(id);
+            const TSharedData buffer = Self.GenerateBuffer(id);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), PutHandleClass);
 
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
@@ -661,6 +668,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     SetKeepFlagsOnInitialAllocation(ctx);
                 }
             };
+
             SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(callback)));
         }
 
@@ -908,7 +916,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 putHandleClass = PutHandleClass;
             }
             const TLogoBlobID id(TabletId, Generation, WriteStep, Channel, size, Cookie);
-            const TSharedData buffer = GenerateBuffer<TSharedData>(id);
+            const TSharedData buffer = Self.GenerateBuffer(id);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), putHandleClass);
             const ui64 writeQueryId = ++WriteQueryId;
 
@@ -1165,11 +1173,11 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
     TMonotonic LastScheduleTime = TMonotonic::Max();
     TMonotonic LastWakeupTime = TMonotonic::Max();
 
-    static constexpr ui64 DefaultTabletId = 5000;
     ui32 WorkersInInitialState = 0;
 
     ui32 DelayAfterInitialWrite = 0;
 
+    TSharedData BlobData;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_LOAD_ACTOR;
@@ -1187,6 +1195,7 @@ public:
         }
 
         std::unordered_map<TString, ui64> tabletIds;
+        ui32 maxBlobSize = 0U;
         for (const auto& profile : cmd.GetTablets()) {
             if (!profile.TabletsSize()) {
                 ythrow TLoadActorException() << "TPerTabletProfile.Tablets must have at least one item";
@@ -1226,6 +1235,8 @@ public:
                 .InFlightTracker = TInFlightTracker(profile.GetMaxInFlightWriteRequests(), profile.GetMaxInFlightWriteBytes()),
                 .MaxTotalBytes = profile.GetMaxTotalBytesWritten(),
             };
+
+            maxBlobSize = std::max(maxBlobSize, writeSettings.SizeGen->GetMax());
 
             bool enableReads = profile.ReadIntervalsSize() || profile.HasReadHardRateDispatcher();
             NKikimrBlobStorage::EGetHandleClass getHandleClass = NKikimrBlobStorage::EGetHandleClass::FastRead;
@@ -1316,6 +1327,7 @@ public:
                 WorkersInInitialState++;
             }
         }
+        BlobData = FastGenDataForLZ4<TSharedData>(maxBlobSize);
     }
 
     void StartWorkers(const TActorContext& ctx) {
@@ -1510,9 +1522,13 @@ public:
         Y_ABORT("TEvUndelivered# 0x%08" PRIx32 " ActorId# %s", ev->Get()->SourceType, ev->Sender.ToString().data());
     }
 
-    template <class ResultContainer = TString>
-    static ResultContainer GenerateBuffer(const TLogoBlobID& id) {
-        return FastGenDataForLZ4<ResultContainer>(id.BlobSize());
+    TSharedData GenerateBuffer(const TLogoBlobID& id) const {
+        if (id.BlobSize() > BlobData.size())
+            return FastGenDataForLZ4<TSharedData>(id.BlobSize());
+        Y_ABORT_UNLESS(id.BlobSize() <= BlobData.size());
+        TSharedData data(BlobData);
+        data.TrimBack(id.BlobSize());
+        return data;
     }
 
     STRICT_STFUNC(StateFunc,
@@ -1529,6 +1545,8 @@ public:
         HFunc(TEvents::TEvUndelivered, Handle);
     )
 };
+
+}
 
 IActor *CreateWriterLoadTest(const NKikimr::TEvLoadTestRequest::TStorageLoad& cmd, const TActorId& parent,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag) {

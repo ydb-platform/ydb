@@ -2,9 +2,9 @@
 
 #include "yql_pq_topic_client.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
+#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
 
 #include <library/cpp/threading/future/core/future.h>
 

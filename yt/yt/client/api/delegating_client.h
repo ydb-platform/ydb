@@ -63,12 +63,12 @@ public:
         (subrequests, options))
 
     DELEGATE_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options),
         (query, options))
 
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options),
         (query, options))
 
@@ -484,6 +484,12 @@ public:
         const TUpdateOperationParametersOptions& options),
         (operationIdOrAlias, parameters, options))
 
+    DELEGATE_METHOD(TFuture<void>, PatchOperationSpec, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const TPatchOperationSpecOptions& options),
+        (operationIdOrAlias, patches, options))
+
     DELEGATE_METHOD(TFuture<TOperation>, GetOperation, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const TGetOperationOptions& options),
@@ -716,6 +722,11 @@ public:
         const TRequestRestartOptions& options),
         (nodeAddress, options))
 
+    DELEGATE_METHOD(TFuture<TCollectCoverageResult>, CollectCoverage, (
+        const std::string& address,
+        const TCollectCoverageOptions& options),
+        (address, options))
+
     DELEGATE_METHOD(TFuture<void>, SetUserPassword, (
         const std::string& user,
         const TString& currentPasswordSha256,
@@ -846,32 +857,28 @@ public:
         (pipelinePath, viewPath, options))
 
     // Distributed client
-    DELEGATE_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (
+    DELEGATE_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options),
         (path, options))
 
     DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteSession, (
-        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options),
-        (std::move(session), options))
+        (sessionWithResults, options))
 
-    DELEGATE_METHOD(TFuture<ITableWriterPtr>, CreateFragmentTableWriter, (
-        const TFragmentWriteCookiePtr& cookie,
-        const TFragmentTableWriterOptions& options),
+    DELEGATE_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (
+        const TSignedWriteFragmentCookiePtr& cookie,
+        const TTableFragmentWriterOptions& options),
         (cookie, options))
 
     // Shuffle Service
     DELEGATE_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (
-        const TString& account,
+        const std::string& account,
         int partitionCount,
+        NObjectClient::TTransactionId transactionId,
         const TStartShuffleOptions& options),
-        (account, partitionCount, options))
-
-    DELEGATE_METHOD(TFuture<void>, FinishShuffle, (
-        const TShuffleHandlePtr& shuffleHandle,
-        const TFinishShuffleOptions& options),
-        (shuffleHandle, options))
+        (account, partitionCount, transactionId, options))
 
     DELEGATE_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
         const TShuffleHandlePtr& shuffleHandle,
@@ -881,7 +888,7 @@ public:
 
     DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TShuffleHandlePtr& shuffleHandle,
-        const TString& partitionColumn,
+        const std::string& partitionColumn,
         const NTableClient::TTableWriterConfigPtr& config),
         (shuffleHandle, partitionColumn, config))
 
@@ -894,4 +901,3 @@ protected:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

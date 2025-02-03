@@ -21,12 +21,10 @@ public:
     { }
 
     void RegisterStaticAnchor(
-        TLoggingAnchor* anchor,
+        TLoggingAnchor* /*anchor*/,
         ::TSourceLocation /*sourceLocation*/,
         TStringBuf /*anchorMessage*/) override
-    {
-        anchor->Registered = true;
-    }
+    { }
 
     virtual void UpdateAnchor(TLoggingAnchor* /*anchor*/) override
     { }

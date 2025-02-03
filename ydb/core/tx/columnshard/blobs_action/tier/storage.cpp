@@ -1,12 +1,14 @@
-#include "storage.h"
 #include "adapter.h"
-#include "remove.h"
-#include "write.h"
-#include "read.h"
 #include "gc.h"
 #include "gc_actor.h"
+#include "read.h"
+#include "remove.h"
+#include "storage.h"
+#include "write.h"
+
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/tiering/manager.h>
+#include <ydb/core/wrappers/unavailable_storage.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
@@ -54,21 +56,26 @@ void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) c
 }
 
 void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* tierManager) {
-    NKikimrSchemeOp::TS3Settings settings;
-    if (tierManager) {
+    NWrappers::NExternalStorage::IExternalStorageOperator::TPtr extStorageOperator;
+    std::optional<NKikimrSchemeOp::TS3Settings> settings;
+
+    if (tierManager && tierManager->IsReady()) {
         settings = tierManager->GetS3Settings();
-    } else {
-        settings.SetEndpoint("nowhere");
-    }
-    {
-        TGuard<TSpinLock> changeLock(ChangeOperatorLock);
-        if (CurrentS3Settings && CurrentS3Settings->SerializeAsString() == settings.SerializeAsString()) {
-            return;
+        {
+            TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+            if (CurrentS3Settings && CurrentS3Settings->SerializeAsString() == settings->SerializeAsString()) {
+                return;
+            }
         }
+        auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(*settings);
+        AFL_VERIFY(extStorageConfig);
+        extStorageOperator = extStorageConfig->ConstructStorageOperator(false);
+    } else {
+        extStorageOperator = std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
+            NWrappers::NExternalStorage::TUnavailableExternalStorageOperator(
+                "tier_unavailable", TStringBuilder() << "Tier is not configured: " << GetStorageId()));
     }
-    auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(settings);
-    AFL_VERIFY(extStorageConfig);
-    auto extStorageOperator = extStorageConfig->ConstructStorageOperator(false);
+
     extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(GetStorageId()));
     TGuard<TSpinLock> changeLock(ChangeOperatorLock);
     CurrentS3Settings = settings;
@@ -103,12 +110,7 @@ TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, con
 
 void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
     auto* tierManager = tiers->GetManagerOptional(TBase::GetStorageId());
-    if (tierManager) {
-        InitNewExternalOperator(tierManager);
-    } else {
-        TGuard<TSpinLock> changeLock(ChangeOperatorLock);
-        ExternalStorageOperator = nullptr;
-    }
+    InitNewExternalOperator(tierManager);
 }
 
 bool TOperator::DoLoad(IBlobManagerDb& dbBlobs) {

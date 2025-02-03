@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.7)
+VERSION(2.8)
 
-ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.7.tar.gz)
+ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.8.tar.gz)
 
 LICENSE(
     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" AND
@@ -60,6 +60,7 @@ RECURSE(
     test/buf-ring.t
     test/ce593a6c480a.t
     test/close-opath.t
+    test/cmd-discard.t
     test/connect-rep.t
     test/connect.t
     test/coredump.t
@@ -90,6 +91,8 @@ RECURSE(
     test/fc2a85cb02ef.t
     test/fd-install.t
     test/fd-pass.t
+    test/fdinfo.t
+    test/fifo-nonblock-read.t
     test/file-register.t
     test/file-update.t
     test/file-verify.t
@@ -114,18 +117,23 @@ RECURSE(
     test/iopoll-leak.t
     test/iopoll-overflow.t
     test/iopoll.t
+    test/kallsyms.t
     test/lfs-openat-write.t
     test/lfs-openat.t
     test/link-timeout.t
     test/link.t
     test/link_drain.t
+    test/linked-defer-close.t
     test/madvise.t
+    test/min-timeout-wait.t
+    test/min-timeout.t
     test/mkdir.t
     test/msg-ring-fd.t
     test/msg-ring-flags.t
     test/msg-ring-overflow.t
     test/msg-ring.t
     test/multicqes_drain.t
+    test/napi-test.t
     test/no-mmap-inval.t
     test/nolibc.t
     test/nop-all-sizes.t
@@ -151,18 +159,22 @@ RECURSE(
     test/poll-ring.t
     test/poll-v-poll.t
     test/poll.t
+    test/pollfree.t
     test/probe.t
     test/read-before-exit.t
     test/read-mshot-empty.t
+    test/read-mshot-stdin.t
     test/read-mshot.t
     test/read-write.t
     test/recv-msgall-stream.t
     test/recv-msgall.t
     test/recv-multishot.t
+    test/recvsend_bundle-inc.t
     test/recvsend_bundle.t
     test/reg-fd-only.t
     test/reg-hint.t
     test/reg-reg-ring.t
+    test/regbuf-clone.t
     test/regbuf-merge.t
     test/register-restrictions.t
     test/rename.t
@@ -199,6 +211,7 @@ RECURSE(
     test/sqpoll-exec.t
     test/sqpoll-exit-hang.t
     test/sqpoll-sleep.t
+    test/sqwait.t
     test/stdout.t
     test/submit-and-wait.t
     test/submit-link-fail.t
@@ -212,7 +225,9 @@ RECURSE(
     test/truncate.t
     test/tty-write-dpoll.t
     test/unlink.t
+    test/uring_cmd_ublk.t
     test/version.t
+    test/wait-timeout.t
     test/waitid.t
     test/wakeup-hang.t
     test/wq-aff.t

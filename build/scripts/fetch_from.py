@@ -22,6 +22,9 @@ except (ImportError, ModuleNotFoundError):
     # Python 3
     import urllib.request as urllib_request
     from urllib.error import HTTPError, URLError
+    # Explicitly enable local imports
+    # Don't forget to add imported scripts to inputs of the calling command!
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import retry
 
@@ -393,6 +396,8 @@ def process(fetched_file, file_name, args, remove=True):
             logging.info('Renaming %s to %s', src, dst)
             if os.path.exists(dst):
                 raise ResourceUnpackingError("Target file already exists ({} -> {})".format(src, dst))
+            if not os.path.exists(src):
+                raise ResourceUnpackingError("Source file does not exist ({} in {})".format(src, os.getcwd()))
             if remove:
                 rename_or_copy_and_remove(src, dst)
             else:

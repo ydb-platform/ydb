@@ -15,7 +15,7 @@ namespace math
   {
     return x;
   }
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

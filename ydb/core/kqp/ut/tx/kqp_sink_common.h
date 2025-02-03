@@ -25,6 +25,7 @@ public:
     void Execute() {
         AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(!DisableSinks);
         AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!DisableSinks);
+        AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
         AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
         auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
         if (FastSnapshotExpiration) {

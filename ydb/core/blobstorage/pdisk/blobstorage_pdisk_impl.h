@@ -33,6 +33,8 @@
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 
+#include <queue>
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -74,10 +76,9 @@ public:
     TAtomic InputQueueCost = 0;
 
     TVector<TRequestBase*> JointLogReads;
-    TVector<TIntrusivePtr<TRequestBase>> JointChunkReads;
-    TVector<TRequestBase*> JointChunkWrites;
-    TVector<TLogWrite*> JointLogWrites;
-    TVector<TLogWrite*> JointCommits;
+    std::queue<TIntrusivePtr<TRequestBase>> JointChunkReads;
+    std::queue<TRequestBase*> JointChunkWrites;
+    std::queue<TLogWrite*> JointLogWrites;
     TVector<TChunkTrim*> JointChunkTrims;
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
@@ -102,6 +103,9 @@ public:
     TControlWrapper ForsetiMaxLogBatchNs;
     TControlWrapper ForsetiOpPieceSizeSsd;
     TControlWrapper ForsetiOpPieceSizeRot;
+    TControlWrapper UseNoopSchedulerSSD;
+    TControlWrapper UseNoopSchedulerHDD;
+    bool UseNoopSchedulerCached = false;
 
     // SectorMap Controls
     TControlWrapper SectorMapFirstSectorReadRate;
@@ -144,7 +148,18 @@ public:
     ui64 InsaneLogChunks = 0;  // Set when pdisk sees insanely large log, to give vdisks a chance to cut it
     ui32 FirstLogChunkToParseCommits = 0;
 
-    // Chunks that is owned by killed owner, but has operations InFlight
+    enum EShredState {
+        EShredStateDefault = 0,
+        EShredStateSendPreShredCompactVDisk = 1,
+        EShredStateSendShredVDisk = 2,
+        EShredStateFinished = 3,
+        EShredStateFailed = 4,
+    };
+    EShredState ShredState = EShredStateDefault;
+    ui64 ShredGeneration = 0;
+    std::deque<std::tuple<TActorId, ui64>> ShredRequesters;
+
+    // Chunks that are owned by killed owner, but have operations InFlight
     TVector<TChunkIdx> QuarantineChunks;
     TVector<TOwner> QuarantineOwners;
 
@@ -178,6 +193,10 @@ public:
 
     TIntrusivePtr<TPDiskConfig> Cfg;
     TInstant CreationTime;
+    // Last chunk and sector indexes we have seen on initial log read.
+    // Used to limit log reading in read-only mode.
+    ui32 LastInitialChunkIdx;
+    ui64 LastInitialSectorIdx;
 
     ui64 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
 
@@ -326,7 +345,7 @@ public:
             std::optional<TRcBuf> metadata);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
-    void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str);
+    void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str, NKikimrProto::EReplyStatus status = NKikimrProto::ERROR);
     TOwner FindNextOwnerId();
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
@@ -348,7 +367,8 @@ public:
     void KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEventSender *completionAction);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Update process
-    void ProcessLogWriteQueueAndCommits();
+    void ProcessLogWriteQueue();
+    void ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWrite*> commits);
     void ProcessChunkForgetQueue();
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
@@ -379,6 +399,12 @@ public:
     void HandleNextWriteMetadata();
     void ProcessWriteMetadataResult(TWriteMetadataResult& request);
 
+    void ProgressShredState();
+    void ProcessShredPDisk(TShredPDisk& request);
+    void ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& request);
+    void ProcessShredVDiskResult(TShredVDiskResult& request);
+    void ProcessMarkDirty(TMarkDirty& request);
+
     void DropAllMetadataRequests();
 
     TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize, bool encryption,
@@ -405,12 +431,13 @@ public:
     bool PreprocessRequestImpl(T *req); // const;
     NKikimrProto::EReplyStatus CheckOwnerAndRound(TRequestBase* req, TStringStream& err);
     bool PreprocessRequest(TRequestBase *request);
-    void PushRequestToForseti(TRequestBase *request);
-    void AddJobToForseti(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind);
+    void PushRequestToScheduler(TRequestBase *request);
+    void AddJobToScheduler(TRequestBase *request, NSchLab::EJobKind jobKind);
     void RouteRequest(TRequestBase *request);
     void ProcessPausedQueue();
     void ProcessPendingActivities();
     void EnqueueAll();
+    void GetJobsFromForsetti();
     void Update() override;
     void Wakeup() override;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -422,6 +449,7 @@ private:
     void AddCbs(ui32 ownerId, EGate gate, const char *gateName, ui64 minBudget);
     void AddCbsSet(ui32 ownerId);
     void UpdateMinLogCostNs();
+    bool HandleReadOnlyIfWrite(TRequestBase *request);
 };
 
 void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, ui64 lastSector, ui64 currentSector,
@@ -432,4 +460,3 @@ bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui3
 
 } // NPDisk
 } // NKikimr
-

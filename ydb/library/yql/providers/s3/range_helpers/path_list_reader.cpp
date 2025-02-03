@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/providers/s3/range_helpers/file_tree_builder.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <google/protobuf/text_format.h>

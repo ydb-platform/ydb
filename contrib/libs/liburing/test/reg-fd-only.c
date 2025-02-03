@@ -50,14 +50,15 @@ static int test_nops(struct io_uring *ring, int sq_size, int nr_nops)
 	return T_EXIT_PASS;
 }
 
-static int test(int nentries)
+static int test(int nentries, int ring_flags)
 {
 	struct io_uring ring;
 	unsigned values[2];
 	int ret;
 
 	ret = io_uring_queue_init(nentries, &ring,
-			IORING_SETUP_REGISTERED_FD_ONLY | IORING_SETUP_NO_MMAP);
+			IORING_SETUP_REGISTERED_FD_ONLY | IORING_SETUP_NO_MMAP |
+			ring_flags);
 	if (ret == -EINVAL) {
 		no_mmap = 1;
 		return T_EXIT_SKIP;
@@ -65,7 +66,7 @@ static int test(int nentries)
 		fprintf(stdout, "Enable huge pages to test big rings\n");
 		return T_EXIT_SKIP;
 	} else if (ret) {
-		fprintf(stderr, "ring setup failed\n");
+		fprintf(stderr, "ring setup failed: %d\n", ret);
 		return T_EXIT_FAIL;
 	}
 
@@ -111,7 +112,16 @@ int main(int argc, char *argv[])
 		return T_EXIT_SKIP;
 
 	/* test single normal page */
-	ret = test(NORMAL_PAGE_ENTRIES);
+	ret = test(NORMAL_PAGE_ENTRIES, 0);
+	if (ret == T_EXIT_SKIP || no_mmap) {
+		return T_EXIT_SKIP;
+	} else if (ret != T_EXIT_PASS) {
+		fprintf(stderr, "test 8 failed\n");
+		return T_EXIT_FAIL;
+	}
+
+	/* test single normal page */
+	ret = test(NORMAL_PAGE_ENTRIES, IORING_SETUP_SQPOLL);
 	if (ret == T_EXIT_SKIP || no_mmap) {
 		return T_EXIT_SKIP;
 	} else if (ret != T_EXIT_PASS) {
@@ -120,7 +130,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* test with entries requiring a huge page */
-	ret = test(HUGE_PAGE_ENTRIES);
+	ret = test(HUGE_PAGE_ENTRIES, 0);
 	if (ret == T_EXIT_SKIP) {
 		return T_EXIT_SKIP;
 	} else if (ret != T_EXIT_PASS) {

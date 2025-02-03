@@ -4,6 +4,7 @@ option cc_enable_arenas = true;
 package Ydb.Cms;
 option java_package = "com.yandex.ydb.cms";
 
+import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
@@ -106,22 +107,27 @@ message DatabaseQuotas {
     repeated StorageQuotas storage_quotas = 6;
 }
 
-// A policy that is used for resource scale recommendation. If multiple are used,
-// recommender combines them to recommend the largest scale.
-message ScaleRecommenderPolicy {
-    // Policy that tracks metric and reactively recommend to adjust resources scale
-    // to keep metric close to the specified target value.
-    message TargetTrackingPolicy {
-        oneof target {
-            // A percentage of compute resources' average CPU utilization.
-            uint32 average_cpu_utilization_percent = 1; 
+message ScaleRecommenderPolicies {
+    // A policy that is used for resource scale recommendation. If multiple are used,
+    // recommender combines them to recommend the largest scale.
+    message ScaleRecommenderPolicy {
+        // Policy that tracks metric and reactively recommend to adjust resources scale
+        // to keep metric close to the specified target value.
+        message TargetTrackingPolicy {
+            oneof target {
+                // A percentage of compute resources' average CPU utilization.
+                uint32 average_cpu_utilization_percent = 1 [(Ydb.value) = "[10; 90]"]; 
+            }
+        }
+
+        oneof policy {
+            TargetTrackingPolicy target_tracking_policy = 1;
         }
     }
 
-    oneof policy {
-        TargetTrackingPolicy target_tracking_policy = 1;
-    }
+    repeated ScaleRecommenderPolicy policies = 1;
 }
+
 
 // Request to create a new database. For successfull creation
 // specified database shouldn't exist. At least one storage
@@ -149,7 +155,7 @@ message CreateDatabaseRequest {
     // Optional quotas for the database
     DatabaseQuotas database_quotas = 10;
     // Optional scale recommender policies
-    repeated ScaleRecommenderPolicy scale_recommender_policies = 11;
+    ScaleRecommenderPolicies scale_recommender_policies = 11;
 }
 
 message CreateDatabaseResponse {
@@ -201,7 +207,7 @@ message GetDatabaseStatusResult {
     // Current quotas for the database
     DatabaseQuotas database_quotas = 10;
     // Current scale recommender policies
-    repeated ScaleRecommenderPolicy scale_recommender_policies = 11;
+    ScaleRecommenderPolicies scale_recommender_policies = 11;
 }
 
 // Change resources allocated for database.
@@ -230,8 +236,8 @@ message AlterDatabaseRequest {
     DatabaseQuotas database_quotas = 11;
     // Alter attributes. Leave the value blank to drop an attribute.
     map<string, string> alter_attributes = 12;
-    // Alter scale recommender policies.
-    repeated ScaleRecommenderPolicy scale_recommender_policies = 13;
+    // Change scale recommender policies.
+    ScaleRecommenderPolicies scale_recommender_policies = 13;
 }
 
 message AlterDatabaseResponse {

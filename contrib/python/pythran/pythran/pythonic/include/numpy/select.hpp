@@ -10,14 +10,15 @@ namespace numpy
 {
 
   template <class C, class L>
-  types::ndarray<typename L::dtype, types::array<long, L::value - 1>>
+  types::ndarray<typename L::dtype, types::array_tuple<long, L::value - 1>>
   select(C const &condlist, L const &choicelist,
          typename L::dtype _default = 0);
 
   template <class T, class TpS, class U, class UpS>
   typename std::enable_if<
       std::tuple_size<TpS>::value == std::tuple_size<UpS>::value,
-      types::ndarray<T, types::array<long, std::tuple_size<TpS>::value>>>::type
+      types::ndarray<
+          T, types::array_tuple<long, std::tuple_size<TpS>::value>>>::type
   select(types::list<types::ndarray<U, UpS>> const &condlist,
          types::list<types::ndarray<T, TpS>> const &choicelist, T _default = 0);
 
@@ -45,7 +46,7 @@ namespace numpy
          T _default = 0);
 
   DEFINE_FUNCTOR(pythonic::numpy, select);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

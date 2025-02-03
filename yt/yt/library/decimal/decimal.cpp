@@ -891,9 +891,27 @@ TStringBuf TDecimal::WriteBinary256(int precision, TValue256 value, char* buffer
     CheckDecimalIntBits<TValue256>(precision);
     YT_VERIFY(bufferLength >= resultLength);
 
-    DecimalIntegerToBinaryUnchecked(std::move(value), buffer);
+    DecimalIntegerToBinaryUnchecked(value, buffer);
     return TStringBuf{buffer, sizeof(TValue256)};
 }
+
+TStringBuf TDecimal::WriteBinary256Variadic(int precision, TValue256 value, char* buffer, size_t bufferLength)
+{
+    const size_t resultLength = GetValueBinarySize(precision);
+    switch (resultLength) {
+        case 4:
+            return WriteBinary32(precision, *reinterpret_cast<i32*>(value.Parts.data()), buffer, bufferLength);
+        case 8:
+            return WriteBinary64(precision, *reinterpret_cast<i64*>(value.Parts.data()), buffer, bufferLength);
+        case 16:
+            return WriteBinary128(precision, *reinterpret_cast<TValue128*>(value.Parts.data()), buffer, bufferLength);
+        case 32:
+            return WriteBinary256(precision, value, buffer, bufferLength);
+        default:
+            THROW_ERROR_EXCEPTION("Invalid precision %v", precision);
+    }
+}
+
 
 template <typename T>
 Y_FORCE_INLINE void CheckBufferLength(int precision, size_t bufferLength)

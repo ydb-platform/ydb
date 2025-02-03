@@ -19,11 +19,11 @@ PEERDIR(
     ydb/library/db_pool
     ydb/library/logger
     ydb/library/security
-    ydb/library/yql/utils
-    ydb/public/sdk/cpp/client/extensions/solomon_stats
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_extension
-    ydb/public/sdk/cpp/client/ydb_table
+    yql/essentials/utils
+    ydb/public/sdk/cpp/src/client/extensions/solomon_stats
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/extension_common
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

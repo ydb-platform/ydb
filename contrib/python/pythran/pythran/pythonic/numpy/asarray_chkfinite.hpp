@@ -4,9 +4,9 @@
 #include "pythonic/include/numpy/asarray_chkfinite.hpp"
 
 #include "pythonic/builtins/ValueError.hpp"
+#include "pythonic/numpy/isfinite.hpp"
 #include "pythonic/types/ndarray.hpp"
 #include "pythonic/utils/numpy_traits.hpp"
-#include "pythonic/numpy/isfinite.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -22,12 +22,12 @@ namespace numpy
         throw types::ValueError("array must ! contain infs || NaNs");
       return a;
     }
-  }
+  } // namespace wrapper
 
 #define NUMPY_NARY_FUNC_NAME asarray_chkfinite
 #define NUMPY_NARY_FUNC_SYM wrapper::asarray_chkfinite
 #include "pythonic/types/numpy_nary_expr.hpp"
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

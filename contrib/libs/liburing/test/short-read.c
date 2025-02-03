@@ -72,5 +72,6 @@ int main(int argc, char *argv[])
 	}
 
 	io_uring_cqe_seen(&ring, cqe);
+	free(vec.iov_base);
 	return 0;
 }

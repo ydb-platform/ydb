@@ -5,7 +5,6 @@ TEST_SRCS(
     test_encryption.py
 )
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 DEPENDS(

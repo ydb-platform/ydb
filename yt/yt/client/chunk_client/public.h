@@ -4,8 +4,8 @@
 
 #include <yt/yt/client/object_client/public.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 namespace NYT::NChunkClient {
 
@@ -80,7 +80,6 @@ YT_DEFINE_ERROR_ENUM(
     ((LocationDiskWaitingReplacement)        (751))
     ((ChunkMetaCacheFetchFailed)             (752))
     ((LocationMediumIsMisconfigured)         (753))
-    ((DiskIdsMismatched)                     (754))
     ((LocationDisabled)                      (755))
     ((DiskFailed)                            (756))
     ((DiskWaitingReplacement)                (757))
@@ -92,7 +91,7 @@ YT_DEFINE_ERROR_ENUM(
     ((ReadMetaTimeout)                       (763))
 );
 
-DEFINE_ENUM(EUpdateMode,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EUpdateMode, i8,
     ((None)                     (0))
     ((Append)                   (1))
     ((Overwrite)                (2))
@@ -117,6 +116,7 @@ constexpr auto InvalidChunkLocationUuid = TChunkLocationUuid(-1, -1);
 constexpr int MinReplicationFactor = 1;
 constexpr int MaxReplicationFactor = 20;
 constexpr int DefaultReplicationFactor = 3;
+constexpr int DefaultIntermediateDataReplicationFactor = 2;
 
 constexpr int MaxMediumCount = 120; // leave some room for sentinels
 
@@ -131,6 +131,7 @@ using TCompactMediumMap = TCompactFlatMap<int, T, 4>;
  *  Additional +8 enables some flexibility during balancing.
  */
 constexpr int TypicalReplicaCount = 24;
+constexpr int SlimTypicalReplicaCount = 3;
 constexpr int GenericChunkReplicaIndex = 16;  // no specific replica; the default one for non-erasure chunks
 
 //! Valid indexes are in range |[0, ChunkReplicaIndexBound)|.
@@ -146,6 +147,7 @@ constexpr int MediumIndexBound = AllMediaIndex + 1;
 
 class TChunkReplicaWithMedium;
 using TChunkReplicaWithMediumList = TCompactVector<TChunkReplicaWithMedium, TypicalReplicaCount>;
+using TChunkReplicaWithMediumSlimList = TCompactVector<TChunkReplicaWithMedium, SlimTypicalReplicaCount>;
 
 class TChunkReplicaWithLocation;
 using TChunkReplicaWithLocationList = TCompactVector<TChunkReplicaWithLocation, TypicalReplicaCount>;
@@ -194,7 +196,7 @@ DEFINE_ENUM(EChunkAvailabilityPolicy,
 );
 
 // Keep in sync with NChunkServer::ETableChunkFormat.
-DEFINE_ENUM(EChunkFormat,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkFormat, i8,
     // Sentinels.
     ((Unknown)                             (-1))
 

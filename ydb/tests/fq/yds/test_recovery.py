@@ -10,8 +10,8 @@ import random
 
 import yatest
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.harness import param_constants
-import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
@@ -56,7 +56,7 @@ class TestRecovery(TestYdsBase):
                 return node_index
         assert False, "No active graphs found"
 
-    def dump_workers(self, worker_count, ca_count, wait_time=yatest_common.plain_or_under_sanitizer(30, 150)):
+    def dump_workers(self, worker_count, ca_count, wait_time=plain_or_under_sanitizer(30, 150)):
         deadline = time.time() + wait_time
         while True:
             wcs = 0
@@ -340,9 +340,9 @@ class TestRecovery(TestYdsBase):
             "--duration",
             "30s",
             "--sleep-min",
-            yatest_common.plain_or_under_sanitizer("10ms", "50ms"),
+            plain_or_under_sanitizer("10ms", "50ms"),
             "--sleep-max",
-            yatest_common.plain_or_under_sanitizer("100ms", "500ms"),
+            plain_or_under_sanitizer("100ms", "500ms"),
             "--reschedule-min",
             "10ms",
             "--reschedule-max",
@@ -405,7 +405,7 @@ class TestRecovery(TestYdsBase):
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
 
         # Checkpointing must be finished
-        deadline = time.time() + yatest_common.plain_or_under_sanitizer(300, 900)
+        deadline = time.time() + plain_or_under_sanitizer(300, 900)
         while True:
             status = client.describe_query(query_id).result.query.meta.status
             assert status == fq.QueryMeta.RUNNING, "Unexpected status " + fq.QueryMeta.ComputeStatus.Name(status)
@@ -413,7 +413,7 @@ class TestRecovery(TestYdsBase):
             if completed >= 5:
                 break
             assert time.time() < deadline, "Completed: {}".format(completed)
-            time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
+            time.sleep(plain_or_under_sanitizer(0.5, 2))
 
         close_ic_sessions_future.wait()
 

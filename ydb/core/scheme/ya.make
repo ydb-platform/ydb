@@ -16,14 +16,16 @@ PEERDIR(
     library/cpp/containers/bitseq
     library/cpp/deprecated/enum_codegen
     library/cpp/yson
+    ydb/public/api/protos
     ydb/core/scheme/protos
     ydb/core/scheme_types
     ydb/library/aclib
-    ydb/library/yql/parser/pg_wrapper/interface
+    yql/essentials/parser/pg_wrapper/interface
     ydb/public/lib/scheme_types
     # temporary.
     ydb/library/pretty_types_print/protobuf
     library/cpp/lwtrace/mon
+    library/cpp/containers/absl_flat_hash
 )
 
 END()

@@ -1,5 +1,7 @@
-from contextlib import contextmanager
-from typing import Iterator, Optional, Union
+from __future__ import annotations
+
+import contextlib
+import typing
 
 from .._models import (
     URL,
@@ -18,12 +20,12 @@ from .._models import (
 class RequestInterface:
     def request(
         self,
-        method: Union[bytes, str],
-        url: Union[URL, bytes, str],
+        method: bytes | str,
+        url: URL | bytes | str,
         *,
         headers: HeaderTypes = None,
-        content: Union[bytes, Iterator[bytes], None] = None,
-        extensions: Optional[Extensions] = None,
+        content: bytes | typing.Iterator[bytes] | None = None,
+        extensions: Extensions | None = None,
     ) -> Response:
         # Strict type checking on our parameters.
         method = enforce_bytes(method, name="method")
@@ -47,16 +49,16 @@ class RequestInterface:
             response.close()
         return response
 
-    @contextmanager
+    @contextlib.contextmanager
     def stream(
         self,
-        method: Union[bytes, str],
-        url: Union[URL, bytes, str],
+        method: bytes | str,
+        url: URL | bytes | str,
         *,
         headers: HeaderTypes = None,
-        content: Union[bytes, Iterator[bytes], None] = None,
-        extensions: Optional[Extensions] = None,
-    ) -> Iterator[Response]:
+        content: bytes | typing.Iterator[bytes] | None = None,
+        extensions: Extensions | None = None,
+    ) -> typing.Iterator[Response]:
         # Strict type checking on our parameters.
         method = enforce_bytes(method, name="method")
         url = enforce_url(url, name="url")

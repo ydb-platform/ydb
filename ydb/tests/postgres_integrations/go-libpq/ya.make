@@ -1,7 +1,6 @@
 PY3TEST()
 
 FORK_TEST_FILES()
-TIMEOUT(600)
 
 
 # copy from https://docs.yandex-team.ru/devtools/test/environment#docker-compose
@@ -11,7 +10,12 @@ REQUIREMENTS(
 )
 
 IF(OPENSOURCE)
-    SIZE(MEDIUM) # for run per PR
+    IF (SANITIZER_TYPE)
+        # Too huge for precommit check with sanitizers
+        SIZE(LARGE)
+    ELSE()
+        SIZE(MEDIUM) # for run per PR
+    ENDIF()
 
     # Including of docker_compose/recipe.inc automatically converts these tests into LARGE,
     # which makes it impossible to run them during precommit checks on Github CI.

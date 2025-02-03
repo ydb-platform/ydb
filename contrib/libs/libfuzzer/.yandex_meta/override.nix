@@ -1,27 +1,41 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "15.0.5";
+  version = "19.1.7";
 
-  src = let
-    pname = "compiler-rt";
-    source = fetchFromGitHub {
-      owner = "llvm";
-      repo = "llvm-project";
-      rev = "llvmorg-${version}";
-      hash = "sha256-lYwtqpodBLPgA+BpdesZ5JetcLccpBKSrE1Pqyj+Wvw=";
-    };
-  in (runCommand "${pname}-src-${version}" {} (''
-    mkdir -p "$out"
-    cp -r ${source}/cmake "$out"
-    cp -r ${source}/${pname} "$out"
-  '')).overrideAttrs(attrs: rec {
-    urls = source.urls;
-  });
-  sourceRoot = "compiler-rt-src-${version}/compiler-rt";
+  src = fetchFromGitHub {
+    owner = "llvm";
+    repo = "llvm-project";
+    rev = "llvmorg-${version}";
+    hash = "sha256-cZAB5vZjeTsXt9QHbP5xluWNQnAHByHtHnAhVDV0E6I=";
+  };
+
+  sourceRoot = "source/compiler-rt";
 
   patches = [
     ./cmake-afl.patch
     ./no-fuchsia.patch
   ];
 
-  NIX_CFLAGS_COMPILE = [ ]; # Remove SCUDO_DEFAULT_OPTIONS.
+  cmakeFlags = [
+    "-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON"
+    "-DCMAKE_C_COMPILER_TARGET=${stdenv.hostPlatform.config}"
+
+    # Build only necessary subset (i. e. libfuzzer)
+    "-DCOMPILER_RT_BUILD_LIBFUZZER=ON"
+    "-DCOMPILER_RT_BUILD_SANITIZERS=OFF"
+    "-DCOMPILER_RT_BUILD_PROFILE=OFF"
+    "-DCOMPILER_RT_BUILD_MEMPROF=OFF"
+    "-DCOMPILER_RT_BUILD_BUILTINS=OFF"
+    "-DCOMPILER_RT_BUILD_CRT=OFF"
+    "-DCOMPILER_RT_BUILD_CTX_PROFILE=OFF"
+    "-DCOMPILER_RT_BUILD_XRAY=OFF"
+    "-DCOMPILER_RT_BUILD_ORC=OFF"
+    "-DCOMPILER_RT_BUILD_GWP_ASAN=OFF"
+
+    # Link against external libcxx
+    "-DCOMPILER_RT_USE_LIBCXX=OFF"
+  ];
+
+  # Remove SCUDO_DEFAULT_OPTIONS
+  env = {};
+  NIX_CFLAGS_COMPILE = [];
 }

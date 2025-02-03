@@ -156,6 +156,9 @@ struct TSetupSysLocks;
 
 class TNeedGlobalTxId : public yexception {};
 
+class IDataShardInMemoryRestoreActor;
+class IDataShardInMemoryStateActor;
+
 ///
 class TDataShard
     : public TActor<TDataShard>
@@ -164,6 +167,7 @@ class TDataShard
     class TTxStopGuard;
     class TTxGetShardState;
     class TTxInit;
+    class TTxInitRestored;
     class TTxInitSchema;
     class TTxInitSchemaDefaults;
     class TTxPlanStep;
@@ -193,7 +197,6 @@ class TDataShard
     class TTxStoreTablePath;
     class TTxGoOffline;
     class TTxGetTableStats;
-    class TTxMonitoring;
     class TTxMonitoringCleanupBorrowedParts;
     class TTxMonitoringCleanupBorrowedPartsActor;
     class TTxMonitoringResetSchemaVersion;
@@ -204,9 +207,6 @@ class TDataShard
     class TTxRemoveOldInReadSets;
     class TTxReadContinue;
     class TTxReadColumns;
-    class TTxGetInfo;
-    class TTxListOperations;
-    class TTxGetOperation;
     class TTxStoreScanState;
     class TTxRefreshVolatileSnapshot;
     class TTxDiscardVolatileSnapshot;
@@ -233,6 +233,7 @@ class TDataShard
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
+    class TTxCleanupUncommitted;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -240,6 +241,7 @@ class TDataShard
 
     class TTxReadViaPipeline;
     class TReadOperation;
+    class TReadScan;
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
@@ -250,23 +252,14 @@ class TDataShard
 
     class TTxMediatorStateRestored;
 
-    ITransaction *CreateTxMonitoring(TDataShard *self,
-                                     NMon::TEvRemoteHttpInfo::TPtr ev);
-    ITransaction *CreateTxGetInfo(TDataShard *self,
-                                  TEvDataShard::TEvGetInfoRequest::TPtr ev);
-    ITransaction *CreateTxListOperations(TDataShard *self,
-                                         TEvDataShard::TEvListOperationsRequest::TPtr ev);
-    ITransaction *CreateTxGetOperation(TDataShard *self,
-                                       TEvDataShard::TEvGetOperationRequest::TPtr ev);
+    void HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev);
+    void HandleMonVolatileTxs(NMon::TEvRemoteHttpInfo::TPtr& ev);
+    void HandleMonVolatileTxs(NMon::TEvRemoteHttpInfo::TPtr& ev, ui64 txId);
+    void HandleMonCleanupBorrowedParts(NMon::TEvRemoteHttpInfo::TPtr& ev);
+    void HandleMonResetSchemaVersion(NMon::TEvRemoteHttpInfo::TPtr& ev);
 
-    ITransaction *CreateTxMonitoringCleanupBorrowedParts(
-            TDataShard *self,
-            NMon::TEvRemoteHttpInfo::TPtr ev);
-
-    ITransaction *CreateTxMonitoringResetSchemaVersion(
-            TDataShard *self,
-            NMon::TEvRemoteHttpInfo::TPtr ev);
-
+    friend class TDataShardInMemoryRestoreActor;
+    friend class TDataShardInMemoryStateActor;
     friend class TDataShardMiniKQLFactory;
     friend class TDataTransactionProcessor;
     friend class TSchemeTransactionProcessor;
@@ -401,6 +394,7 @@ class TDataShard
             ui64 MemRowCount = 0;
             ui64 MemDataSize = 0;
             ui64 SearchHeight = 0;
+            bool HasSchemaChanges = false;
         };
 
         struct TEvTableStatsError : public TEventLocal<TEvTableStatsError, EvTableStatsError> {
@@ -1160,6 +1154,10 @@ class TDataShard
             SysMvcc_FollowerReadEdgeTxId = 43,
             SysMvcc_FollowerReadEdgeRepeatable = 44,
 
+            // Last known in-memory state actor
+            Sys_InMemoryStateActorId = 45,
+            Sys_InMemoryStateGeneration = 46,
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -1221,6 +1219,8 @@ class TDataShard
             value = rowset.GetValue<Schema::Sys::Bytes>();
         return true;
     }
+
+    static bool SysGetActorId(NIceDb::TNiceDb& db, ui64 key, TActorId& value);
 
     template <typename TEvHandle>
     void ForwardEventToOperation(TAutoPtr<TEvHandle> ev, const TActorContext &ctx) {
@@ -1291,16 +1291,18 @@ class TDataShard
     void Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvReadScanStarted::TPtr& ev);
+    void Handle(TEvDataShard::TEvReadScanFinished::TPtr& ev);
     void Handle(TEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev);
+    void Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev);
+    void Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev);
+    void Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev);
     void Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetReadTableScanStateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev);
+    void Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev);
     void Handle(TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev, const TActorContext& ctx);
@@ -1388,6 +1390,8 @@ class TDataShard
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvDataShard::TEvForceDataCleanup::TPtr& ev, const TActorContext& ctx);
+
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
     void DoPeriodicTasks(const TActorContext &ctx);
@@ -1420,6 +1424,9 @@ class TDataShard
     void SwitchToWork(const TActorContext &ctx);
     void SyncConfig();
 
+    // Cleanup for bug https://github.com/ydb-platform/ydb/issues/13387
+    void CleanupUncommitted(const TActorContext &ctx);
+
     TMaybe<TInstant> GetTxPlanStartTimeAndCleanup(ui64 step);
 
     struct TPersistentTablet;
@@ -1439,6 +1446,7 @@ class TDataShard
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, ui64 value) const;
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, ui32 value) const;
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, bool value) const;
+    void PersistSys(NIceDb::TNiceDb& db, ui64 key, const TActorId& value) const;
     void PersistUserTable(NIceDb::TNiceDb& db, ui64 tableId, const TUserTable& tableInfo);
     void PersistUserTableFullCompactionTs(NIceDb::TNiceDb& db, ui64 tableId, ui64 ts);
     void PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui64 tableId, const TUserTable& tableInfo);
@@ -1449,6 +1457,7 @@ class TDataShard
     bool CheckMediatorAuthorisation(ui64 mediatorId);
 
     NTabletFlatExecutor::ITransaction* CreateTxInit();
+    NTabletFlatExecutor::ITransaction* CreateTxInitRestored();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
@@ -1467,6 +1476,7 @@ public:
     }
 
     TDataShard(const TActorId &tablet, TTabletStorageInfo *info);
+    ~TDataShard();
 
 
     void PrepareAndSaveOutReadSets(ui64 step,
@@ -1490,6 +1500,7 @@ public:
                       TVector<THolder<TEvTxProcessing::TEvReadSet>> &&readsets);
     void ResendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
     void SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const;
+    void GetCleanupReplies(TOperation* op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies);
     void GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies);
     void SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies);
     void SendCommittedReplies(std::vector<std::unique_ptr<IEventHandle>>&& replies);
@@ -1644,7 +1655,10 @@ public:
         TableInfos.erase(tableId.LocalPathId);
     }
 
-    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
+    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb* locksDb = nullptr) {
+        if (locksDb) {
+            SysLocks.RemoveSchema(tableId, locksDb);
+        }
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
@@ -2089,6 +2103,7 @@ public:
     void CheckChangesQueueNoOverflow(ui64 cookie = 0);
 
     void DeleteReadIterator(TReadIteratorsMap::iterator it);
+    void DeleteReadIterator(TReadIteratorsLocalMap::iterator it);
     void CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx);
     void ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx);
     void UnsubscribeReadIteratorSessions(const TActorContext& ctx);
@@ -2135,6 +2150,8 @@ public:
         Y_ABORT_UNLESS(type != ELogThrottlerType::LAST);
         return LogThrottlers[type];
     };
+
+    void OnTableCreated(TTransactionContext& txc, const TActorContext& ctx);
 
 private:
     ///
@@ -2691,6 +2708,30 @@ private:
     TS3UploadsManager S3Uploads;
     TS3DownloadsManager S3Downloads;
 
+    // Initial state
+    struct TInitialState {
+        TVector<IDataShardChangeCollector::TChange> ChangeRecords;
+    };
+    std::optional<TInitialState> InitialState;
+
+    // In-memory state transfer support
+    IDataShardInMemoryRestoreActor* InMemoryRestoreActor = nullptr;
+    IDataShardInMemoryStateActor* InMemoryStateActor = nullptr;
+    TActorId InMemoryStateActorId;
+    TActorId InMemoryStatePrevActorId;
+    ui64 InMemoryStatePrevGeneration = 0;
+
+    void StartInMemoryRestoreActor();
+    void OnInMemoryStateRestored();
+    bool StartInMemoryStateActor();
+
+    struct TPreservedInMemoryState {
+        TVector<TString> Chunks;
+        TVector<size_t> Checkpoints;
+    };
+
+    TPreservedInMemoryState PreserveInMemoryState();
+
     struct TMediatorDelayedReply {
         TActorId Target;
         THolder<IEventBase> Event;
@@ -2714,7 +2755,6 @@ private:
 
     struct TCoordinatorSubscription {
         ui64 CoordinatorId;
-        TMediatorTimecastReadStep::TCPtr ReadStep;
     };
 
     TVector<TCoordinatorSubscription> CoordinatorSubscriptions;
@@ -2727,6 +2767,9 @@ private:
     bool MediatorStateWaiting = false;
     bool MediatorStateRestoreTxPending = false;
 
+    bool InMemoryVarsRestored = false;
+    bool InMemoryVarsFrozen = false;
+
     bool IcbRegistered = false;
 
     TControlWrapper DisableByKeyFilter;
@@ -2734,9 +2777,9 @@ private:
     TControlWrapper MaxTxLagMilliseconds;
     TControlWrapper CanCancelROWithReadSets;
     TControlWrapper PerShardReadSizeLimit;
-    TControlWrapper CpuUsageReportThreshlodPercent;
+    TControlWrapper CpuUsageReportThresholdPercent;
     TControlWrapper CpuUsageReportIntervalSeconds;
-    TControlWrapper HighDataSizeReportThreshlodBytes;
+    TControlWrapper HighDataSizeReportThresholdBytes;
     TControlWrapper HighDataSizeReportIntervalSeconds;
 
     TControlWrapper DataTxProfileLogThresholdMs;
@@ -2963,6 +3006,7 @@ private:
     TReplicatedTableState* EnsureReplicatedTable(const TPathId& pathId);
 
     TReadIteratorsMap ReadIterators;
+    TReadIteratorsLocalMap ReadIteratorsByLocalReadId;
     THashMap<TActorId, TReadIteratorSession> ReadIteratorSessions;
 
     NTable::ITransactionObserverPtr BreakWriteConflictsTxObserver;
@@ -3115,17 +3159,19 @@ protected:
             HFunc(TEvDataShard::TEvReadContinue, Handle);
             HFunc(TEvDataShard::TEvReadAck, Handle);
             HFunc(TEvDataShard::TEvReadCancel, Handle);
+            hFunc(TEvDataShard::TEvReadScanStarted, Handle);
+            hFunc(TEvDataShard::TEvReadScanFinished, Handle);
             HFunc(TEvDataShard::TEvReadColumnsRequest, Handle);
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
-            HFunc(TEvDataShard::TEvGetInfoRequest, Handle);
-            HFunc(TEvDataShard::TEvListOperationsRequest, Handle);
-            HFunc(TEvDataShard::TEvGetDataHistogramRequest, Handle);
-            HFunc(TEvDataShard::TEvGetOperationRequest, Handle);
+            hFunc(TEvDataShard::TEvGetInfoRequest, Handle);
+            hFunc(TEvDataShard::TEvListOperationsRequest, Handle);
+            hFunc(TEvDataShard::TEvGetDataHistogramRequest, Handle);
+            hFunc(TEvDataShard::TEvGetOperationRequest, Handle);
             HFunc(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
             HFunc(TEvDataShard::TEvGetReadTableScanStateRequest, Handle);
             HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
-            HFunc(TEvDataShard::TEvGetRSInfoRequest, Handle);
-            HFunc(TEvDataShard::TEvGetSlowOpProfilesRequest, Handle);
+            hFunc(TEvDataShard::TEvGetRSInfoRequest, Handle);
+            hFunc(TEvDataShard::TEvGetSlowOpProfilesRequest, Handle);
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
@@ -3172,6 +3218,7 @@ protected:
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
+            HFunc(TEvDataShard::TEvForceDataCleanup, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
@@ -3196,6 +3243,8 @@ protected:
             HFuncTraced(TEvDataShard::TEvReadContinue, Handle);
             HFuncTraced(TEvDataShard::TEvReadAck, Handle);
             HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
+            hFuncTraced(TEvDataShard::TEvReadScanStarted, Handle);
+            hFuncTraced(TEvDataShard::TEvReadScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3302,6 +3351,7 @@ protected:
 
                 ev->Record.MutableTableStats()->SetPartCount(ti.Stats.PartCount);
                 ev->Record.MutableTableStats()->SetSearchHeight(ti.Stats.SearchHeight);
+                ev->Record.MutableTableStats()->SetHasSchemaChanges(ti.Stats.HasSchemaChanges);
                 ev->Record.MutableTableStats()->SetLastFullCompactionTs(ti.Stats.LastFullCompaction.Seconds());
                 ev->Record.MutableTableStats()->SetHasLoanedParts(Executor()->HasLoanedParts());
 
@@ -3340,6 +3390,10 @@ protected:
             if (resourceMetrics != nullptr) {
                 resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
             }
+
+            ev->Record.MutableTableStats()->SetLocksAcquired(TabletCounters->Cumulative()[COUNTER_LOCKS_ACQUIRED].Get());
+            ev->Record.MutableTableStats()->SetLocksWholeShard(TabletCounters->Cumulative()[COUNTER_LOCKS_WHOLE_SHARD].Get());
+            ev->Record.MutableTableStats()->SetLocksBroken(TabletCounters->Cumulative()[COUNTER_LOCKS_BROKEN].Get());
 
             ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
             ev->Record.SetStartTime(StartTime().MilliSeconds());

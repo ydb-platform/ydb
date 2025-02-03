@@ -1,7 +1,7 @@
 # Contributing
 
 Read OpenTelemetry project [contributing
-guide](https://github.com/open-telemetry/community/blob/main/CONTRIBUTING.md)
+guide](https://github.com/open-telemetry/community/blob/main/guides/contributor/README.md)
 for general information about the project.
 
 ## Prerequisites

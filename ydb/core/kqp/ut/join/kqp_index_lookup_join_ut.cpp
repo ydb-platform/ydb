@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <fmt/format.h>
 
@@ -224,7 +224,8 @@ Y_UNIT_TEST_TWIN(JoinWithSubquery, StreamLookup) {
                 ON l.Fk = r.Key
         );
         SELECT j.lValue AS Value FROM $join AS j INNER JOIN `/Root/Kv` AS kv
-            ON j.lKey = kv.Key;
+            ON j.lKey = kv.Key
+        ORDER BY j.lValue;
     )";
 
     NKikimrConfig::TAppConfig appConfig;

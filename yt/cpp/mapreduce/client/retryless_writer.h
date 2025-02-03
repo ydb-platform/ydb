@@ -1,8 +1,10 @@
 #pragma once
 
+#include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/helpers.h>
 #include <yt/cpp/mapreduce/http/http.h>
 #include <yt/cpp/mapreduce/http/http_client.h>
+#include <yt/cpp/mapreduce/http/requests.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/common.h>
@@ -11,8 +13,6 @@
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/io/helpers.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 #include <util/stream/buffered.h>
 
@@ -56,7 +56,7 @@ public:
         auto hostName = GetProxyForHeavyRequest(context);
         UpdateHeaderForProxyIfNeed(hostName, context, header);
         Request_ = context.HttpClient->StartRequest(GetFullUrl(hostName, context, header), requestId, header);
-        BufferedOutput_.Reset(new TBufferedOutput(Request_->GetStream(), BufferSize_));
+        BufferedOutput_ = std::make_unique<TBufferedOutput>(Request_->GetStream(), BufferSize_);
     }
 
     ~TRetrylessWriter() override;
@@ -75,7 +75,7 @@ private:
 
     bool Running_ = true;
     NHttpClient::IHttpRequestPtr Request_;
-    THolder<TBufferedOutput> BufferedOutput_;
+    std::unique_ptr<TBufferedOutput> BufferedOutput_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

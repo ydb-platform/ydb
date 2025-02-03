@@ -11,61 +11,60 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct IRegistryImpl
+struct IRegistry
     : public TRefCounted
 {
-public:
-    virtual ICounterImplPtr RegisterCounter(
+    virtual ICounterPtr RegisterCounter(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
-    virtual ITimeCounterImplPtr RegisterTimeCounter(
+    virtual ITimeCounterPtr RegisterTimeCounter(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
-    virtual IGaugeImplPtr RegisterGauge(
+    virtual IGaugePtr RegisterGauge(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
-    virtual ITimeGaugeImplPtr RegisterTimeGauge(
+    virtual ITimeGaugePtr RegisterTimeGauge(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
-    virtual ISummaryImplPtr RegisterSummary(
+    virtual ISummaryPtr RegisterSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
-    virtual IGaugeImplPtr RegisterGaugeSummary(
+    virtual IGaugePtr RegisterGaugeSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
-    virtual ITimeGaugeImplPtr RegisterTimeGaugeSummary(
+    virtual ITimeGaugePtr RegisterTimeGaugeSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
-    virtual ITimerImplPtr RegisterTimerSummary(
+    virtual ITimerPtr RegisterTimerSummary(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
-    virtual ITimerImplPtr RegisterTimeHistogram(
+    virtual ITimerPtr RegisterTimeHistogram(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
-    virtual IHistogramImplPtr RegisterGaugeHistogram(
+    virtual IHistogramPtr RegisterGaugeHistogram(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
-    virtual IHistogramImplPtr RegisterRateHistogram(
+    virtual IHistogramPtr RegisterRateHistogram(
         const std::string& name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
@@ -96,24 +95,24 @@ public:
         const std::string& value) = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(IRegistryImpl)
+DEFINE_REFCOUNTED_TYPE(IRegistry)
 
-IRegistryImplPtr GetGlobalRegistry();
+IRegistryPtr GetGlobalRegistry();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct ICounterImpl
+struct ICounter
     : public TRefCounted
 {
     virtual void Increment(i64 delta) = 0;
     virtual i64 GetValue() = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(ICounterImpl)
+DEFINE_REFCOUNTED_TYPE(ICounter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct ITimeCounterImpl
+struct ITimeCounter
     : public TRefCounted
 {
     virtual void Add(TDuration delta) = 0;
@@ -121,34 +120,34 @@ struct ITimeCounterImpl
     virtual TDuration GetValue() = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(ITimeCounterImpl)
+DEFINE_REFCOUNTED_TYPE(ITimeCounter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct IGaugeImpl
+struct IGauge
     : public virtual TRefCounted
 {
     virtual void Update(double value) = 0;
     virtual double GetValue() = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(IGaugeImpl)
+DEFINE_REFCOUNTED_TYPE(IGauge)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct ITimeGaugeImpl
+struct ITimeGauge
     : public virtual TRefCounted
 {
     virtual void Update(TDuration value) = 0;
     virtual TDuration GetValue() = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(ITimeGaugeImpl)
+DEFINE_REFCOUNTED_TYPE(ITimeGauge)
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-struct ISummaryImplBase
+struct ISummaryBase
     : public virtual TRefCounted
 {
     virtual void Record(T value) = 0;
@@ -157,12 +156,12 @@ struct ISummaryImplBase
     virtual TSummarySnapshot<T> GetSummaryAndReset() = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(ISummaryImpl)
-DEFINE_REFCOUNTED_TYPE(ITimerImpl)
+DEFINE_REFCOUNTED_TYPE(ISummary)
+DEFINE_REFCOUNTED_TYPE(ITimer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct IHistogramImpl
+struct IHistogram
     : public virtual TRefCounted
 {
     virtual void Add(double value, int count) = 0;
@@ -173,7 +172,7 @@ struct IHistogramImpl
     virtual void LoadSnapshot(THistogramSnapshot snapshot) = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(IHistogramImpl)
+DEFINE_REFCOUNTED_TYPE(IHistogram)
 
 ////////////////////////////////////////////////////////////////////////////////
 

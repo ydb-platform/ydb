@@ -24,13 +24,13 @@ namespace scipy
       {
         return boost::math::cyl_hankel_1(x, y);
       }
-    }
+    } // namespace details
 
 #define NUMPY_NARY_FUNC_NAME hankel1
 #define NUMPY_NARY_FUNC_SYM details::hankel1
 #include "pythonic/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

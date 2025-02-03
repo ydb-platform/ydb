@@ -9,8 +9,7 @@
 #include "oidc_settings.h"
 #include "context.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 class THandlerSessionCreate : public NActors::TActorBootstrapped<THandlerSessionCreate> {
 private:
@@ -19,7 +18,7 @@ private:
 protected:
     const NActors::TActorId Sender;
     const NHttp::THttpIncomingRequestPtr Request;
-    NActors::TActorId HttpProxyId;
+    const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
     TContext Context;
 
@@ -29,20 +28,21 @@ public:
                           const NActors::TActorId& httpProxyId,
                           const TOpenIdConnectSettings& settings);
 
-    virtual void RequestSessionToken(const TString&, const NActors::TActorContext&) = 0;
-    virtual void ProcessSessionToken(const TString& accessToken, const NActors::TActorContext&) = 0;
+    virtual void RequestSessionToken(const TString&) = 0;
+    virtual void ProcessSessionToken(const NJson::TJsonValue& jsonValue) = 0;
 
-    void Bootstrap(const NActors::TActorContext& ctx);
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
+    void Bootstrap();
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
 
 protected:
     TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
-    void RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx);
-    void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx);
+    void RetryRequestToProtectedResourceAndDie();
+    void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders);
+    void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
+    void ReplyBadRequestAndPassAway(TString errorMessage);
 
 private:
-    void SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx);
+    void SendUnknownErrorResponseAndDie();
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

@@ -11,16 +11,17 @@
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <library/cpp/scheme/scheme.h>
 #include <library/cpp/json/json_reader.h>
@@ -67,15 +68,15 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 for (const auto& column: json.GetArray()) {
                     *objectStorage.add_partitioned_by() = column;
                 }
-            } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "csv_delimiter"sv}, lowerKey)) {
+            } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "data.date.format"sv, "csv_delimiter"sv}, lowerKey)) {
                 objectStorage.mutable_format_setting()->insert({lowerKey, value});
             } else {
-                ythrow TExternalSourceException() << "Unknown attribute " << key;
+                throw TExternalSourceException() << "Unknown attribute " << key;
             }
         }
 
         if (auto issues = Validate(schema, objectStorage, PathsLimit, general.location())) {
-            ythrow TExternalSourceException() << issues.ToString();
+            throw TExternalSourceException() << issues.ToString();
         }
 
         return objectStorage.SerializeAsString();
@@ -136,7 +137,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
 
         if (!proto.GetProperties().GetProperties().empty()) {
-            ythrow TExternalSourceException() << "ObjectStorage source doesn't support any properties";
+            throw TExternalSourceException() << "ObjectStorage source doesn't support any properties";
         }
 
         ValidateHostname(HostnamePatterns, proto.GetLocation());
@@ -150,6 +151,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
         const bool hasPartitioning = objectStorage.projection_size() || objectStorage.partitioned_by_size();
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting(), location, hasPartitioning));
+        issues.AddIssues(ValidateSchema(schema));
         issues.AddIssues(ValidateJsonListFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         issues.AddIssues(ValidateRawFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         if (hasPartitioning) {
@@ -196,7 +198,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 continue;
             }
 
-            if (IsIn({ "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv}, key)) {
+            if (IsIn({ "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "data.date.format"sv}, key)) {
                 continue;
             }
 
@@ -257,10 +259,30 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 continue;
             }
 
+            if (key == "data.date.format"sv) {
+                continue;
+            }
+
             if (matchAllSettings) {
                 issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "unknown format setting " + key));
             }
         }
+        return issues;
+    }
+
+    template<typename TScheme>
+    static NYql::TIssues ValidateSchema(const TScheme& schema) {
+        NYql::TIssues issues;
+        for (const auto& column: schema.column()) {
+            const auto type = column.type();
+            if (type.has_optional_type() && type.optional_type().item().has_optional_type()) {
+                issues.AddIssue(MakeErrorIssue(
+                    Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder{} << "Double optional types are not supported (you have '" 
+                        << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
+            }
+        }
+
         return issues;
     }
 
@@ -458,7 +480,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             auto promise = NThreading::NewPromise<TMetadataResult>();
             auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
                 if (!response.Status.IsSuccess()) {
-                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(response.Status.GetIssues()));
+                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(NYdb::NAdapters::ToYqlIssues(response.Status.GetIssues())));
                     return;
                 }
                 meta->Changed = true;
@@ -525,7 +547,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (value.Success()) {
                 return value.Metadata;
             }
-            ythrow TExternalSourceException{} << value.Issues().ToOneLineString();
+            throw TExternalSourceException{} << value.Issues().ToOneLineString();
         });
     }
 

@@ -79,6 +79,14 @@ message TRegistrationResponse {
   optional uint64 ScopePathId = 4;
 }
 
+message TGracefulShutdownRequest {
+  optional uint32 NodeId = 1;
+}
+
+message TGracefulShutdownResponse {
+  optional TStatus Status = 1;
+}
+
 message TExtendLeaseRequest {
   optional uint32 NodeId = 1;
 }

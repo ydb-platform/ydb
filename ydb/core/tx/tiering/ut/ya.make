@@ -5,12 +5,10 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(ram:16)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -30,6 +28,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_tiers.cpp
+    ut_object.cpp
 )
 
 END()

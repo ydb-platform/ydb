@@ -68,11 +68,11 @@ public:
         const TMultiLookupOptions& options = {}) override;
 
     TFuture<NApi::TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const NApi::TSelectRowsOptions& options) override;
 
     TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
+        const std::string& query,
         const NApi::TExplainQueryOptions& options) override;
 
     virtual TFuture<TPullRowsResult> PullRows(
@@ -185,12 +185,12 @@ public:
         const NApi::TTableWriterOptions& options) override;
 
     // Distributed table client
-    TFuture<TDistributedWriteSessionPtr> StartDistributedWriteSession(
+    TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options) override;
 
     TFuture<void> FinishDistributedWriteSession(
-        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options) override;
 };
 

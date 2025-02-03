@@ -15,7 +15,7 @@ namespace math
   {
     return std::floor(x);
   }
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

@@ -8,6 +8,9 @@ template <typename TCharType, typename TTraits = std::char_traits<TCharType>>
 class TBasicString;
 
 using TString = TBasicString<char>;
+#ifndef TSTRING_IS_STD_STRING
+using TCowString = TBasicString<char>;
+#endif
 using TUtf16String = TBasicString<wchar16>;
 using TUtf32String = TBasicString<wchar32>;
 
@@ -44,12 +47,6 @@ class TIntrusiveListWithAutoDelete;
 
 template <class T, class Tag = TIntrusiveListDefaultTag>
 class TIntrusiveSList;
-
-template <class T, class C>
-class TAvlTree;
-
-template <class TValue, class TCmp>
-class TRbTree;
 
 // containers
 template <class T, class A = std::allocator<T>>

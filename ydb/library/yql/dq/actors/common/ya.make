@@ -7,13 +7,15 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/library/yql/dq/actors/protos
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut
-)
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
+    RECURSE_FOR_TESTS(
+        ut
+    )
+ENDIF()

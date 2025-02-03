@@ -1,11 +1,11 @@
 #ifndef PYTHONIC_INCLUDE_ITERTOOLS_PRODUCT_HPP
 #define PYTHONIC_INCLUDE_ITERTOOLS_PRODUCT_HPP
 
-#include "pythonic/include/utils/iterator.hpp"
-#include "pythonic/include/utils/seq.hpp"
-#include "pythonic/include/utils/int_.hpp"
 #include "pythonic/include/itertools/common.hpp"
 #include "pythonic/include/utils/functor.hpp"
+#include "pythonic/include/utils/int_.hpp"
+#include "pythonic/include/utils/iterator.hpp"
+#include "pythonic/include/utils/seq.hpp"
 
 #include <iterator>
 #include <type_traits>
@@ -60,21 +60,21 @@ namespace itertools
       iterator end_iter;
 
       product() = default;
-      product(Iters const &... _iters);
+      product(Iters const &..._iters);
 
       iterator &begin();
       iterator const &begin() const;
       iterator const &end() const;
     };
-  }
+  } // namespace details
 
   template <typename... Iter>
   details::product<typename std::remove_cv<
       typename std::remove_reference<Iter>::type>::type...>
-  product(Iter &&... iters);
+  product(Iter &&...iters);
 
   DEFINE_FUNCTOR(pythonic::itertools, product);
-}
+} // namespace itertools
 PYTHONIC_NS_END
 
 /* type inference stuff  {*/

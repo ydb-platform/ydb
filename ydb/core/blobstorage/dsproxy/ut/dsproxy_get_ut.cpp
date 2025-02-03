@@ -36,7 +36,7 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
     const ui32 groupId = 0;
     const ui32 domainCount = groupType.BlobSubgroupSize();
 
-    TGroupMock group(groupId, erasureSpecies, domainCount, 1);
+    TGroupMock group(groupId, erasureSpecies, domainCount, 1, 1);
     TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
 
     const ui64 maxQueryCount = 32;
@@ -245,7 +245,7 @@ public:
     void Init() {
         SendVPuts.clear();
         Group.Clear();
-        Group.ConstructInPlace(GroupId, ErasureSpecies, DomainCount, 1);
+        Group.ConstructInPlace(GroupId, ErasureSpecies, DomainCount, 1, 1);
         GroupQueues = Group->MakeGroupQueues();
         BlobSet.Clear();
         BlobSet.ConstructInPlace();
@@ -423,7 +423,7 @@ public:
 
     TGetSimulator(ui32 groupId, TErasureType::EErasureSpecies erasureSpecies, ui32 failDomains,
             ui32 drivesPerFailDomain)
-        : Group(groupId, erasureSpecies, failDomains, drivesPerFailDomain)
+        : Group(groupId, erasureSpecies, failDomains, 1, drivesPerFailDomain)
         , GroupQueues(Group.MakeGroupQueues())
     {}
 
@@ -532,7 +532,7 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
 
     const ui32 isRestore = 0;
 
-    TGroupMock group(groupId, erasureSpecies, domainCount, 1);
+    TGroupMock group(groupId, erasureSpecies, domainCount, 1, 1);
     TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
     TBlobTestSet blobSet;
     blobSet.AddBlobs(blobs);
@@ -672,7 +672,7 @@ Y_UNIT_TEST(TestBlock42WipedOneDiskAndErrorDurringGet) {
 
     const ui32 isRestore = 0;
 
-    TGroupMock group(groupId, erasureSpecies, domainCount, 1);
+    TGroupMock group(groupId, erasureSpecies, domainCount, 1, 1);
     TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
     TBlobTestSet blobSet;
     blobSet.AddBlobs(blobs);
@@ -939,7 +939,7 @@ void TestWipedErrorWithTwoBlobs(TErasureType::EErasureSpecies erasureSpecies, bo
 
                     for (ui64 it = 0; it < 100; ++it, ++seed) {
                         SetRandomSeed(seed);
-                        TGroupMock group(groupId, erasureSpecies, domainCount, 1);
+                        TGroupMock group(groupId, erasureSpecies, domainCount, 1, 1);
                         TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
                         TBlobTestSet blobSet;
                         blobSet.AddBlobs(blobs);
@@ -1207,7 +1207,7 @@ public:
         , DomainCount(GroupType.BlobSubgroupSize())
         , MaxQueryCount(maxQueryCount)
         , BlobSize(blobSize)
-        , Group(0, ErasureSpecies, DomainCount, 1)
+        , Group(0, ErasureSpecies, DomainCount, 1, 1)
         , ErroneousVDisks(Group.GetInfo()->Type.BlobSubgroupSize(), NKikimrProto::OK)
     {
         BlobSet.GenerateSet(0, MaxQueryCount, BlobSize);
@@ -1415,7 +1415,7 @@ public:
     TTestNoDataRegression(EMode mode)
         : GroupType(ErasureSpecies)
         , DomainCount(GroupType.BlobSubgroupSize())
-        , Group(0, ErasureSpecies, DomainCount, 1)
+        , Group(0, ErasureSpecies, DomainCount, 1, 1)
         , Mode(mode)
     {
         BlobSet.GenerateSet(0, MaxQueryCount, BlobSize);

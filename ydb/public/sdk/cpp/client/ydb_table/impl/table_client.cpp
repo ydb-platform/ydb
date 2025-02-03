@@ -1,6 +1,6 @@
 #include "table_client.h"
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace NTable {
 
@@ -527,6 +527,10 @@ TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const TString& sess
 
     if (settings.WithSetVal_) {
         request.set_include_set_val(true);
+    }
+
+    if (settings.WithShardNodesInfo_) {
+        request.set_include_shard_nodes_info(true);
     }
 
     auto promise = NewPromise<TDescribeTableResult>();
@@ -1129,6 +1133,9 @@ void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, Ydb::Tabl
             break;
         case TTxSettings::TS_SNAPSHOT_RO:
             proto->mutable_snapshot_read_only();
+            break;
+        case TTxSettings::TS_SNAPSHOT_RW:
+            proto->mutable_snapshot_read_write();
             break;
         default:
             throw TContractViolation("Unexpected transaction mode.");

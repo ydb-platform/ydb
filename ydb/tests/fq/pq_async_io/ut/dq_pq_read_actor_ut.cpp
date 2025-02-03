@@ -1,6 +1,6 @@
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -36,6 +36,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads)
     Settings->SetUseRealThreads(useRealThreads);
     Settings->AddStoragePoolType("hdd1");
     Settings->AddStoragePoolType("hdd2");
+    Settings->SetColumnShardAlterObjectEnabled(true);
 
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableStatistics(true);
@@ -58,7 +59,6 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads)
 
     CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
     CSController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-    CSController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::STATISTICS, NActors::NLog::PRI_DEBUG);
 }
@@ -106,7 +106,7 @@ TString CreateDatabase(TTestEnv& env, const TString& databaseName,
     return fullDbName;
 }
 
-TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName) {
+TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName, size_t nodeCount) {
     auto& runtime = *env.GetServer().GetRuntime();
     auto fullDbName = Sprintf("/Root/%s", databaseName.c_str());
 
@@ -124,7 +124,7 @@ TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, con
     UNIT_ASSERT(response.operation().ready());
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
-    env.GetTenants().Run(fullDbName, 0);
+    env.GetTenants().Run(fullDbName, nodeCount);
 
     if (!env.GetServer().GetSettings().UseRealThreads) {
         runtime.SimulateSleep(TDuration::Seconds(1));
@@ -454,7 +454,7 @@ TAnalyzedTable::TAnalyzedTable(const TPathId& pathId, const std::vector<ui32>& c
 {}
 
 void TAnalyzedTable::ToProto(NKikimrStat::TTable& tableProto) const {
-    PathIdFromPathId(PathId, tableProto.MutablePathId());
+    PathId.ToProto(tableProto.MutablePathId());
     tableProto.MutableColumnTags()->Add(ColumnTags.begin(), ColumnTags.end());
 }
 

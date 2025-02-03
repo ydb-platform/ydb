@@ -63,7 +63,7 @@ public:
             }
 
             TStringStream profileBlob;
-            WriteProfile(&profileBlob, profile);
+            WriteCompressedProfile(&profileBlob, profile);
 
             rsp->SetStatus(EStatusCode::OK);
             WaitFor(rsp->WriteBody(TSharedRef::FromString(profileBlob.Str())))
@@ -176,11 +176,11 @@ public:
 
     NProto::Profile BuildProfile(const TCgiParameters& /*params*/) override
     {
-        return ReadHeapProfile(ProfileType_);
+        return CaptureHeapProfile(ProfileType_);
     }
 
 private:
-    tcmalloc::ProfileType ProfileType_;
+    const tcmalloc::ProfileType ProfileType_;
 };
 
 class TTCMallocAllocationProfilerHandler
@@ -198,7 +198,7 @@ public:
 
         auto token = tcmalloc::MallocExtension::StartAllocationProfiling();
         TDelayedExecutor::WaitForDuration(duration);
-        return ConvertAllocationProfile(std::move(token).Stop());
+        return TCMallocProfileToProtoProfile(std::move(token).Stop());
     }
 };
 
@@ -206,7 +206,7 @@ class TTCMallocStatHandler
     : public IHttpHandler
 {
 public:
-    void HandleRequest(const IRequestPtr& /* req */, const IResponseWriterPtr& rsp) override
+    void HandleRequest(const IRequestPtr& /*req*/, const IResponseWriterPtr& rsp) override
     {
         auto stat = tcmalloc::MallocExtension::GetStats();
         rsp->SetStatus(EStatusCode::OK);
@@ -258,7 +258,7 @@ class TVersionHandler
     : public IHttpHandler
 {
 public:
-    void HandleRequest(const IRequestPtr& /* req */, const IResponseWriterPtr& rsp) override
+    void HandleRequest(const IRequestPtr& /*req*/, const IResponseWriterPtr& rsp) override
     {
         rsp->SetStatus(EStatusCode::OK);
         WaitFor(rsp->WriteBody(TSharedRef::FromString(GetVersion())))
@@ -270,7 +270,7 @@ class TBuildIdHandler
     : public IHttpHandler
 {
 public:
-    void HandleRequest(const IRequestPtr& /* req */, const IResponseWriterPtr& rsp) override
+    void HandleRequest(const IRequestPtr& /*req*/, const IResponseWriterPtr& rsp) override
     {
         rsp->SetStatus(EStatusCode::OK);
         WaitFor(rsp->WriteBody(TSharedRef::FromString(GetVersion())))
@@ -291,22 +291,28 @@ void Register(
     const TString& prefix,
     const TBuildInfo& buildInfo)
 {
+    handlers->Add(prefix + "/cpu/profile", New<TCpuProfilerHandler>(buildInfo));
+
+    handlers->Add(prefix + "/spinlock/lock", New<TSpinlockProfilerHandler>(buildInfo, false));
+    handlers->Add(prefix + "/spinlock/block", New<TSpinlockProfilerHandler>(buildInfo, true));
+
+    handlers->Add(prefix + "/tcmalloc/current", New<TTCMallocSnapshotProfilerHandler>(buildInfo, tcmalloc::ProfileType::kHeap));
+    handlers->Add(prefix + "/tcmalloc/peak", New<TTCMallocSnapshotProfilerHandler>(buildInfo, tcmalloc::ProfileType::kPeakHeap));
+    handlers->Add(prefix + "/tcmalloc/fragmentation", New<TTCMallocSnapshotProfilerHandler>(buildInfo, tcmalloc::ProfileType::kFragmentation));
+    handlers->Add(prefix + "/tcmalloc/allocation", New<TTCMallocAllocationProfilerHandler>(buildInfo));
+    handlers->Add(prefix + "/tcmalloc/stat", New<TTCMallocStatHandler>());
+
+    handlers->Add(prefix + "/binary", New<TBinaryHandler>());
+    handlers->Add(prefix + "/build_id", New<TBuildIdHandler>());
+    handlers->Add(prefix + "/version", New<TVersionHandler>());
+
+    // COMPAT(babenko): consider dropping these
     handlers->Add(prefix + "/profile", New<TCpuProfilerHandler>(buildInfo));
-
-    handlers->Add(prefix + "/lock", New<TSpinlockProfilerHandler>(buildInfo, false));
-    handlers->Add(prefix + "/block", New<TSpinlockProfilerHandler>(buildInfo, true));
-
+    handlers->Add(prefix + "/buildid", New<TBuildIdHandler>());
     handlers->Add(prefix + "/heap", New<TTCMallocSnapshotProfilerHandler>(buildInfo, tcmalloc::ProfileType::kHeap));
     handlers->Add(prefix + "/peak", New<TTCMallocSnapshotProfilerHandler>(buildInfo, tcmalloc::ProfileType::kPeakHeap));
     handlers->Add(prefix + "/fragmentation", New<TTCMallocSnapshotProfilerHandler>(buildInfo, tcmalloc::ProfileType::kFragmentation));
     handlers->Add(prefix + "/allocations", New<TTCMallocAllocationProfilerHandler>(buildInfo));
-
-    handlers->Add(prefix + "/tcmalloc", New<TTCMallocStatHandler>());
-
-    handlers->Add(prefix + "/binary", New<TBinaryHandler>());
-
-    handlers->Add(prefix + "/version", New<TVersionHandler>());
-    handlers->Add(prefix + "/buildid", New<TBuildIdHandler>());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

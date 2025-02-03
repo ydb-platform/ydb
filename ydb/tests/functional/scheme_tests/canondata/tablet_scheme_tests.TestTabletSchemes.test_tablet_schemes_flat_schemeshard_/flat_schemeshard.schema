@@ -126,7 +126,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -209,7 +212,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -251,7 +257,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -292,7 +301,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -367,6 +379,11 @@
                 "ColumnId": 13,
                 "ColumnName": "IncrementalBackupConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "IsRestore",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -385,7 +402,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -399,7 +417,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -507,7 +528,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -572,7 +596,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -638,7 +665,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -703,7 +733,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -799,7 +832,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -847,7 +883,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -918,7 +957,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1026,7 +1068,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1061,7 +1106,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1150,7 +1198,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1241,7 +1292,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1289,7 +1343,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1510,7 +1567,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1552,7 +1612,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1593,7 +1656,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1647,7 +1713,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1706,7 +1775,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1759,7 +1831,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1813,7 +1888,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1860,7 +1938,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1909,7 +1990,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -1963,7 +2047,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2004,7 +2091,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2052,7 +2142,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2105,7 +2198,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2152,7 +2248,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2247,7 +2346,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2289,7 +2391,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2338,7 +2443,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2386,7 +2494,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2434,7 +2545,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2464,6 +2578,11 @@
                 "ColumnId": 5,
                 "ColumnName": "State",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "Description",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -2473,7 +2592,8 @@
                     1,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2487,7 +2607,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2517,6 +2640,11 @@
                 "ColumnId": 5,
                 "ColumnName": "State",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "Description",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -2526,7 +2654,8 @@
                     1,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2540,7 +2669,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2588,7 +2720,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2636,7 +2771,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2768,7 +2906,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2824,7 +2965,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2879,7 +3023,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -2890,6 +3037,11 @@
             1
         ],
         "ColumnsAdded": [
+            {
+                "ColumnId": 17,
+                "ColumnName": "EnableChecksums",
+                "ColumnType": "Bool"
+            },
             {
                 "ColumnId": 1,
                 "ColumnName": "Id",
@@ -2975,6 +3127,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -3004,7 +3157,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3055,6 +3211,11 @@
                 "ColumnId": 8,
                 "ColumnName": "SourceOwnerPathId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "SourcePathType",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -3068,7 +3229,8 @@
                     5,
                     6,
                     7,
-                    8
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3082,7 +3244,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3123,7 +3288,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3172,7 +3340,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3213,7 +3384,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3345,7 +3519,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3400,7 +3577,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3472,7 +3652,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3533,7 +3716,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3614,6 +3800,11 @@
                 "ColumnId": 14,
                 "ColumnName": "IncrementalBackupConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "IsRestore",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -3633,7 +3824,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3647,7 +3839,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3762,7 +3957,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3841,7 +4039,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3889,7 +4090,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3931,7 +4135,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -3987,7 +4194,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4029,7 +4239,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4091,7 +4304,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4146,7 +4362,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4261,7 +4480,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4357,7 +4579,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4455,7 +4680,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4510,7 +4738,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4570,7 +4801,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4625,7 +4859,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4805,6 +5042,36 @@
                 "ColumnId": 34,
                 "ColumnName": "CreationConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "ReadRowsBilled",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 36,
+                "ColumnName": "ReadBytesBilled",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 37,
+                "ColumnName": "UploadRowsProcessed",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 38,
+                "ColumnName": "UploadBytesProcessed",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 39,
+                "ColumnName": "ReadRowsProcessed",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 40,
+                "ColumnName": "ReadBytesProcessed",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -4844,7 +5111,13 @@
                     31,
                     32,
                     33,
-                    34
+                    34,
+                    35,
+                    36,
+                    37,
+                    38,
+                    39,
+                    40
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4858,7 +5131,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4912,7 +5188,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -4961,7 +5240,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5002,7 +5284,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5050,7 +5335,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5112,6 +5400,16 @@
                 "ColumnId": 10,
                 "ColumnName": "BytesProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "ReadRowsProcessed",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "ReadBytesProcessed",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5127,7 +5425,9 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5141,7 +5441,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5189,7 +5492,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5251,7 +5557,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5317,7 +5626,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5364,7 +5676,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5411,7 +5726,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5466,7 +5784,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5521,7 +5842,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5569,7 +5893,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5623,7 +5950,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5677,7 +6007,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5784,7 +6117,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5850,6 +6186,21 @@
                 "ColumnId": 11,
                 "ColumnName": "Permissions",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "Metadata",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "CreationQuery",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "PreparedCreationQuery",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -5866,7 +6217,10 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12,
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5880,7 +6234,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -5953,7 +6310,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6006,7 +6366,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6065,7 +6428,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6124,7 +6490,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6189,7 +6558,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6236,7 +6608,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6261,6 +6636,31 @@
                 "ColumnId": 3,
                 "ColumnName": "SidHash",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LastSuccessfulAttempt",
+                "ColumnType": "Timestamp"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "LastFailedAttempt",
+                "ColumnType": "Timestamp"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "FailedAttemptCount",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "CreatedAt",
+                "ColumnType": "Timestamp"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "IsEnabled",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6269,7 +6669,12 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6283,7 +6688,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6325,7 +6733,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6409,7 +6820,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6493,7 +6907,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6546,7 +6963,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6599,7 +7019,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6646,7 +7069,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6693,7 +7119,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6928,7 +7357,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -6975,7 +7407,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -7037,7 +7472,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -7109,7 +7547,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -7193,7 +7634,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -7252,7 +7696,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -7318,7 +7765,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -7371,7 +7821,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -7437,7 +7890,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -7491,7 +7947,10 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     },
@@ -7545,7 +8004,123 @@
             "0": {
                 "Main": 1,
                 "Outer": 1,
-                "Blobs": 1
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 112,
+        "TableName": "KMeansTreeState",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Level",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Parent",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "State",
+                "ColumnType": "Uint32"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 113,
+        "TableName": "KMeansTreeSample",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Row",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Probability",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Data",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
             }
         }
     }

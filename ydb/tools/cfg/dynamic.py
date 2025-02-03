@@ -5,7 +5,7 @@ import os
 
 from ydb.core.protos import blobstorage_config_pb2 as bs_config
 from ydb.core.protos import blobstorage_pdisk_config_pb2 as pdisk_config
-from ydb.core.protos import flat_scheme_op_pb2 as flat_scheme_op
+from ydb.core.protos.schemeshard import operations_pb2 as schemeshard_pb2
 from ydb.core.protos import msgbus_pb2 as msgbus
 from ydb.core.protos import tx_proxy_pb2 as tx_proxy
 from ydb.tools.cfg import base, static, utils
@@ -20,19 +20,19 @@ class DynamicConfigGenerator(object):
         output_dir,
         grpc_endpoint=None,
         local_binary_path=None,
-        walle_provider=None,
+        host_info_provider=None,
         **kwargs
     ):
         self._template = template
         self._binary_path = binary_path
         self._local_binary_path = local_binary_path or binary_path
         self._output_dir = output_dir
-        self._walle_provider = walle_provider
-        self._cluster_details = base.ClusterDetailsProvider(template, walle_provider=self._walle_provider)
+        self._host_info_provider = host_info_provider
+        self._cluster_details = base.ClusterDetailsProvider(template, host_info_provider=self._host_info_provider)
         self._grpc_endpoint = grpc_endpoint
         self.__configure_request = None
         self.__static_config = static.StaticConfigGenerator(
-            template, binary_path, output_dir, walle_provider=walle_provider, local_binary_path=local_binary_path
+            template, binary_path, output_dir, host_info_provider=host_info_provider, local_binary_path=local_binary_path
         )
 
     @property
@@ -251,7 +251,7 @@ class DynamicConfigGenerator(object):
         scheme_transaction = tx_proxy.TTransaction()
         scheme_operation = scheme_transaction.ModifyScheme
         scheme_operation.WorkingDir = '/'
-        scheme_operation.OperationType = flat_scheme_op.ESchemeOpAlterSubDomain
+        scheme_operation.OperationType = schemeshard_pb2.ESchemeOpAlterSubDomain
 
         domain_description = scheme_operation.SubDomain
         domain_description.Name = domain.domain_name
@@ -312,12 +312,6 @@ class DynamicConfigGenerator(object):
             pool = resources.storage_units.add()
             pool.unit_kind = storage_unit.kind
             pool.count = storage_unit.count
-
-        overridden_configs = tenant.overridden_configs or {}
-        nbs = overridden_configs.get('nbs', {})
-        nfs = overridden_configs.get('nfs', {})
-        if nbs.get('enable', False) or nfs.get('enable', False):
-            console_request.CreateTenantRequest.Request.options.disable_tx_service = True
 
         if tenant.plan_resolution is not None:
             console_request.CreateTenantRequest.Request.options.plan_resolution = tenant.plan_resolution

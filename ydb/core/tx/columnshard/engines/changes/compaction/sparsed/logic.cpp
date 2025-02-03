@@ -160,6 +160,7 @@ void TSparsedMerger::TCursor::InitArrays(const ui32 position) {
         SparsedCursor = std::make_shared<TSparsedChunkCursor>(sparsedArray, &*CurrentOwnedArray);
         PlainCursor = nullptr;
     } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("event", "plain_merger");
         PlainCursor = make_shared<TPlainChunkCursor>(CurrentOwnedArray->GetArray(), &*CurrentOwnedArray);
         SparsedCursor = nullptr;
     }

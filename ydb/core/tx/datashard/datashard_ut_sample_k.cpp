@@ -8,7 +8,7 @@
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include <ydb/core/protos/index_builder.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             }
 
             if (!rec.HasPathId()) {
-                PathIdFromPathId(tableId.PathId, rec.MutablePathId());
+                tableId.PathId.ToProto(rec.MutablePathId());
             }
 
             if (rec.ColumnsSize() == 0) {
@@ -92,13 +92,15 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                 rec.SetSeqNoRound(1);
 
                 rec.SetTabletId(tid);
-                PathIdFromPathId(tableId.PathId, rec.MutablePathId());
+                tableId.PathId.ToProto(rec.MutablePathId());
 
                 rec.AddColumns("value");
                 rec.AddColumns("key");
 
-                rec.SetSnapshotTxId(snapshot.TxId);
-                rec.SetSnapshotStep(snapshot.Step);
+                if (snapshot.TxId) {
+                    rec.SetSnapshotTxId(snapshot.TxId);
+                    rec.SetSnapshotStep(snapshot.Step);
+                }
 
                 rec.SetMaxProbability(std::numeric_limits<uint64_t>::max());
                 rec.SetSeed(seed);
@@ -180,6 +182,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                                      "value = 40, key = 4\n"
                                      "value = 10, key = 1\n");
         }
+        snapshot = {};
         seed = 111;
         {
             k = 1;
@@ -247,7 +250,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
             auto& rec = ev->Record;
 
-            PathIdFromPathId({0, 0}, rec.MutablePathId());
+            TPathId(0, 0).ToProto(rec.MutablePathId());
             DoSampleKBad(server, sender, "/Root/table-1", snapshot, ev);
         }
         {

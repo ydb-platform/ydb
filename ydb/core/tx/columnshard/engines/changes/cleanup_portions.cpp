@@ -1,8 +1,10 @@
 #include "cleanup_portions.h"
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 namespace NKikimr::NOlap {
 
@@ -10,21 +12,29 @@ void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) cons
     if (ui32 dropped = PortionsToDrop.size()) {
         out << "drop " << dropped << " portions";
         for (auto& portionInfo : PortionsToDrop) {
-            out << portionInfo.DebugString();
+            out << portionInfo->DebugString();
         }
     }
 }
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
+    AFL_VERIFY(FetchedDataAccessors);
+    PortionsToRemove.ApplyOnExecute(self, context, *FetchedDataAccessors);
+
     THashSet<ui64> pathIds;
     if (!self) {
         return;
     }
+    THashSet<ui64> usedPortionIds = PortionsToRemove.GetPortionIds();
+    auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
+
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
+
     for (auto&& p : PortionsToDrop) {
-        p.RemoveFromDatabase(context.DBWrapper);
-        p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
-        pathIds.emplace(p.GetPathId());
+        const auto& accessor = FetchedDataAccessors->GetPortionAccessorVerified(p->GetPortionId());
+        accessor.RemoveFromDatabase(context.DBWrapper);
+        accessor.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
+        pathIds.emplace(p->GetPathId());
     }
     for (auto&& i : blobIdsByStorage) {
         auto action = BlobsAction.GetRemoving(i.first);
@@ -35,15 +45,16 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
 }
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    PortionsToRemove.ApplyOnComplete(self, context, *FetchedDataAccessors);
     for (auto& portionInfo : PortionsToDrop) {
-        if (!context.EngineLogs.ErasePortion(portionInfo)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.DebugString());
+        if (!context.EngineLogs.ErasePortion(*portionInfo)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo->DebugString());
         }
     }
     if (self) {
         self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
         for (auto&& p : PortionsToDrop) {
-            self->Counters.GetTabletCounters()->OnDropPortionEvent(p.GetTotalRawBytes(), p.GetTotalBlobBytes(), p.NumRows());
+            self->Counters.GetTabletCounters()->OnDropPortionEvent(p->GetTotalRawBytes(), p->GetTotalBlobBytes(), p->GetRecordsCount());
         }
     }
 }
@@ -60,4 +71,4 @@ NColumnShard::ECumulativeCounters TCleanupPortionsColumnEngineChanges::GetCounte
     return isSuccess ? NColumnShard::COUNTER_CLEANUP_SUCCESS : NColumnShard::COUNTER_CLEANUP_FAIL;
 }
 
-}
+}   // namespace NKikimr::NOlap

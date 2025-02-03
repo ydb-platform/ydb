@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:2:86: Info: Cannot execute self join in DQ
-        	select count(*) from (select cast(subkey as int) as v1, subkey from plato.Input1) as a full join (select cast(subkey as int) as v2, subkey from plato.Input1) as b on a.v1 = b.v2;
-	                                                                                     ^

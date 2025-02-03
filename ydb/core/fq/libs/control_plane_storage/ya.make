@@ -37,10 +37,13 @@ PEERDIR(
     ydb/library/db_pool
     ydb/library/security
     ydb/library/yql/providers/s3/path_generator
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/public/api/protos
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
+    ydb/library/db_pool
+    ydb/library/yql/providers/s3/path_generator
 )
 
 YQL_LAST_ABI_VERSION()

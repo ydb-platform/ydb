@@ -16,7 +16,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropOlapStore TDropParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -55,7 +55,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropOlapStore TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -92,8 +92,8 @@ public:
         context.SS->PersistDropStep(db, pathId, step, OperationId);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
-        parentDir->DecAliveChildren();
+        domainInfo->DecPathsInside(context.SS);
+        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
 
         context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
@@ -139,7 +139,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropOlapStore TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -214,7 +214,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropOlapStore TProposedDeleteParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

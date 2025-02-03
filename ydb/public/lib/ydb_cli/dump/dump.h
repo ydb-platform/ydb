@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/request_settings.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <library/cpp/regex/pcre/regexp.h>
 
@@ -12,14 +12,11 @@ class TLog;
 
 namespace NYdb {
 
+inline namespace V3 {
 class TDriver;
+}
 
 namespace NDump {
-
-extern const char SCHEME_FILE_NAME[10];
-extern const char PERMISSIONS_FILE_NAME[15];
-extern const char INCOMPLETE_FILE_NAME[11];
-extern const char EMPTY_FILE_NAME[10];
 
 TString DataFileName(ui32 id);
 
@@ -100,6 +97,7 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
     FLUENT_SETTING_DEFAULT(bool, DryRun, false);
     FLUENT_SETTING_DEFAULT(bool, RestoreData, true);
     FLUENT_SETTING_DEFAULT(bool, RestoreIndexes, true);
+    FLUENT_SETTING_DEFAULT(bool, RestoreChangefeeds, true);
     FLUENT_SETTING_DEFAULT(bool, RestoreACL, true);
     FLUENT_SETTING_DEFAULT(bool, SkipDocumentTables, false);
     FLUENT_SETTING_DEFAULT(bool, SavePartialResult, false);

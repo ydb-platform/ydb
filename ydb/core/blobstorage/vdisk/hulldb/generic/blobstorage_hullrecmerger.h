@@ -123,163 +123,74 @@ namespace NKikimr {
         using TBase::Empty;
         using TBase::AddBasic;
 
-        enum class ELoadData {
-            NotSet = 0,
-            LoadData = 1,
-            DontLoadData = 2
-        };
-
     public:
-        TCompactRecordMerger(const TBlobStorageGroupType &gtype, bool addHeader)
+        TCompactRecordMerger(TBlobStorageGroupType gtype, bool addHeader)
             : TBase(gtype, true)
             , AddHeader(addHeader)
+            , DataMerger(gtype, addHeader)
         {}
 
         void Clear() {
             TBase::Clear();
-            MemRecs.clear();
-            ProducingSmallBlob = false;
-            ProducingHugeBlob = false;
-            NeedToLoadData = ELoadData::NotSet;
             DataMerger.Clear();
+            Key = {};
         }
 
         using TBase::GetMemRec;
         using TBase::HaveToMergeData;
 
-        void SetLoadDataMode(bool loadData) {
-            NeedToLoadData = loadData ? ELoadData::LoadData : ELoadData::DontLoadData;
-        }
-
         void AddFromSegment(const TMemRec &memRec, const TDiskPart *outbound, const TKey &key, ui64 circaLsn) {
-            Add(memRec, nullptr, outbound, key, circaLsn);
+            Add(memRec, outbound, key, circaLsn);
         }
 
         void AddFromFresh(const TMemRec &memRec, const TRope *data, const TKey &key, ui64 lsn) {
-            Add(memRec, data, nullptr, key, lsn);
+            Add(memRec, data, key, lsn);
         }
 
-        void Add(const TMemRec& memRec, const TRope *data, const TDiskPart *outbound, const TKey& key, ui64 lsn) {
-            Y_DEBUG_ABORT_UNLESS(NeedToLoadData != ELoadData::NotSet);
+        void Add(const TMemRec& memRec, std::variant<const TRope*, const TDiskPart*> dataOrOutbound, const TKey& key, ui64 lsn) {
+            Y_DEBUG_ABORT_UNLESS(Key == TKey{} || Key == key);
+            Key = key;
             AddBasic(memRec, key);
-            if (const NMatrix::TVectorType local = memRec.GetLocalParts(GType); !local.Empty()) {
-                TDiskDataExtractor extr;
-                switch (memRec.GetType()) {
-                    case TBlobType::MemBlob:
-                    case TBlobType::DiskBlob:
-                        if (NeedToLoadData == ELoadData::LoadData) {
-                            if (data) {
-                                // we have some data in-memory
-                                DataMerger.AddBlob(TDiskBlob(data, local, GType, key.LogoBlobID()));
-                            }
-                            if (memRec.GetType() == TBlobType::DiskBlob) {
-                                if (memRec.HasData()) { // there is something to read from the disk
-                                    MemRecs.push_back(memRec);
-                                } else { // headerless metadata stored
-                                    static TRope emptyRope;
-                                    DataMerger.AddBlob(TDiskBlob(&emptyRope, local, GType, key.LogoBlobID()));
-                                }
-                            }
-                            Y_DEBUG_ABORT_UNLESS(!ProducingHugeBlob);
-                            ProducingSmallBlob = true;
-                        }
-                        break;
-
-                    case TBlobType::ManyHugeBlobs:
-                        Y_ABORT_UNLESS(outbound);
-                        [[fallthrough]];
-                    case TBlobType::HugeBlob:
-                        memRec.GetDiskData(&extr, outbound);
-                        DataMerger.AddHugeBlob(extr.Begin, extr.End, local, lsn);
-                        Y_DEBUG_ABORT_UNLESS(!ProducingSmallBlob);
-                        ProducingHugeBlob = true;
-                        break;
-                }
-            }
-            VerifyConsistency(memRec, outbound);
-        }
-
-        void VerifyConsistency(const TMemRec& memRec, const TDiskPart *outbound) {
-#ifdef NDEBUG
-            return;
-#endif
-            if constexpr (std::is_same_v<TMemRec, TMemRecLogoBlob>) {
-                if (const auto m = memRec.GetType(); m == TBlobType::HugeBlob || m == TBlobType::ManyHugeBlobs) {
-                    TDiskDataExtractor extr;
-                    memRec.GetDiskData(&extr, outbound);
-                    Y_ABORT_UNLESS(extr.End - extr.Begin == memRec.GetIngress().LocalParts(GType).CountBits());
-                }
-                switch (memRec.GetType()) {
-                    case TBlobType::DiskBlob:
-                        Y_ABORT_UNLESS(!memRec.HasData() || DataMerger.GetHugeBlobMerger().Empty());
-                        break;
-
-                    case TBlobType::HugeBlob:
-                    case TBlobType::ManyHugeBlobs:
-                        Y_ABORT_UNLESS(memRec.HasData() && DataMerger.GetDiskBlobMerger().Empty());
-                        break;
-
-                    case TBlobType::MemBlob:
-                        Y_ABORT_UNLESS(memRec.HasData() && DataMerger.GetHugeBlobMerger().Empty());
-                        break;
-                }
-                VerifyConsistency();
+            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
+                DataMerger.Add(memRec, dataOrOutbound, lsn, key.LogoBlobID());
             }
         }
 
-        void VerifyConsistency() {
-            if constexpr (std::is_same_v<TMemRec, TMemRecLogoBlob>) {
-                Y_DEBUG_ABORT_UNLESS(DataMerger.GetHugeBlobMerger().Empty() || MemRec.GetIngress().LocalParts(GType).CountBits() ==
-                    DataMerger.GetHugeBlobMerger().GetNumParts());
-            }
-        }
-
-        void Finish() {
-            if (NeedToLoadData == ELoadData::DontLoadData) {
-                Y_ABORT_UNLESS(!DataMerger.HasSmallBlobs()); // we didn't put any small blob to the data merger
-                // if we have huge blobs for the record, than we set TBlobType::HugeBlob or
-                // TBlobType::ManyHugeBlobs a few lines below
-                MemRec.SetNoBlob();
-            }
-
+        void Finish(bool targetingHugeBlob) {
+            Y_DEBUG_ABORT_UNLESS(!Finished);
             Y_DEBUG_ABORT_UNLESS(!Empty());
-            VerifyConsistency();
 
-            // in case when we keep data and disk merger contains small blobs, we set up small blob record -- this logic
-            // is used in replication and in fresh compaction
-            if (NeedToLoadData == ELoadData::LoadData && DataMerger.HasSmallBlobs()) {
-                TDiskPart addr(0, 0, DataMerger.GetDiskBlobRawSize(AddHeader));
-                MemRec.SetDiskBlob(addr);
-            }
+            MemRec.SetNoBlob();
 
-            // clear local bits if we are not going to keep item's data
-            if (NeedToLoadData == ELoadData::DontLoadData) {
-                MemRec.ClearLocalParts(GType);
+            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
+                TBlobType::EType type = TBlobType::DiskBlob;
+                ui32 inplacedDataSize = 0;
+                DataMerger.Finish(targetingHugeBlob, Key.LogoBlobID(), &type, &inplacedDataSize);
+
+                const NMatrix::TVectorType localParts = MemRec.GetLocalParts(GType);
+                Y_ABORT_UNLESS(localParts == DataMerger.GetParts());
+
+                MemRec.SetType(type);
+
+                if (type == TBlobType::DiskBlob && inplacedDataSize) {
+                    Y_ABORT_UNLESS(inplacedDataSize == TDiskBlob::CalculateBlobSize(GType, Key.LogoBlobID(),
+                        localParts, AddHeader));
+                    MemRec.SetDiskBlob(TDiskPart(0, 0, inplacedDataSize));
+                }
             }
 
             Finished = true;
-            MemRec.SetType(DataMerger.GetType());
         }
 
-        const TDataMerger *GetDataMerger() const {
+        TDataMerger& GetDataMerger() {
             Y_DEBUG_ABORT_UNLESS(Finished);
-            return &DataMerger;
-        }
-
-        template<typename TCallback>
-        void ForEachSmallDiskBlob(TCallback&& callback) {
-            for (const auto& memRec : MemRecs) {
-                callback(memRec);
-            }
+            return DataMerger;
         }
 
     protected:
-        TStackVec<TMemRec, 16> MemRecs;
-        bool ProducingSmallBlob = false;
-        bool ProducingHugeBlob = false;
-        ELoadData NeedToLoadData = ELoadData::NotSet;
-        TDataMerger DataMerger;
         const bool AddHeader;
+        TDataMerger DataMerger;
+        TKey Key;
     };
 
     ////////////////////////////////////////////////////////////////////////////

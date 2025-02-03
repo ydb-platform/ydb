@@ -8,11 +8,11 @@
  #include "y_absl/strings/str_cat.h"
  #include "y_absl/strings/str_format.h"
 @@ -209,6 +209,8 @@
-                  errno == EWOULDBLOCK) {
+       if (errno == EAGAIN || errno == ECONNABORTED || errno == EWOULDBLOCK) {
          grpc_fd_notify_on_read(sp->emfd, &sp->read_closure);
          return;
-+      } else if (errno == EMFILE || errno == ENFILE) {
++      } else if (errno == ENFILE) {
 +        Y_ABORT("grpc failed accept4: %s", strerror(errno));
-       } else {
-         gpr_mu_lock(&sp->server->mu);
-         if (!sp->server->shutdown_listeners) {
+       }
+       gpr_mu_lock(&sp->server->mu);
+       if (!sp->server->shutdown_listeners) {

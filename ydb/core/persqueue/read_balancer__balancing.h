@@ -2,6 +2,9 @@
 
 #include "read_balancer.h"
 
+namespace NKikimr::NPQ::NApp {
+struct TNavigationBar;
+}
 namespace NKikimr::NPQ::NBalancing {
 
 using namespace NTabletFlatExecutor;
@@ -156,7 +159,7 @@ private:
     void LockPartition(ui32 partitionId, const TActorContext& ctx);
     std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
     std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
-    TString GetPrefix() const;
+    TString LogPrefix() const;
 };
 
 struct TPartitionFamilyComparator {
@@ -243,7 +246,7 @@ struct TConsumer {
     bool ScalingSupport() const;
 
 private:
-    TString GetPrefix() const;
+    TString LogPrefix() const;
 };
 
 struct TSession {
@@ -334,10 +337,10 @@ public:
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void ProcessPendingStats(const TActorContext& ctx);
 
-    void RenderApp(TStringStream& str) const;
+    void RenderApp(NApp::TNavigationBar&) const;
 
 private:
-    TString GetPrefix() const;
+    TString LogPrefix() const;
     ui32 NextStep();
 
 private:

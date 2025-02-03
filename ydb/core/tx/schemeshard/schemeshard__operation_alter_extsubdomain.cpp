@@ -1,9 +1,11 @@
 #include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common_subdomain.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_subdomain.h"
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/hive.h>
 
 
 #define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -358,7 +360,7 @@ void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TOperat
         context.DbChanges.PersistShard(shardIdx);
 
         // Path
-        path.DomainInfo()->AddInternalShard(shardIdx);
+        path.DomainInfo()->AddInternalShard(shardIdx, context.SS);
         path.Base()->IncShardsInside(1);
 
         // Extsubdomain data
@@ -495,7 +497,7 @@ public:
         {
             auto subdomain = context.SS->SubDomains.at(txState->TargetPathId);
             subdomain->AddPrivateShard(shardIdx);
-            subdomain->AddInternalShard(shardIdx);
+            subdomain->AddInternalShard(shardIdx, context.SS);
 
             subdomain->SetTenantHiveIDPrivate(createdTabletId);
 

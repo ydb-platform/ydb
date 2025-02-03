@@ -5,14 +5,14 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/public/udf/udf_helpers.h>
-#include <ydb/library/yql/public/udf/udf_value_builder.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/public/udf/udf_helpers.h>
+#include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/testing/common/env.h>
 
@@ -123,7 +123,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
-    ServerSettings->FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
     ServerSettings->SetNodeCount(settings.NodeCount);
     ServerSettings->SetEnableKqpSpilling(enableSpilling);
     ServerSettings->SetEnableDataColumnForIndexTable(true);
@@ -526,12 +525,17 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKLOAD_SERVICE);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
         return true;
     });
+
+    if (settings.AuthToken) {
+        this->Client->GrantConnect(settings.AuthToken);
+    }
 
     if (settings.WithSampleTables) {
         RunCall([this] {
@@ -548,11 +552,11 @@ TString ReformatYson(const TString& yson) {
     return output.Str();
 }
 
-void CompareYson(const TString& expected, const TString& actual) {
-    UNIT_ASSERT_NO_DIFF(ReformatYson(expected), ReformatYson(actual));
+void CompareYson(const TString& expected, const TString& actual, const TString& message) {
+    UNIT_ASSERT_VALUES_EQUAL_C(ReformatYson(expected), ReformatYson(actual), message);
 }
 
-void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual) {
+void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message) {
     TStringStream ysonStream;
     NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Text);
     NYql::IDataProvider::TFillSettings fillSettings;
@@ -560,7 +564,7 @@ void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual)
     KikimrResultToYson(ysonStream, writer, actual, {}, fillSettings, truncated);
     UNIT_ASSERT(!truncated);
 
-    CompareYson(expected, ysonStream.Str());
+    CompareYson(expected, ysonStream.Str(), message);
 }
 
 bool HasIssue(const NYql::TIssues& issues, ui32 code,
@@ -584,8 +588,29 @@ bool HasIssue(const NYql::TIssues& issues, ui32 code,
     return hasIssue;
 }
 
+bool HasIssue(const NYdb::NIssue::TIssues& issues, ui32 code,
+    std::function<bool(const NYdb::NIssue::TIssue& issue)> predicate)
+{
+    bool hasIssue = false;
+
+    for (auto& issue : issues) {
+        NYdb::NIssue::WalkThroughIssues(issue, false, [code, predicate, &hasIssue] (const NYdb::NIssue::TIssue& issue, int level) {
+            Y_UNUSED(level);
+            if (issue.GetCode() == code) {
+                bool issueMatch = predicate
+                    ? predicate(issue)
+                    : true;
+
+                hasIssue = hasIssue || issueMatch;
+            }
+        });
+    }
+
+    return hasIssue;
+}
+
 void PrintQueryStats(const TDataQueryResult& result) {
-    if (!result.GetStats().Defined()) {
+    if (!result.GetStats().has_value()) {
         return;
     }
 
@@ -785,6 +810,13 @@ bool IsTimeoutError(NYdb::EStatus status) {
 // IssueMessageSubString - uses only in case if !streamPart.IsSuccess()
 template<typename TIterator>
 TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles, bool throwOnTimeout = false, const NYdb::EStatus& opStatus = NYdb::EStatus::SUCCESS, const TString& issueMessageSubString = "") {
+    if (!it.IsSuccess()) {
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), opStatus, it.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(it.GetIssues().ToString(), issueMessageSubString,
+            TStringBuilder() << "Issue should contain '" << issueMessageSubString << "'. " << it.GetIssues().ToString());
+        return {};
+    }
+
     TStringStream out;
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
@@ -796,7 +828,8 @@ TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles, bool t
         if (!streamPart.IsSuccess()) {
             if (opStatus != NYdb::EStatus::SUCCESS) {
                 UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), opStatus, streamPart.GetIssues().ToString());
-                UNIT_ASSERT_C(streamPart.GetIssues().ToString().Contains(issueMessageSubString), TStringBuilder() << "Issue should contain '" << issueMessageSubString << "'. " << streamPart.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(streamPart.GetIssues().ToString(), issueMessageSubString,
+                    TStringBuilder() << "Issue should contain '" << issueMessageSubString << "'. " << streamPart.GetIssues().ToString());
                 break;
             }
             if (throwOnTimeout && IsTimeoutError(streamPart.GetStatus())) {
@@ -829,6 +862,11 @@ TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it, bool throwO
 }
 
 TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTimeout, const NYdb::EStatus& opStatus) {
+    if (!it.IsSuccess()) {
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), opStatus, it.GetIssues().ToString());
+        return {};
+    }
+
     TStringStream out;
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
@@ -838,7 +876,7 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTim
         if (!streamPart.IsSuccess()) {
             if (opStatus != NYdb::EStatus::SUCCESS) {
                 UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), opStatus, streamPart.GetIssues().ToString());
-                 break;
+                break;
             }
             if (throwOnTimeout && IsTimeoutError(streamPart.GetStatus())) {
                 throw TStreamReadError(streamPart.GetStatus());
@@ -857,6 +895,11 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTim
 }
 
 TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it, bool throwOnTimeout, const NYdb::EStatus& opStatus) {
+    if (!it.IsSuccess()) {
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), opStatus, it.GetIssues().ToString());
+        return {};
+    }
+
     TStringStream out;
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
@@ -908,6 +951,11 @@ static void FillPlan(const NYdb::NTable::TScanQueryPart& streamPart, TCollectedS
         if (!plan.empty()) {
             res.PlanJson = plan;
         }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
+        }
     }
 }
 
@@ -919,6 +967,11 @@ static void FillPlan(const NYdb::NScripting::TYqlResultPart& streamPart, TCollec
         if (!plan.empty()) {
             res.PlanJson = plan;
         }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
+        }
     }
 }
 
@@ -929,6 +982,11 @@ static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& streamPart, TCollect
         auto plan = res.QueryStats->query_plan();
         if (!plan.empty()) {
             res.PlanJson = plan;
+        }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
         }
     }
 }
@@ -1187,7 +1245,7 @@ std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     return stages;
 }
 
-void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
+void CreateSampleTablesWithIndex(TSession& session, bool populateTables, bool withPgTypes) {
     auto res = session.ExecuteSchemeQuery(R"(
         --!syntax_v1
         CREATE TABLE `/Root/SecondaryKeys` (
@@ -1213,10 +1271,25 @@ void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
             PRIMARY KEY (Key),
             INDEX Index GLOBAL ON (Index2)
             COVER (Value)
-        )
+        );
 
     )").GetValueSync();
     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+    if (withPgTypes) {
+        auto res = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/SecondaryPgTypeKeys` (
+                Key pgint4,
+                Fk pgint4,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX Index GLOBAL ON (Fk)
+            );
+
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
 
     if (!populateTables)
         return;
@@ -1256,6 +1329,19 @@ void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
             ("Primary1", "Secondary1", "Value1");
 
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+    if (withPgTypes) {
+        auto result = session.ExecuteDataQuery(R"(
+
+            REPLACE INTO `/Root/SecondaryPgTypeKeys` (Key, Fk, Value) VALUES
+                (1pi,  1pi,  "Payload1"),
+                (2pi,  2pi,  "Payload2"),
+                (5pi,  5pi,  "Payload5"),
+                (NULL, 6pi,  "Payload6"),
+                (7pi,  NULL, "Payload7");
+
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+    }
 
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
@@ -1344,6 +1430,44 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters) {
     }
 
     UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+}
+
+void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
+    int iterators = 0;
+    static const TString counterName = "DataShard/ReadIteratorsCount";
+
+    for (int i = 0; i < 10; i++, Sleep(TDuration::Seconds(1))) {
+        TTestActorRuntime* runtime = server.GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto shards = GetTableShards(&server, sender, path);
+        UNIT_ASSERT_C(shards.size() > 0, "Table: " << path << " has no shards");
+        iterators = 0;
+        for (auto x : shards) {
+            runtime->SendToPipe(
+                x,
+                sender,
+                new TEvTablet::TEvGetCounters,
+                0,
+                GetPipeConfigWithRetries());
+
+            auto ev = runtime->GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
+            UNIT_ASSERT(ev);
+
+            const NKikimrTabletBase::TEvGetCountersResponse& resp = ev->Get()->Record;
+            for (const auto& counter : resp.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+                if (counterName != counter.GetName()) {
+                    continue;
+                }
+
+                iterators += counter.GetValue();
+            }
+        }
+        if (iterators == 0) {
+            break;
+        }
+    }
+
+    UNIT_ASSERT_C(iterators == 0, "Unable to wait for proper read iterator count, it looks like cancelation doesn`t work (" << iterators << ")");
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {

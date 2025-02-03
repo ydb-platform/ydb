@@ -3,9 +3,9 @@
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/metrics/status_code_counters.h>
 
-#include <ydb/library/yql/providers/common/metrics/service_counters.h>
+#include <yql/essentials/providers/common/metrics/service_counters.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
+#include <ydb-cpp-sdk/client/query/query.h>
 
 #include <util/generic/ptr.h>
 

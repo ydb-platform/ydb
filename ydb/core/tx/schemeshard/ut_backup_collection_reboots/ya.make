@@ -5,17 +5,15 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(20)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
 PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/sql/pg_dummy
 )
 
 SRCS(

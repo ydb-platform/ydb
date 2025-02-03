@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/library/services/services.pb.h>
 #include <util/string/ascii.h>
 #include "grpc_service_settings.h"
@@ -22,6 +22,7 @@ class TGrpcServiceClient  {
     using TServiceConnection = NYdbGrpc::TServiceConnection<TGrpcService>;
 
     NYdbGrpc::TGRpcClientConfig Config;
+    std::unordered_map<TString, TString> Headers;
     NYdbGrpc::TGRpcClientLow Client;
     std::unique_ptr<TServiceConnection> Connection;
 
@@ -93,6 +94,12 @@ public:
         if (requestId) {
             meta.Aux.push_back({"x-request-id", requestId});
         }
+        for (const auto& [k, v] : ev->Get()->Headers) {
+            meta.Aux.push_back({k, v});
+        }
+        for (auto [k ,v]: Headers) {
+            meta.Aux.push_back({k, v});
+        }
 
         NYdbGrpc::TResponseCallback<TResponseType> callback =
             [actorSystem = NActors::TActivationContext::ActorSystem(), prefix = Prefix(requestId), request = ev](NYdbGrpc::TGrpcStatus&& status, TResponseType&& response) -> void {
@@ -129,6 +136,7 @@ public:
 
     TGrpcServiceClient(const NGrpcActorClient::TGrpcClientSettings& settings)
         : Config(InitGrpcConfig(settings))
+        , Headers(settings.Headers)
     {}
 };
 

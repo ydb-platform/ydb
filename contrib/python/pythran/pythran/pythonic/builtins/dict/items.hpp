@@ -3,9 +3,9 @@
 
 #include "pythonic/include/builtins/dict/items.hpp"
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/dict.hpp"
 #include "pythonic/include/types/list.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 #include <tuple>
 
@@ -22,8 +22,8 @@ namespace builtins
     {
       return std::forward<D>(d).items();
     }
-  }
-}
+  } // namespace dict
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

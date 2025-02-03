@@ -4,7 +4,7 @@
 
 To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` namespace in the SDK. You must also pass the name of the checked DB as usual.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -52,7 +52,7 @@ This is a short messages each about a single issue. All parameters will affect t
 
 The complete list of extra parameters is presented below:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 

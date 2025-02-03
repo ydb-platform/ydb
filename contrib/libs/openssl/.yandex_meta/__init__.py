@@ -31,6 +31,10 @@ def post_install(self):
         m.SRCS = {P.relpath(s, "crypto") for s in m.SRCS}
         m.SRCS -= {"dso/dso_dlfcn.c", "rand/rand_vms.c"}
 
+    # Add suppression for ubsan, see also https://github.com/openssl/openssl/issues/22896
+    with self.yamakes["crypto"] as m:
+        m.after("NO_RUNTIME", "SUPPRESSIONS(ubsan.supp)")
+
     self.yamakes["crypto"].PEERDIR.add("library/cpp/sanitizer/include")
     self.yamakes["apps"].PEERDIR.add("library/cpp/sanitizer/include")
 
@@ -142,6 +146,7 @@ openssl = NixProject(
         "asm/windows/",
         "openssl.package.json",
         "sanitizers.h",
+        "crypto/ubsan.supp",
     ],
     post_install=post_install,
 )

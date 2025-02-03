@@ -15,13 +15,13 @@ namespace numpy
     types::ndarray<double, pS> chisquare(double df, pS const &shape);
 
     auto chisquare(double df, long size)
-        -> decltype(chisquare(df, types::array<long, 1>{{size}}));
+        -> decltype(chisquare(df, types::array_tuple<long, 1>{{size}}));
 
     double chisquare(double df, types::none_type size = {});
 
     DEFINE_FUNCTOR(pythonic::numpy::random, chisquare);
-  }
-}
+  } // namespace random
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -4,8 +4,8 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/locks/sys_tables.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -48,6 +48,15 @@ constexpr TStringBuf TopPartitions1HourName = "top_partitions_one_hour";
 constexpr TStringBuf PgTablesName = "pg_tables";
 constexpr TStringBuf InformationSchemaTablesName = "tables";
 constexpr TStringBuf PgClassName = "pg_class";
+
+namespace NAuth {
+    constexpr TStringBuf UsersName = "auth_users";
+    constexpr TStringBuf GroupsName = "auth_groups";
+    constexpr TStringBuf GroupMembersName = "auth_group_members";
+    constexpr TStringBuf OwnersName = "auth_owners";
+    constexpr TStringBuf PermissionsName = "auth_permissions";
+    constexpr TStringBuf EffectivePermissionsName = "auth_effective_permissions";
+}
 
 
 struct Schema : NIceDb::Schema {
@@ -217,6 +226,7 @@ struct Schema : NIceDb::Schema {
         struct ExpectedSlotCount : Column<15, NScheme::NTypeIds::Uint32> {};
         struct NumActiveSlots : Column<16, NScheme::NTypeIds::Uint32> {};
         struct DecommitStatus : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct State : Column<18, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -232,6 +242,7 @@ struct Schema : NIceDb::Schema {
             AvailableSize,
             TotalSize,
             Status,
+            State,
             StatusChangeTimestamp,
             ExpectedSlotCount,
             NumActiveSlots,
@@ -254,6 +265,9 @@ struct Schema : NIceDb::Schema {
         //struct StopFactor : Column<13, NScheme::NTypeIds::Double> {};
         struct Kind : Column<14, NScheme::NTypeIds::Utf8> {};
         struct FailRealm : Column<15, NScheme::NTypeIds::Uint32> {};
+        struct Replicated : Column<16, NScheme::NTypeIds::Bool> {};
+        struct DiskSpace : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct State : Column <18, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, PDiskId, VSlotId>;
         using TColumns = TableColumns<
@@ -267,8 +281,11 @@ struct Schema : NIceDb::Schema {
             AllocatedSize,
             AvailableSize,
             Status,
+            State,
             Kind,
-            FailRealm>;
+            FailRealm,
+            Replicated,
+            DiskSpace>;
     };
 
     struct Groups : Table<6> {
@@ -470,6 +487,7 @@ struct Schema : NIceDb::Schema {
         struct RowCount        : Column<9, NScheme::NTypeIds::Uint64> {};
         struct IndexSize       : Column<10, NScheme::NTypeIds::Uint64> {};
         struct InFlightTxCount : Column<11, NScheme::NTypeIds::Uint32> {};
+        struct FollowerId      : Column<12, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<IntervalEnd, Rank>;
         using TColumns = TableColumns<
@@ -483,7 +501,8 @@ struct Schema : NIceDb::Schema {
             DataSize,
             RowCount,
             IndexSize,
-            InFlightTxCount>;
+            InFlightTxCount,
+            FollowerId>;
     };
 
     struct QuerySessions : Table<13> {
@@ -601,6 +620,72 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct AuthUsers : Table<15> {
+        struct Sid: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct IsEnabled: Column<2, NScheme::NTypeIds::Bool> {};
+        struct IsLockedOut: Column<3, NScheme::NTypeIds::Bool> {};
+        struct CreatedAt: Column<4, NScheme::NTypeIds::Timestamp> {};
+        struct LastSuccessfulAttemptAt: Column<5, NScheme::NTypeIds::Timestamp> {};
+        struct LastFailedAttemptAt: Column<6, NScheme::NTypeIds::Timestamp> {};
+        struct FailedAttemptCount: Column<7, NScheme::NTypeIds::Uint32> {};
+        struct PasswordHash: Column<8, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Sid>;
+        using TColumns = TableColumns<
+            Sid,
+            IsEnabled,
+            IsLockedOut,
+            CreatedAt,
+            LastSuccessfulAttemptAt,
+            LastFailedAttemptAt,
+            FailedAttemptCount,
+            PasswordHash
+        >;
+    };
+
+    struct AuthGroups : Table<16> {
+        struct Sid: Column<1, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Sid>;
+        using TColumns = TableColumns<
+            Sid
+        >;
+    };
+
+    struct AuthGroupMembers : Table<17> {
+        struct GroupSid: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct MemberSid: Column<2, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<GroupSid, MemberSid>;
+        using TColumns = TableColumns<
+            GroupSid,
+            MemberSid
+        >;
+    };
+
+    struct AuthOwners : Table<18> {
+        struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Sid: Column<2, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Path>;
+        using TColumns = TableColumns<
+            Path,
+            Sid
+        >;
+    };
+
+    struct AuthPermissions : Table<19> {
+        struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Sid: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Permission: Column<3, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Path, Sid, Permission>;
+        using TColumns = TableColumns<
+            Path,
+            Sid,
+            Permission
+        >;
+    };
 
     struct PgColumn {
         NIceDb::TColumnId _ColumnId;

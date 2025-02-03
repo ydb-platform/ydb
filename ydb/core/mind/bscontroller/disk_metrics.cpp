@@ -37,6 +37,18 @@ public:
             }
         }
 
+        for (auto& [vslotId, v] : Self->StaticVSlots) {
+            if (std::exchange(v.MetricsDirty, false)) {
+                Self->SysViewChangedVSlots.insert(vslotId);
+                auto vdiskId = v.VDiskId;
+                auto groupId = vdiskId.GroupID.GetRawId();
+                auto&& key = std::tie(groupId, vdiskId.GroupGeneration, vdiskId.FailRealm, vdiskId.FailDomain, vdiskId.VDisk);
+                auto value = v.VDiskMetrics;
+                value->ClearVDiskId();
+                db.Table<Schema::VDiskMetrics>().Key(key).Update<Schema::VDiskMetrics::Metrics>(*value);
+                Self->SysViewChangedGroups.insert(vdiskId.GroupID);
+            }
+        }
         return true;
     }
 
@@ -69,6 +81,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
         } else if (const auto it = StaticVDiskMap.find(vdiskId); it != StaticVDiskMap.end()) {
             TStaticVSlotInfo& info = StaticVSlots.at(it->second);
             info.VDiskMetrics = m;
+            info.MetricsDirty = true;
         } else {
             STLOG(PRI_NOTICE, BS_CONTROLLER, BSCTXUDM02, "VDisk not found", (VDiskId, vdiskId));
         }

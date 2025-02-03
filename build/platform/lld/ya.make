@@ -5,8 +5,13 @@ DEFAULT(LLD_VERSION ${CLANG_VER})
 TOOLCHAIN(lld)
 VERSION(${LLD_VERSION})
 
-# lld16 is the only supported version at the time
-DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld16.json)
+# There is no backward compatibility between LLVM IR versions 16 and 18.
+# So, we need to select lld18 when using clang18 to compile src in LTO mode.
+IF (LLD_VERSION == 18)
+    DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld18.json)
+ELSEIF (LLD_VERSION == 16)
+    DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld16.json)
+ENDIF()
 
 IF (OS_ANDROID)
     # Use LLD shipped with Android NDK.

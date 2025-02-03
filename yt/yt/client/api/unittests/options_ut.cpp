@@ -11,10 +11,9 @@
 #include <util/system/env.h>
 
 namespace NYT::NApi {
+namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-// TODO(ignat): move these tests to yt/yt/client/api/options.h
 
 TEST(TClientOptionsTest, TokenFromFile)
 {
@@ -82,4 +81,5 @@ TEST(TClientOptionsTest, AllowEmptyUser)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NClient::NCache
+} // namespace
+} // namespace NYT::NApi

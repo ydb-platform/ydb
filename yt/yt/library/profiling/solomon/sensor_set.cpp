@@ -45,7 +45,7 @@ bool TSensorSet::IsEmpty() const
         RateHistograms_.empty();
 }
 
-void TSensorSet::Profile(const TProfiler &profiler)
+void TSensorSet::Profile(const TWeakProfiler& profiler)
 {
     CubeSize_ = profiler.Gauge("/cube_size");
     SensorsEmitted_ = profiler.Gauge("/sensors_emitted");
@@ -412,7 +412,7 @@ void TSensorSet::DumpCube(NProto::TCube *cube, const std::vector<TTagId>& extraT
     cube->set_global(Options_.Global);
     cube->set_disable_default(Options_.DisableDefault);
     cube->set_disable_sensors_rename(Options_.DisableSensorsRename);
-    cube->set_summary_policy(ToProto<ui64>(Options_.SummaryPolicy));
+    cube->set_summary_policy(ToProto(Options_.SummaryPolicy));
 
     CountersCube_.DumpCube(cube, extraTags);
     TimeCountersCube_.DumpCube(cube, extraTags);

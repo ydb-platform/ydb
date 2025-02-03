@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/nansum.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/numpy/isnan.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -34,7 +34,7 @@ namespace numpy
     _nansum(expr.begin(), expr.end(), s, utils::int_<E::value>());
     return s;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -1,0 +1,65 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "test1";
+                            "test2";
+                            "test3"
+                        ];
+                        [
+                            "test1";
+                            "test22";
+                            "test3"
+                        ];
+                        [
+                            "test3";
+                            "test22";
+                            "test1"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

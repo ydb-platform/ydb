@@ -2,6 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/base/subdomain.h>
 
@@ -215,11 +216,6 @@ class TCreateExternalDataSource : public TSubOperation {
         context.SS->PersistTxState(db, OperationId);
     }
 
-    static void UpdatePathSizeCounts(const TPath& parentPath, const TPath& dstPath) {
-        dstPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
-    }
-
 public:
     using TSubOperation::TSubOperation;
 
@@ -282,7 +278,8 @@ public:
                                                           context.SS,
                                                           context.OnComplete);
 
-        UpdatePathSizeCounts(parentPath, dstPath);
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
@@ -304,6 +301,30 @@ public:
 } // namespace
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateExternalDataSource().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateExternalDataSource()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
                                                          const TTxTransaction& tx,
@@ -349,6 +370,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
 
     return {MakeSubOperation<TCreateExternalDataSource>(id, tx)};
 }
+
 ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreateExternalDataSource>(id, state);

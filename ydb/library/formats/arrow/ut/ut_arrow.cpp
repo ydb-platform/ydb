@@ -1,7 +1,7 @@
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/permutations.h>
 
-#include <ydb/library/binary_json/write.h>
+#include <yql/essentials/types/binary_json/write.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>

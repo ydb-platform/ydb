@@ -1,5 +1,5 @@
-#include <ydb/library/yql/minikql/mkql_runtime_version.h>
-#include <ydb/library/yql/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
+#include <yql/essentials/minikql/mkql_runtime_version.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <chrono>
@@ -15,7 +15,7 @@
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/hashes_calc.h>
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/tuple.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_rh_hash.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

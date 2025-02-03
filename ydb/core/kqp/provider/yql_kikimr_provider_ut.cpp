@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/sql/v1/source.h>
-#include <ydb/library/yql/sql/v1/context.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/sql/v1/source.h>
+#include <yql/essentials/sql/v1/context.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -16,7 +16,7 @@ TContext CreateDefaultParserContext(NYql::TIssues& issues) {
     settings.DefaultCluster = "/Cluster";
     settings.AssumeYdbOnClusterWithSlash = true;
 
-    return TContext(settings, {}, issues);
+    return TContext(settings, { /* hints */ }, issues, { /* query */ });
 }
 
 TAstNode* CreateAlterTable(TContext& parserContext, const TString& tableName, const TAlterTableParameters& params) {

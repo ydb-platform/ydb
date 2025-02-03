@@ -30,9 +30,9 @@ namespace numpy
     }
 
     inline auto lognormal(double mean, double sigma, long size)
-        -> decltype(lognormal(mean, sigma, types::array<long, 1>{{size}}))
+        -> decltype(lognormal(mean, sigma, types::array_tuple<long, 1>{{size}}))
     {
-      return lognormal(mean, sigma, types::array<long, 1>{{size}});
+      return lognormal(mean, sigma, types::array_tuple<long, 1>{{size}});
     }
 
     inline double lognormal(double mean, double sigma, types::none_type d)

@@ -9,8 +9,9 @@ import re
 import sys
 import typing as t
 from collections import deque
-from html import escape
 from traceback import format_exception_only
+
+from markupsafe import escape
 
 missing = object()
 _paragraph_re = re.compile(r"(?:\r\n|\r|\n){2,}")
@@ -83,8 +84,8 @@ def _add_subclass_info(
     inner: str, obj: object, base: t.Union[t.Type, t.Tuple[t.Type, ...]]
 ) -> str:
     if isinstance(base, tuple):
-        for base in base:
-            if type(obj) is base:
+        for cls in base:
+            if type(obj) is cls:
                 return inner
     elif type(obj) is base:
         return inner

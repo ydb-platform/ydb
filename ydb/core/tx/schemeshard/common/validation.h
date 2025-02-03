@@ -9,5 +9,8 @@ namespace NKikimr::NSchemeShard::NValidation {
 class TTTLValidator {
 public:
     static bool ValidateUnit(const NScheme::TTypeInfo columnType, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& errStr);
+    static bool ValidateTiers(const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTTLSettings_TTier>& tiers, TString& errStr);
+
+private:
 };
 }

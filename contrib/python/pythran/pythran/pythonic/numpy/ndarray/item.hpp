@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/ndarray/item.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/numpy/asarray.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -24,7 +24,8 @@ namespace numpy
     }
 
     template <class E, size_t N>
-    auto item(E &&expr, types::array<long, N> const &i) -> decltype(expr[i])
+    auto item(E &&expr,
+              types::array_tuple<long, N> const &i) -> decltype(expr[i])
     {
       return expr[i];
     }
@@ -37,7 +38,7 @@ namespace numpy
         i += expr.flat_size();
       return asarray(std::forward<E>(expr)).flat()[i];
     }
-  }
-}
+  } // namespace ndarray
+} // namespace numpy
 PYTHONIC_NS_END
 #endif

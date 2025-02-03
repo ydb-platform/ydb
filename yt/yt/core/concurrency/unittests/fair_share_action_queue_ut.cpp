@@ -9,6 +9,7 @@
 
 #include <yt/yt/core/misc/collection_helpers.h>
 
+#include <yt/yt/library/profiling/solomon/config.h>
 #include <yt/yt/library/profiling/solomon/exporter.h>
 
 #include <util/datetime/base.h>
@@ -143,7 +144,11 @@ TEST_F(TTestFairShareActionQueue, TestProfiling)
     THashMap<EBuckets, std::vector<EQueues>> bucketToQueues{};
     bucketToQueues[EBuckets::Bucket1] = {EQueues::Queue1, EQueues::Queue2};
     bucketToQueues[EBuckets::Bucket2] = {EQueues::Queue3};
-    auto queue = CreateEnumIndexedFairShareActionQueue<EQueues>("ActionQueue", bucketToQueues, registry);
+    auto queue = CreateEnumIndexedFairShareActionQueue<EQueues>(
+        "ActionQueue",
+        bucketToQueues,
+        /*threadOptions*/ {},
+        registry);
 
     auto config = CreateExporterConfig();
     auto exporter = New<TSolomonExporter>(config, registry);

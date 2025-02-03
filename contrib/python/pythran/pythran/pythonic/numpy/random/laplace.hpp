@@ -29,9 +29,9 @@ namespace numpy
     }
 
     inline auto laplace(double loc, double scale, long size)
-        -> decltype(laplace(loc, scale, types::array<long, 1>{{size}}))
+        -> decltype(laplace(loc, scale, types::array_tuple<long, 1>{{size}}))
     {
-      return laplace(loc, scale, types::array<long, 1>{{size}});
+      return laplace(loc, scale, types::array_tuple<long, 1>{{size}});
     }
 
     inline double laplace(double loc, double scale, types::none_type d)

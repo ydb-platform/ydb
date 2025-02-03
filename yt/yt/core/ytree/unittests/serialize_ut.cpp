@@ -385,7 +385,7 @@ TEST(TSerializationTest, VectorOfTuple)
     std::vector<std::tuple<int, TString, size_t>> original{
         std::tuple<int, TString, size_t>(43, "First", 343U),
         std::tuple<int, TString, size_t>(0, "Second", 7U),
-        std::tuple<int, TString, size_t>(2323, "Third", 9U)
+        std::tuple<int, TString, size_t>(2323, "Third", 9U),
     };
 
     TestSerializationDeserialization(original);
@@ -398,7 +398,7 @@ TEST(TSerializationTest, MapOnArray)
         {"1", {{2112U, 4343U, 5445U}}},
         {"22", {{54654U, 93U, 5U}}},
         {"333", {{7U, 93U, 9U}}},
-        {"rel", {{233U, 9763U, 0U}}}
+        {"rel", {{233U, 9763U, 0U}}},
     };
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::MapFragment);
@@ -406,20 +406,14 @@ TEST(TSerializationTest, MapOnArray)
 
 TEST(TSerializationTest, Enum)
 {
-    for (const auto original : TEnumTraits<ETestEnum>::GetDomainValues()) {
+    for (auto original : TEnumTraits<ETestEnum>::GetDomainValues()) {
         TestSerializationDeserialization(original);
     }
 }
 
-TEST(TSerializationTest, EnumUnknownValue)
-{
-    auto unknownValue = static_cast<ETestEnum>(ToUnderlying(TEnumTraits<ETestEnum>::GetMaxValue()) + 1);
-    TestSerializationDeserialization(unknownValue);
-}
-
 TEST(TSerializationTest, BitEnum)
 {
-    for (const auto original : TEnumTraits<ETestBitEnum>::GetDomainValues()) {
+    for (auto original : TEnumTraits<ETestBitEnum>::GetDomainValues()) {
         TestSerializationDeserialization(original);
     }
     TestSerializationDeserialization(ETestBitEnum::Green | ETestBitEnum::Red);
@@ -428,7 +422,7 @@ TEST(TSerializationTest, BitEnum)
 
 TEST(TSerializationTest, SerializableArcadiaEnum)
 {
-    for (const auto original : GetEnumAllValues<ESerializableArcadiaEnum>()) {
+    for (auto original : GetEnumAllValues<ESerializableArcadiaEnum>()) {
         TestSerializationDeserialization(original);
     }
 }

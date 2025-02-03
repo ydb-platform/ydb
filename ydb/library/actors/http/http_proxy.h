@@ -46,12 +46,16 @@ struct TEvHttpProxy {
         EvHttpOutgoingRequest,
         EvHttpIncomingResponse,
         EvHttpOutgoingResponse,
-        EvHttpConnectionOpened,
-        EvHttpConnectionClosed,
+        EvHttpIncomingConnectionClosed,
+        EvHttpOutgoingConnectionClosed,
+        EvHttpOutgoingConnectionAvailable,
         EvHttpAcceptorClosed,
         EvResolveHostRequest,
         EvResolveHostResponse,
         EvReportSensors,
+        EvHttpOutgoingDataChunk,
+        EvSubscribeForCancel,
+        EvRequestCancelled,
         EvEnd
     };
 
@@ -68,6 +72,7 @@ struct TEvHttpProxy {
         std::vector<TString> CompressContentTypes;
         ui32 MaxRequestsPerSecond = 0;
         ui32 MaxRecycledRequestsCount = DEFAULT_MAX_RECYCLED_REQUESTS_COUNT;
+        TDuration InactivityTimeout = TDuration::Minutes(2);
 
         TEvAddListeningPort() = default;
 
@@ -103,6 +108,7 @@ struct TEvHttpProxy {
 
     struct TEvHttpIncomingRequest : NActors::TEventLocal<TEvHttpIncomingRequest, EvHttpIncomingRequest> {
         THttpIncomingRequestPtr Request;
+        TString UserToken; // built and serialized
 
         TEvHttpIncomingRequest(THttpIncomingRequestPtr request)
             : Request(std::move(request))
@@ -112,6 +118,7 @@ struct TEvHttpProxy {
     struct TEvHttpOutgoingRequest : NActors::TEventLocal<TEvHttpOutgoingRequest, EvHttpOutgoingRequest> {
         THttpOutgoingRequestPtr Request;
         TDuration Timeout;
+        bool AllowConnectionReuse = false;
 
         TEvHttpOutgoingRequest(THttpOutgoingRequestPtr request)
             : Request(std::move(request))
@@ -120,6 +127,11 @@ struct TEvHttpProxy {
         TEvHttpOutgoingRequest(THttpOutgoingRequestPtr request, TDuration timeout)
             : Request(std::move(request))
             , Timeout(timeout)
+        {}
+
+        TEvHttpOutgoingRequest(THttpOutgoingRequestPtr request, bool allowConnectionReuse)
+            : Request(std::move(request))
+            , AllowConnectionReuse(allowConnectionReuse)
         {}
     };
 
@@ -162,27 +174,46 @@ struct TEvHttpProxy {
         {}
     };
 
-    struct TEvHttpConnectionOpened : NActors::TEventLocal<TEvHttpConnectionOpened, EvHttpConnectionOpened> {
-        TString PeerAddress;
-        TActorId ConnectionID;
+    struct TEvHttpOutgoingDataChunk : NActors::TEventLocal<TEvHttpOutgoingDataChunk, EvHttpOutgoingDataChunk> {
+        THttpOutgoingDataChunkPtr DataChunk;
+        TString Error;
 
-        TEvHttpConnectionOpened(const TString& peerAddress, const TActorId& connectionID)
-            : PeerAddress(peerAddress)
-            , ConnectionID(connectionID)
+        TEvHttpOutgoingDataChunk(THttpOutgoingDataChunkPtr dataChunk)
+            : DataChunk(std::move(dataChunk))
+        {}
+
+        TEvHttpOutgoingDataChunk(const TString& error)
+            : Error(error)
         {}
     };
 
-    struct TEvHttpConnectionClosed : NActors::TEventLocal<TEvHttpConnectionClosed, EvHttpConnectionClosed> {
+    struct TEvHttpIncomingConnectionClosed : NActors::TEventLocal<TEvHttpIncomingConnectionClosed, EvHttpIncomingConnectionClosed> {
         TActorId ConnectionID;
         TDeque<THttpIncomingRequestPtr> RecycledRequests;
 
-        TEvHttpConnectionClosed(const TActorId& connectionID)
-            : ConnectionID(connectionID)
-        {}
-
-        TEvHttpConnectionClosed(const TActorId& connectionID, TDeque<THttpIncomingRequestPtr> recycledRequests)
+        TEvHttpIncomingConnectionClosed(const TActorId& connectionID, TDeque<THttpIncomingRequestPtr> recycledRequests)
             : ConnectionID(connectionID)
             , RecycledRequests(std::move(recycledRequests))
+        {}
+    };
+
+    struct TEvHttpOutgoingConnectionClosed : NActors::TEventLocal<TEvHttpOutgoingConnectionClosed, EvHttpOutgoingConnectionClosed> {
+        TActorId ConnectionID;
+        TString Destination;
+
+        TEvHttpOutgoingConnectionClosed(const TActorId& connectionID, const TString& destination)
+            : ConnectionID(connectionID)
+            , Destination(destination)
+        {}
+    };
+
+    struct TEvHttpOutgoingConnectionAvailable : NActors::TEventLocal<TEvHttpOutgoingConnectionAvailable, EvHttpOutgoingConnectionAvailable> {
+        TActorId ConnectionID;
+        TString Destination;
+
+        TEvHttpOutgoingConnectionAvailable(const TActorId& connectionID, const TString& destination)
+            : ConnectionID(connectionID)
+            , Destination(destination)
         {}
     };
 
@@ -224,6 +255,9 @@ struct TEvHttpProxy {
             : TSensors(sensors)
         {}
     };
+
+    struct TEvSubscribeForCancel : NActors::TEventLocal<TEvSubscribeForCancel, EvSubscribeForCancel> {};
+    struct TEvRequestCancelled : NActors::TEventLocal<TEvRequestCancelled, EvRequestCancelled> {};
 };
 
 struct TRateLimiter {
@@ -251,15 +285,16 @@ struct TPrivateEndpointInfo : THttpEndpointInfo {
     TActorId Owner;
     TSslHelpers::TSslHolder<SSL_CTX> SecureContext;
     TRateLimiter RateLimiter;
+    TDuration InactivityTimeout;
 
     TPrivateEndpointInfo(const std::vector<TString>& compressContentTypes)
         : THttpEndpointInfo(compressContentTypes)
     {}
 };
 
-NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> registry = NMonitoring::TMetricRegistry::SharedInstance());
-NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner, const TActorId& poller);
-NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure, const TActorId& poller);
+NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry = NMonitoring::TMetricRegistry::SharedInstance());
+NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner);
+NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure);
 NActors::IActor* CreateIncomingConnectionActor(
         std::shared_ptr<TPrivateEndpointInfo> endpoint,
         TIntrusivePtr<TSocketDescriptor> socket,

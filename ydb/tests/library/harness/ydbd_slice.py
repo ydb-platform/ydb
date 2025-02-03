@@ -3,12 +3,13 @@
 import itertools
 import logging
 import time
+import yaml
 
 import ydb
 import ydb.tools.ydbd_slice as ydbd_slice
 from ydb.tools.cfg import walle
 
-from .kikimr_cluster import DEFAULT_INTERCONNECT_PORT, DEFAULT_MBUS_PORT, DEFAULT_MON_PORT, DEFAULT_GRPC_PORT, load_yaml
+from .kikimr_cluster import DEFAULT_INTERCONNECT_PORT, DEFAULT_MBUS_PORT, DEFAULT_MON_PORT, DEFAULT_GRPC_PORT
 from .kikimr_runner import KikimrExternalNode
 from .kikimr_cluster_interface import KiKiMRClusterInterface
 
@@ -17,20 +18,21 @@ logger = logging.getLogger(__name__)
 
 class YdbdSlice(KiKiMRClusterInterface):
     def __init__(self, config_path, binary_path=None):
-        kikimr_bin = binary_path
-        self.__yaml_config = load_yaml(config_path)
+        self.__kikimr_path = binary_path
+        with open(config_path) as f:
+            self.__yaml_config = yaml.safe_load(f.read())
         self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
-        ssh_user = "yc-user"
+        self.__ssh_user = "yc-user"
         walle_provider = walle.NopHostsInformationProvider()
         components = {'kikimr': ['bin', 'cfg'], 'dynamic_slots': ['all']}
         self.cluster_details = ydbd_slice.safe_load_cluster_details(config_path, walle_provider=walle_provider)
         self.hosts_names = self.cluster_details.hosts_names
-        nodes = ydbd_slice.nodes.Nodes(self.hosts_names, dry_run=False, ssh_user=ssh_user)
+        nodes = ydbd_slice.nodes.Nodes(self.hosts_names, dry_run=False, ssh_user=self.__ssh_user)
 
         configurator = ydbd_slice.cluster_description.Configurator(
             self.cluster_details,
             out_dir="/tmp",
-            kikimr_bin=kikimr_bin,
+            kikimr_bin=self.__kikimr_path,
             kikimr_compressed_bin=None,
             walle_provider=walle_provider
         )
@@ -105,8 +107,12 @@ class YdbdSlice(KiKiMRClusterInterface):
         # TODO: use from config?
         return {
             node_id: KikimrExternalNode(
+                kikimr_configure_binary_path=self.__kikimr_configure_binary_path,
+                kikimr_path=self.__kikimr_path,
+                kikimr_next_path=None,
                 node_id=node_id,
                 host=host,
+                ssh_username=self.__ssh_user,
                 port=DEFAULT_GRPC_PORT,
                 mon_port=DEFAULT_MON_PORT,
                 ic_port=DEFAULT_INTERCONNECT_PORT,

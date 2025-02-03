@@ -6,7 +6,7 @@
 #include <util/string/split.h>
 
 #include "dq_opt_make_join_hypergraph.h"
-#include "dq_opt_log.h"
+#include "dq_opt_join_cost_based.h"
 
 #include <memory>
 
@@ -51,8 +51,9 @@ struct TTestContext : public TBaseProviderContext {
 template <typename TProviderContext = TTestContext>
 std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root, const TOptimizerHints& hints = {}) {
     auto ctx = TProviderContext();
-    auto optimizer = 
-        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max()));
+    TExprContext dummyCtx;
+    auto optimizer =
+        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max(), dummyCtx));
     
     Y_ENSURE(root->Kind == EOptimizerNodeKind::JoinNodeType);
     auto res = optimizer->JoinSearch(std::static_pointer_cast<TJoinOptimizerNode>(root), hints);
@@ -223,7 +224,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
     template<typename TLhsArg, typename TRhsArg>
     std::shared_ptr<IBaseOptimizerNode> Join(const TLhsArg& lhsArg, const TRhsArg& rhsArg, TString on="", EJoinKind kind = EJoinKind::InnerJoin) {
         if constexpr (std::is_convertible_v<TLhsArg, std::string> && std::is_convertible_v<TRhsArg, std::string>) {
-            if (on.Empty()) {
+            if (on.empty()) {
                 on = Sprintf("%s=%s", lhsArg, rhsArg);
             }
         }

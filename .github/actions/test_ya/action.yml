@@ -181,7 +181,7 @@ runs:
           git checkout $ORIGINAL_HEAD
           YA_MAKE_TARGET=.
         else
-          YA_MAKE_TARGET=${{ inputs.build_target }}
+          YA_MAKE_TARGET="${{ inputs.build_target }}"
         fi
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
@@ -208,19 +208,10 @@ runs:
           release)  
             params+=(--build "release")
             ;;
-          release-clang14)  # TODO: remove after removing from workflow 
-            params+=(--build "release")
-            params+=(--target-platform="CLANG14-LINUX-X86_64")
-            params+=(-DLLD_VERSION=16)
-            params+=(-DSTRIP)
-            ;;
           release-asan)
             params+=(
               --build "release" --sanitize="address"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
-              TEST_RETRY_COUNT=1
-            fi
             IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
@@ -292,7 +283,7 @@ runs:
           debug)
             TESTMO_SOURCE="ya-${TESTMO_ARCH}-debug"
             ;;
-          release-*)
+          release*)
             TESTMO_SOURCE="ya-${TESTMO_ARCH}-${BUILD_PRESET/release-/}"
             ;;
           *)

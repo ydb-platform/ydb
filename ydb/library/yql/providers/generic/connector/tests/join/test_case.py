@@ -2,7 +2,7 @@ import itertools
 from dataclasses import dataclass
 from typing import Sequence, Final
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
@@ -36,7 +36,7 @@ class Table:
 class DataSource:
     database: Database
     table: Table
-    kind: EDataSourceKind.ValueType = EDataSourceKind.DATA_SOURCE_KIND_UNSPECIFIED
+    kind: EGenericDataSourceKind.ValueType = EGenericDataSourceKind.DATA_SOURCE_KIND_UNSPECIFIED
 
     @property
     def alias(self) -> str:
@@ -70,12 +70,14 @@ class TestCase:
 
         for data_source in self.data_sources:
             match data_source.kind:
-                case EDataSourceKind.CLICKHOUSE:
+                case EGenericDataSourceKind.CLICKHOUSE:
                     clickhouse_clusters.add(
-                        GenericSettings.ClickHouseCluster(database=data_source.database.name, protocol=EProtocol.NATIVE)
+                        GenericSettings.ClickHouseCluster(
+                            database=data_source.database.name, protocol=EGenericProtocol.NATIVE
+                        )
                     )
 
-                case EDataSourceKind.POSTGRESQL:
+                case EGenericDataSourceKind.POSTGRESQL:
                     postgresql_clusters.add(
                         GenericSettings.PostgreSQLCluster(database=data_source.database.name, schema=None)
                     )
@@ -170,9 +172,9 @@ class Factory:
 
         data_out = list(map(lambda x: list(itertools.chain(*x)), zip(*(t.data_in for t in tables))))
 
-        data_sources: Sequence[EDataSourceKind] = (
-            EDataSourceKind.CLICKHOUSE,
-            EDataSourceKind.POSTGRESQL,
+        data_sources: Sequence[EGenericDataSourceKind] = (
+            EGenericDataSourceKind.CLICKHOUSE,
+            EGenericDataSourceKind.POSTGRESQL,
         )
 
         # For each test case we create a unique set of datasources;
@@ -247,13 +249,13 @@ class Factory:
 
         test_case_data_sources = [
             DataSource(
-                kind=EDataSourceKind.CLICKHOUSE,
-                database=Database(kind=EDataSourceKind.CLICKHOUSE, name=test_case_name),
+                kind=EGenericDataSourceKind.CLICKHOUSE,
+                database=Database(kind=EGenericDataSourceKind.CLICKHOUSE, name=test_case_name),
                 table=ch_table,
             ),
             DataSource(
-                kind=EDataSourceKind.POSTGRESQL,
-                database=Database(kind=EDataSourceKind.POSTGRESQL, name=test_case_name),
+                kind=EGenericDataSourceKind.POSTGRESQL,
+                database=Database(kind=EGenericDataSourceKind.POSTGRESQL, name=test_case_name),
                 table=pg_table,
             ),
         ]

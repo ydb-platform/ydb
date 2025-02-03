@@ -4,9 +4,9 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/url_builder.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/url_builder.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 
@@ -304,7 +304,7 @@ private:
         // This requirement will be fixed in the curl library
         // https://github.com/curl/curl/commit/fc76a24c53b08cdf6eec8ba787d8eac64651d56e
         // https://github.com/curl/curl/commit/c87920353883ef9d5aa952e724a8e2589d76add5
-        TUrlBuilder urlBuilder(ctx.ListingRequest.Url);
+        NS3Util::TUrlBuilder urlBuilder(ctx.ListingRequest.Url);
         if (ctx.ContinuationToken.Defined()) {
             urlBuilder.AddUrlParam("continuation-token", *ctx.ContinuationToken);
         }

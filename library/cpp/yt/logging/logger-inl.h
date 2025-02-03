@@ -30,7 +30,8 @@ void TLogger::AddTag(const char* format, TArgs&&... args)
 template <class TType>
 void TLogger::AddStructuredTag(TStringBuf key, TType value)
 {
-    StructuredTags_.emplace_back(key, NYson::ConvertToYsonString(value));
+    auto* state = GetMutableCoWState();
+    state->StructuredTags.emplace_back(key, NYson::ConvertToYsonString(value));
 }
 
 template <class... TArgs>
@@ -115,10 +116,10 @@ inline bool HasMessageTags(
     const TLoggingContext& loggingContext,
     const TLogger& logger)
 {
-    if (logger.GetTag()) {
+    if (!logger.GetTag().empty()) {
         return true;
     }
-    if (loggingContext.TraceLoggingTag) {
+    if (!loggingContext.TraceLoggingTag.empty()) {
         return true;
     }
     return false;
@@ -130,11 +131,11 @@ inline void AppendMessageTags(
     const TLogger& logger)
 {
     bool printComma = false;
-    if (const auto& loggerTag = logger.GetTag()) {
+    if (const auto& loggerTag = logger.GetTag(); !loggerTag.empty()) {
         builder->AppendString(loggerTag);
         printComma = true;
     }
-    if (auto traceLoggingTag = loggingContext.TraceLoggingTag) {
+    if (const auto& traceLoggingTag = loggingContext.TraceLoggingTag; !traceLoggingTag.empty()) {
         if (printComma) {
             builder->AppendString(TStringBuf(", "));
         }
@@ -307,10 +308,10 @@ inline void LogEventImpl(
     event.SourceFile = sourceLocation.File;
     event.SourceLine = sourceLocation.Line;
     event.Anchor = anchor;
-    logger.Write(std::move(event));
     if (Y_UNLIKELY(event.Level >= ELogLevel::Alert)) {
         OnCriticalLogEvent(logger, event);
     }
+    logger.Write(std::move(event));
 }
 
 } // namespace NDetail

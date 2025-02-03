@@ -1,6 +1,7 @@
 #include "ydb_root_common.h"
 #include "ydb_profile.h"
 #include "ydb_admin.h"
+#include "ydb_debug.h"
 #include "ydb_service_auth.h"
 #include "ydb_service_discovery.h"
 #include "ydb_service_export.h"
@@ -17,9 +18,9 @@
 #include "ydb_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/credentials.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/jwt_token_source.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
@@ -52,6 +53,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandYql>());
     AddCommand(std::make_unique<TCommandTopic>());
     AddCommand(std::make_unique<TCommandWorkload>());
+    AddCommand(std::make_unique<TCommandDebug>());
 }
 
 void TClientCommandRootCommon::ValidateSettings() {
@@ -96,7 +98,7 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
         }
 
         if (config.UseStaticCredentials) {
-            if (config.StaticCredentials.User) {
+            if (!config.StaticCredentials.User.empty()) {
                 return CreateLoginCredentialsProviderFactory(config.StaticCredentials);
             }
         }
@@ -252,7 +254,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
         if (config.HelpCommandVerbosiltyLevel >= 2) {
             TStringBuilder supportedJwtAlgorithms;
-            for (const TString& alg : GetSupportedOauth2TokenExchangeJwtAlgorithms()) {
+            for (const std::string& alg : GetSupportedOauth2TokenExchangeJwtAlgorithms()) {
                 if (supportedJwtAlgorithms) {
                     supportedJwtAlgorithms << ", ";
                 }
@@ -580,7 +582,9 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
         throw TMisuseException() << "Missing required option 'endpoint'.";
     }
 
-    if (config.Database.empty()) {
+    if (config.Database.empty() && config.AllowEmptyDatabase) {
+        // just skip the Database check
+    } else if (config.Database.empty()) {
         throw TMisuseException()
             << "Missing required option 'database'.";
     } else if (!config.Database.StartsWith('/')) {
@@ -798,7 +802,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         if (authData["password"]) {
             if (!IsAuthSet && (explicitOption || !Profile)) {
                 config.StaticCredentials.Password = authData["password"].as<TString>();
-                if (!config.StaticCredentials.Password) {
+                if (config.StaticCredentials.Password.empty()) {
                     DoNotAskForPassword = true;
                 }
             }
@@ -816,7 +820,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             }
             if (!IsAuthSet && (explicitOption || !Profile)) {
                 config.StaticCredentials.Password = fileContent;
-                if (!config.StaticCredentials.Password) {
+                if (config.StaticCredentials.Password.empty()) {
                     DoNotAskForPassword = true;
                 }
             }
@@ -894,12 +898,12 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             }
             if (PasswordFile) {
                 config.StaticCredentials.Password = ReadFromFile(PasswordFile, "password", true);
-                if (!config.StaticCredentials.Password) {
+                if (config.StaticCredentials.Password.empty()) {
                     DoNotAskForPassword = true;
                 }
                 if (IsVerbose()) {
                     Cerr << "Using user password from file provided with --password-file option" << Endl;
-                    config.ConnectionParams["password"].push_back({config.StaticCredentials.Password, "file provided with explicit --password-file option"});
+                    config.ConnectionParams["password"].push_back({TString{config.StaticCredentials.Password}, "file provided with explicit --password-file option"});
                 }
             }
             config.ChosenAuthMethod = "static-credentials";
@@ -1103,16 +1107,16 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
     }
 
     if (config.UseStaticCredentials) {
-        if (config.StaticCredentials.User) {
-            if (!config.StaticCredentials.Password && !DoNotAskForPassword) {
+        if (!config.StaticCredentials.User.empty()) {
+            if (config.StaticCredentials.Password.empty() && !DoNotAskForPassword) {
                 Cerr << "Enter password for user " << config.StaticCredentials.User << ": ";
                 config.StaticCredentials.Password = InputPassword();
                 if (IsVerbose()) {
-                    config.ConnectionParams["password"].push_back({config.StaticCredentials.Password, "standard input"});
+                    config.ConnectionParams["password"].push_back({TString{config.StaticCredentials.Password}, "standard input"});
                 }
             }
         } else {
-            if (config.StaticCredentials.Password) {
+            if (!config.StaticCredentials.Password.empty()) {
                 MisuseErrors.push_back("User password was provided without user name");
                 return;
             }

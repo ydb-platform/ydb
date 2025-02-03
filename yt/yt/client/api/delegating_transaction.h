@@ -41,11 +41,11 @@ public:
         const TMultiLookupOptions& options) override;
 
     TFuture<TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options) override;
 
     TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options) override;
 
     TFuture<TPullRowsResult> PullRows(
@@ -214,7 +214,7 @@ public:
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TLegacyKey> keys,
-        const std::vector<TString>& locks,
+        const std::vector<std::string>& locks,
         NTableClient::ELockType lockType) override;
 
     void ModifyRows(
@@ -257,12 +257,12 @@ public:
         const TPushQueueProducerOptions& options) override;
 
     // Distributed table client
-    TFuture<TDistributedWriteSessionPtr> StartDistributedWriteSession(
+    TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options = {}) override;
 
     TFuture<void> FinishDistributedWriteSession(
-        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options = {}) override;
 
 protected:

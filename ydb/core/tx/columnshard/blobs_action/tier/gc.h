@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/remove_gc.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/tier/common.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/library/accessor/accessor.h>
 
@@ -12,7 +13,7 @@ private:
     using TBase = IBlobsGCAction;
 private:
     YDB_READONLY_DEF(std::deque<TUnifiedBlobId>, DraftBlobIds);
-    YDB_READONLY_DEF(NWrappers::NExternalStorage::IExternalStorageOperator::TPtr, ExternalStorageOperator);
+    std::shared_ptr<TExternalStorageOperatorHolder> ExternalStorageOperator;
 protected:
     virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) override;
     virtual bool DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) override;
@@ -26,8 +27,11 @@ protected:
     virtual bool DoIsEmpty() const override {
         return DraftBlobIds.empty();
     }
+    NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetExternalStorageOperator() const {
+        return ExternalStorageOperator->Get();
+    }
 public:
-    TGCTask(const TString& storageId, std::deque<TUnifiedBlobId>&& draftBlobIds, const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& externalStorageOperator,
+    TGCTask(const TString& storageId, std::deque<TUnifiedBlobId>&& draftBlobIds, const std::shared_ptr<TExternalStorageOperatorHolder>& externalStorageOperator,
         TBlobsCategories&& blobsToRemove, const std::shared_ptr<TRemoveGCCounters>& counters)
         : TBase(storageId, std::move(blobsToRemove), counters)
         , DraftBlobIds(std::move(draftBlobIds))

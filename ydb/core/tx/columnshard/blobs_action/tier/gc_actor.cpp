@@ -22,27 +22,11 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
 
         if (isRemoved) {
             // Do nothing
-        } else if (error.ShouldRetry()) {
-            // TODO: add backoff, don't pass away immediately ever
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "retriable_error")(
-                "exception", error.GetExceptionName())("message", error.GetMessage())("key", key);
-            {
-                ui64& retryCounter = RetryCountersByKey.emplace(key, 0).first->second;
-                if (++retryCounter > 10) {
-                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "exceeded_retry_limit")(
-                        "exception", error.GetExceptionName())("message", error.GetMessage())("key", key);
-                    Abort();
-                    PassAway();
-                    return;
-                }
-            }
-            StartDeletingObject(*ev->Get()->Key);
-            return;
         } else {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "error")(
+            auto delay = NextRetryDelay(error, key).value_or(TDuration::Seconds(60));
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "error")(
                 "exception", error.GetExceptionName())("message", error.GetMessage())("key", key);
-            Abort();
-            PassAway();
+            Schedule(delay, new NWrappers::NExternalStorage::TEvDeleteObjectRequest(Aws::S3::Model::DeleteObjectRequest().WithKey(key)));
             return;
         }
     }
@@ -53,6 +37,12 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
     AFL_VERIFY(TLogoBlobID::Parse(logoBlobId, *ev->Get()->Key, errorMessage))("error", errorMessage);
     BlobIdsToRemove.erase(logoBlobId);
     CheckFinished();
+}
+
+void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjectRequest::TPtr& ev) {
+    AFL_VERIFY(ev->Sender == SelfId());
+    AFL_VERIFY(ev->Get()->Request.KeyHasBeenSet());
+    StartDeletingObject(TString(ev->Get()->Request.GetKey()));
 }
 
 void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
@@ -76,6 +66,29 @@ void TGarbageCollectionActor::CheckFinished() {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "finished");
         TActorContext::AsActorContext().Send(TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask));
     }
+}
+
+void TGarbageCollectionActor::StartDeletingObject(const TString& key) const {
+    auto awsRequest = Aws::S3::Model::DeleteObjectRequest().WithKey(key);
+    auto request = std::make_unique<NWrappers::NExternalStorage::TEvDeleteObjectRequest>(awsRequest);
+    auto hRequest = std::make_unique<IEventHandle>(NActors::TActorId(), TActorContext::AsActorContext().SelfID, request.release());
+    TAutoPtr<TEventHandle<NWrappers::NExternalStorage::TEvDeleteObjectRequest>> evPtr(
+        (TEventHandle<NWrappers::NExternalStorage::TEvDeleteObjectRequest>*)hRequest.release());
+    GCTask->GetExternalStorageOperator()->Execute(evPtr);
+}
+
+std::optional<TDuration> TGarbageCollectionActor::NextRetryDelay(const Aws::S3::S3Error& reason, const TString& key) {
+    if (!reason.ShouldRetry()) {
+        return std::nullopt;
+    }
+    auto* findState = RetryStateByKey.FindPtr(key);
+    if (!findState) {
+        findState = &RetryStateByKey.emplace(key, RetryPolicy->CreateRetryState()).first->second;
+    }
+    if (auto delay = (*findState)->GetNextRetryDelay()) {
+        return *delay;
+    }
+    return std::nullopt;
 }
 
 }

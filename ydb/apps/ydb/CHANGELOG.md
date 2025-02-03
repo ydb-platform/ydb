@@ -1,3 +1,4 @@
+* Include topics in local backups (`ydb tools dump` and `ydb tools restore`). In this release, only the settings of the topics are retained; messages are not included in the backup.
 
 ## 2.19.0 ##
 

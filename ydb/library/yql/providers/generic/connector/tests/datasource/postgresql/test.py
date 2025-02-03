@@ -75,6 +75,7 @@ def test_select_missing_table(
     postgresql_client: Client,
     test_case: select_missing_table.TestCase,
 ):
+    assert 1 == 2
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_missing_table(
         test_name=request.node.name,
@@ -96,6 +97,7 @@ def test_select_datetime(
     postgresql_client: Client,
     test_case: select_positive_common.TestCase,
 ):
+    assert 1 == 2
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_positive(
         settings=settings,
@@ -121,6 +123,7 @@ def test_select_positive_with_schema(
     postgresql_client: Client,
     test_case: select_positive_common.TestCase,
 ):
+    assert 1 == 2
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_pg_schema(
         settings=settings,

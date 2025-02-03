@@ -49,6 +49,7 @@ def test_select_positive(
     runner_type: str,
     test_case: select_positive_common.TestCase,
 ):
+    assert 1 == 2
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_positive(test_name=request.node.name, settings=settings, runner=runner, test_case=test_case)
 
@@ -64,6 +65,7 @@ def test_select_missing_database(
     runner_type: str,
     test_case: select_missing_database.TestCase,
 ):
+    assert 1 == 2
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_missing_table(
         settings=settings,
@@ -84,6 +86,7 @@ def test_select_missing_table(
     runner_type: str,
     test_case: select_missing_table.TestCase,
 ):
+    assert 1 == 2
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_missing_table(
         test_name=request.node.name,
@@ -102,6 +105,7 @@ def test_select_datetime(
     runner_type: str,
     test_case: select_positive_common.TestCase,
 ):
+    assert 1 == 2
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_positive(
         test_name=request.node.name,

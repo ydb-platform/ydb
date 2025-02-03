@@ -405,12 +405,14 @@ void TWriteSessionImpl::InitWriter() { // No Lock, very initial start - no race 
     } else {
         // Deduplication explicitly disabled, ProducerId & MessageGroupId must be empty.
         if (!Settings.ProducerId_.empty() || !Settings.MessageGroupId_.empty()) {
+            std::lock_guard guard(Lock);
             LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefixImpl()
                     << "ProducerId or MessageGroupId is not empty when deduplication is switched off");
             ThrowFatalError("Explicitly disabled deduplication conflicts with non-empty ProducerId or MessageGroupId");
         }
     }
     if (!Settings.ProducerId_.empty() && !Settings.MessageGroupId_.empty() && Settings.ProducerId_ != Settings.MessageGroupId_) {
+            std::lock_guard guard(Lock);
             LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefixImpl()
                     << "ProducerId and MessageGroupId mismatch");
             ThrowFatalError("ProducerId != MessageGroupId scenario is currently not supported");

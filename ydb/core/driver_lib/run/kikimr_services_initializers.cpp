@@ -2825,5 +2825,6 @@ void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, c
 }
 #endif
 
+
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

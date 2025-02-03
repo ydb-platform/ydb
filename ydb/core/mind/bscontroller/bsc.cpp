@@ -300,6 +300,13 @@ void TBlobStorageController::OnHostRecordsInitiate() {
             appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
                 "BlobStorageControllerControls.EnableSelfHealWithDegraded");
         }
+
+        if (appData->BscConfig.HasUpdateSettings()) {
+            auto cfg = appData->BscConfig.GetUpdateSettings();
+            auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+            ev->Record.MutableRequest()->AddCommand()->MutableUpdateSettings()->CopyFrom(cfg);
+            Send(SelfId(), ev.Release());
+        }
     }
     Y_ABORT_UNLESS(!SelfHealId);
     SelfHealId = Register(CreateSelfHealActor());

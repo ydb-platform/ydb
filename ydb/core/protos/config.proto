@@ -1753,6 +1753,10 @@ message THiveConfig {
     optional double DryRunTargetTrackingCPU = 84; // percent
 }
 
+message TBSCConfig {
+    optional NKikimrBlobStorage.TUpdateSettings UpdateSettings = 1;
+}
+
 message TBlobCacheConfig {
     optional uint64 MaxSizeBytes = 1 [default = 1073741824];
 }
@@ -2222,6 +2226,7 @@ message TAppConfig {
 
     optional TConfigVersion Version = 102;
     repeated TLabel Labels = 103;
+    optional TBSCConfig BSCConfig = 104;
 }
 
 message TYdbVersion {

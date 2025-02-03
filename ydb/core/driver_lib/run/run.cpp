@@ -1127,6 +1127,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->HiveConfig.CopyFrom(runConfig.AppConfig.GetHiveConfig());
     }
 
+    if (runConfig.AppConfig.HasBSCConfig()) {
+        AppData->BscConfig.CopyFrom(runConfig.AppConfig.GetBSCConfig());
+    }
+
     if (runConfig.AppConfig.HasDataShardConfig()) {
         AppData->DataShardConfig = runConfig.AppConfig.GetDataShardConfig();
     }

@@ -53,6 +53,7 @@ struct TAppData::TImpl {
     NKikimrProto::TKeyConfig PDiskKeyConfig;
     TFeatureFlags FeatureFlags;
     NKikimrConfig::THiveConfig HiveConfig;
+    NKikimrConfig::TBSCConfig BSCConfig;
     NKikimrConfig::TDataShardConfig DataShardConfig;
     NKikimrConfig::TColumnShardConfig ColumnShardConfig;
     NKikimrConfig::TSchemeShardConfig SchemeShardConfig;
@@ -109,6 +110,7 @@ TAppData::TAppData(
     , PDiskKeyConfig(Impl->PDiskKeyConfig)
     , FeatureFlags(Impl->FeatureFlags)
     , HiveConfig(Impl->HiveConfig)
+    , BSCConfig(Impl->BSCConfig)
     , DataShardConfig(Impl->DataShardConfig)
     , ColumnShardConfig(Impl->ColumnShardConfig)
     , SchemeShardConfig(Impl->SchemeShardConfig)

@@ -96,6 +96,7 @@ class TieringTestBase(BaseTestSet):
             extra_feature_flags=[
                 'enable_external_data_sources',
                 'enable_tiering_in_column_shard',
+                'enable_column_store',
             ],
             columnshard_config={
                 'lag_for_compaction_before_tierings_ms': 0,
@@ -305,6 +306,7 @@ class TestAlterTiering(TieringTestBase):
         self.n_writers = 4
         self.is_standalone_tables = False
 
+        sth = ScenarioTestHelper(ctx)
         if not self.is_standalone_tables:
             sth.execute_scheme_query(CreateTableStore('store').with_schema(self.schema1).existing_ok())
 

@@ -31,7 +31,7 @@ class YdbClusterInstance():
             self._database = database
             self._mon_port = 8765
         else:
-            cluster = KiKiMR(configurator=config, extra_feature_flags=["enable_column_store"])
+            cluster = KiKiMR(configurator=config)
             cluster.start()
             node = cluster.nodes[1]
             self._endpoint = "grpc://%s:%d" % (node.host, node.port)
@@ -108,7 +108,7 @@ class BaseTestSet:
 
     @classmethod
     def _get_cluster_config(cls):
-        return KikimrConfigGenerator()
+        return KikimrConfigGenerator(extra_feature_flags=["enable_column_store"])
 
 
 def pytest_generate_tests(metafunc):

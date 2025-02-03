@@ -11,6 +11,7 @@
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
 
+
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
 #include <ydb/core/tx/priorities/usage/service.h>
@@ -292,7 +293,8 @@ void TColumnShard::UpdateInsertTableCounters() {
     Counters.GetTabletCounters()->SetCounter(COUNTER_COMMITTED_RECORDS, committed.Rows);
     Counters.GetTabletCounters()->SetCounter(COUNTER_COMMITTED_BYTES, committed.Bytes);
 
-    LOG_S_TRACE("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows << " records, committed: " << committed.Bytes << " in "
+    
+    LOG_S_INFO("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows << " records, committed: " << committed.Bytes << " in "
                                           << committed.Rows << " records at tablet " << TabletID());
 }
 

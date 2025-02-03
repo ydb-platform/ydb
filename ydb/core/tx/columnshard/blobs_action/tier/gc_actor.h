@@ -4,7 +4,6 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc_actor.h>
-#include <ydb/core/tx/columnshard/blobs_action/tier/events.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
 #include <library/cpp/retry/retry_policy.h>

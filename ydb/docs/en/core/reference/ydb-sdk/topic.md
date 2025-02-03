@@ -1412,6 +1412,8 @@ If a commit fails with an error, the application should log it and continue; it 
    }
    ```
 
+   The `Commit` call is fast by default, saving data into an internal buffer and returning control to the caller. The real message to the server is sent in the background. To prevent losing the last commits, call the `Reader.Close()` method before exiting the program.
+
 - Python
 
    ```python
@@ -1420,6 +1422,8 @@ If a commit fails with an error, the application should log it and continue; it 
        process(message)
        reader.commit(message)
    ```
+
+   The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
 
 - Java
 
@@ -1481,6 +1485,8 @@ If a commit fails with an error, the application should log it and continue; it 
    }
    ```
 
+   The `Commit` call is fast by default, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
+
 - Python
 
    ```python
@@ -1489,6 +1495,8 @@ If a commit fails with an error, the application should log it and continue; it 
      process(batch)
      reader.commit(batch)
    ```
+
+   The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
 
 - Java (sync)
 

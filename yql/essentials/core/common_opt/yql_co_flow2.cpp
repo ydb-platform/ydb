@@ -1837,7 +1837,11 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map["ExtractMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoExtractMembers self(node);
-        if (!optCtx.IsSingleUsage(self.Input())) {
+        const bool optInput = self.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
+        static const char splitFlag[] = "ExtractMembersSplitOnOptional";
+        YQL_ENSURE(optCtx.Types);
+        const bool split = IsOptimizerEnabled<splitFlag>(*optCtx.Types) && !IsOptimizerDisabled<splitFlag>(*optCtx.Types);
+        if (!optCtx.IsSingleUsage(self.Input()) && (!optInput || !split)) {
             return node;
         }
 

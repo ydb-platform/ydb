@@ -3971,6 +3971,39 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
+    map["FilterNullMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        YQL_ENSURE(optCtx.Types);
+        static const char optName[] = "FilterNullMembersOverJust";
+        if (!IsOptimizerEnabled<optName>(*optCtx.Types) || IsOptimizerDisabled<optName>(*optCtx.Types)) {
+            return node;
+        }
+        const auto self = TCoFilterNullMembers(node);
+        if (self.Members() && self.Members().Cast().Size() == 1) {
+            if (auto maybeJust = self.Input().Maybe<TCoJust>()) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " with single member over Just";
+                auto name = self.Members().Cast().Item(0);
+                return Build<TCoFlatMap>(ctx, node->Pos())
+                    .Input<TCoMember>()
+                        .Struct(maybeJust.Cast().Input())
+                        .Name(name)
+                    .Build()
+                    .Lambda()
+                        .Args({"unwrapped"})
+                        .Body<TCoJust>()
+                            .Input<TCoReplaceMember>()
+                                .Struct(maybeJust.Cast().Input())
+                                .Name(name)
+                                .Item("unwrapped")
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Done()
+                    .Ptr();
+            }
+        }
+        return node;
+    };
+
     map["Filter"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (const auto sorted = node->Head().GetConstraint<TSortedConstraintNode>()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << ' ' << node->Head().Content();

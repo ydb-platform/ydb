@@ -2,7 +2,7 @@ clean.dst:
 	$(YDB) -e $(ENDPOINT) -d $(TENANT) workload log clean
 
 init.dst:
-	$(YDB) -e $(ENDPOINT) -d $(TENANT) workload log init --int-cols 5 --str-cols 5
+	$(YDB) -e $(ENDPOINT) -d $(TENANT) workload log init --store column --int-cols 5 --str-cols 5
 
 bulk_upsert.dst:
 	$(YDB) -e $(ENDPOINT) -d $(TENANT) workload log run bulk_upsert -s $(DURATION) -t $(BULK_UPSERT_THREADS) --rows $(BULK_UPSERT_ROWS) --window $(WINDOW) --len 1000 --int-cols 5 --str-cols 5 2>&1 | tee upsert_out

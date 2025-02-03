@@ -4185,6 +4185,13 @@
             "uri": "https://{canondata_backend}/1920236/5e37b541c71c89b1b95dee0463a5a2e9bc5999f4/resource.tar.gz#test_sql2yql.test_match_recognize-alerts_/sql.yql"
         }
     ],
+    "test_sql2yql.test[match_recognize-alerts_without_order-streaming]": [
+        {
+            "checksum": "2544bb720aab6ef9d8d57f909f58ce8f",
+            "size": 9925,
+            "uri": "https://{canondata_backend}/1925842/7d0ab953a9979e9baa7ae26ebae2128b1cbe8128/resource.tar.gz#test_sql2yql.test_match_recognize-alerts_without_order-streaming_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[match_recognize-alerts_without_order]": [
         {
             "checksum": "7e6cd1cda9ddc8a2fe0f41ace902517e",
@@ -10211,6 +10218,11 @@
     "test_sql_format.test[match_recognize-alerts]": [
         {
             "uri": "file://test_sql_format.test_match_recognize-alerts_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[match_recognize-alerts_without_order-streaming]": [
+        {
+            "uri": "file://test_sql_format.test_match_recognize-alerts_without_order-streaming_/formatted.sql"
         }
     ],
     "test_sql_format.test[match_recognize-alerts_without_order]": [

@@ -143,14 +143,15 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
 
         const auto& writeStagePlan = plan["Plan"]["Plans"][0]["Plans"][0];
-        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Limit-Sink");
-        UNIT_ASSERT(writeStagePlan["Operators"].GetArraySafe().size() >= 2);
-        const auto& sinkOp = writeStagePlan["Operators"].GetArraySafe()[1];
+        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Stage-Sink");
+        UNIT_ASSERT(writeStagePlan["Operators"].GetArraySafe().size() >= 1);
+        const auto& sinkOp = writeStagePlan["Operators"].GetArraySafe()[0];
         UNIT_ASSERT_VALUES_EQUAL(sinkOp["ExternalDataSource"].GetStringSafe(), "write_data_source");
         UNIT_ASSERT_VALUES_EQUAL(sinkOp["Compression"].GetStringSafe(), "gzip");
 
-        const auto& readStagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
+        const auto& readStagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
         UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Node Type"].GetStringSafe(), "Source");
+        UNIT_ASSERT(readStagePlan["Operators"].GetArraySafe().size() >= 1);
         const auto& sourceOp = readStagePlan["Operators"].GetArraySafe()[0];
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["ExternalDataSource"].GetStringSafe(), "read_data_source");
 

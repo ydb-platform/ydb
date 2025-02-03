@@ -1,4 +1,4 @@
-# Working with S3 buckets ({{objstorage-full-name}})
+# Working with S3 buckets ({{objstorage-full-name}}) {#working_with_s3}
 
 When working with {{ objstorage-full-name }} using [external data sources](../../datamodel/external_data_source.md), it is convenient to perform prototyping and initial data connection setup.
 
@@ -21,6 +21,46 @@ WITH
 ```
 
 The list of supported formats and data compression algorithms for reading data in S3 ({{objstorage-full-name}}) is provided in the section [{#T}](formats.md).
+
+## Creating an external connection to S3 bucket {#external-data-source-settings}
+
+There are two types of buckets in S3: public and private. To connect to a public bucket, you need to use `AUTH_METHOD="NONE"`, and to connect to a private bucket, `AUTH_METHOD="AWS"`. A detailed description of `AWS` can be found [here](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html). `AUTH_METHOD="NONE"` means that no authentication should be used. In case of `AUTH_METHOD="AWS"`, you need to specify several additional parameters:
+
+- `AWS_ACCESS_KEY_ID_SECRET_NAME` - reference to the name of the [secret](../../datamodel/secrets.md) where `AWS_ACCESS_KEY_ID` is stored
+- `AWS_SECRET_ACCESS_KEY_SECRET_NAME` - reference to the name of the [secret](../../datamodel/secrets.md) where `AWS_SECRET_ACCESS_KEY` is stored
+- `AWS_REGION` - region from which reading will be performed, for example `ru-central-1`
+
+To set up a connection to a public bucket, it is enough to execute the following SQL query. The query will create an external connection named `object_storage`, which will point to a specific s3 bucket named `bucket`.
+
+```yql
+CREATE EXTERNAL DATA SOURCE object_storage WITH (
+  SOURCE_TYPE="ObjectStorage",
+  LOCATION="https://object_storage_domain/bucket/",
+  AUTH_METHOD="NONE"
+);
+```
+
+To set up a connection to a private bucket, you need to run a few SQL queries. First, you need to create [secrets](../../datamodel/secrets.md) containing `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+
+```yql
+    CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=`<id>`);
+    CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=`<key>`);
+```
+
+The next step is to create an external connection named `object_storage`, which will point out to a specific s3 bucket named `bucket` and also use `AUTH_METHOD="AWS"`. The parameters `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, and `AWS_REGION` are filled in for `AWS`. The values of these parameters are described above
+
+```yql
+CREATE EXTERNAL DATA SOURCE object_storage WITH (
+  SOURCE_TYPE="ObjectStorage",
+  LOCATION="https://object_storage_domain/bucket/",
+  AUTH_METHOD="AWS",
+  AWS_ACCESS_KEY_ID_SECRET_NAME="aws_access_id",
+  AWS_SECRET_ACCESS_KEY_SECRET_NAME="aws_access_key",
+  AWS_REGION="ru-central-1"
+);
+```
+
+The example of using the created external connection `object_storage` can be found [here](#working_with_s3)
 
 ## Data model {#data_model}
 

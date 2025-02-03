@@ -211,7 +211,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         return;
     };
 
-    if (SubDomainOutOfSpace && record.HasModificationType() && (record.GetModificationType() != NKikimrTxColumnShard::TEvWrite::OPERATION_DELETE)) {
+    if (SubDomainOutOfSpace && (!record.HasModificationType() || (record.GetModificationType() != NKikimrTxColumnShard::TEvWrite::OPERATION_DELETE))) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded");
         Counters.GetTabletCounters()->IncCounter(COUNTER_OUT_OF_SPACE);
         return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::Overload, NKikimrTxColumnShard::EResultStatus::OVERLOADED);

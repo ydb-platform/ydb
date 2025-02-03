@@ -385,7 +385,7 @@ public:
         return true;
     }
 
-    void PersistSubDomainPathId(ui64 ownerId, ui64 localPathId, NTabletFlatExecutor::TTransactionContext &txc);
+    void PersistSubDomainPathId(ui64 localPathId, NTabletFlatExecutor::TTransactionContext &txc);
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();
     void StartFindSubDomainPathId(bool delayFirstRequest = true);
@@ -564,8 +564,8 @@ private:
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
     TActorId FindSubDomainPathIdActor;
-    std::optional<TPathId> SubDomainPathId;
-    std::optional<TPathId> WatchingSubDomainPathId;
+    std::optional<TLocalPathId> SubDomainPathId;
+    std::optional<TLocalPathId> WatchingSubDomainPathId;
     bool SubDomainOutOfSpace = false;
 
     void TryRegisterMediatorTimeCast();

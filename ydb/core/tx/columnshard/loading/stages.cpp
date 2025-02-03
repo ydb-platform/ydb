@@ -179,7 +179,7 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     }
 
     if (subDomainLocalPathId.has_value()) {
-        Self->SubDomainPathId.emplace(Self->CurrentSchemeShardId, *subDomainLocalPathId);
+        Self->SubDomainPathId = *subDomainLocalPathId;
     }
 
     ui64 outOfSpace = 0;

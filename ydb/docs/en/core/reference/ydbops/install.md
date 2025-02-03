@@ -32,6 +32,13 @@ Currently, only building from source is available as an installation option. The
 
   The `ydbops` executables will be available in the `bin` folder. Binary files are generated for Linux and MacOS (arm64, amd64).
 
+  | Binary name | Platform
+  |-|-|
+  | ydbops | Linux(amd64) |
+  | ydbops_darwin_amd64 | MacOS(amd64) |
+  | ydbops_darwin_arm64 | MacOS(arm64) |
+
+
 4. To install the binary file, execute the following command:
 
    ```bash

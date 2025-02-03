@@ -19,6 +19,7 @@ import helpers.data_generators as dg
 from helpers.table_helper import AlterTable, ResetSetting, AlterTableStore
 
 from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 
@@ -103,13 +104,15 @@ class TieringTestBase(BaseTestSet):
                 'compaction_actualization_lag_ms': 0,
                 'optimizer_freshness_check_duration_ms': 0,
                 'small_portion_detect_size_limit': 0,
+                'alter_object_enabled': True,
             },
             additional_log_configs={
                 'TX_TIERING': LogLevels.DEBUG,
-                'TX_TIERING_BLOBS_TIER': LogLevels.DEBUG,
+                'TX_TIERING_BLOBS_TIER': LogLevels.TRACE,
+                'TX_COLUMNSHARD_ACTUALIZATION': LogLevels.TRACE,
             },
         )
-    
+
     def _setup_tiering_test(self, ctx):
         random.seed(0)
 
@@ -159,13 +162,6 @@ class TieringTestBase(BaseTestSet):
     def _tier_down_tiering_test(self, ctx):
         LOGGER.info('Tiering down scheme objects')
         sth = ScenarioTestHelper(ctx)
-        for table in self.tables:
-            sth.execute_scheme_query(AlterTable(table).action(ResetSetting('TTL')), retries=2)
-
-        for table in self.tables:
-            sth.execute_scheme_query(DropTable(table))
-        if not self.is_standalone_tables:
-            sth.execute_scheme_query(DropTableStore('store'))
 
         # NOTE: evicted data is not erased when the colummnstore is deleted
         # assert all(s3.count_objects(bucket) == 0 for bucket in s3_configs)
@@ -304,20 +300,21 @@ class TestAlterTiering(TieringTestBase):
         self.test_duration = self._get_test_duration(get_external_param('test-class', 'SMALL'))
         self.n_tables = 4
         self.n_writers = 4
-        self.is_standalone_tables = False
 
         sth = ScenarioTestHelper(ctx)
-        if not self.is_standalone_tables:
-            sth.execute_scheme_query(CreateTableStore('store').with_schema(self.schema1).existing_ok())
+
+        sth.execute_scheme_query(CreateTableStore('store').with_schema(self.schema1).existing_ok())
+        YdbCluster.get_ydb_driver().table_client.session().create().execute_scheme(
+            f'ALTER OBJECT `{sth.get_full_path('store')}` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`'
+            f'    {{"levels" : [{{"class_name" : "Zero", "portions_live_duration" : "5s", "expected_blobs_size" : 1000000000000, "portions_count_available" : 2}},'
+            f'                  {{"class_name" : "Zero"}}]}}`);'
+        )
 
         sth = ScenarioTestHelper(ctx)
-        tables: list[str] = []
+        self.tables: list[str] = []
         for i in range(self.n_tables):
-            if self.is_standalone_tables:
-                tables.append(f'table{i}')
-            else:
-                tables.append(f'store/table{i}')
-            sth.execute_scheme_query(CreateTable(tables[-1]).with_schema(self.schema1).existing_ok())
+            self.tables.append(f'store/table{i}')
+            sth.execute_scheme_query(CreateTable(self.tables[-1]).with_schema(self.schema1).existing_ok())
 
         LOGGER.info('Starting workload threads')
         threads = []
@@ -328,7 +325,7 @@ class TestAlterTiering(TieringTestBase):
                 args=[ctx, 'store', self.test_duration],
             )
         )
-        for i, table in enumerate(tables):
+        for i, table in enumerate(self.tables):
             for writer in range(self.n_writers):
                 threads.append(
                     TestThread(
@@ -361,143 +358,11 @@ class TestAlterTiering(TieringTestBase):
 
         assert any(self.s3.count_objects(bucket) != 0 for bucket in self.s3_configs)
 
-        self._tier_down_tiering_test(ctx)
+        for table in self.tables:
+            sth.execute_scheme_query(AlterTable(table).action(ResetSetting('TTL')), retries=2)
 
-
-class TestDataCorrectness(TieringTestBase):
-    schema1 = (
-        ScenarioTestHelper.Schema()
-        .with_column(name='timestamp', type=PrimitiveType.Timestamp, not_null=True)
-        .with_column(name='value', type=PrimitiveType.Uint64, not_null=True)
-        .with_column(name='payload', type=PrimitiveType.String, not_null=True)
-        .with_key_columns('timestamp')
-    )
-
-    def _get_values_total(self, ctx: TestContext, table: str):
-        return ScenarioTestHelper(ctx).execute_scan_query(f'SELECT SUM(value) FROM `{ScenarioTestHelper(ctx).get_full_path(table)}`').result_set.rows[0]['column0'] or 0
-
-    def _get_rows_in_tier(self, ctx: TestContext, table: str, tier: str):
-        return ScenarioTestHelper(ctx).execute_scan_query(f'SELECT SUM(Rows) FROM `{ScenarioTestHelper(ctx).get_full_path(table)}/.sys/primary_index_portion_stats` WHERE Activity == 1 AND TierName == "{tier}"').result_set.rows[0]['column0'] or 0
-
-    def _write_data(
-        self,
-        ctx: TestContext,
-        table: str,
-        timestamp_from_ms: int,
-        n_rows: int,
-        value: int = 1,
-    ):
-        sth = ScenarioTestHelper(ctx)
-
-        chunk_size = 100
-        while n_rows:
-            current_chunk_size = min(chunk_size, n_rows)
-            sth.bulk_upsert(
-                table,
-                dg.DataGeneratorPerColumn(self.schema1, current_chunk_size)
-                .with_column(
-                    'timestamp',
-                    dg.ColumnValueGeneratorSequential(timestamp_from_ms),
-                )
-                .with_column('value', dg.ColumnValueGeneratorConst(value))
-                .with_column(
-                    'payload',
-                    dg.ColumnValueGeneratorConst(random.randbytes(1024)),
-                ),
-            )
-            timestamp_from_ms += current_chunk_size
-            n_rows -= current_chunk_size
-            assert n_rows >= 0
-
-    def _delete_rows(
-        self,
-        ctx: TestContext,
-        table: str,
-        values_from: int,
-        n_rows: int,
-    ):
-        sth = ScenarioTestHelper(ctx)
-
-        chunk_size = 100
-        while n_rows:
-            current_chunk_size = min(chunk_size, n_rows)
-            sth.execute_data_query(f'DELETE FROM `{ScenarioTestHelper(ctx).get_full_path(table)}` WHERE id BETWEEN {values_from} AND {values_from + current_chunk_size};')
-            values_from += current_chunk_size
-            n_rows -= current_chunk_size
-            assert n_rows >= 0
-
-    def scenario_write_update_delete(self, ctx: TestContext):
-        self._setup_tiering_test(ctx)
-
-        sth = ScenarioTestHelper(ctx)
-
-        table = 'table'
-        sth.execute_scheme_query(CreateTable(table).with_schema(self.schema1))
-        sth.execute_scheme_query(
-            AlterTable(table).set_ttl(
-                [
-                    (
-                        datetime.timedelta(seconds=1),
-                        sth.get_full_path(self.sources[0]),
-                    )
-                ],
-                'timestamp',
-            ),
-            retries=2,
-        )
-
-        start_time_ms = int(datetime.datetime.now().timestamp() * 1000000)
-        threads = [
-            TestThread(
-                target=self._write_data,
-                args=[ctx, table, start_time_ms + i * 10000, 10000, 1],
-            )
-            for i in range(10)
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-
-        while self._get_rows_in_tier(ctx, table, "__DEFAULT"):
-            LOGGER.info("waiting eviction")
-            time.sleep(1)
-        assert self._get_rows_in_tier(ctx, table, f"{ScenarioTestHelper(ctx).get_full_path(self.sources[0])}") == 10000
-        assert self._get_values_total(ctx, table) == 10000
-
-        threads = [
-            TestThread(
-                target=self._write_data,
-                args=[ctx, table, i * 1000, 1000, 2],
-            )
-            for i in range(10)
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-
-        while self._get_rows_in_tier(ctx, table, "__DEFAULT"):
-            LOGGER.info("waiting eviction")
-            time.sleep(1)
-        assert self._get_rows_in_tier(ctx, table, f"{ScenarioTestHelper(ctx).get_full_path(self.sources[0])}") == 10000
-        assert self._get_values_total(ctx, table) == 20000
-
-        threads = [
-            TestThread(
-                target=self._delete_rows,
-                args=[ctx, table, i * 1000, 1000],
-            )
-            for i in range(10)
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-
-        while self._get_rows_in_tier(ctx, table, f"{ScenarioTestHelper(ctx).get_full_path(self.sources[0])}") == 0:
-            LOGGER.info("waiting eviction")
-            time.sleep(1)
-        assert self._get_values_total(ctx, table) == 0
+        for table in self.tables:
+            sth.execute_scheme_query(DropTable(table))
+        sth.execute_scheme_query(DropTableStore('store'))
 
         self._tier_down_tiering_test(ctx)

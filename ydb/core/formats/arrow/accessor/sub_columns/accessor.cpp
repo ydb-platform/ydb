@@ -114,10 +114,8 @@ IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
         };
         auto onRecordKV = [&](const ui32 index, const std::string_view valueView, const bool isColumn) {
             if (isColumn) {
-                Cerr << ColumnsData.GetStats().GetColumnNameString(index) << " : " << valueView << " : " << isColumn << Endl;
                 value.InsertValue(ColumnsData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
             } else {
-                Cerr << OthersData.GetStats().GetColumnNameString(index) << " : " << valueView << " : " << isColumn << Endl;
                 value.InsertValue(OthersData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
             }
         };

@@ -173,7 +173,7 @@ public:
         auto pathEl = CreateBackupCollectionPathElement(dstPath);
 
         IncAliveChildrenDirect(OperationId, rootPath, context); // for correct discard of ChildrenExist prop
-        rootPath.DomainInfo()->IncPathsInside();
+        rootPath.DomainInfo()->IncPathsInside(context.SS);
 
         auto backupCollection = TBackupCollectionInfo::Create(desc);
         context.SS->BackupCollections[dstPath->PathId] = backupCollection;

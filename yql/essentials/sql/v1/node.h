@@ -1302,18 +1302,20 @@ namespace NSQLTranslationV1 {
     };
 
     struct TRoleParameters {
+    protected:
+        TRoleParameters() {}
+    public:
+        TVector<TDeferredAtom> Roles;
+    };
+
+    struct TUserParameters : TRoleParameters {
         TMaybe<TDeferredAtom> Password;
         bool IsPasswordEncrypted = false;
-        TVector<TDeferredAtom> Roles;
-
-        enum class ETypeOfLogin {
-            Undefined,
-            Login,
-            NoLogin
-        };
-
-        ETypeOfLogin CanLogin = ETypeOfLogin::Undefined;
+        std::optional<bool> CanLogin;
+        TMaybe<TDeferredAtom> Hash;
     };
+
+    struct TCreateGroupParameters : TRoleParameters {};
 
     struct TSequenceParameters {
         bool MissingOk = false;
@@ -1435,6 +1437,8 @@ namespace NSQLTranslationV1 {
 
     TString TypeByAlias(const TString& alias, bool normalize = true);
 
+    TNodePtr BuildList(TPosition pos, TVector<TNodePtr> nodes = {});
+    TNodePtr BuildQuote(TPosition pos, TNodePtr expr);
     TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent,
         bool isOptionalArg = false);
     TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent);
@@ -1469,7 +1473,6 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildColumn(TPosition pos, const TDeferredAtom& column, const TString& source = TString());
     TNodePtr BuildColumnOrType(TPosition pos, const TString& column = TString());
     TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
-    TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, const TString& var, const TString& column, bool theSameVar);
     TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, const TVector<TNodePtr>& bodies);
@@ -1522,9 +1525,9 @@ namespace NSQLTranslationV1 {
     );
 
     // Implemented in query.cpp
-    TNodePtr BuildCreateUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped);
-    TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped);
-    TNodePtr BuildAlterUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TRoleParameters& params, TScopedStatePtr scoped);
+    TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TCreateGroupParameters>& params, TScopedStatePtr scoped);
+    TNodePtr BuildControlUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name,
+                                const TMaybe<TUserParameters>& params, TScopedStatePtr scoped, bool isCreateUser);
     TNodePtr BuildRenameUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
     TNodePtr BuildAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop,
         TScopedStatePtr scoped);
@@ -1548,6 +1551,14 @@ namespace NSQLTranslationV1 {
         std::map<TString, TNodePtr>&& settings,
         const TObjectOperatorContext& context);
     TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
+    TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString&& source, const TString&& target,
+        const TString&& transformLambda,
+        std::map<TString, TNodePtr>&& settings,
+        const TObjectOperatorContext& context);
+    TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
+        std::map<TString, TNodePtr>&& settings,
+        const TObjectOperatorContext& context);
+    TNodePtr BuildDropTransfer(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
     TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings);
     TNodePtr BuildCommitClusters(TPosition pos);
     TNodePtr BuildRollbackClusters(TPosition pos);

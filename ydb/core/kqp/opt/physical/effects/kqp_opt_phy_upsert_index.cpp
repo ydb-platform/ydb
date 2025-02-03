@@ -153,18 +153,6 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
     const TVector<TStringBuf>& indexColumns, const TKikimrTableDescription& table, TPositionHandle pos,
     TExprContext& ctx, bool opt)
 {
-    // Check if we can update index table from just input data
-    bool allColumnFromInput = true; // - indicate all data from input
-    for (const auto& column : indexColumns) {
-        allColumnFromInput = allColumnFromInput && inputColumns.contains(column);
-    }
-
-    if (allColumnFromInput) {
-        return mode == TKqpPhyUpsertIndexMode::UpdateOn
-            ? MakeNonexistingRowsFilter(inputRows, lookupDict, table.Metadata->KeyColumnNames, pos, ctx)
-            : TExprBase(inputRows);
-    }
-
     auto inputRowsArg = TCoArgument(ctx.NewArgument(pos, "input_rows"));
     auto inputRowArg = TCoArgument(ctx.NewArgument(pos, "input_row"));
     auto lookupDictArg = TCoArgument(ctx.NewArgument(pos, "lookup_dict"));

@@ -108,9 +108,9 @@ TEST(TFederatedClientTest, Basic)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillOnce(Return(VoidFuture))
@@ -187,9 +187,9 @@ TEST(TFederatedClientTest, CheckHealth)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
     auto config = New<TFederationConfig>();
@@ -273,9 +273,9 @@ TEST(TFederatedClientTest, Transactions)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillOnce(Return(VoidFuture))
@@ -364,9 +364,9 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillOnce(Return(VoidFuture))
@@ -450,9 +450,9 @@ TEST(TFederatedClientTest, AttachTransaction)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("b-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("b-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillRepeatedly(Return(MakeFuture(TError("Failure"))));

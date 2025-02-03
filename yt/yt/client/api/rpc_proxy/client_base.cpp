@@ -487,6 +487,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::CopyNode(
     req->set_preserve_acl(options.PreserveAcl);
     req->set_pessimistic_quota_check(options.PessimisticQuotaCheck);
     req->set_enable_cross_cell_copying(options.EnableCrossCellCopying);
+    req->set_allow_secondary_index_abandonment(options.AllowSecondaryIndexAbandonment);
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
@@ -521,6 +522,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::MoveNode(
     req->set_preserve_acl(options.PreserveAcl);
     req->set_pessimistic_quota_check(options.PessimisticQuotaCheck);
     req->set_enable_cross_cell_copying(options.EnableCrossCellCopying);
+    req->set_allow_secondary_index_abandonment(options.AllowSecondaryIndexAbandonment);
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
@@ -1051,7 +1053,7 @@ void FillRequestBySelectRowsOptionsBase(
 }
 
 TFuture<TSelectRowsResult> TClientBase::SelectRows(
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1123,7 +1125,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
 }
 
 TFuture<TYsonString> TClientBase::ExplainQuery(
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

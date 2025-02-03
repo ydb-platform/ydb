@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -738,7 +738,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             TResultSetParser parser(result.GetResultSetParser(0));
             for (size_t i = 0; parser.TryNextRow(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetUuid().ToString(), testUuids[i]);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), i);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().value(), i);
             }
         }
         {
@@ -752,7 +752,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
                 TResultSetParser parser(result.GetResultSetParser(0));
                 UNIT_ASSERT(parser.TryNextRow());
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), val++);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().value(), val++);
                 UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
             }
         }
@@ -822,7 +822,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             TResultSetParser parser(result.GetResultSetParser(0));
             for (size_t i = 0; parser.TryNextRow(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUuid().ToString(), testUuids[i]);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Value").GetOptionalInt32().GetRef(), i);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Value").GetOptionalInt32().value(), i);
             }
         }
     }
@@ -877,7 +877,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
                 TResultSetParser parser(result.GetResultSetParser(0));
                 UNIT_ASSERT(parser.TryNextRow());
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), val++);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().value(), val++);
                 UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
             }
         }
@@ -963,7 +963,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             TResultSetParser parser(result.GetResultSetParser(0));
             for (size_t i = 0; parser.TryNextRow(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetUuid().ToString(), testUuids[i]);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), i);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().value(), i);
             }
         }
     }
@@ -1029,7 +1029,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
                 TResultSetParser parser(result.GetResultSetParser(0));
                 UNIT_ASSERT(parser.TryNextRow());
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), val++);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().value(), val++);
                 UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
             }
         }

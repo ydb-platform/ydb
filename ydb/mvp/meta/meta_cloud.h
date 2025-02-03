@@ -8,12 +8,12 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/api/client/yc_private/resourcemanager/cloud_service.grpc.pb.h>
 #include <ydb/mvp/core/core_ydb.h>
@@ -46,7 +46,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
 
         {
@@ -69,7 +69,7 @@ public:
                 << "SELECT resource_manager, mvp_token FROM `" + Location.RootDomain + "/ydb/Endpoints.db` WHERE "
                 << "location=$location";
 
-            NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+            NActors::TActorSystem* actorSystem = ctx.ActorSystem();
             NActors::TActorId actorId = ctx.SelfID;
             NYdb::TParamsBuilder params;
             params.AddParam("$location", NYdb::TValueBuilder().Utf8(location).Build());
@@ -101,7 +101,7 @@ public:
                 TString resource_manager = ColumnValueToString(rsParser.GetValue("resource_manager"));
                 TString token = ColumnValueToString(rsParser.GetValue("mvp_token"));
                 if (resource_manager) {
-                    NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+                    NActors::TActorSystem* actorSystem = ctx.ActorSystem();
                     NActors::TActorId actorId = ctx.SelfID;
                     yandex::cloud::priv::resourcemanager::v1::GetCloudRequest request;
 

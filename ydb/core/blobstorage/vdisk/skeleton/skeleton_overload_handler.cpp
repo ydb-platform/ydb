@@ -262,10 +262,21 @@ namespace NKikimr {
             ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
             ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
             ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
+            ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
 
             return CurrentSstCount > minSstCount ||
                 CurrentInplacedSize > minInplacedSize ||
-                CurrentOccupancy > minOccupancy;
+                CurrentOccupancy > minOccupancy ||
+                CurrentLogChunkCount > minLogChunkCount;
+        }
+
+        ui32 GetThrottlingRate() const {
+            if (!IsActive()) {
+                return 1000;
+            }
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            double rate = (double)CurrentSpeedLimit / deviceSpeed;
+            return rate * 1000;
         }
 
         TDuration BytesToDuration(ui64 bytes) const {
@@ -477,6 +488,14 @@ namespace NKikimr {
 
     void TOverloadHandler::SetLogChunkCount(ui32 logChunkCount) {
         LogChunkCount = logChunkCount;
+    }
+
+    bool TOverloadHandler::IsThrottling() const {
+        return ThrottlingController->IsActive();
+    }
+
+    ui32 TOverloadHandler::GetThrottlingRate() const {
+        return ThrottlingController->GetThrottlingRate();
     }
 
     template <class TEv>

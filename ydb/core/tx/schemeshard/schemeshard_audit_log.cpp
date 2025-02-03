@@ -298,7 +298,7 @@ TParts ImportKindSpecificParts(const Proto& proto) {
 template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromS3Settings& proto) {
     return {
         {"import_type", "s3"},
-        {"export_item_count", ToString(proto.items().size())},
+        {"import_item_count", ToString(proto.items().size())},
         {"import_s3_bucket", proto.bucket()},
         //NOTE: take first item's source_prefix as a "good enough approximation"
         // (each item has its own source_prefix, but in practice they are all the same)

@@ -31,7 +31,7 @@ class YdbClusterInstance():
             self._database = database
             self._mon_port = 8765
         else:
-            config = KikimrConfigGenerator()
+            config = KikimrConfigGenerator(extra_feature_flags=["enable_column_store"])
             cluster = KiKiMR(configurator=config)
             cluster.start()
             node = cluster.nodes[1]

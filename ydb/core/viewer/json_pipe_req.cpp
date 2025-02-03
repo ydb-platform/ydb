@@ -47,13 +47,13 @@ void TViewerPipeClient::BuildParamsFromJson(TStringBuf data) {
 void TViewerPipeClient::SetupTracing(const TString& handlerName) {
     auto request = GetRequest();
     NWilson::TTraceId traceId;
-    TStringBuf traceparent = request.GetHeader("traceparent");
+    TString traceparent = request.GetHeader("traceparent");
     if (traceparent) {
         traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
     }
-    TStringBuf wantTrace = request.GetHeader("X-Want-Trace");
-    TStringBuf traceVerbosity = request.GetHeader("X-Trace-Verbosity");
-    TStringBuf traceTTL = request.GetHeader("X-Trace-TTL");
+    TString wantTrace = request.GetHeader("X-Want-Trace");
+    TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
+    TString traceTTL = request.GetHeader("X-Trace-TTL");
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
         ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
         if (traceVerbosity) {
@@ -803,9 +803,13 @@ void TViewerPipeClient::RequestDone(ui32 requests) {
     if (!DelayedRequests.empty()) {
         SendDelayedRequests();
     }
-    if (Requests == 0) {
+    if (Requests == 0 && !PassedAway) {
         ReplyAndPassAway();
     }
+}
+
+void TViewerPipeClient::CancelAllRequests() {
+    DelayedRequests.clear();
 }
 
 void TViewerPipeClient::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
@@ -821,17 +825,15 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
         if (ResourceNavigateResponse->IsOk()) {
             TSchemeCacheNavigate::TEntry& entry(ResourceNavigateResponse->Get()->Request->ResultSet.front());
             SharedDatabase = CanonizePath(entry.Path);
-            if (SharedDatabase == AppData()->TenantName) {
-                Direct = true;
-                Bootstrap(); // retry bootstrap without redirect this time
-            } else {
-                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
-            }
+            Direct |= (SharedDatabase == AppData()->TenantName);
+            DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
+            --Requests; // don't count this request
         } else {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"));
+            AddEvent("Failed to resolve database - shared database not found");
+            Direct = true;
+            Bootstrap(); // retry bootstrap without redirect this time
         }
     }
-    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -841,28 +843,36 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
             TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
             if (entry.DomainInfo && entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                 ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(TPathId(entry.DomainInfo->ResourcesDomainKey));
+                --Requests; // don't count this request
                 Become(&TViewerPipeClient::StateResolveResource);
             } else {
-                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(CanonizePath(entry.Path));
+                Database = CanonizePath(entry.Path);
+                DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(Database);
+                --Requests; // don't count this request
             }
         } else {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"));
+            AddEvent("Failed to resolve database - not found");
+            Direct = true;
+            Bootstrap(); // retry bootstrap without redirect this time
         }
     }
-    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
     if (DatabaseBoardInfoResponse) {
         DatabaseBoardInfoResponse->Set(std::move(ev));
         if (DatabaseBoardInfoResponse->IsOk()) {
-            return ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
+            if (Direct) {
+                Bootstrap(); // retry bootstrap without redirect this time
+            } else {
+                ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
+            }
         } else {
+            AddEvent("Failed to resolve database nodes");
             Direct = true;
             Bootstrap(); // retry bootstrap without redirect this time
         }
     }
-    RequestDone();
 }
 
 void TViewerPipeClient::HandleTimeout() {
@@ -887,15 +897,17 @@ STATEFN(TViewerPipeClient::StateResolveResource) {
 
 void TViewerPipeClient::RedirectToDatabase(const TString& database) {
     DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(database);
+    --Requests; // don't count this request
     Become(&TViewerPipeClient::StateResolveDatabase);
 }
 
 bool TViewerPipeClient::NeedToRedirect() {
     auto request = GetRequest();
-    if (request) {
+    if (NeedRedirect && request) {
+        NeedRedirect = false;
         Direct |= !request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
-        if (Database && !Direct) {
+        if (Database) {
             RedirectToDatabase(Database); // to find some dynamic node and redirect query there
             return true;
         }
@@ -913,6 +925,8 @@ void TViewerPipeClient::PassAway() {
         Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
     }
     ClosePipes();
+    CancelAllRequests();
+    PassedAway = true;
     TBase::PassAway();
 }
 

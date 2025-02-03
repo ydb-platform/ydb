@@ -286,6 +286,8 @@ struct TConverterTraits {
     template<typename TTzDate, bool Nullable>
     using TTzDateConverter = TTzDateBlockItemConverter<TTzDate, Nullable>;
 
+    constexpr static bool PassType = false;
+
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         if (desc.PassByValue) {
             return std::make_unique<TFixedSize<ui64, true>>();
@@ -328,7 +330,7 @@ struct TConverterTraits {
 } // namespace
 
 std::unique_ptr<IBlockItemConverter> MakeBlockItemConverter(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type, const NUdf::IPgBuilder& pgBuilder) {
-    return NYql::NUdf::MakeBlockReaderImpl<TConverterTraits>(typeInfoHelper, type, &pgBuilder);
+    return NYql::NUdf::DispatchByArrowTraits<TConverterTraits>(typeInfoHelper, type, &pgBuilder);
 }
 
 } // namespace NMiniKQL

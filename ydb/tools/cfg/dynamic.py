@@ -20,19 +20,19 @@ class DynamicConfigGenerator(object):
         output_dir,
         grpc_endpoint=None,
         local_binary_path=None,
-        walle_provider=None,
+        host_info_provider=None,
         **kwargs
     ):
         self._template = template
         self._binary_path = binary_path
         self._local_binary_path = local_binary_path or binary_path
         self._output_dir = output_dir
-        self._walle_provider = walle_provider
-        self._cluster_details = base.ClusterDetailsProvider(template, walle_provider=self._walle_provider)
+        self._host_info_provider = host_info_provider
+        self._cluster_details = base.ClusterDetailsProvider(template, host_info_provider=self._host_info_provider)
         self._grpc_endpoint = grpc_endpoint
         self.__configure_request = None
         self.__static_config = static.StaticConfigGenerator(
-            template, binary_path, output_dir, walle_provider=walle_provider, local_binary_path=local_binary_path
+            template, binary_path, output_dir, host_info_provider=host_info_provider, local_binary_path=local_binary_path
         )
 
     @property

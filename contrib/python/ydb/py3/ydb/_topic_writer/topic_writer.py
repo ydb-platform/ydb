@@ -15,7 +15,7 @@ from .._grpc.grpcwrapper.common_utils import IToProto
 from .._grpc.grpcwrapper.ydb_topic_public_types import PublicCodec
 from .. import connection
 
-Message = typing.Union["PublicMessage", "PublicMessage.SimpleMessageSourceType"]
+Message = typing.Union["PublicMessage", "PublicMessage.SimpleSourceType"]
 
 
 @dataclass
@@ -91,20 +91,23 @@ class PublicWriterInitInfo:
 class PublicMessage:
     seqno: Optional[int]
     created_at: Optional[datetime.datetime]
-    data: "PublicMessage.SimpleMessageSourceType"
+    data: "PublicMessage.SimpleSourceType"
+    metadata_items: Optional[Dict[str, "PublicMessage.SimpleSourceType"]]
 
-    SimpleMessageSourceType = Union[str, bytes]  # Will be extend
+    SimpleSourceType = Union[str, bytes]  # Will be extend
 
     def __init__(
         self,
-        data: SimpleMessageSourceType,
+        data: SimpleSourceType,
         *,
+        metadata_items: Optional[Dict[str, "PublicMessage.SimpleSourceType"]] = None,
         seqno: Optional[int] = None,
         created_at: Optional[datetime.datetime] = None,
     ):
         self.seqno = seqno
         self.created_at = created_at
         self.data = data
+        self.metadata_items = metadata_items
 
     @staticmethod
     def _create_message(data: Message) -> "PublicMessage":
@@ -117,30 +120,37 @@ class InternalMessage(StreamWriteMessage.WriteRequest.MessageData, IToProto):
     codec: PublicCodec
 
     def __init__(self, mess: PublicMessage):
+        metadata_items = mess.metadata_items or {}
         super().__init__(
             seq_no=mess.seqno,
             created_at=mess.created_at,
             data=mess.data,
+            metadata_items=metadata_items,
             uncompressed_size=len(mess.data),
             partitioning=None,
         )
         self.codec = PublicCodec.RAW
 
-    def get_bytes(self) -> bytes:
-        if self.data is None:
+    def _get_bytes(self, obj: Optional[PublicMessage.SimpleSourceType]) -> bytes:
+        if obj is None:
             return bytes()
-        if isinstance(self.data, bytes):
-            return self.data
-        if isinstance(self.data, str):
-            return self.data.encode("utf-8")
+        if isinstance(obj, bytes):
+            return obj
+        if isinstance(obj, str):
+            return obj.encode("utf-8")
         raise ValueError("Bad data type")
 
+    def get_data_bytes(self) -> bytes:
+        return self._get_bytes(self.data)
+
     def to_message_data(self) -> StreamWriteMessage.WriteRequest.MessageData:
-        data = self.get_bytes()
+        data = self.get_data_bytes()
+        metadata_items = {key: self._get_bytes(value) for key, value in self.metadata_items.items()}
         return StreamWriteMessage.WriteRequest.MessageData(
             seq_no=self.seq_no,
             created_at=self.created_at,
             data=data,
+            metadata_items=metadata_items,
             uncompressed_size=len(data),
             partitioning=None,  # unsupported by server now
         )
@@ -221,6 +231,7 @@ _message_data_overhead = (
                     seq_no=_max_int,
                     created_at=datetime.datetime(3000, 1, 1, 1, 1, 1, 1),
                     data=bytes(1),
+                    metadata_items={},
                     uncompressed_size=_max_int,
                     partitioning=StreamWriteMessage.PartitioningMessageGroupID(
                         message_group_id="a" * 100,

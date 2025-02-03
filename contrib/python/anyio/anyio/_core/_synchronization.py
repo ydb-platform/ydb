@@ -728,6 +728,5 @@ class ResourceGuard:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> bool | None:
+    ) -> None:
         self._guarded = False
-        return None

@@ -11,8 +11,6 @@
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-
 #include <util/string/builder.h>
 
 #include <util/system/mutex.h>

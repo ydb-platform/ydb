@@ -157,43 +157,42 @@ class LoadSuiteBase:
             s = f'{int(duration)}s ' if duration >= 1 else ''
             return f'{s}{int(duration * 1000) % 1000}ms'
 
-        def _attach_plans(plan: YdbCliHelper.QueryPlan) -> None:
+        def _attach_plans(plan: YdbCliHelper.QueryPlan, name: str) -> None:
             if plan.plan is not None:
-                allure.attach(json.dumps(plan.plan), 'Plan json', attachment_type=allure.attachment_type.JSON)
+                allure.attach(json.dumps(plan.plan), f'{name} json', attachment_type=allure.attachment_type.JSON)
             if plan.table is not None:
-                allure.attach(plan.table, 'Plan table', attachment_type=allure.attachment_type.TEXT)
+                allure.attach(plan.table, f'{name} table', attachment_type=allure.attachment_type.TEXT)
             if plan.ast is not None:
-                allure.attach(plan.ast, 'Plan ast', attachment_type=allure.attachment_type.TEXT)
+                allure.attach(plan.ast, f'{name} ast', attachment_type=allure.attachment_type.TEXT)
             if plan.svg is not None:
-                allure.attach(plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
+                allure.attach(plan.svg, f'{name} svg', attachment_type=allure.attachment_type.SVG)
+            if plan.stats is not None:
+                allure.attach(plan.stats, f'{name} stats', attachment_type=allure.attachment_type.TEXT)
 
         test = cls._test_name(query_num)
         stats = result.stats.get(test)
-        if stats is not None:
-            allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
-        else:
+        if stats is None:
             stats = {}
         if result.query_out is not None:
             allure.attach(result.query_out, 'Query output', attachment_type=allure.attachment_type.TEXT)
 
-        if result.explain_plan is not None:
+        if result.explain.final_plan is not None:
             with allure.step('Explain'):
-                _attach_plans(result.explain_plan)
+                _attach_plans(result.explain.final_plan, 'Plan')
 
-        if result.plans is not None:
-            for i in range(iterations):
-                s = allure.step(f'Iteration {i}')
-                if i in result.time_by_iter:
-                    s.params['duration'] = _duration_text(result.time_by_iter[i])
-                try:
-                    with s:
-                        _attach_plans(result.plans[i])
-                        if i in result.time_by_iter:
-                            allure.dynamic.parameter('duration', _duration_text(result.time_by_iter[i]))
-                        if i in result.errors_by_iter:
-                            pytest.fail(result.errors_by_iter[i])
-                except BaseException:
-                    pass
+        for iter_num in sorted(result.iterations.keys()):
+            iter_res = result.iterations[iter_num]
+            s = allure.step(f'Iteration {iter_num}')
+            if iter_res.time:
+                s.params['duration'] = _duration_text(iter_res.time)
+            try:
+                with s:
+                    _attach_plans(iter_res.final_plan, 'Final plan')
+                    _attach_plans(iter_res.in_progress_plan, 'In-progress plan')
+                    if iter_res.error_message:
+                        pytest.fail(iter_res.error_message)
+            except BaseException:
+                pass
 
         if result.stdout is not None:
             allure.attach(result.stdout, 'Stdout', attachment_type=allure.attachment_type.TEXT)
@@ -222,9 +221,11 @@ class LoadSuiteBase:
             error_message = 'There are fail attemps'
         if os.getenv('NO_KUBER_LOGS') is None and not success:
             cls._attach_logs(start_time=result.start_time, attach_name='kikimr')
+        stats['with_warrnings'] = bool(result.warning_message)
+        stats['with_errors'] = bool(error_message)
+        stats['errors'] = result.get_error_stats()
+        allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
         if upload:
-            stats['with_warrnings'] = bool(result.warning_message)
-            stats['with_errors'] = bool(error_message)
             ResultsProcessor.upload_results(
                 kind='Load',
                 suite=cls.suite(),

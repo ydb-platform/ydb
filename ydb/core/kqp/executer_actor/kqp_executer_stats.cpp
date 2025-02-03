@@ -1144,6 +1144,10 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             ExportAggStats(a.Rows, *aggrStat.MutableRows());
         }
     }
+
+    for (const auto& [_, tableStats] : TableStats) {
+        stats.AddTables()->CopyFrom(*tableStats);
+    }
 }
 
 void TQueryExecutionStats::AdjustAsyncAggr(NYql::NDqProto::TDqAsyncStatsAggr& stats) {

@@ -29,6 +29,9 @@ class TDataAccessorsResult;
 namespace NIndexes {
 class TIndexMetaContainer;
 }
+namespace NDataLocks {
+class ILock;
+}
 }   // namespace NKikimr::NOlap
 namespace arrow {
 class RecordBatch;
@@ -61,6 +64,7 @@ public:
         Cleanup,
         GC
     };
+    YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
 
 protected:
     virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {
@@ -145,6 +149,7 @@ protected:
 private:
     inline static const NKikimrConfig::TColumnShardConfig DefaultConfig = {};
 
+public:
     static const NKikimrConfig::TColumnShardConfig& GetConfig() {
         if (HasAppData()) {
             return AppDataVerified().ColumnShardConfig;
@@ -152,12 +157,11 @@ private:
         return DefaultConfig;
     }
 
-public:
     const NOlap::NSplitter::TSplitSettings& GetBlobSplitSettings(
         const NOlap::NSplitter::TSplitSettings& defaultValue = Default<NOlap::NSplitter::TSplitSettings>()) {
         return DoGetBlobSplitSettings(defaultValue);
     }
-
+    virtual bool CheckPortionsToMergeOnCompaction(const ui64 memoryAfterAdd, const ui32 currentSubsetsCount);
     virtual void OnRequestTracingChanges(
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }
@@ -329,6 +333,9 @@ public:
         Y_UNUSED(txInfo);
     }
 
+    virtual THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>> GetExternalDataLocks() const {
+        return {};
+    }
 };
 
 class TControllers {
@@ -337,7 +344,7 @@ private:
 
 public:
     template <class TController>
-    class TGuard: TNonCopyable {
+    class TGuard: TMoveOnly {
     private:
         std::shared_ptr<TController> Controller;
 
@@ -347,12 +354,22 @@ public:
             Y_ABORT_UNLESS(Controller);
         }
 
+        TGuard(TGuard&& other)
+            : TGuard(other.Controller) {
+            other.Controller = nullptr;
+        }
+        TGuard& operator=(TGuard&& other) {
+            std::swap(Controller, other.Controller);
+        }
+
         TController* operator->() {
             return Controller.get();
         }
 
         ~TGuard() {
-            Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+            if (Controller) {
+                Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+            }
         }
     };
 

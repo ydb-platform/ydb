@@ -67,8 +67,8 @@ public:
 class IFetchingStep: public TNonCopyable {
 private:
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY(TDuration, SumDuration, TDuration::Zero());
-    YDB_READONLY(ui64, SumSize, 0);
+    TAtomicCounter SumDuration;
+    TAtomicCounter SumSize;
     TFetchingStepSignals Signals;
 
 protected:
@@ -78,12 +78,20 @@ protected:
     }
 
 public:
+    TDuration GetSumDuration() const {
+        return TDuration::MicroSeconds(SumDuration.Val());
+    }
+
+    ui64 GetSumSize() const {
+        return SumSize.Val();
+    }
+
     void AddDuration(const TDuration d) {
-        SumDuration += d;
+        SumDuration.Add(d.MicroSeconds());
         Signals.AddDuration(d);
     }
     void AddDataSize(const ui64 size) {
-        SumSize += size;
+        SumSize.Add(size);
         Signals.AddBytes(size);
     }
 
@@ -163,6 +171,64 @@ public:
     }
 
     ui32 Execute(const ui32 startStepIdx, const std::shared_ptr<IDataSource>& source) const;
+};
+
+class TFetchingScriptOwner: TNonCopyable {
+private:
+    TAtomic InitializationDetector = 0;
+    std::shared_ptr<TFetchingScript> Script;
+
+    void FinishInitialization(std::shared_ptr<TFetchingScript>&& script) {
+        AFL_VERIFY(AtomicCas(&InitializationDetector, 1, 2));
+        Script = std::move(script);
+    }
+
+public:
+    const std::shared_ptr<TFetchingScript>& GetScriptVerified() const {
+        AFL_VERIFY(Script);
+        return Script;
+    }
+
+    TString DebugString() const {
+        if (Script) {
+            return TStringBuilder() << Script->DebugString() << Endl;
+        } else {
+            return TStringBuilder() << "NO_SCRIPT" << Endl;
+        }
+    }
+
+    bool HasScript() const {
+        return !!Script;
+    }
+
+    bool NeedInitialization() const {
+        return AtomicGet(InitializationDetector) != 1;
+    }
+
+    class TInitializationGuard: TNonCopyable {
+    private:
+        TFetchingScriptOwner& Owner;
+
+    public:
+        TInitializationGuard(TFetchingScriptOwner& owner)
+            : Owner(owner) {
+            Owner.StartInitialization();
+        }
+        void InitializationFinished(std::shared_ptr<TFetchingScript>&& script) {
+            Owner.FinishInitialization(std::move(script));
+        }
+        ~TInitializationGuard() {
+            AFL_VERIFY(!Owner.NeedInitialization());
+        }
+    };
+
+    std::optional<TInitializationGuard> StartInitialization() {
+        if (AtomicCas(&InitializationDetector, 2, 0)) {
+            return std::optional<TInitializationGuard>(*this);
+        } else {
+            return std::nullopt;
+        }
+    }
 };
 
 class TColumnsAccumulator {

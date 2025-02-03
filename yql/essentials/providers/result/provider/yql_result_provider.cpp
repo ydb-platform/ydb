@@ -619,13 +619,13 @@ namespace {
             input.Ptr()->SetState(TExprNode::EState::ExecutionInProgress);
             auto status = DelegatedProvider->GetCallableExecutionTransformer().Transform(DelegatedNode, DelegatedNodeOutput, ctx);
             if (status.Level != TStatus::Async) {
-                FinishNode(*input.Ptr(), ctx, status);
+                status = FinishNode(*input.Ptr(), ctx, status);
             }
 
             return status;
         }
 
-        void FinishNode(TExprNode& input, TExprContext& ctx, IGraphTransformer::TStatus status) {
+        IGraphTransformer::TStatus FinishNode(TExprNode& input, TExprContext& ctx, IGraphTransformer::TStatus status) {
             if (status.Level == TStatus::Ok) {
                 auto data = DelegatedNode->GetResult().Content();
                 const bool needWriter = input.Content() != TResIf::CallableName()
@@ -638,6 +638,7 @@ namespace {
                 } else {
                     input.SetResult(ctx.NewAtom(input.Pos(), data));
                     input.SetState(TExprNode::EState::ExecutionRequired);
+                    status = IGraphTransformer::TStatus::Repeat;
                 }
             } else if (status.Level == TStatus::Error) {
                 if (const auto issies = ctx.AssociativeIssues.extract(DelegatedNode.Get())) {
@@ -650,6 +651,7 @@ namespace {
             DelegatedProvider = nullptr;
             DelegatedNode = nullptr;
             DelegatedNodeOutput = nullptr;
+            return status;
         }
 
     private:

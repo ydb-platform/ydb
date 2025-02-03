@@ -105,6 +105,8 @@ public:
         Functions["Iterator"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ForwardList"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["LazyList"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["TableSource"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["WideTableSource"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ToFlow"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["FromFlow"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ToStream"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
@@ -241,7 +243,6 @@ public:
         Functions["WideSortBlocks"] = &TCallableConstraintTransformer::WideTopWrap<true>;
         Functions["WideToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["WideFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
-        Functions["BlockExpandChunked"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ReplicateScalars"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;

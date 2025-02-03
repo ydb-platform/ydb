@@ -329,6 +329,7 @@ public:
         TMaybe<Table::ReadCentric::Type> ReadCentric; // null on old versions
         Table::NextVSlotId::Type NextVSlotId; // null on old versions
         Table::PDiskConfig::Type PDiskConfig;
+        bool ShredComplete;
         TBoxId BoxId;
         ui32 ExpectedSlotCount = 0;
         bool HasExpectedSlotCount = false;
@@ -349,6 +350,8 @@ public:
         TString LastSeenPath;
         const ui32 StaticSlotUsage = 0;
 
+        bool ShredInProgress = false; // set to true when shredding is started for this disk
+
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
             static TTableAdapter<Table, TPDiskInfo,
@@ -365,7 +368,8 @@ public:
                     Table::ExpectedSerial,
                     Table::LastSeenSerial,
                     Table::LastSeenPath,
-                    Table::DecommitStatus
+                    Table::DecommitStatus,
+                    Table::ShredComplete
                 > adapter(
                     &TPDiskInfo::Path,
                     &TPDiskInfo::Kind,
@@ -380,7 +384,8 @@ public:
                     &TPDiskInfo::ExpectedSerial,
                     &TPDiskInfo::LastSeenSerial,
                     &TPDiskInfo::LastSeenPath,
-                    &TPDiskInfo::DecommitStatus
+                    &TPDiskInfo::DecommitStatus,
+                    &TPDiskInfo::ShredComplete
                 );
             callback(&adapter);
         }
@@ -402,7 +407,8 @@ public:
                    const TString& expectedSerial,
                    const TString& lastSeenSerial,
                    const TString& lastSeenPath,
-                   ui32 staticSlotUsage)
+                   ui32 staticSlotUsage,
+                   bool shredComplete)
             : HostId(hostId)
             , Path(path)
             , Kind(kind)
@@ -411,6 +417,7 @@ public:
             , ReadCentric(readCentric)
             , NextVSlotId(nextVSlotId)
             , PDiskConfig(std::move(pdiskConfig))
+            , ShredComplete(shredComplete)
             , BoxId(boxId)
             , Status(status)
             , StatusTimestamp(statusTimestamp)
@@ -1503,6 +1510,14 @@ public:
     using THostRecordMap = std::shared_ptr<THostRecordMapImpl>;
 
 private:
+    using TYamlConfig = std::tuple<TString, ui64, TString>; // yaml, configVersion, yamlReturnedByFetch; this tuple must not change
+
+    static TString CompressYamlConfig(const TYamlConfig& configYaml);
+    static TString CompressStorageYamlConfig(const TString& storageConfigYaml);
+    static TYamlConfig DecompressYamlConfig(const TString& buffer);
+    static TString DecompressStorageYamlConfig(const TString& buffer);
+
+private:
     TString InstanceId;
     std::shared_ptr<std::atomic_uint64_t> SelfHealUnreassignableGroups = std::make_shared<std::atomic_uint64_t>();
     TMaybe<TActorId> MigrationId;
@@ -1540,10 +1555,9 @@ private:
     TDuration ScrubPeriodicity;
     NKikimrBlobStorage::TStorageConfig StorageConfig;
     bool SelfManagementEnabled = false;
-    TString YamlConfig;
-    ui32 ConfigVersion = 0;
+    std::optional<TYamlConfig> YamlConfig;
+    std::optional<TString> StorageYamlConfig; // if separate config is in effect
     TBackoffTimer GetBlockBackoff{1, 1000};
-    NKikimrBlobStorage::TShredState ShredState;
 
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
@@ -1554,6 +1568,9 @@ private:
     bool StorageConfigObtained = false;
     bool Loaded = false;
     std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
+
+    struct TLifetimeToken {};
+    std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
 
     std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
 
@@ -1585,6 +1602,7 @@ private:
             EvVSlotNotReadyHistogramUpdate,
             EvProcessIncomingEvent,
             EvUpdateHostRecords,
+            EvUpdateShredState,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1626,6 +1644,7 @@ private:
     void CommitScrubUpdates(TConfigState& state, TTransactionContext& txc);
     void CommitStoragePoolStatUpdates(TConfigState& state);
     void CommitSysViewUpdates(TConfigState& state);
+    void CommitShredUpdates(TConfigState& state);
 
     void InitializeSelfHealState();
     void FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state);
@@ -1783,7 +1802,6 @@ private:
     void ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender);
 
     void StartConsoleInteraction();
-    void MakeCommitToConsole();
 
     void RenderResourceValues(IOutputStream& out, const TResourceRawValues& current);
     void RenderHeader(IOutputStream& out);
@@ -1847,7 +1865,35 @@ private:
     void ForwardToSystemViewsCollector(STATEFN_SIG);
     void Handle(TEvPrivate::TEvUpdateSystemViews::TPtr &ev);
     void Handle(TEvBlobStorage::TEvGetBlockResult::TPtr &ev);
-    void Handle(TEvBlobStorage::TEvControllerShredRequest::TPtr ev);
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Shred support
+
+    class TShredState {
+        friend class TBlobStorageController;
+        friend class TTxUpdateShred;
+        class TImpl;
+        std::unique_ptr<TImpl> Impl;
+
+    public:
+        TShredState(TBlobStorageController *self);
+        ~TShredState();
+        void Handle(TEvBlobStorage::TEvControllerShredRequest::TPtr ev);
+        void OnLoad(const TString& buffer);
+        void Initialize();
+        void HandleUpdateShredState();
+        std::optional<ui64> GetCurrentGeneration() const;
+        bool ShouldShred(TPDiskId pdiskId, const TPDiskInfo& pdiskInfo) const;
+        void OnShredFinished(TPDiskId pdiskId, TPDiskInfo& pdiskInfo, ui64 generation, TTransactionContext& txc);
+        void OnShredAborted(TPDiskId pdiskId, TPDiskInfo& pdiskInfo);
+        void OnNodeReportTxComplete();
+        void OnRegisterNode(TPDiskId pdiskId, std::optional<ui64> shredCompleteGeneration, bool shredInProgress,
+            TTransactionContext& txc);
+        void OnWardenConnected(TNodeId nodeId);
+        void Render(IOutputStream& str, const TCgiParameters& cgi);
+    };
+
+    TShredState ShredState{this};
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Scrub handling
@@ -1926,7 +1972,9 @@ private:
     ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
-    ITransaction* CreateTxCommitConfig(TString& yamlConfig, ui64 configVersion, NKikimrBlobStorage::TStorageConfig& storageConfig);
+    ITransaction* CreateTxCommitConfig(std::optional<TYamlConfig>&& yamlConfig,
+        std::optional<std::optional<TString>>&& storageYamlConfig,
+        std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig);
 
     struct TVDiskAvailabilityTiming {
         TVSlotId VSlotId;
@@ -2087,7 +2135,7 @@ public:
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedNotify, Handle);
             cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
-            hFunc(TEvBlobStorage::TEvControllerShredRequest, Handle);
+            hFunc(TEvBlobStorage::TEvControllerShredRequest, ShredState.Handle);
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
@@ -2127,6 +2175,8 @@ public:
                 (Event, ev->ToString()));
             StateWork(ev);
         }
+
+        ShredState.Initialize();
     }
 
     void UpdatePDisksCounters() {

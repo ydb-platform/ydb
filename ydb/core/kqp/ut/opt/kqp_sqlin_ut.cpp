@@ -1,5 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
 
         // empty parameters
         {
-            TMap<TString, TType> paramsType;
+            std::map<std::string, TType> paramsType;
             paramsType.emplace("$in", TTypeBuilder().BeginList().Primitive(EPrimitiveType::Uint64).EndList().Build());
             auto params = TParamsBuilder(paramsType);
 
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 }
             }
             if (optionalParam) {
-                pl.AddListItem().OptionalUint64(Nothing());
+                pl.AddListItem().OptionalUint64(std::nullopt);
             }
             pl.EndList().Build();
 
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 .AddListItem().OptionalUint64(1)
                 .AddListItem().OptionalUint64(2)
                 .AddListItem().OptionalUint64(42)
-                .AddListItem().OptionalUint64(Nothing())
+                .AddListItem().OptionalUint64(std::nullopt)
                 .EndList().Build().Build();
         auto result = ExecQueryAndTestResult(session, query, params,
                 R"([[[3u];["Three"]];
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 }
             }
             if (optionalParam) {
-                pl.AddListItem().OptionalString(Nothing());
+                pl.AddListItem().OptionalString(std::nullopt);
             }
             pl.EndList().Build();
 
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 .AddListItem().OptionalString("Tony")
                 .AddListItem().OptionalString("Hugo")
                 .AddListItem().OptionalString("Logan")
-                .AddListItem().OptionalString(Nothing())
+                .AddListItem().OptionalString(std::nullopt)
                 .EndList().Build().Build();
         auto result = ExecQueryAndTestResult(session, query, params,
                 R"([[[1u];["Anna"];[3500u];["None"]];
@@ -296,7 +296,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 .AddListItem().OptionalString("Tony")
                 .AddListItem().OptionalString("Harry")
                 .AddListItem().OptionalString("Hugo")
-                .AddListItem().OptionalString(Nothing())
+                .AddListItem().OptionalString(std::nullopt)
                 .EndList().Build().Build();
         auto result = ExecQueryAndTestResult(session, query, params,
                 R"([[[2u];["Tony"];[7200u];["None"]];
@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     .AddListItem().OptionalString("Tony")
                     .AddListItem().OptionalString("Jack")
                     .AddListItem().OptionalString("Hugo")
-                    .AddListItem().OptionalString(Nothing())
+                    .AddListItem().OptionalString(std::nullopt)
                     .EndList().Build()
                 .Build();
 
@@ -564,13 +564,13 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     .AddListItem().OptionalInt32(1)
                     .AddListItem().OptionalInt32(2)
                     .AddListItem().OptionalInt32(42)
-                    .AddListItem().OptionalInt32(Nothing())
+                    .AddListItem().OptionalInt32(std::nullopt)
                 .EndList().Build()
                 .AddParam("$in2").BeginList()
                     .AddListItem().OptionalString("Payload1")
                     .AddListItem().OptionalString("Payload2")
                     .AddListItem().OptionalString("Payload0")
-                    .AddListItem().OptionalString(Nothing())
+                    .AddListItem().OptionalString(std::nullopt)
                 .EndList().Build()
                 .Build();
 
@@ -634,7 +634,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     .AddListItem().OptionalInt32(1)
                     .AddListItem().OptionalInt32(2)
                     .AddListItem().OptionalInt32(42)
-                    .AddListItem().OptionalInt32(Nothing())
+                    .AddListItem().OptionalInt32(std::nullopt)
                     .EndList().Build().Build();
 
             auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");
@@ -672,7 +672,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     .AddListItem().OptionalInt32(1)
                     .AddListItem().OptionalInt32(2)
                     .AddListItem().OptionalInt32(42)
-                    .AddListItem().OptionalInt32(Nothing())
+                    .AddListItem().OptionalInt32(std::nullopt)
                     .EndList().Build().Build();
 
             auto result = ExecQueryAndTestResult(session, query, params, R"([[[1];[1];["Payload1"]]])");
@@ -843,7 +843,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     .AddListItem().BeginTuple().AddElement().OptionalInt32(1).AddElement().String("Fk1").EndTuple()
                     .AddListItem().BeginTuple().AddElement().OptionalInt32(2).AddElement().String("Fk2").EndTuple()
                     .AddListItem().BeginTuple().AddElement().OptionalInt32(42).AddElement().String("Fk5").EndTuple()
-                    .AddListItem().BeginTuple().AddElement().OptionalInt32(Nothing()).AddElement().String("FkNull").EndTuple()
+                    .AddListItem().BeginTuple().AddElement().OptionalInt32(std::nullopt).AddElement().String("FkNull").EndTuple()
                     .EndList().Build().Build();
 
             auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");
@@ -911,7 +911,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).AddMember("v").String("Fk1").EndStruct()
             .AddListItem().BeginStruct().AddMember("k").OptionalInt32(2).AddMember("v").String("Fk2").EndStruct()
             .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).AddMember("v").String("Fk5").EndStruct()
-            .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).AddMember("v").String("FkNull").EndStruct()
+            .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt).AddMember("v").String("FkNull").EndStruct()
             .EndList().Build().Build();
 
         auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");

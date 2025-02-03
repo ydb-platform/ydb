@@ -8,6 +8,7 @@
 #include <util/generic/string.h>
 #include <ydb/library/login/protos/login.pb.h>
 #include <ydb/library/login/password_checker/password_checker.h>
+#include <ydb/library/login/password_checker/hash_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
 
 namespace NLogin {
@@ -21,8 +22,8 @@ public:
     static constexpr auto KEYS_ROTATION_PERIOD = std::chrono::hours(6);
     static constexpr auto KEY_EXPIRE_TIME = std::chrono::hours(24);
 
-    static constexpr size_t SALT_SIZE = 16;
-    static constexpr size_t HASH_SIZE = 32;
+    static constexpr size_t SALT_SIZE = THashChecker::SALT_SIZE;
+    static constexpr size_t HASH_SIZE = THashChecker::HASH_SIZE;
 
     static constexpr const char* GROUPS_CLAIM_NAME = "https://ydb.tech/groups";
     static constexpr const char* EXTERNAL_AUTH_CLAIM_NAME = "external_authentication";
@@ -70,7 +71,7 @@ public:
             SUCCESS,
             INVALID_USER,
             INVALID_PASSWORD,
-            UNAVAILABLE_KEY,
+            UNAVAILABLE_KEY
         };
 
         TString Token;
@@ -94,11 +95,15 @@ public:
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
+        bool IsHashedPassword = false;
+        bool CanLogin = true;
     };
 
     struct TModifyUserRequest : TBasicRequest {
         TString User;
-        TString Password;
+        std::optional<TString> Password;
+        bool IsHashedPassword = false;
+        std::optional<bool> CanLogin;
     };
 
     struct TRemoveUserResponse : TBasicResponse {
@@ -138,11 +143,6 @@ public:
         std::vector<TString> TouchedGroups;
     };
 
-    struct TRemoveGroupRequest : TBasicRequest {
-        TString Group;
-        bool MissingOk;
-    };
-
     struct TRemoveGroupResponse : TBasicResponse {
         std::vector<TString> TouchedGroups;
     };
@@ -160,12 +160,11 @@ public:
     struct TSidRecord {
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
-        TString Hash;
+        TString PasswordHash;
+        bool IsEnabled;
         std::unordered_set<TString> Members;
-        // CreatedAt, FailedLoginAttemptCount, LastFailedLogin, LastSuccessfulLogin do not need in describe result.
-        // We will not add these parameters to security state
         std::chrono::system_clock::time_point CreatedAt;
-        size_t FailedLoginAttemptCount = 0;
+        ui32 FailedLoginAttemptCount = 0;
         std::chrono::system_clock::time_point LastFailedLogin;
         std::chrono::system_clock::time_point LastSuccessfulLogin;
     };
@@ -173,7 +172,7 @@ public:
     // our current audience (database name)
     TString Audience;
 
-    // all users and theirs hashs
+    // all users and groups
     std::unordered_map<TString, TSidRecord> Sids;
 
     // index for fast traversal
@@ -187,6 +186,7 @@ public:
     NLoginProto::TSecurityState GetSecurityState() const;
     void UpdateSecurityState(const NLoginProto::TSecurityState& state);
 
+    bool IsLockedOut(const TSidRecord& user) const;
     TCheckLockOutResponse CheckLockOutUser(const TCheckLockOutRequest& request);
     TLoginUserResponse LoginUser(const TLoginUserRequest& request);
     TValidateTokenResponse ValidateToken(const TValidateTokenRequest& request);
@@ -200,7 +200,8 @@ public:
     TBasicResponse AddGroupMembership(const TAddGroupMembershipRequest& request);
     TBasicResponse RemoveGroupMembership(const TRemoveGroupMembershipRequest& request);
     TRenameGroupResponse RenameGroup(const TRenameGroupRequest& request);
-    TRemoveGroupResponse RemoveGroup(const TRemoveGroupRequest& request);
+    TRemoveGroupResponse RemoveGroup(const TString& group);
+    bool CheckGroupExists(const TString& group);
 
     void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
     void UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer);
@@ -225,11 +226,13 @@ private:
     static void UnlockAccount(TSidRecord* sid);
     bool ShouldResetFailedAttemptCount(const TSidRecord& sid) const;
     bool ShouldUnlockAccount(const TSidRecord& sid) const;
+    bool CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
 
     struct TImpl;
     THolder<TImpl> Impl;
 
     TPasswordChecker PasswordChecker;
+    THashChecker HashChecker;
     TAccountLockout AccountLockout;
 };
 

@@ -565,6 +565,8 @@ message TEvStartKqpTasksRequest {
     optional double ResourceWeight = 18;
 
     optional NKikimrDataEvents.ELockMode LockMode = 19;
+
+    optional string UserToken = 20;
 }
 
 message TEvStartKqpTasksResponse {

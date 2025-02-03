@@ -34,6 +34,7 @@ from pathlib import Path
 from types import ModuleType, TracebackType
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
+from .. import _static
 from .._path import StrPath, same_path as _same_path
 from ..discovery import find_package_path
 from ..warnings import SetuptoolsWarning
@@ -181,7 +182,9 @@ def read_attr(
     spec = _find_spec(module_name, path)
 
     try:
-        return getattr(StaticModule(module_name, spec), attr_name)
+        value = getattr(StaticModule(module_name, spec), attr_name)
+        # XXX: Is marking as static contents coming from modules too optimistic?
+        return _static.attempt_conversion(value)
     except Exception:
         # fallback to evaluate module
         module = _load_spec(spec, module_name)
@@ -329,7 +332,7 @@ def version(value: Callable | Iterable[str | int] | str) -> str:
         return _value
     if hasattr(_value, '__iter__'):
         return '.'.join(map(str, _value))
-    return '%s' % _value
+    return f'{_value}'
 
 
 def canonic_package_data(package_data: dict) -> dict:

@@ -41,7 +41,8 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Y_VERIFY_S(rootPathElements.size() == 1, "invalid root name in domain config: " << rootName << " parts count: " << rootPathElements.size());
 
         TString owner;
-        const NKikimrConfig::TSecurityConfig& securityConfig = Self->GetSecurityConfig();
+        const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = Self->GetDomainsConfig().GetSecurityConfig();
+
         for (const auto& defaultUser : securityConfig.GetDefaultUsers()) {
             auto response = Self->LoginProvider.CreateUser({
                 .User = defaultUser.GetName(),
@@ -51,13 +52,13 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TTxInitRoot DoExecute"
                          << ", path: " << rootName
-                         << ", error creating user: " << defaultUser.GetName()
+                         << ", error creating user: '" << defaultUser.GetName() << "'"
                          << ", error: " << response.Error);
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                    Schema::LoginSids::SidHash,
-                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.Hash, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MilliSeconds());
                 if (owner.empty()) {
                     owner = defaultUser.GetName();
                 }
@@ -90,7 +91,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                         LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "TTxInitRoot DoExecute"
                                 << ", path: " << rootName
-                                << ", error modifying group: " << defaultGroup.GetName()
+                                << ", error modifying group: '" << defaultGroup.GetName() << "'"
                                 << ", with member: " << member
                                 << ", error: " << response.Error);
                     } else {
@@ -122,9 +123,17 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
         NACLib::TDiffACL diffAcl;
         for (const auto& defaultAccess : securityConfig.GetDefaultAccess()) {
-            NACLibProto::TACE ace;
-            NACLib::TACL::FromString(ace, defaultAccess);
-            diffAcl.AddAccess(ace);
+            try {
+                NACLibProto::TACE ace;
+                NACLib::TACL::FromString(ace, defaultAccess);
+                diffAcl.AddAccess(ace);
+            } catch (const yexception& e) {
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "TTxInitRoot DoExecute"
+                                << ", path: " << rootName
+                                << ", error setting access right: '" << defaultAccess << "'"
+                                << ", error: " << e.what());
+            }
         }
         newPath->ApplyACL(diffAcl.SerializeAsString());
         newPath->CachedEffectiveACL.Init(newPath->ACL);
@@ -257,7 +266,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             Self->PersistShardMapping(db, shardIdx, id, Self->RootPathId(), InvalidTxId, type);
 
             subdomain->AddPrivateShard(shardIdx);
-            subdomain->AddInternalShard(shardIdx);
+            subdomain->AddInternalShard(shardIdx, Self);
         }
     }
 
@@ -385,7 +394,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             subdomain->AddStoragePool(x);
         }
 
-        subdomain->SetSchemeLimits(TSchemeLimits::FromProto(schemeLimits));
+        subdomain->SetSchemeLimits(TSchemeLimits::FromProto(schemeLimits), Self);
 
         if (record.HasDeclaredSchemeQuotas()) {
             subdomain->ApplyDeclaredSchemeQuotas(record.GetDeclaredSchemeQuotas(), ctx.Now());

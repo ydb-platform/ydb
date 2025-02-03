@@ -150,7 +150,13 @@ IF (ARCH_ARM64 OR ARCH_X86_64)
 ENDIF()
 EOF
 
-echo 'IF (ARCH_AARCH64)'
+echo 'IF (ARCH_ARM7)'
+echo 'SRCS('
+ls arm/*.S arm/*.c > special
+python3 join.py common special arm
+echo ')'
+
+echo 'ELSEIF (ARCH_AARCH64)'
 echo 'SRCS('
 ls aarch64/*.c cpu_model/aarch64.*c aarch64/*.S > special
 python3 join.py common special aarch

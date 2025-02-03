@@ -4,6 +4,7 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 TEST_SRCS(
     conftest.py
+    test_create_users.py
     test_db_counters.py
     test_dynamic_tenants.py
     test_tenants.py

@@ -24,6 +24,7 @@ struct TCmsSentinelConfig {
     ui32 ChangeStatusRetries;
 
     ui32 DefaultStateLimit;
+    ui32 GoodStateLimit;
     TMap<EPDiskState, ui32> StateLimits;
 
     ui32 DataCenterRatio;
@@ -40,6 +41,7 @@ struct TCmsSentinelConfig {
         config.SetRetryChangeStatus(RetryChangeStatus.GetValue());
         config.SetChangeStatusRetries(ChangeStatusRetries);
         config.SetDefaultStateLimit(DefaultStateLimit);
+        config.SetGoodStateLimit(GoodStateLimit);
         config.SetDataCenterRatio(DataCenterRatio);
         config.SetRoomRatio(RoomRatio);
         config.SetRackRatio(RackRatio);
@@ -57,6 +59,7 @@ struct TCmsSentinelConfig {
         RetryChangeStatus = TDuration::MicroSeconds(config.GetRetryChangeStatus());
         ChangeStatusRetries = config.GetChangeStatusRetries();
         DefaultStateLimit = config.GetDefaultStateLimit();
+        GoodStateLimit = config.GetGoodStateLimit();
         DataCenterRatio = config.GetDataCenterRatio();
         RoomRatio = config.GetRoomRatio();
         RackRatio = config.GetRackRatio();

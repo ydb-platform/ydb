@@ -179,14 +179,14 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
                 << " Postpone# " << (postpone ? "true" : "false")
                 << " SendMeCostSettings# " << (sendMeCostSettings ? "true" : "false"));
 
-        // check if window has enough space for such item
-        if (postpone) {
-            // can't send more items now
-            QLOG_DEBUG_S("BSQ26", "Queue overflow: InFlightCost# " << InFlightCost << " WindowSize# "
-                << WindowSize << " item.Cost# " << item.Cost << " InFlightCount# " << InFlightCount());
-            ++*QueueOverflow;
-            break;
-        }
+        // // check if window has enough space for such item
+        // if (postpone) {
+        //     // can't send more items now
+        //     QLOG_DEBUG_S("BSQ26", "Queue overflow: InFlightCost# " << InFlightCost << " WindowSize# "
+        //         << WindowSize << " item.Cost# " << item.Cost << " InFlightCount# " << InFlightCount());
+        //     ++*QueueOverflow;
+        //     break;
+        // }
 
         if (!item.Event.Relevant()) {
             ++*QueueItemsPruned;

@@ -10,6 +10,7 @@ SRCS(
     yaml_config_helpers.h
     yaml_config_parser.cpp
     yaml_config_parser.h
+    yaml_config_compress.h
 )
 
 PEERDIR(

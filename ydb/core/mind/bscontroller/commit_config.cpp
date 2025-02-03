@@ -36,11 +36,11 @@ namespace NKikimr::NBsController {
             FingerprintOnStart = conf.GetFingerprint();
             auto row = db.Table<Schema::State>().Key(true);
             if (YamlConfig) {
-                row.Update<Schema::State::YamlConfig>(CompressYamlConfig(*YamlConfig));
+                row.Update<Schema::State::YamlConfig>(NYamlConfig::CompressYamlConfig(*YamlConfig));
             }
             if (StorageYamlConfig) {
                 if (*StorageYamlConfig) {
-                    row.Update<Schema::State::StorageYamlConfig>(CompressStorageYamlConfig(**StorageYamlConfig));
+                    row.Update<Schema::State::StorageYamlConfig>(NYamlConfig::CompressStorageYamlConfig(**StorageYamlConfig));
                 } else {
                     row.UpdateToNull<Schema::State::StorageYamlConfig>();
                 }
@@ -60,6 +60,15 @@ namespace NKikimr::NBsController {
             }
             if (YamlConfig) {
                 Self->YamlConfig = std::move(YamlConfig);
+                for (auto& node: Self->Nodes) {
+                    if (node.second.ConnectedServerId) {
+                        auto configPersistEv = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+                        auto* yamlConfig = configPersistEv->Record.MutableYamlConfig();
+                        yamlConfig->SetYAML(NYamlConfig::CompressSingleConfig(*Self->YamlConfig));
+                        yamlConfig->SetConfigVersion(NYamlConfig::GetVersion(*Self->YamlConfig));
+                        Self->SendToWarden(node.first, std::move(configPersistEv), 0);
+                    }
+                }
             }
             if (StorageYamlConfig) {
                 Self->StorageYamlConfig = std::move(*StorageYamlConfig);

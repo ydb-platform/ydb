@@ -66,6 +66,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/library/yaml_config
     ydb/core/base
     ydb/core/base/services
     ydb/core/blobstorage

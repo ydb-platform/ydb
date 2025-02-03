@@ -2240,6 +2240,7 @@ message TAppConfig {
     repeated TLabel Labels = 103;
 
     optional string ConfigStorePath = 104;
+    optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
 }
 
 message TYdbVersion {

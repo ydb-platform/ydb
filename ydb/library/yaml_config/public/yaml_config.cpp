@@ -644,6 +644,10 @@ ui64 GetVersion(const TString& config) {
     return metadata.Version.value_or(0);
 }
 
+ui64 GetVersion(const TYamlConfig& config) {
+    return GetVersion(std::get<0>(config));
+}
+
 struct TMetadataDocument {
     NFyaml::TDocument Doc;
     NFyaml::TMapping Node;

@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/incrhuge/incrhuge.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+#include <ydb/core/util/backoff.h>
 
 namespace NKikimr {
     struct TNodeWardenConfig;
@@ -25,6 +26,8 @@ namespace NKikimr::NStorage {
     constexpr TDuration BackoffMin = TDuration::MilliSeconds(20);
     constexpr TDuration BackoffMax = TDuration::Seconds(5);
     constexpr const char *MockDevicesPath = "/Berkanavt/kikimr/testing/mock_devices.txt";
+    constexpr const char *YamlConfigFileName = "config.yaml";
+    constexpr const char *StorageConfigFileName = "storage.yaml";
 
     template<typename T, typename TPred>
     T *FindOrCreateProtoItem(google::protobuf::RepeatedPtrField<T> *collection, TPred&& pred) {
@@ -139,6 +142,9 @@ namespace NKikimr::NStorage {
 
         ui64 NextConfigCookie = 1;
         std::unordered_map<ui64, std::function<void(TEvBlobStorage::TEvControllerConfigResponse*)>> ConfigInFlight;
+
+        TBackoffTimer ConfigSaveTimer{BackoffMin.MilliSeconds(), BackoffMax.MilliSeconds()};
+        std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
 
         TVector<NPDisk::TDriveData> WorkingLocalDrives;
 
@@ -551,6 +557,11 @@ namespace NKikimr::NStorage {
         void Handle(NPDisk::TEvShredPDiskResult::TPtr ev);
         void Handle(NPDisk::TEvShredPDisk::TPtr ev);
         void ProcessShredStatus(ui64 cookie, ui64 generation, std::optional<TString> error);
+
+        bool SaveConfig(const TString& yaml, const TString& configFileName);
+        bool PersistConfig(const TString& yaml, std::optional<TString> storageYaml = std::nullopt);
+        void LoadConfigVersion();
+
         void Handle(TEvRegisterPDiskLoadActor::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev);
 

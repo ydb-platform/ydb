@@ -357,12 +357,35 @@ public:
         return true;
     }
 
+    void CheckConfigVersion() {
+        const auto& record = Request->Get()->Record;
+        if (Self->YamlConfig && !Self->StorageYamlConfig) {
+            const auto& configVersion = std::get<1>(*Self->YamlConfig);
+            const auto& nodeId = record.GetNodeID();
+            if (record.GetConfigVersion() != configVersion) {
+                if (record.GetConfigVersion() > configVersion) {
+                    STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "Version on node greater than BSC", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
+                }
+                STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN09, "Send update config", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
+                auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+                auto *yamlConfig = ev->Record.MutableYamlConfig();
+                yamlConfig->SetYAML(NYamlConfig::CompressSingleConfig(*Self->YamlConfig));
+                yamlConfig->SetConfigVersion(record.GetConfigVersion());
+                Self->SendToWarden(nodeId, std::move(ev), 0);
+            }
+        }
+        else {
+            // TODO(mregrock): Implement for double config mode
+        }
+    }
+
     void Complete(const TActorContext&) override {
         if (Response) {
             Self->SendInReply(*Request, std::move(Response));
             Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
         }
         Self->ShredState.OnNodeReportTxComplete();
+        CheckConfigVersion();
     }
 };
 

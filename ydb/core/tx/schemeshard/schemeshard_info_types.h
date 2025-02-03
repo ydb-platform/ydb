@@ -2858,7 +2858,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
         TVector<TChangefeedImportDescriptions> Changefeeds;
-        int NextChangefeedIdx = 0;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
@@ -2866,6 +2865,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
         int NextIndexIdx = 0;
+        ui64 NextChangefeedIdx = 0;
         TString Issue;
         int ViewCreationRetries = 0;
 
@@ -2886,7 +2886,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         static bool IsDone(const TItem& item);
     };
-    
+
     ui64 Id;  // TxId from the original TEvCreateImportRequest
     TString Uid;
     EKind Kind;

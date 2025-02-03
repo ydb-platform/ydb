@@ -19,6 +19,7 @@ message ImportProgress {
         PROGRESS_DONE = 4;
         PROGRESS_CANCELLATION = 5;
         PROGRESS_CANCELLED = 6;
+        PROGRESS_CREATE_CHANGEFEEDS = 7;
     }
 }
 

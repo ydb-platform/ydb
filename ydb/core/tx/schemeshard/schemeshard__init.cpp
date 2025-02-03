@@ -4483,6 +4483,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ImportItems::WaitTxId>(InvalidTxId);
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
+                    item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);
                     item.Issue = rowset.GetValueOrDefault<Schema::ImportItems::Issue>(TString());
 
                     if (item.WaitTxId != InvalidTxId) {

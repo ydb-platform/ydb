@@ -87,7 +87,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose( TSchemeShard* ss, TTxId txId, const TImportInfo::TItem& item) {
-    const auto& [changefeed, topic] = item.Changefeed;
+    Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.size());
+    const auto& [changefeed, topic] = item.Changefeeds[item.NextChangefeedIdx];
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
     auto& modifyScheme = *record.AddTransaction();

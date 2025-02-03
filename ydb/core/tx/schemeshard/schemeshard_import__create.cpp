@@ -1230,6 +1230,19 @@ private:
                 if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
                     AllocateTxId(importInfo, itemIdx);
                 } else {
+                    item.State = EState::CreateChangefeed;
+                }
+            }
+            break;
+        
+        case EState::CreateChangefeed:
+            if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
+                item.Issue = *issue;
+                Cancel(importInfo, itemIdx, "issues during changefeed creating");
+            } else {
+                if (item.NextChangefeedIdx++ < item.Changefeeds.size()) {
+                    AllocateTxId(importInfo, itemIdx);
+                } else {
                     item.State = EState::Done;
                 }
             }

@@ -12,9 +12,8 @@ def validate_pr_description(description, is_not_for_cl_valid=True):
             print("::warning::PR description is empty. Please fill it out.")
             return False
 
-        if "### Changelog category" not in description:
-            print("::warning::Missing '### Changelog category'.")
-            return False
+        if "### Changelog category" not in description and "### Changelog entry" not in description:
+            return True
 
         # Extract changelog category section
         category_section = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", description, re.DOTALL)
@@ -29,7 +28,7 @@ def validate_pr_description(description, is_not_for_cl_valid=True):
             return False
 
         category = categories[0]
-        valid_categories = [
+        for_cl_categories = [
             "New feature",
             "Experimental feature",
             "User Interface",
@@ -44,7 +43,7 @@ def validate_pr_description(description, is_not_for_cl_valid=True):
             "Not for changelog (changelog entry is not required)"
         ]
         
-        valid_categories += not_for_cl_categories
+        valid_categories = for_cl_categories + not_for_cl_categories
 
         if not any(cat.startswith(category) for cat in valid_categories):
             print(f"::warning::Invalid Changelog category: {category}")
@@ -57,7 +56,7 @@ def validate_pr_description(description, is_not_for_cl_valid=True):
         if not any(cat.startswith(category) for cat in not_for_cl_categories):
             entry_section = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", description, re.DOTALL)
             if not entry_section or len(entry_section.group(1).strip()) < 20:
-                print("::warning::Changelog entry is too short or missing.")
+                print("::warning::The changelog entry is less than 20 characters or missing.")
                 return False
 
             if category == "Bugfix":

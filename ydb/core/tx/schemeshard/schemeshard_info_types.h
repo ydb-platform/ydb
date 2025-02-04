@@ -2839,7 +2839,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     };
 
     struct TChangefeedImportDescriptions {
-        Ydb::Table::ChangefeedDescription ChangefeedDescription;
+        Ydb::Table::ChangefeedDescription Changefeed;
         Ydb::Topic::DescribeTopicResult Topic;
     };
 

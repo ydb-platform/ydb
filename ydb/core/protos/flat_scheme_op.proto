@@ -2126,11 +2126,10 @@ message TBackupBackupCollection {
     optional string TargetDir = 3; // must be set on Rewrite
 }
 
-message TImportChangefeedTopic {
-    optional Ydb.Table.ChangefeedDescription ChangefeedDescription = 1;
-    optional Ydb.Topic.DescribeTopicResult Topic = 2;
-}
-
 message TImportTableChangefeeds {
+    message TImportChangefeedTopic {
+        optional Ydb.Table.ChangefeedDescription Changefeed = 1;
+        optional Ydb.Topic.DescribeTopicResult Topic = 2;
+    }
     repeated TImportChangefeedTopic Changefeeds = 1;
 }

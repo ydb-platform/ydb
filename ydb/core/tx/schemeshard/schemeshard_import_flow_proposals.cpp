@@ -17,7 +17,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 ) {
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
-
+    
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
 
@@ -242,6 +242,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     auto& record = propose->Record;
     auto& modifyScheme = *record.AddTransaction();
     auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
+    // cdcStream.SetTableName(changefeed.);
 
     TString error;
     Ydb::StatusIds::StatusCode status;
@@ -251,8 +252,35 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
         return nullptr;
     }
-        
-    cdcStream.SetRetentionPeriodSeconds(topic.Getretention_period().seconds());
+    
+    if (topic.has_retention_period()) {
+        cdcStream.SetRetentionPeriodSeconds(topic.retention_period().seconds());
+    }
+    
+    if (topic.has_partitioning_settings()) {
+        i64 minActivePartitions =
+            topic.partitioning_settings().min_active_partitions();
+        if (minActivePartitions < 0) {
+            return nullptr;
+        } else if (minActivePartitions == 0) {
+            minActivePartitions = 1;
+        }
+        cdcStream.SetTopicPartitions(minActivePartitions);
+
+        if (topic.partitioning_settings().has_auto_partitioning_settings()) {
+            auto& partitioningSettings = topic.partitioning_settings().auto_partitioning_settings();
+            cdcStream.SetTopicAutoPartitioning(partitioningSettings.strategy() != ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED);
+
+            i64 maxActivePartitions =
+                topic.partitioning_settings().max_active_partitions();
+            if (maxActivePartitions < 0) {
+                return nullptr;
+            } else if (maxActivePartitions == 0) {
+                maxActivePartitions = 50;
+            }
+            cdcStream.SetMaxPartitionCount(maxActivePartitions);
+        }
+    }
     
     return propose;
 }

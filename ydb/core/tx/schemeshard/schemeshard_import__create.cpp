@@ -373,23 +373,6 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    void CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        auto& item = importInfo->Items.at(itemIdx);
-
-        item.SubState = ESubState::Proposed;
-
-        LOG_I("TImport::TTxProgress: CreateChangefeed propose"
-            << ": info# " << importInfo->ToString()
-            << ", item# " << item.ToString(itemIdx)
-            << ", txId# " << txId);
-
-        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-
-        auto propose = CreateChangefeedPropose(Self, txId, item);
-        Send(Self->SelfId(), std::move(propose));
-    }
-
     void ExecutePreparedQuery(TTransactionContext& txc, TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items[itemIdx];
@@ -522,6 +505,23 @@ private:
 
         Send(Self->SelfId(), CancelIndexBuildPropose(Self, importInfo, item.WaitTxId), 0, importInfo->Id);
         return true;
+    }
+
+    void CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+
+        item.SubState = ESubState::Proposed;
+
+        LOG_I("TImport::TTxProgress: CreateChangefeed propose"
+            << ": info# " << importInfo->ToString()
+            << ", item# " << item.ToString(itemIdx)
+            << ", txId# " << txId);
+
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
+
+        auto propose = CreateChangefeedPropose(Self, txId, item);
+        Send(Self->SelfId(), std::move(propose));
     }
 
     void AllocateTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -1236,7 +1236,7 @@ private:
             break;
         
         case EState::CreateChangefeed:
-            if (++item.NextChangefeedIdx < item.Changefeeds.size()) {
+            if (static_cast<ui64>(++item.NextChangefeedIdx) < item.Changefeeds.size()) {
                 AllocateTxId(importInfo, itemIdx);
             } else {
                 item.State = EState::Done;

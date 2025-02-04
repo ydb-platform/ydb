@@ -4470,7 +4470,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         changefeeds.reserve(importTableChangefeeds.size());
 
                         for (const auto& changefeedAndTopic : importTableChangefeeds) {
-                            const Ydb::Table::ChangefeedDescription& changefeed = changefeedAndTopic.GetChangefeedDescription();
+                            const Ydb::Table::ChangefeedDescription& changefeed = changefeedAndTopic.GetChangefeed();
                             const Ydb::Topic::DescribeTopicResult& topic = changefeedAndTopic.GetTopic();
                             changefeeds.emplace_back(changefeed, topic);
                         }

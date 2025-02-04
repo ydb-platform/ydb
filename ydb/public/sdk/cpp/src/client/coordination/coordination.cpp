@@ -89,6 +89,12 @@ struct TNodeDescription::TImpl {
         Proto_ = desc;
     }
 
+    void SerializeTo(Ydb::Coordination::CreateNodeRequest& creationRequest) {
+        auto& config = *creationRequest.mutable_config();
+        config.CopyFrom(Proto_.config());
+        config.clear_path();
+    }
+
     std::optional<TDuration> SelfCheckPeriod_;
     std::optional<TDuration> SessionGracePeriod_;
     EConsistencyMode ReadConsistencyMode_;
@@ -134,6 +140,10 @@ const std::vector<NScheme::TPermissions>& TNodeDescription::GetEffectivePermissi
 
 const Ydb::Coordination::DescribeNodeResult& TNodeDescription::GetProto() const {
     return Impl_->Proto_;
+}
+
+void TNodeDescription::SerializeTo(Ydb::Coordination::CreateNodeRequest& creationRequest) const {
+    return Impl_->SerializeTo(creationRequest);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

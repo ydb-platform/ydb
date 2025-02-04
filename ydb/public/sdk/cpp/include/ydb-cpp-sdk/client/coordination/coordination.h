@@ -4,6 +4,7 @@
 
 namespace Ydb {
 namespace Coordination {
+    class CreateNodeRequest;
     class DescribeNodeResult;
     class SemaphoreSession;
     class SemaphoreDescription;
@@ -106,6 +107,8 @@ public:
     const std::string& GetOwner() const;
     const std::vector<NScheme::TPermissions>& GetEffectivePermissions() const;
     const Ydb::Coordination::DescribeNodeResult& GetProto() const;
+
+    void SerializeTo(Ydb::Coordination::CreateNodeRequest& creationRequest) const;
 
 private:
     struct TImpl;

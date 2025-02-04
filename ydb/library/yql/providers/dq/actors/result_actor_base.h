@@ -102,7 +102,7 @@ struct TWriteQueue {
                 (Settings && Settings->_AllResultsBytesLimit.Get().Defined())
                 ? Settings->_AllResultsBytesLimit.Get().GetRef()
                 : 64000000) // GRPC limit
-            , RowsLimit(settings ? Settings->_RowsLimitPerWrite.Get() : Nothing())
+            , RowsLimit(100000)
             , Rows(0)
             , Truncated(false)
             , FullResultWriterID()

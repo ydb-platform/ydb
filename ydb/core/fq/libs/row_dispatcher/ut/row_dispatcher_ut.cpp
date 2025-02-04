@@ -451,7 +451,6 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
     }
 
     Y_UNIT_TEST_F(IgnoreWrongPartitionId, TFixture) {
-        // 
         MockAddSession(Source1, {PartitionId0}, ReadActorId1);
         auto topicSessionId = ExpectRegisterTopicSession();
         ExpectStartSessionAck(ReadActorId1);

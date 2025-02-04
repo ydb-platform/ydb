@@ -201,6 +201,7 @@ namespace NKikimr::NStorage {
         }
 
         vdiskConfig->ThrottlingDeviceSpeed = ThrottlingDeviceSpeed;
+        vdiskConfig->ThrottlingDryRun = ThrottlingDryRun;
         vdiskConfig->ThrottlingMinSstCount = ThrottlingMinSstCount;
         vdiskConfig->ThrottlingMaxSstCount = ThrottlingMaxSstCount;
         vdiskConfig->ThrottlingMinInplacedSizeHDD = ThrottlingMinInplacedSizeHDD;

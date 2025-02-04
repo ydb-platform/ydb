@@ -86,6 +86,7 @@ TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::Recor
     arrow::ipc::IpcPayload payload;
     // Build payload. Compression if set up performed here.
     TStatusValidator::Validate(arrow::ipc::GetRecordBatchPayload(*batch, Options, &payload));
+    TStatusValidator::Validate(batch->ValidateFull());
 
     int32_t metadata_length = 0;
     arrow::io::MockOutputStream mock;
@@ -99,7 +100,7 @@ TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::Recor
     // Write prepared payload into the resultant string. No extra allocation will be made.
     TStatusValidator::Validate(arrow::ipc::WriteIpcPayload(payload, Options, &out, &metadata_length));
     Y_ABORT_UNLESS(out.GetPosition() == str.size());
-    AFL_VERIFY_DEBUG(Deserialize(str, batch->schema()).ok());
+    TStatusValidator::GetValid(Deserialize(str, batch->schema()));
     AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "serialize")("size", str.size())("columns", batch->schema()->num_fields());
     return str;
 }

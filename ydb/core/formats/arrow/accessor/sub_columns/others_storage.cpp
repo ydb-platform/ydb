@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
@@ -52,7 +53,8 @@ TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishC
             if (idx) {
                 const ui32 predKeyIndex = (*finishContext.GetRemap())[RTKeyIndexes[idx - 1]];
                 AFL_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) || 
-                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && predKeyIndex < newIndex))("r1", arrRecordIndexValue->Value(idx - 1))(
+                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && predKeyIndex < newIndex))(
+                                                                   "r1", arrRecordIndexValue->Value(idx - 1))(
                                                                    "r2", arrRecordIndexValue->Value(idx))("k1", predKeyIndex)("k2", newIndex);
             }
         }
@@ -124,6 +126,14 @@ TOthersData TOthersData::Slice(const ui32 offset, const ui32 count) const {
         auto sliceRecords = std::make_shared<TGeneralContainer>(GetSchema(), std::move(arrays));
         return TOthersData(sliceStats, sliceRecords);
     }
+}
+
+TOthersData TOthersData::BuildEmpty() {
+    auto records = std::make_shared<TGeneralContainer>(0);
+    for (auto&& f : GetSchema()->fields()) {
+        records->AddField(f, NArrow::TThreadSimpleArraysCache::GetNull(f->type(), 0)).Validate();
+    }
+    return TOthersData(TDictStats::BuildEmpty(), records);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

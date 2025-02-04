@@ -20,9 +20,7 @@ private:
 public:
     TOthersData Slice(const ui32 offset, const ui32 count) const;
 
-    static TOthersData BuildEmpty() {
-        return TOthersData(TDictStats::BuildEmpty(), std::make_shared<TGeneralContainer>(0));
-    }
+    static TOthersData BuildEmpty();
 
     ui64 GetRawSize() const {
         return Records->GetRawSizeVerified();

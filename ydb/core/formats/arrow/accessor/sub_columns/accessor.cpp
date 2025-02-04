@@ -64,11 +64,13 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
         cInfo->SetSize(blobRanges.back().size());
     }
 
-    for (auto&& i : OthersData.GetRecords()->GetColumns()) {
-        TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
-        blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
-        auto* cInfo = proto.AddOtherColumns();
-        cInfo->SetSize(blobRanges.back().size());
+    if (OthersData.GetRecords()->GetRecordsCount()) {
+        for (auto&& i : OthersData.GetRecords()->GetColumns()) {
+            TChunkConstructionData cData(i->GetRecordsCount(), nullptr, i->GetDataType(), externalInfo.GetDefaultSerializer());
+            blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
+            auto* cInfo = proto.AddOtherColumns();
+            cInfo->SetSize(blobRanges.back().size());
+        }
     }
     proto.SetOtherRecordsCount(OthersData.GetRecords()->GetRecordsCount());
 

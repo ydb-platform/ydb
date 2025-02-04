@@ -47,8 +47,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
         }
         columnKeysContainer = std::make_shared<TGeneralContainer>(schema, std::move(columns));
     }
-    std::shared_ptr<TGeneralContainer> otherKeysContainer;
-    {
+    TOthersData otherData = TOthersData::BuildEmpty();
+    if (proto.GetOtherColumns().size() && proto.GetOtherRecordsCount()) {
+        std::shared_ptr<TGeneralContainer> otherKeysContainer;
         std::vector<std::shared_ptr<IChunkedArray>> columns;
         AFL_VERIFY(rbOtherStats->schema()->num_fields() == proto.GetOtherColumns().size());
         auto schema = TOthersData::GetSchema();
@@ -61,9 +62,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
             currentIndex += proto.GetOtherColumns(i).GetSize();
         }
         otherKeysContainer = std::make_shared<TGeneralContainer>(schema, std::move(columns));
+        otherData = TOthersData(otherStats, otherKeysContainer);
     }
     TColumnsData columnData(columnStats, columnKeysContainer);
-    TOthersData otherData(otherStats, otherKeysContainer);
     return std::make_shared<TSubColumnsArray>(
         std::move(columnData), std::move(otherData), externalInfo.GetColumnType(), externalInfo.GetRecordsCount(), Settings);
 }

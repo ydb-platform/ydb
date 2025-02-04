@@ -1523,7 +1523,7 @@ metadata: {}
     }
 
     Y_UNIT_TEST(ReplaceMetadata) {
-        NYamlConfig::TMetadata metadata;
+        NYamlConfig::TMainMetadata metadata;
         metadata.Version = 1;
         metadata.Cluster = "test";
 

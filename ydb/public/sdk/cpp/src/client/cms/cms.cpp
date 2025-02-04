@@ -83,7 +83,7 @@ TDatabaseQuotas::TDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& proto)
     , DataStreamShardsQuota(proto.data_stream_shards_quota())
     , DataStreamReservedStorageQuota(proto.data_stream_reserved_storage_quota())
     , TtlMinRunInternalSeconds(proto.ttl_min_run_internal_seconds())
-    , StorageQuotas(proto.storage_quotas().begin(), proto.storage_quotas().end()) // TODO(pixcc): if works, then change std::copy
+    , StorageQuotas(proto.storage_quotas().begin(), proto.storage_quotas().end())
 {}
 
 TTargetTrackingPolicy::TTargetTrackingPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy& proto)

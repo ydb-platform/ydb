@@ -319,6 +319,13 @@ TFuture<void> TClient::UnfreezeTable(
     return req->Invoke().As<void>();
 }
 
+TFuture<void> TClient::CancelTabletTransition(
+    NTabletClient::TTabletId /*tabletId*/,
+    const TCancelTabletTransitionOptions& /*options*/)
+{
+    ThrowUnimplemented("CancelTabletTransition");
+}
+
 TFuture<void> TClient::ReshardTable(
     const TYPath& path,
     const std::vector<TLegacyOwningKey>& pivotKeys,

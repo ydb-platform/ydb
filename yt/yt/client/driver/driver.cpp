@@ -230,6 +230,7 @@ public:
         REGISTER    (TRemountTableCommand,                 "remount_table",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TFreezeTableCommand,                  "freeze_table",                    Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TUnfreezeTableCommand,                "unfreeze_table",                  Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TCancelTabletTransitionCommand,       "cancel_tablet_transition",        Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TReshardTableCommand,                 "reshard_table",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAlterTableCommand,                   "alter_table",                     Null,       Structured, true,  false, ApiVersion4);
 

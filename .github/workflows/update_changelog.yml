@@ -86,7 +86,7 @@ jobs:
       - name: Update Changelog
         uses: ./.github/actions/update_changelog 
         env:
-          UPDATE_REPO_TOKEN: ${{ secrets.UPDATE_REPO_TOKEN }}
+          UPDATE_REPO_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           pr_data: "${{ needs.gather-prs.outputs.prs }}"
           changelog_path: "${{ github.event.inputs.changelog_path }}"

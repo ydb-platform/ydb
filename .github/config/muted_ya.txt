@@ -88,6 +88,7 @@ ydb/core/viewer/tests test.py.test_viewer_healthcheck
 ydb/core/viewer/tests test.py.test_viewer_nodes
 ydb/core/viewer/tests test.py.test_viewer_sysinfo
 ydb/core/viewer/tests test.py.test_viewer_tenantinfo
+ydb/core/viewer/tests test.py.test_storage_groups
 ydb/core/viewer/ut Viewer.TabletMerging
 ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/http/ut sole chunk chunk

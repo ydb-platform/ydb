@@ -87,6 +87,7 @@ struct TKiExploreTxResults {
 
     bool ConcurrentResults = true;
 
+    THashSet<const TExprNode*> Ops;
     TVector<TExprBase> Sync;
     TVector<TKiQueryBlock> QueryBlocks;
     bool HasExecute;
@@ -330,6 +331,16 @@ bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& 
     return false;
 }
 
+bool IsPgRead(const TExprBase& node, TTypeAnnotationContext& types) {
+    if (auto maybePgRead = node.Maybe<TPgTableContent>()) {
+        auto dataSourceProviderIt = types.DataSourceMap.find(NYql::PgProviderName);
+        if (dataSourceProviderIt != types.DataSourceMap.end()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool IsDqWrite(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (node.Ref().ChildrenSize() <= 1) {
         return false;
@@ -354,6 +365,20 @@ bool IsDqWrite(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext&
 bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, TKiExploreTxResults& txRes,
     TIntrusivePtr<TKikimrTablesData> tablesData, TTypeAnnotationContext& types) {
 
+    if (txRes.Ops.cend() != txRes.Ops.find(node.Raw())) {
+        return true;
+    }
+
+    if (node.Maybe<TCoWorld>()) {
+        txRes.Ops.insert(node.Raw());
+        return true;
+    }
+
+    if (node.Maybe<TCoLeft>()) {
+        txRes.Ops.insert(node.Raw());
+        return true;
+    }
+
     auto checkDataSource = [dataSink] (const TKiDataSource& ds) {
         return dataSink.Cluster().Raw() == ds.Cluster().Raw();
     };
@@ -374,6 +399,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         YQL_ENSURE(key.Extract(read.TableKey().Ref()));
         YQL_ENSURE(key.GetKeyType() == TKikimrKey::Type::Table);
         auto table = key.GetTablePath();
+        txRes.Ops.insert(node.Raw());
 
         YQL_ENSURE(tablesData);
         const auto& tableData = tablesData->ExistingTable(cluster, table);
@@ -384,6 +410,16 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         return true;
     }
 
+    if (IsDqRead(node, ctx, types, true, &txRes.HasErrors)) {
+        txRes.Ops.insert(node.Raw());
+        return true;
+    }
+
+    if (IsPgRead(node, types)) {
+        txRes.Ops.insert(node.Raw());
+        return true;
+    }
+
     if (auto maybeWrite = node.Maybe<TKiWriteTable>()) {
         auto write = maybeWrite.Cast();
         if (!checkDataSink(write.DataSink())) {
@@ -391,6 +427,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         }
 
         auto table = write.Table().Value();
+        txRes.Ops.insert(node.Raw());
         auto tableOp = GetTableOp(write);
 
         YQL_ENSURE(tablesData);
@@ -435,6 +472,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
     }
 
     if (IsDqWrite(node, ctx, types)) {
+        txRes.Ops.insert(node.Raw());
         txRes.AddEffect(node, THashMap<TString, TPrimitiveYdbOperations>{});
         return true;
     }
@@ -446,6 +484,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         }
 
         auto table = update.Table().Value();
+        txRes.Ops.insert(node.Raw());
         const auto tableOp = TYdbOperation::Update;
 
         YQL_ENSURE(tablesData);
@@ -490,6 +529,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         }
 
         auto table = del.Table().Value();
+        txRes.Ops.insert(node.Raw());
         const auto tableOp = TYdbOperation::Delete;
 
         YQL_ENSURE(tablesData);
@@ -527,6 +567,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         }
 
         auto table = create.Table().Value();
+        txRes.Ops.insert(node.Raw());
         txRes.AddTableOperation(BuildTableOpNode(cluster, table, TYdbOperation::CreateTable, create.Pos(), ctx));
         return true;
     }
@@ -538,6 +579,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         }
 
         auto table = drop.Table().Value();
+        txRes.Ops.insert(node.Raw());
         txRes.AddTableOperation(BuildTableOpNode(cluster, table, TYdbOperation::DropTable, drop.Pos(), ctx));
         return true;
     }
@@ -549,6 +591,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         }
 
         auto table = alter.Table().Value();
+        txRes.Ops.insert(node.Raw());
         txRes.AddTableOperation(BuildTableOpNode(cluster, table, TYdbOperation::AlterTable, alter.Pos(), ctx));
         return true;
     }
@@ -559,6 +602,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             return false;
         }
 
+        txRes.Ops.insert(node.Raw());
         txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::CreateUser, createUser.Pos(), ctx));
         return true;
     }
@@ -569,6 +613,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             return false;
         }
 
+        txRes.Ops.insert(node.Raw());
         txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::AlterUser, alterUser.Pos(), ctx));
         return true;
     }
@@ -579,6 +624,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             return false;
         }
 
+        txRes.Ops.insert(node.Raw());
         txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::DropUser, dropUser.Pos(), ctx));
         return true;
     }
@@ -589,6 +635,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             return false;
         }
 
+        txRes.Ops.insert(node.Raw());
         txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::CreateGroup, createGroup.Pos(), ctx));
         return true;
     }
@@ -599,6 +646,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             return false;
         }
 
+        txRes.Ops.insert(node.Raw());
         txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::AlterGroup, alterGroup.Pos(), ctx));
         return true;
     }
@@ -609,6 +657,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             return false;
         }
 
+        txRes.Ops.insert(node.Raw());
         txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::RenameGroup, renameGroup.Pos(), ctx));
         return true;
     }
@@ -619,6 +668,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             return false;
         }
 
+        txRes.Ops.insert(node.Raw());
         txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::DropGroup, dropGroup.Pos(), ctx));
         return true;
     }
@@ -643,9 +693,15 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         return true;
     }
 
+    if (node.Maybe<TCoSync>()) {
+        txRes.Ops.insert(node.Raw());
+        return true;
+    }
+
     if (node.Maybe<TResWrite>() ||
         node.Maybe<TResPull>())
     {
+        txRes.Ops.insert(node.Raw());
         txRes.AddResult(node);
         return true;
     }
@@ -655,7 +711,30 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         return true;
     }
 
-    return true;
+    if (node.Maybe<TCoCons>()) {
+        txRes.Ops.insert(node.Raw());
+        return true;
+    }
+
+    return false;
+}
+
+bool IsKikimrPureNode(const TExprNode::TPtr& node) {
+    if (node->IsCallable("TypeOf")) {
+        return true;
+    }
+
+    if (TMaybeNode<TCoDataSource>(node) ||
+        TMaybeNode<TCoDataSink>(node))
+    {
+        return true;
+    }
+
+    if (!node->GetTypeAnn()->IsComposable()) {
+        return false;
+    }
+
+    return false;
 }
 
 bool ExploreTx(TExprBase root, TExprContext& ctx, const TKiDataSink& dataSink, TKiExploreTxResults& txRes,
@@ -667,7 +746,7 @@ bool ExploreTx(TExprBase root, TExprContext& ctx, const TKiDataSink& dataSink, T
             return false;
         }
 
-        if (!ExploreNode(TExprBase(node), ctx, dataSink, txRes, tablesData, types)) {
+        if (!IsKikimrPureNode(node) && !ExploreNode(TExprBase(node), ctx, dataSink, txRes, tablesData, types)) {
             hasErrors = true;
             return false;
         }
@@ -852,6 +931,11 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
     }
 
     if (txExplore.HasExecute) {
+        return node.Ptr();
+    }
+
+    auto txSyncSet = txExplore.GetSyncSet();
+    if (!CheckTx(commit.World(), kiDataSink, txExplore.Ops, txSyncSet)) {
         return node.Ptr();
     }
 

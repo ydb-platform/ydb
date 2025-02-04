@@ -1228,7 +1228,6 @@ public:
 
     typename TDynMapImpl::const_iterator SpillingHashMapIt_;
     typename TFixedMapImpl::const_iterator SpillingHashFixedMapIt_;
-    size_t SpillingOutputBlockSize_ = 0;
     bool IsExtractingFinished = false;
     bool IteratorsInitialized = false;
 
@@ -1394,13 +1393,6 @@ public:
                 
             }
 
-
-            // if (SpillingOutputBlockSize_ == MaxBlockLen_) {
-            //     iterateBatch();
-            //     UniteKeysAndStates();
-            //     return false;
-            // }
-
             if (itersLen == iters.size()) {
                 iterateBatch();
                 itersLen = 0;
@@ -1409,7 +1401,6 @@ public:
 
             iters[itersLen] = iter;
             ++itersLen;
-            ++SpillingOutputBlockSize_;
             if constexpr (UseArena) {
                 auto payload = (char*)hash.GetPayload(iter);
                 auto ptr = *(char**)payload;
@@ -1450,8 +1441,6 @@ public:
         }
 
         while (!IsExtractingFinished) {
-            SpillingBuckets_[0].KeysBuffer.Rewind();
-            SpillingBuckets_[0].StateBuffer.Rewind();
             IsExtractingFinished = InlineAggState ?
                 SpillingIterate(*HashMap_, SpillingHashMapIt_) :
                 SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_);
@@ -1461,11 +1450,9 @@ public:
 
             // }
 
-            std::cerr << "Spilled block " << SpillingBuckets_[0].SpillingBuffer.Size() << " SpillingOutputBlockSize: " << SpillingOutputBlockSize_ << " Rows: " << SpillingBuckets_[0].Rows << std::endl;
+            std::cerr << "Spilled block " << SpillingBuckets_[0].SpillingBuffer.Size() << " Rows: " << SpillingBuckets_[0].Rows << std::endl;
             SpillingBuckets_[0].SpillingOperation_ = SpillingBuckets_[0].Spiller_->Put(std::move(SpillingBuckets_[0].SpillingBuffer));
-            SpillingOutputBlockSize_ = 0;
-            SpillingBuckets_[0].SpillingBuffer = NYql::TChunkedBuffer();
-            SpillingBuckets_[0].Rows = 0;
+            SpillingBuckets_[0].Clear();
             break;
         }
         return !SpillingBuckets_[0].SpillingOperation_.has_value();

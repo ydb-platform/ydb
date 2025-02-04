@@ -27,7 +27,6 @@ from ydb import PrimitiveType, StatusCode
 import yatest.common
 from moto.server import ThreadedMotoServer
 
-import time
 import boto3
 import datetime
 import random
@@ -158,7 +157,6 @@ class TieringTestBase(BaseTestSet):
             self.sources.append(f'tier{i}')
             self._override_external_data_source(sth, self.sources[-1], s3_config)
 
-
     def _tier_down_tiering_test(self, ctx):
         LOGGER.info('Tiering down scheme objects')
         sth = ScenarioTestHelper(ctx)
@@ -186,8 +184,6 @@ class TieringTestBase(BaseTestSet):
 
     def _get_test_prefix(self):
         return type(self).__name__
-
-
 
 
 class TestAlterTiering(TieringTestBase):
@@ -305,7 +301,7 @@ class TestAlterTiering(TieringTestBase):
 
         sth.execute_scheme_query(CreateTableStore('store').with_schema(self.schema1).existing_ok())
         YdbCluster.get_ydb_driver().table_client.session().create().execute_scheme(
-            f'ALTER OBJECT `{sth.get_full_path('store')}` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`'
+            f'ALTER OBJECT `{sth.get_full_path("store")}` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`'
             f'    {{"levels" : [{{"class_name" : "Zero", "portions_live_duration" : "5s", "expected_blobs_size" : 1000000000000, "portions_count_available" : 2}},'
             f'                  {{"class_name" : "Zero"}}]}}`);'
         )

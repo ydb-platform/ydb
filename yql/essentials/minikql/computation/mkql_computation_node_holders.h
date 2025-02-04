@@ -60,6 +60,13 @@ public:
     {
     }
 
+    explicit TUnboxedValueBatch(ui32 width)
+        : Width_(width)
+        , IsWide_(width > 1)
+        , PageSize_(GetPageSize(width)) {
+
+    }
+
     TUnboxedValueBatch(const TUnboxedValueBatch& other) = default;
     TUnboxedValueBatch& operator=(const TUnboxedValueBatch& other) = default;
 
@@ -189,7 +196,7 @@ public:
     }
 
     void PushRow(NUdf::TUnboxedValue* values, ui32 width) {
-        Y_DEBUG_ABORT_UNLESS(width == Width_);
+        Y_DEBUG_ABORT_UNLESS(width == Width_, "%d != %d", width, Width_);
         ReserveNextRow();
         for (ui32 i = 0; i < Width_; ++i) {
             Values_.back().emplace_back(std::move(values[i]));

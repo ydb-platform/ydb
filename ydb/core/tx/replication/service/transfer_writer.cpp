@@ -25,6 +25,8 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <ydb/core/kqp/runtime/kqp_write_table.h>
+
 #include <ydb/core/persqueue/purecalc/purecalc.h>
 
 
@@ -46,16 +48,28 @@ using namespace NKikimr::NMiniKQL;
 
 struct TSchemaColumn {
     TString Name;
-    TString TypeYson;
+    ui32 Id;
+    NScheme::TTypeInfo PType;
+    bool KeyColumn;
+    bool Nullable;
 
     bool operator==(const TSchemaColumn& other) const = default;
 
     TString ToString() const;
+
+    TString TypeName() const {
+        return NScheme::TypeName(PType);
+    }
 };
 
 
 struct TOutputType {
-    // TODO
+    TOutputType(ui32 width)
+        : Data(width) {
+    }
+
+    NUdf::TUnboxedValue Value;
+    NMiniKQL::TUnboxedValueBatch Data;
 };
 
 class TMessageOutputSpec : public NYql::NPureCalc::TOutputSpecBase {
@@ -88,7 +102,9 @@ public:
     explicit TOutputListImpl(const TMessageOutputSpec& outputSpec, TWorkerHolder<IPullListWorker> worker)
         : WorkerHolder_(std::move(worker))
         , OutputSpec(outputSpec)
+        , Out(1)
     {
+        Row.resize(1);
     }
 
 public:
@@ -96,31 +112,43 @@ public:
         TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
 
         with_lock(WorkerHolder_->GetScopedAlloc()) {
+            Out.Data.clear();
+
             NYql::NUdf::TUnboxedValue value;
 
             if (!WorkerHolder_->GetOutputIterator().Next(value)) {
                 return nullptr;
             }
 
-            auto v = value.GetElement(0);
+            Out.Value = value.GetElement(0);
 
+/*
             size_t i = 0;
+
             for (auto& c : OutputSpec.GetTableColumns()) {
-                auto e = v.GetElement(i++);
+                auto e = v.GetElement(i);
+                Row[i] = e;
+                ++i;
 
                 // TODO
                 if (!e.HasValue()) {
                     Cerr << ">>>>> " << c.Name << " IS NULL" << Endl << Flush;
-                } else if (c.TypeYson == "Uint32") {
+                } else if (c.TypeName() == "Uint32") {
                     Cerr << ">>>>> " << c.Name << " = " << e.Get<ui32>() << Endl << Flush;
-                } else if (c.TypeYson == "Utf8") {
+                } else if (c.TypeName() == "Utf8") {
                     Cerr << ">>>>> " << c.Name << " = '" << TString(e.AsStringRef()) << "'" << Endl << Flush;
                 }
             }
+*/
+            Out.Data.PushRow(&Out.Value, 1);
 
-            return nullptr; // new TOutputType(); // TODO кто собирает мусор?
+            return &Out;
         }
     }
+
+private:
+    std::vector<NUdf::TUnboxedValue> Row;
+    TOutputType Out;
 };
 
 } // namespace
@@ -181,7 +209,7 @@ NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& columns) {
     auto structMembers = NYT::TNode::CreateList();
 
     for (const auto& column : columns) {
-        AddField(structMembers, column.Name, column.TypeYson);
+        AddField(structMembers, column.Name, column.TypeName());
     }
 
     auto rootMembers = NYT::TNode::CreateList();
@@ -236,6 +264,53 @@ private:
     THolder<NYql::NPureCalc::TPullListProgram<NYdb::NTopic::NPurecalc::TMessageInputSpec, TMessageOutputSpec>> Program;
 };
 
+
+class ITableKindStrategy {
+public:
+    using TPtr = std::unique_ptr<ITableKindStrategy>;
+
+    virtual ~ITableKindStrategy() = default;
+
+    virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
+};
+
+class TColumnTableStrategy : public ITableKindStrategy {
+public:
+    TColumnTableStrategy(
+        const TVector<NKikimrKqp::TKqpColumnMetadataProto>& columnsMetadata,
+        const std::vector<ui32>& writeIndex
+    )
+        : ColumnsMetadata(columnsMetadata)
+        , WriteIndex(writeIndex)
+    {}
+
+    NKqp::IDataBatcherPtr CreateDataBatcher() override {
+        return NKqp::CreateColumnDataBatcher(ColumnsMetadata, WriteIndex);
+    }
+
+private:
+    const TVector<NKikimrKqp::TKqpColumnMetadataProto> ColumnsMetadata;
+    const std::vector<ui32> WriteIndex;
+};
+
+class TRowTableStrategy : public ITableKindStrategy {
+public:
+    TRowTableStrategy(
+        const TVector<NKikimrKqp::TKqpColumnMetadataProto>& columnsMetadata,
+        const std::vector<ui32>& writeIndex
+    )
+        : ColumnsMetadata(columnsMetadata)
+        , WriteIndex(writeIndex)
+    {}
+
+    NKqp::IDataBatcherPtr CreateDataBatcher() override {
+        return NKqp::CreateRowDataBatcher(ColumnsMetadata, WriteIndex);
+    }
+
+private:
+    const TVector<NKikimrKqp::TKqpColumnMetadataProto> ColumnsMetadata;
+    const std::vector<ui32> WriteIndex;
+};
 
 } // anonymous namespace
 
@@ -351,7 +426,7 @@ private:
 
         TableColumns.reserve(entry.Columns.size());
         for (const auto& [_, column] : entry.Columns) {
-            TableColumns.emplace_back(column.Name, TypeName(column.PType));
+            TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn);
 
             if (column.KeyOrder >= 0) {
                 if (schema->KeyColumns.size() <= static_cast<ui32>(column.KeyOrder)) {
@@ -369,6 +444,40 @@ private:
         }
 
         Schema = schema;
+
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata;
+        columnsMetadata.reserve(TableColumns.size());
+
+        std::vector<ui32> writeIndex;
+        writeIndex.reserve(TableColumns.size());
+
+        for (const auto& column : TableColumns) {
+                writeIndex.push_back(columnsMetadata.size());
+                columnsMetadata.emplace_back();
+                auto& c = columnsMetadata.back();
+
+                c.SetName(column.Name);
+                c.SetId(column.Id);
+                c.SetTypeId(column.PType.GetTypeId());
+                // TODO
+                //if (column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                //    c.MutableTypeInfo()->SetPgTypeId(column.PType.GetPgTypeDesc());
+                //    c.MutableTypeInfo()->SetPgTypeMod(::arc_ui32 value);
+                //}
+                if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
+                    const auto& decimal = column.PType.GetDecimalType();
+                    c.MutableTypeInfo()->SetDecimalPrecision(decimal.GetPrecision());
+                    c.MutableTypeInfo()->SetDecimalScale(decimal.GetScale());
+                }
+        }
+
+        if (entry.Kind == TNavigate::KindColumnTable) {
+            Cerr << ">>>>> Kind = KindColumnTable" << Endl << Flush;
+            TableStrategy = std::make_unique<TColumnTableStrategy>(columnsMetadata, writeIndex);
+        } else {
+            Cerr << ">>>>> Kind = KindTable" << Endl << Flush;
+            TableStrategy = std::make_unique<TRowTableStrategy>(columnsMetadata, writeIndex);
+        }
 
         CompileTransferLambda();
     }
@@ -480,17 +589,24 @@ private:
             return;
         }
 
+        EnshureDataBatch();
+
         for (auto& message : ev->Get()->Records) {
             NYdb::NTopic::NPurecalc::TMessage input(message.Data);
             input.WithOffset(message.Offset);
 
             auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
             while (auto* m = result->Fetch()) {
-                Y_UNUSED(m);
-
-                //Cout << "url = " << message->GetUrl() << Endl;
-                //Cout << "hits = " << message->GetHits() << Endl;
+                Batcher->AddData(m->Data);
             }
+        }
+
+        NKqp::IDataBatchPtr batch = Batcher->Build();
+
+        Cerr << ">>>>> Batch size = " << batch->GetMemory() << Endl << Flush;
+
+        if (batch->GetMemory() > (i64) 1_KB) {
+            Cerr << ">>>>> Flush " << Endl << Flush;
         }
 
         // TODO Send to table
@@ -580,6 +696,15 @@ private:
         }
     }
 */
+
+private:
+
+    void EnshureDataBatch() {
+        if (!Batcher) {
+            Batcher = TableStrategy->CreateDataBatcher();
+        }
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::REPLICATION_S3_WRITER;
@@ -611,6 +736,9 @@ private:
     TVector<TSchemaColumn> TableColumns;
     bool Resolving = false;
     bool Initialized = false;
+
+    ITableKindStrategy::TPtr TableStrategy;
+    NKqp::IDataBatcherPtr Batcher;
 
     TProgramHolder::TPtr ProgramHolder;
 

@@ -746,6 +746,12 @@ bool ExploreTx(TExprBase root, TExprContext& ctx, const TKiDataSink& dataSink, T
             return false;
         }
 
+        if (auto maybeCommit = TMaybeNode<TCoCommit>(node)) {
+            if (maybeCommit.Cast().DataSink().Raw() != dataSink.Raw()) {
+                return true;
+            }
+        }
+
         if (!IsKikimrPureNode(node) && !ExploreNode(TExprBase(node), ctx, dataSink, txRes, tablesData, types)) {
             hasErrors = true;
             return false;

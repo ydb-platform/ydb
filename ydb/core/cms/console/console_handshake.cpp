@@ -143,7 +143,7 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerValidateConfigRequest:
         record.SetStatus(NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigNotValid);
         TStringStream s;
         if (opCtx.Error) {
-            s << *opCtx.Error<< (opCtx.HasForbiddenUnknown ? " and " : "");
+            s << *opCtx.Error<< (opCtx.UnknownFields.empty() ? "" : " and ");
         }
         if (!opCtx.UnknownFields.empty()) {
             s << "has forbidden unknown fields";

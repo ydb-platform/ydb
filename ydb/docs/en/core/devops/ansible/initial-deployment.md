@@ -100,7 +100,7 @@ Feel free to change these settings if needed, but it is not necessary in straigh
       - static-node-3.ydb-cluster.com
   ```
 
-The value of the `ydb_database_groups` variable in the `vars` set the number of [storage groups](https://ydb.tech/docs/en/concepts/glossary#storage-group) for database. 
+The value of the `ydb_database_groups` variable in the `vars` set the number of [storage groups](https://ydb.tech/docs/en/concepts/glossary#storage-group) for database.
 
 The values of the `system_timezone` and `system_ntp_servers` variables depend on the infrastructure properties where the {{ ydb-short-name }} cluster is being deployed. By default, `system_ntp_servers` includes a set of NTP servers without considering the geographical location of the infrastructure on which the {{ ydb-short-name }} cluster will be deployed. We strongly recommend using a local NTP server for on-premise infrastructure and the following NTP servers for cloud providers:
 

@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         void Shutdown() override {}
         bool Cleanup() override { return true; }
 
-        TMailbox* GetReadyActivation(TWorkerContext& /*wctx*/, ui64 /*revolvingCounter*/) override { return nullptr; }
+        TMailbox* GetReadyActivation(ui64 /*revolvingCounter*/) override { return nullptr; }
         TMailbox* ResolveMailbox(ui32 /*hint*/) override { return nullptr; }
 
         void Schedule(TInstant /*deadline*/, TAutoPtr<IEventHandle> /*ev*/, ISchedulerCookie* /*cookie*/, TWorkerId /*workerId*/) override {}
@@ -164,6 +164,14 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
             UNIT_ASSERT_GE(threadIdx, 0);
             UNIT_ASSERT_LE(static_cast<ui16>(threadIdx), ThreadCpuConsumptions.size());
             return ThreadCpuConsumptions[threadIdx];
+        }
+
+        ui64 TimePerMailboxTs() const override {
+            return 1000000;
+        }
+
+        ui32 EventsPerMailbox() const override {
+            return 1;
         }
     };
 

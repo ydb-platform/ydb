@@ -1468,23 +1468,28 @@ public:
         return UpdateSpillingAndWait(true);
     }
 
+    ui64 LoadingBucket = 0;
+
     bool LoadEverything() {
-        std::cerr << "Loading everything" << std::endl;
-        if (SpillingBuckets_[0].LoadingOperation_.has_value() && !SpillingBuckets_[0].LoadingOperation_->HasValue()) return false;
+        std::cerr << "Loading bucket " << LoadingBucket << std::endl;
+        if (SpillingBuckets_[LoadingBucket].LoadingOperation_.has_value() && !SpillingBuckets_[LoadingBucket].LoadingOperation_->HasValue()) return false;
 
-        if (SpillingBuckets_[0].LoadingOperation_.has_value()) {
-            auto data = *SpillingBuckets_[0].LoadingOperation_->ExtractValue();
-            SpillingBuckets_[0].LoadingOperation_ = std::nullopt;
+        if (SpillingBuckets_[LoadingBucket].LoadingOperation_.has_value()) {
+            auto data = *SpillingBuckets_[LoadingBucket].LoadingOperation_->ExtractValue();
+            SpillingBuckets_[LoadingBucket].LoadingOperation_ = std::nullopt;
 
-            std::cerr << "ProcessingLoaded." << std::endl;
+            std::cerr << "ProcessingLoaded" << std::endl;
             SpillingProcessInput(data);
         }
-        if (!SpillingBuckets_[0].SpillingKeys_.empty()) {
-            SpillingBuckets_[0].LoadingOperation_ = SpillingBuckets_[0].Spiller_->Get(SpillingBuckets_[0].SpillingKeys_.back());
-            SpillingBuckets_[0].SpillingKeys_.pop_back();
-        }
+        while (SpillingBuckets_[LoadingBucket].SpillingKeys_.empty()) {
+            LoadingBucket++;
+            if (LoadingBucket == NumberOfSpillingBuckets_) return true;
 
-        return !SpillingBuckets_[0].LoadingOperation_.has_value();
+        }
+        SpillingBuckets_[LoadingBucket].LoadingOperation_ = SpillingBuckets_[LoadingBucket].Spiller_->Get(SpillingBuckets_[LoadingBucket].SpillingKeys_.back());
+        SpillingBuckets_[LoadingBucket].SpillingKeys_.pop_back();
+
+        return false;
 
     }
 

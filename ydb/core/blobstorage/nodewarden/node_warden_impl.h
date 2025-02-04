@@ -183,8 +183,10 @@ namespace NKikimr::NStorage {
         TControlWrapper ThrottlingDeviceSpeed;
         TControlWrapper ThrottlingMinSstCount;
         TControlWrapper ThrottlingMaxSstCount;
-        TControlWrapper ThrottlingMinInplacedSize;
-        TControlWrapper ThrottlingMaxInplacedSize;
+        TControlWrapper ThrottlingMinInplacedSizeHDD;
+        TControlWrapper ThrottlingMaxInplacedSizeHDD;
+        TControlWrapper ThrottlingMinInplacedSizeSSD;
+        TControlWrapper ThrottlingMaxInplacedSizeSSD;
         TControlWrapper ThrottlingMinOccupancyPerMille;
         TControlWrapper ThrottlingMaxOccupancyPerMille;
         TControlWrapper ThrottlingMinLogChunkCount;

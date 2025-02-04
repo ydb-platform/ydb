@@ -1402,13 +1402,23 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 250 }];
-        optional uint64 ThrottlingMinInplacedSize = 17 [(ControlOptions) = {
-            Description: "Minimum size of all inplaced blobs - throttling is turned on",
+        optional uint64 ThrottlingMinInplacedSizeHDD = 17 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs (HDD) - throttling is turned on",
             MinValue: 1048576,
             MaxValue: 536870912000,
             DefaultValue: 21474836480 }];
-        optional uint64 ThrottlingMaxInplacedSize = 18 [(ControlOptions) = {
-            Description: "Maximum size of all inplaced blobs - throttling speed is zero",
+        optional uint64 ThrottlingMaxInplacedSizeHDD = 18 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs (HDD) - throttling speed is zero",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 64424509440 }];
+        optional uint64 ThrottlingMinInplacedSizeSSD = 24 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs (SSD) - throttling is turned on",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 21474836480 }];
+        optional uint64 ThrottlingMaxInplacedSizeSSD = 25 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs (SSD) - throttling speed is zero",
             MinValue: 1048576,
             MaxValue: 536870912000,
             DefaultValue: 64424509440 }];

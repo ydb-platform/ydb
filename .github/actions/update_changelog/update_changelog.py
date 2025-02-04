@@ -97,18 +97,11 @@ def extract_changelog_body(description):
     return None
 
 def match_pr_to_changelog_category(category):
-# * New feature - Functionality
-# * Experimental feature - Functionality
-# * Performance improvement - Performance
-# * User Interface - YDB UI
-# * Bugfix - Bug fixes
-# * Backward incompatible change - Backward incompatible change
-# * Documentation (changelog entry is not required)
-# * Not for changelog (changelog entry is not required)
     categories = {
         "New feature": "Functionality",
         "Experimental feature": "Functionality",
-        "Performance improvement": "Functionality",
+        "Improvement": "Functionality",
+        "Performance improvement": "Performance",
         "User Interface": "YDB UI",
         "Bugfix": "Bug fixes",
         "Backward incompatible change": "Backward incompatible change",

@@ -61,10 +61,11 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_RUN_DATA_ERASURE; }
 
-    void DoExecute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
+    void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxRunDataErasure Execute at schemeshard: " << Self->TabletID());
         NIceDb::TNiceDb db(txc.DB);
         if (Self->DataErasureGeneration < RequestedGeneration) {
-            ui64 previousGeneration = Self->DataErasureGeneration;
             Self->DataErasureGeneration = RequestedGeneration;
             for (auto& [pathId, subdomain] : Self->SubDomains) {
                 auto path = TPath::Init(pathId, Self);
@@ -75,9 +76,9 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
                     continue;
                 }
                 Self->DataErasureQueue->Enqueue(pathId);
+                Self->RunningDataErasureForTenants.insert(pathId);
+                db.Table<Schema::DataErasure>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::DataErasure::Generation>(Self->DataErasureGeneration);
             }
-            db.Table<Schema::DataErasure>().Key(previousGeneration).Delete();
-            db.Table<Schema::DataErasure>().Key(Self->DataErasureGeneration).Update();
         }
     }
     void DoComplete(const TActorContext& /*ctx*/) override {}

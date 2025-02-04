@@ -444,6 +444,8 @@ void TSchemeShard::Clear() {
         UpdateBorrowedCompactionQueueMetrics();
     }
 
+    RunningDataErasureForTenants.clear();
+
     ClearTempDirsState();
 
     ShardsWithBorrowed.clear();

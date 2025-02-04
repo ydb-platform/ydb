@@ -1867,6 +1867,30 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         }
 
+        // Read Running data erasure for tenants
+        {
+            if (Self->IsDomainSchemeShard) {
+                auto rowset = db.Table<Schema::DataErasure>().Range().Select();
+                if (!rowset.IsReady())
+                    return false;
+                while (!rowset.EndOfSet()) {
+                    TOwnerId ownerPathId = rowset.GetValue<Schema::DataErasure::OwnerPathId>();
+                    TLocalPathId localPathId = rowset.GetValue<Schema::DataErasure::LocalPathId>();
+                    TPathId pathId(ownerPathId, localPathId);
+                    Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
+                    TPathElement::TPtr path = Self->PathsById.at(pathId);
+                    Y_VERIFY_S(path->IsDomainRoot(), "Path is not a subdomain, pathId: " << pathId);
+
+                    Y_ABORT_UNLESS(Self->SubDomains.contains(pathId));
+
+                    Self->RunningDataErasureForTenants.insert(pathId);
+
+                    ui64 generation = rowset.GetValue<Schema::DataErasure::Generation>();
+                    Self->DataErasureGeneration = Max(generation, Self->DataErasureGeneration);
+                }
+            }
+        }
+
         // Read External Tables
         {
             auto rowset = db.Table<Schema::ExternalTable>().Range().Select();

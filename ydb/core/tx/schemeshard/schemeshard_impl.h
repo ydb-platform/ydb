@@ -362,6 +362,7 @@ public:
     TTenantDataErasureQueue* TenantDataErasureQueue = nullptr;
 
     ui64 DataErasureGeneration = 0;
+    THashSet<TPathId> RunningDataErasureForTenants;
 
     struct TBackgroundCleaningState {
         THashSet<TTxId> TxIds;

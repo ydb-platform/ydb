@@ -76,6 +76,8 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
     NCommon::TConfSetting<ui32, false> MaxSequentialReadsInFlight;
 
+    NCommon::TConfSetting<ui32, false> KMeansTreeSearchTopSize;
+
     /* Runtime */
     NCommon::TConfSetting<bool, true> ScanQuery;
 

@@ -46,6 +46,16 @@
 /ydb/core/viewer @ydb-platform/ui-backend
 /ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend
 
+/ydb/core/protos/flat_scheme_op.proto @ydb-platform/schemeshard
+/ydb/core/protos/flat_tx_scheme.proto @ydb-platform/schemeshard
+/ydb/core/protos/counters_schemeshard.proto @ydb-platform/schemeshard
+/ydb/core/protos/schemeshard @ydb-platform/schemeshard
+/ydb/core/tx/schemeshard @ydb-platform/schemeshard
+/ydb/tests/functional/limits @ydb-platform/schemeshard
+/ydb/tests/functional/scheme_shard @ydb-platform/schemeshard
+/ydb/tests/functional/tenants/test_dynamic_tenants.py @ydb-platform/schemeshard
+/ydb/core/tx/tx_proxy/schemereq.cpp @ydb-platform/schemeshard
+
 /ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 

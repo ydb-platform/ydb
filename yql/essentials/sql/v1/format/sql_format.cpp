@@ -496,6 +496,10 @@ private:
             ++CommentLines;
         }
 
+        if (!text.StartsWith("--")) {
+            CommentLines += CountIf(text, [](auto c) { return c == '\n'; });
+        }
+
         Out(text);
 
         if (text.StartsWith("--") && !text.EndsWith("\n")) {
@@ -574,7 +578,7 @@ private:
             ForceExpandedLine = token.GetLine();
         }
 
-        const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor());
+        const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor() || descr == TRule_type_name_composite::GetDescriptor());
         if (expr) {
             ++InsideExpr;
         }

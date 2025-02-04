@@ -779,7 +779,7 @@ struct TUserJobSpec
     /// @note
     /// When @ref NYT::TOperationOptions::MountSandboxInTmpfs is enabled library will compute
     /// total size of all files used by this job and add this total size to MemoryLimit.
-    /// Thus you shouldn't include size of your files (e.g. binary file) into MemoryLimit.
+    /// Thus, you shouldn't include size of your files (e.g. binary file) into MemoryLimit.
     ///
     /// @note
     /// Final memory memory_limit passed to YT is calculated as follows:

@@ -1309,6 +1309,7 @@ public:
                 HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(TotalStateSize_, Hasher_, equal);
             }
         }
+        BatchNum_ = 0;
         std::cerr << "State cleared" << std::endl;
 
     }

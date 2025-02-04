@@ -84,7 +84,7 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
             std::push_heap(heap.begin(), heap.end());
         }
     }
-    return othersBuilder->Finish(BuildStats(otherKeys));
+    return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys)));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

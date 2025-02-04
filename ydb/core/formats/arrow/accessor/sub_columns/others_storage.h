@@ -137,6 +137,26 @@ public:
         return Records->GetColumnVerified(2);
     }
 
+    class TFinishContext {
+    private:
+        const TDictStats ActualStats;
+        YDB_READONLY_DEF(std::optional<std::vector<ui32>>, Remap);
+
+    public:
+        const TDictStats& GetActualStats() const {
+            return ActualStats;
+        }
+
+        TFinishContext(const TDictStats& actualStats, const std::vector<ui32>& remap)
+            : ActualStats(actualStats)
+            , Remap(remap) {
+        }
+
+        TFinishContext(const TDictStats& actualStats)
+            : ActualStats(actualStats){
+        }
+    };
+
     class TBuilderWithStats: TNonCopyable {
     private:
         std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
@@ -147,15 +167,14 @@ public:
         std::optional<ui32> LastRecordIndex;
         std::optional<ui32> LastKeyIndex;
         ui32 RecordsCount = 0;
-        YDB_READONLY_DEF(std::vector<ui32>, RecordsCountByKeyIndex);
-        YDB_READONLY_DEF(std::vector<ui32>, BytesByKeyIndex);
+        YDB_READONLY_DEF(std::vector<TDictStats::TRTStatsValue>, StatsByKeyIndex);
 
     public:
         TBuilderWithStats();
 
         void Add(const ui32 recordIndex, const ui32 keyIndex, const std::string_view value);
 
-        TOthersData Finish(const TDictStats& stats);
+        TOthersData Finish(const TFinishContext& finishContext);
     };
 
     static std::shared_ptr<TBuilderWithStats> MakeMergedBuilder() {

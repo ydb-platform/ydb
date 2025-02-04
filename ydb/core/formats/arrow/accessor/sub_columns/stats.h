@@ -47,28 +47,15 @@ public:
         return 0;
     }
 
-    class TRTStats {
+    class TRTStatsValue {
     private:
-        YDB_READONLY_DEF(TString, KeyName);
         YDB_READONLY(ui32, RecordsCount, 0);
         YDB_READONLY(ui32, DataSize, 0);
 
     public:
-        TRTStats(const TString& keyName)
-            : KeyName(keyName) {
-        }
-        TRTStats(const TString& keyName, const ui32 recordsCount, const ui32 dataSize)
-            : KeyName(keyName)
-            , RecordsCount(recordsCount)
-            , DataSize(dataSize) {
-        }
-
-        TRTStats(const std::string_view keyName)
-            : KeyName(keyName.data(), keyName.size()) {
-        }
-        TRTStats(const std::string_view keyName, const ui32 recordsCount, const ui32 dataSize)
-            : KeyName(keyName.data(), keyName.size())
-            , RecordsCount(recordsCount)
+        TRTStatsValue() = default;
+        TRTStatsValue(const ui32 recordsCount, const ui32 dataSize)
+            : RecordsCount(recordsCount)
             , DataSize(dataSize) {
         }
 
@@ -80,6 +67,29 @@ public:
         void Add(const TDictStats& stats, const ui32 idx) {
             RecordsCount += stats.GetColumnRecordsCount(idx);
             DataSize += stats.GetColumnSize(idx);
+        }
+    };
+
+    class TRTStats: public TRTStatsValue {
+    private:
+        using TBase = TRTStatsValue;
+        YDB_READONLY_DEF(TString, KeyName);
+
+    public:
+        TRTStats(const TString& keyName)
+            : KeyName(keyName) {
+        }
+        TRTStats(const TString& keyName, const ui32 recordsCount, const ui32 dataSize)
+            : TBase(recordsCount, dataSize)
+            , KeyName(keyName) {
+        }
+
+        TRTStats(const std::string_view keyName)
+            : KeyName(keyName.data(), keyName.size()) {
+        }
+        TRTStats(const std::string_view keyName, const ui32 recordsCount, const ui32 dataSize)
+            : TBase(recordsCount, dataSize)
+            , KeyName(keyName.data(), keyName.size()) {
         }
 
         bool operator<(const TRTStats& item) const {

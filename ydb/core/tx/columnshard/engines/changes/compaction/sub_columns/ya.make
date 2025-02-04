@@ -2,6 +2,9 @@ LIBRARY()
 
 SRCS(
     GLOBAL logic.cpp
+    builder.cpp
+    remap.cpp
+    iterator.cpp
 )
 
 PEERDIR(

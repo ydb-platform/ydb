@@ -20,12 +20,10 @@ TOthersData::TBuilderWithStats::TBuilderWithStats() {
 
 void TOthersData::TBuilderWithStats::Add(const ui32 recordIndex, const ui32 keyIndex, const std::string_view value) {
     AFL_VERIFY(Builders.size());
-    if (RecordsCountByKeyIndex.size() <= keyIndex) {
-        RecordsCountByKeyIndex.resize((keyIndex + 1) * 2);
-        BytesByKeyIndex.resize((keyIndex + 1) * 2);
+    if (StatsByKeyIndex.size() <= keyIndex) {
+        StatsByKeyIndex.resize((keyIndex + 1) * 2);
     }
-    ++RecordsCountByKeyIndex[keyIndex];
-    BytesByKeyIndex[keyIndex] += value.size();
+    StatsByKeyIndex[keyIndex].AddValue(value);
     if (!LastRecordIndex) {
         LastRecordIndex = recordIndex;
         LastKeyIndex = keyIndex;
@@ -38,38 +36,20 @@ void TOthersData::TBuilderWithStats::Add(const ui32 recordIndex, const ui32 keyI
     ++RecordsCount;
 }
 
-TOthersData TOthersData::TBuilderWithStats::Finish(const TDictStats& stats) {
+TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishContext) {
     AFL_VERIFY(Builders.size());
-    std::vector<ui32> toRemove;
-    for (ui32 i = 0; i < stats.GetColumnsCount(); ++i) {
-        if (!RecordsCountByKeyIndex[i]) {
-            toRemove.emplace_back(i);
+    std::optional<TDictStats> resultStats = finishContext.GetActualStats();
+    if (finishContext.GetRemap()) {
+        for (ui32 idx = 0; idx < RTKeyIndexes.size(); ++idx) {
+            AFL_VERIFY(RTKeyIndexes[idx] < finishContext.GetRemap()->size());
+            const ui32 newIndex = (*finishContext.GetRemap())[RTKeyIndexes[idx]];
+            AFL_VERIFY(newIndex < finishContext.GetActualStats().GetColumnsCount());
+            TStatusValidator::Validate(KeyIndex->Append(newIndex));
         }
-    }
-    std::optional<TDictStats> resultStats;
-    if (toRemove.size()) {
-        auto dictBuilder = TDictStats::MakeBuilder();
-        std::vector<ui32> remap;
-        ui32 correctIdx = 0;
-        for (ui32 i = 0; i < stats.GetColumnsCount(); ++i) {
-            if (!RecordsCountByKeyIndex[i]) {
-                remap.emplace_back(Max<ui32>());
-            } else {
-                remap.emplace_back(correctIdx++);
-                dictBuilder.Add(stats.GetColumnName(i), RecordsCountByKeyIndex[i], BytesByKeyIndex[i]);
-            }
-        }
-        for (ui32 idx = 0; RTKeyIndexes.size(); ++idx) {
-            AFL_VERIFY(RTKeyIndexes[idx] < remap.size());
-            RTKeyIndexes[idx] = remap[RTKeyIndexes[idx]];
-        }
-        resultStats = dictBuilder.Finish();
     } else {
-        resultStats = stats;
-    }
-
-    for (auto&& i : RTKeyIndexes) {
-        TStatusValidator::Validate(KeyIndex->Append(i));
+        for (ui32 idx = 0; idx < RTKeyIndexes.size(); ++idx) {
+            TStatusValidator::Validate(KeyIndex->Append(RTKeyIndexes[idx]));
+        }
     }
     auto arrays = NArrow::Finish(std::move(Builders));
     return TOthersData(*resultStats, std::make_shared<TGeneralContainer>(arrow::RecordBatch::Make(GetSchema(), RecordsCount, arrays)));

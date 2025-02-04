@@ -1207,9 +1207,23 @@ public:
 
         NYql::TChunkedBuffer SpillingBuffer;
 
+        ui64 Rows = 0;
+
+        ui64 GetSize() const {
+            return KeysBuffer.Finish().size() + StateBuffer.Finish().size() + SpillingBuffer.Size();
+        }
+
+        void Clear() {
+            KeysBuffer.Rewind();
+            StateBuffer.Rewind();
+            SpillingBuffer = NYql::TChunkedBuffer();
+            Rows = 0;
+        }
+
     };
 
     static constexpr ui64 NumberOfSpillingBuckets_ = 10;
+    static constexpr ui64 BucketSizeLimit_ = 1_MB;
     std::deque<TSpillingBucket> SpillingBuckets_;
 
     typename TDynMapImpl::const_iterator SpillingHashMapIt_;
@@ -1317,6 +1331,15 @@ public:
         SpillingBuckets_[0].StateBuffer.Rewind();
     }   
 
+    bool HasFullSpillingBuckets() {
+        for (const auto& bucket : SpillingBuckets_) {
+            if (bucket.GetSize() > BucketSizeLimit_) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     template <typename THash>
     bool SpillingIterate(THash& hash, typename THash::const_iterator& iter) {
@@ -1326,13 +1349,10 @@ public:
         auto iterateBatch = [&]() {
             for (ui32 i = 0; i < itersLen; ++i) {
                 auto iter = iters[i];
+
                 const TKey& key = hash.GetKey(iter);
-
                 SpillingBuckets_[0].KeysBuffer.PushString(GetKeyView<TKey>(key, KeyLength_));
-            }
 
-            for (ui32 i = 0; i < itersLen; ++i) {
-                auto iter = iters[i];
                 auto payload = (char*)hash.GetPayload(iter);
                 char* ptr;
                 if constexpr (UseArena) {
@@ -1356,6 +1376,8 @@ public:
 
                     ptr += Aggs_[i]->StateSize;
                 }
+
+                SpillingBuckets_[0].Rows++;
             }
 
         };
@@ -1365,12 +1387,19 @@ public:
                 continue;
             }
 
-
-            if (SpillingOutputBlockSize_ == MaxBlockLen_) {
+            if (HasFullSpillingBuckets()) {
                 iterateBatch();
                 UniteKeysAndStates();
                 return false;
+                
             }
+
+
+            // if (SpillingOutputBlockSize_ == MaxBlockLen_) {
+            //     iterateBatch();
+            //     UniteKeysAndStates();
+            //     return false;
+            // }
 
             if (itersLen == iters.size()) {
                 iterateBatch();
@@ -1426,12 +1455,17 @@ public:
             IsExtractingFinished = InlineAggState ?
                 SpillingIterate(*HashMap_, SpillingHashMapIt_) :
                 SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_);
-            SpillingBuckets_[0].SpillingSizes_.push_back(SpillingOutputBlockSize_);
+            SpillingBuckets_[0].SpillingSizes_.push_back(SpillingBuckets_[0].Rows);
 
-            std::cerr << "Spilled block " << SpillingBuckets_[0].SpillingBuffer.Size() << " SpillingOutputBlockSize: " << SpillingOutputBlockSize_ << std::endl;
+            // if (HasFullSpillingBuckets()) {
+
+            // }
+
+            std::cerr << "Spilled block " << SpillingBuckets_[0].SpillingBuffer.Size() << " SpillingOutputBlockSize: " << SpillingOutputBlockSize_ << " Rows: " << SpillingBuckets_[0].Rows << std::endl;
             SpillingBuckets_[0].SpillingOperation_ = SpillingBuckets_[0].Spiller_->Put(std::move(SpillingBuckets_[0].SpillingBuffer));
             SpillingOutputBlockSize_ = 0;
             SpillingBuckets_[0].SpillingBuffer = NYql::TChunkedBuffer();
+            SpillingBuckets_[0].Rows = 0;
             break;
         }
         return !SpillingBuckets_[0].SpillingOperation_.has_value();
@@ -1492,7 +1526,7 @@ public:
         ui32 insertBatchLen = 0;
 
         const auto processInsertBatch = [&]() {
-            std::cerr << "Processing insert batch. InsertBatvhLen: " << insertBatchLen<< std::endl;
+            // std::cerr << "Processing insert batch. InsertBatvhLen: " << insertBatchLen<< std::endl;
             for (ui32 i = 0; i < insertBatchLen; ++i) {
                 auto& r = insertBatch[i];
                 TStringBuf str = out[i].Finish();
@@ -1571,7 +1605,7 @@ public:
         };
 
         for (ui64 row = 0; row < batchLength; ++row) {
-            std::cerr << "Row: " << row << "/" << batchLength << std::endl;
+            // std::cerr << "Row: " << row << "/" << batchLength << std::endl;
 
             // encode key
             out[insertBatchLen].Rewind();
@@ -2246,7 +2280,7 @@ private:
             const size_t outputWidth = state.OutputWidth_;
             MKQL_ENSURE(outputWidth == width, "The given width doesn't equal to the result type size");
 
-            std::cerr << "MISHA HERE. Final? " << Finalize << std::endl;
+            // std::cerr << "MISHA HERE. Final? " << Finalize << std::endl;
 
             if (!state.Count) {
                 if (state.IsFinished_)

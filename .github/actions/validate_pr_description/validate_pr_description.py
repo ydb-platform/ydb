@@ -13,7 +13,7 @@ def validate_pr_description(description, is_not_for_cl_valid=True):
             return False
 
         if "### Changelog category" not in description and "### Changelog entry" not in description:
-            return True
+            return is_not_for_cl_valid
 
         # Extract changelog category section
         category_section = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", description, re.DOTALL)

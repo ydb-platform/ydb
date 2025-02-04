@@ -1441,7 +1441,7 @@ public:
             }
 
             if (bucket.GetSize() > BucketSizeLimit_ || bucket.GetSize() != 0 && finalize) {
-                std::cerr << "Spilling bucket: " << bucketId << " Size: " << bucket.SpillingBuffer.Size() << " Rows: " << bucket.Rows << " TmpRows: " << bucket.TmpRows << std::endl;
+                std::cerr << "Spilling bucket: " << bucketId << " Size: " << bucket.SpillingBuffer.Size() << " Rows: " << bucket.Rows << " TmpRows: " << bucket.TmpRows << " Finalize: " << finalize << std::endl;
                 bucket.SpillingSizes_.push_back(bucket.Rows);
                 bucket.SpillingOperation_ = bucket.Spiller_->Put(std::move(bucket.SpillingBuffer));
                 bucket.Clear();
@@ -1470,7 +1470,6 @@ public:
                 SpillingIterate(*HashMap_, SpillingHashMapIt_) :
                 SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_);
 
-            break;
         }
         return UpdateSpillingAndWait(true);
     }

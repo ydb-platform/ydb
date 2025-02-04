@@ -398,14 +398,29 @@ namespace NActors {
     EMailboxPush TMailbox::Push(TAutoPtr<IEventHandle>& evPtr) noexcept {
         IEventHandle* ev = evPtr.Release();
 
-        // For logging
+	// For logging
+        auto getThreadNameWithoutSpace = []() {
+            auto name = TThread::CurrentThreadName();
+            std::string nameWithoutSpace;
+            for (auto sym : name) {
+                if (sym == ' ') {
+                    nameWithoutSpace += '+';
+                } else {
+                    nameWithoutSpace += sym;
+                }
+            }
+
+            return nameWithoutSpace;
+        };
         TStringStream logOut;
         logOut << "Send "
-            << ev->GetRecipientRewrite() << " "
+	    << ev->GetRecipientRewrite() << " "
             << ev->Sender << " "
             << (void*)ev.Get() << " "
-            << TInstant::Now().ToString() << "\n";
-        Cerr << logOut.Str(); 
+            << TInstant::Now().ToString() << " "
+            << getThreadNameWithoutSpace() << "\n";
+        Cerr << logOut.Str();
+
 
         uintptr_t current = NextEventPtr.load(std::memory_order_relaxed);
         for (;;) {
@@ -544,14 +559,28 @@ namespace NActors {
         // This is similar to sending the event again
         ev->SendTime = (::NHPTimer::STime)GetCycleCountFast();
 #endif
-        // For logging
+	// For logging
+        auto getThreadNameWithoutSpace = []() {
+            auto name = TThread::CurrentThreadName();
+            std::string nameWithoutSpace;
+            for (auto sym : name) {
+                if (sym == ' ') {
+                    nameWithoutSpace += '+';
+                } else {
+                    nameWithoutSpace += sym;
+                }
+            }
+
+            return nameWithoutSpace;
+        };
         TStringStream logOut;
         logOut << "Send "
-            << ev->GetRecipientRewrite() << " "
+	    << ev->GetRecipientRewrite() << " "
             << ev->Sender << " "
             << (void*)ev.Get() << " "
-            << TInstant::Now().ToString() << "\n";
-        Cerr << logOut.Str(); 
+            << TInstant::Now().ToString() << " "
+            << getThreadNameWithoutSpace() << "\n";
+        Cerr << logOut.Str();
 
         SetNextPtr(ev, nullptr);
         PrependPreProcessed(ev, ev);

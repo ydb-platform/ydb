@@ -2,6 +2,8 @@
 
 #include <common/defines.h>
 
+#include <sanitizer/asan_interface.h>
+
 #define DBMS_DEFAULT_HOST "localhost"
 #define DBMS_DEFAULT_PORT 9000
 #define DBMS_DEFAULT_SECURE_PORT 9440

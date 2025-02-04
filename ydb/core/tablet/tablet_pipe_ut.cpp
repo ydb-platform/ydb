@@ -101,7 +101,7 @@ namespace NKikimr {
 
             auto client = NTabletPipe::CreateClient(ctx.SelfID, ev->Get()->UseBadTabletId ?
                 TTestTxConfig::TxTablet2 : TTestTxConfig::TxTablet1, Config);
-            ClientId = ctx.Register(client, ctx.SelfID, TMailboxType::Simple, Max<ui32>());
+            ClientId = ctx.Register(client, TMailboxType::Simple, Max<ui32>());
         }
 
         void Handle(TEvProducerTablet::TEvSend::TPtr &ev, const TActorContext &ctx) {

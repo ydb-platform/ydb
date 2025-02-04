@@ -40,4 +40,4 @@
 
 ## Загрузка бинарного файла со страницы релизов
 
-В GitHub можно взять уже скомпилированные исполняемые файлы - [YDBOps Releases](https://github.com/ydb-platform/ydbops/releases).
+Скомпилированные исполняемые файлы можно скачать с [YDBOps Releases](../../downloads/index.md#ydbops).

@@ -5,7 +5,7 @@
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/yql/providers/yt/codec/yt_codec_io.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
 

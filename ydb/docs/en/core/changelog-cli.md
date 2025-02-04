@@ -6,22 +6,22 @@ Released on February 4, 2025. To update to version **2.19.0**, select the [Downl
 
 ### Features
 
-* Added [views](./concepts/datamodel/view) support in `ydb export s3` and `ydb import s3`. Views are exported as `CREATE VIEW` YQL statements which are executed on import.
-* Added [changefeeds](./concepts/cdc) support in `ydb tools dump` and `ydb tools restore`. As a result, there are changes in the backup file structure: for tables with changefeeds, a subdirectory is created for each changefeed, named after the changefeed. This subdirectory contains two files: `changefeed_description.pb`, which contains the changefeed description, and `topic_description.pb`, which contains information about the underlying topic.
-* Added `CREATE TABLE` text suggestion on scheme error during `ydb import file csv`.
-* Added `--skip-checksum-validation` option to `ydb import s3` command to skip server-side checksum validation.
-* Added statistics output on the current progress of the query in `ydb workload` command.
-* Added query text to error message if a query fails in `ydb workload run` comamnd.
-* Added a message if global timeout expiried in `ydb workload run` comamnd.
-* Added new experimental options for `ydb debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
-* Added some temporary changes to experimental `ydb admin storage` command for internal usage.
+* Added [views](./concepts/datamodel/view.md) support in `ydb export s3` and `ydb import s3`. Views are exported as `CREATE VIEW` YQL statements, which are executed on import.
+* Added [changefeeds](./concepts/cdc.md) support in `ydb tools dump` and `ydb tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md). As a result, there are changes in the backup file structure: for tables with changefeeds, a subdirectory is created for each changefeed, named after the changefeed. This subdirectory contains two files: `changefeed_description.pb`, which contains the changefeed description, and `topic_description.pb`, which contains information about the underlying topic.
+* Added `CREATE TABLE` text suggestion on schema error during `ydb import file csv` [command](./reference/ydb-cli/export-import/import-file.md).
+* Added the `--skip-checksum-validation` option to the `ydb import s3` [command](./reference/ydb-cli/export-import/import-s3.md) to skip server-side checksum validation.
+* Added statistics output on the current progress of the query in the `ydb workload` [command](./reference/ydb-cli/commands/workload.md).
+* Added query text to the error message if a query fails in the `ydb workload run` [command](./reference/ydb-cli/commands/workload.md).
+* Added a message if the global timeout expired in the `ydb workload run` [command](./reference/ydb-cli/commands/workload.md).
+* Added new experimental options for the `ydb debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
+* Added some temporary changes to the experimental `ydb admin storage` command.
 
 ### Bug fixes
 
-* Fixed a bug where arm64 YDB CLI binary was downloading amd64 binary to replace itself during `ydb update`. To update already installed binaries to the latest arm64 version, YDB CLI should be re-installed.
-* Fixed return code of `ydb workload run` comamnd.
-* Fixed a bug where `ydb workload tpch import generator` and `ydb workload tpcds import generator` commands were failing due to not all tables had been created
-* Fixed a bug with backslashes in `ydb workload` benchmark paths on Windows
+* Fixed a bug where the arm64 {{ ydb-short-name }} CLI binary was downloading the amd64 binary to replace itself during `ydb update` [command](./reference/ydb-cli/commands/service.md). To update already installed binaries to the latest arm64 version, {{ ydb-short-name }} CLI should be reinstalled.
+* Fixed the return code of the `ydb workload run` [command](./reference/ydb-cli/commands/workload.md).
+* Fixed a bug where the `ydb workload tpch import generator` and `ydb workload tpcds import generator` [commands](./reference/ydb-cli/workload-tpch.md) were failing because not all tables had been created.
+* Fixed a bug with backslashes in `ydb workload` [commands](./reference/ydb-cli/commands/workload.md) paths on Windows.
 
 ## Version 2.18.0 {#2-18-0}
 

@@ -6,6 +6,7 @@
 
 * New feature
 * Experimental feature
+* Improvement
 * Performance improvement
 * User Interface
 * Bugfix 

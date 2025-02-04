@@ -73,10 +73,10 @@ DEFINE_REFCOUNTED_TYPE(TDynamicHeapSizeLimitConfig)
 struct TTCMallocConfig
     : public NYTree::TYsonStruct
 {
-    //! Threshold in bytes
+    //! Threshold in bytes.
     i64 AggressiveReleaseThreshold;
 
-    //! Threshold in fractions of total memory of the container
+    //! Threshold in fractions of total memory of the container.
     std::optional<double> AggressiveReleaseThresholdRatio;
 
     i64 AggressiveReleaseSize;

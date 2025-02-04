@@ -19,6 +19,7 @@
 #include "schemeshard_schema.h"
 #include "schemeshard__operation.h"
 #include "schemeshard__stats.h"
+#include "schemeshard_data_erasure_scheduler.h"
 
 #include "olap/manager/manager.h"
 
@@ -364,6 +365,8 @@ public:
     ui64 DataErasureGeneration = 0;
     THashMap<TPathId, bool> RequestedDataErasureForTenants;
     THashMap<TPathId, TActorId> RunningDataErasureForTenants;
+
+    TAutoPtr<TDataErasureScheduler> DataErasureScheduler;
 
     struct TBackgroundCleaningState {
         THashSet<TTxId> TxIds;
@@ -1130,6 +1133,9 @@ public:
     struct TTxCompleteDataErasure;
     NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasure(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev);
 
+    struct TTxDataErasureSchedulerInit;
+    NTabletFlatExecutor::ITransaction* CreateTxDataErasureSchedulerInit();
+
     void PublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths, const TActorContext& ctx);
     void PublishToSchemeBoard(TTxId txId, TDeque<TPathId>&& paths, const TActorContext& ctx);
 
@@ -1238,6 +1244,7 @@ public:
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvRunDataErasure::TPtr& ev, const TActorContext& ctx);
 
 
     void Handle(TEvSchemeShard::TEvProcessingRequest::TPtr& ev, const TActorContext& ctx);

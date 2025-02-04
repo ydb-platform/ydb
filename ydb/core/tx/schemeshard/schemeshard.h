@@ -100,6 +100,9 @@ namespace TEvSchemeShard {
 
         EvDataCleanupRequest,
         EvDataCleanupResult,
+        EvWakeupToRunDataErasure,
+        EvRunDataErasure,
+        EvCompleteDataErasure,
 
         EvEnd
     };
@@ -403,6 +406,9 @@ namespace TEvSchemeShard {
     struct TEvWakeupToMeasureSelfResponseTime : public TEventLocal<TEvWakeupToMeasureSelfResponseTime, EvWakeupToMeasureSelfResponseTime> {
     };
 
+    struct TEvWakeupToRunDataErasure : public TEventLocal<TEvWakeupToRunDataErasure, EvWakeupToRunDataErasure> {
+    };
+
     struct TEvInitTenantSchemeShard: public TEventPB<TEvInitTenantSchemeShard,
                                                             NKikimrScheme::TEvInitTenantSchemeShard,
                                                             EvInitTenantSchemeShard> {
@@ -674,6 +680,18 @@ namespace TEvSchemeShard {
 
     struct TEvListUsersResult : TEventPB<TEvListUsersResult, NKikimrScheme::TEvListUsersResult, EvListUsersResult> {
         TEvListUsersResult() = default;
+    };
+
+    struct TEvRunDataErasure : TEventLocal<TEvRunDataErasure, EvRunDataErasure> {
+        const ui64 Generation;
+
+        TEvRunDataErasure(ui64 generation)
+            : Generation(generation)
+        {}
+    };
+
+    struct TEvCompleteDataErasure : TEventLocal<TEvCompleteDataErasure, EvCompleteDataErasure> {
+        TEvCompleteDataErasure() = default;
     };
 
     struct TEvDataClenupRequest : TEventPB<TEvDataClenupRequest, NKikimrScheme::TEvDataCleanupRequest, EvDataCleanupRequest> {

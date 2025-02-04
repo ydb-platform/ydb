@@ -189,7 +189,7 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
                 }
                 Self->DataErasureQueue->Enqueue(pathId);
                 Self->RequestedDataErasureForTenants[pathId] = false;
-                db.Table<Schema::DataErasure>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::DataErasure::IsCompleted, Schema::DataErasure::Generation>(false, Self->DataErasureGeneration);
+                db.Table<Schema::DataErasure>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::DataErasure::IsCompleted>(false);
             }
         } else {
             Self->DataErasureQueue->Clear();
@@ -235,6 +235,24 @@ struct TSchemeShard::TTxCompleteDataErasure : public TSchemeShard::TRwTxBase {
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasure(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev) {
     return new TTxCompleteDataErasure(this, ev);
+}
+
+struct TSchemeShard::TTxDataErasureSchedulerInit : public TSchemeShard::TRwTxBase {
+    TTxDataErasureSchedulerInit(TSelf* self)
+        : TRwTxBase(self)
+    {}
+
+    void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
+        NIceDb::TNiceDb db(txc.DB);
+        db.Table<Schema::DataErasureScheduler>().Key(0).Update<Schema::DataErasureScheduler::IsCompleted,
+                                                               Schema::DataErasureScheduler::StartTime>(true, AppData(ctx)->TimeProvider->Now().MicroSeconds());
+    }
+
+    void DoComplete(const TActorContext& /*ctx*/) override {}
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDataErasureSchedulerInit() {
+    return new TTxDataErasureSchedulerInit(this);
 }
 
 } // NKikimr::NSchemeShard

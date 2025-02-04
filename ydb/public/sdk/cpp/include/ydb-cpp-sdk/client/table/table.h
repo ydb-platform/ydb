@@ -293,7 +293,7 @@ public:
     EIndexType GetIndexType() const;
     const std::vector<std::string>& GetIndexColumns() const;
     const std::vector<std::string>& GetDataColumns() const;
-    const std::variant<std::monostate, TKMeansTreeSettings>& GetVectorIndexSettings() const;
+    const std::variant<std::monostate, TKMeansTreeSettings>& GetIndexSettings() const;
     uint64_t GetSizeBytes() const;
 
     void SerializeTo(Ydb::Table::TableIndex& proto) const;

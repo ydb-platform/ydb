@@ -985,3 +985,12 @@ def on_depends_on_mod(unit: NotsUnitType) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
         for_mod_path = unit.get("TS_TEST_FOR_PATH")
         unit.ondepends([for_mod_path])
+
+
+@_with_report_configure_error
+def on_run_javascript_after_build_add_js_script_as_input(unit: NotsUnitType, js_script: str) -> None:
+    js_script = os.path.normpath(js_script)
+    if js_script.startswith("node_modules/"):
+        return
+
+    __set_append(unit, "_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", js_script)

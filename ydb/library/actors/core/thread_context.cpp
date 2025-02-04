@@ -39,10 +39,10 @@ namespace NActors {
 
     void TWorkerContext::AssignPool(IExecutorPool* pool, ui64 softDeadlineTs) {
         Pool = pool;
-        TimePerMailboxTs = pool->TimePerMailboxTs();
-        EventsPerMailbox = pool->EventsPerMailbox();
+        TimePerMailboxTs = pool ? pool->TimePerMailboxTs() : TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat() * NHPTimer::GetClockRate();
+        EventsPerMailbox = pool ? pool->EventsPerMailbox() : TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
         SoftDeadlineTs = softDeadlineTs;
-        MailboxTable = pool->GetMailboxTable();
+        MailboxTable = pool ? pool->GetMailboxTable() : nullptr;
         MailboxCache.Switch(MailboxTable);
     }
 

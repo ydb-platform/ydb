@@ -205,7 +205,7 @@ bool TReadInitAndAuthActor::CheckTopicACL(
         if (!NPQ::HasConsumer(pqDescr.GetPQTabletConfig(), ClientId)) {
             CloseSession(
                     TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster << "'",
-                    PersQueue::ErrorCode::BAD_REQUEST, ctx
+                    PersQueue::ErrorCode::UNKNOWN_READ_RULE, ctx
             );
             return false;
         }

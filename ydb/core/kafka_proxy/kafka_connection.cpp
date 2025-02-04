@@ -98,9 +98,9 @@ public:
 
     void Bootstrap() {
         Context->ConnectionId = SelfId();
+        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement;
         // if no authentication required, then we can use local database as our target
-        if (!NKikimr::AppData()->EnforceUserTokenRequirement) {
-            Context->RequireAuthentication = false;
+        if (!Context->RequireAuthentication) {
             Context->DatabasePath = NKikimr::AppData()->TenantName;
         }
 

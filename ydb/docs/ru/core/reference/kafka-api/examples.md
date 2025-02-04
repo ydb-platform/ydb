@@ -15,28 +15,6 @@
 
 Запустите Docker по [этой](../../quickstart#install) инструкции. Kafka API будет доступен на 9092 порте.
 
-### В Yandex Cloud {#how-to-try-kafka-api-in-cloud}
-
-Попробовать работу с топиками YDB по Kafka API можно без тарификации ([в небольших месячных объемах](https://yandex.cloud/ru/docs/data-streams/pricing?from=int-console-help-center-or-nav#prices)) в Yandex Cloud.
-Для этого в своей [консоли Yandex Cloud](https://console.yandex.cloud):
-
-1. Создайте [базу данных YDB](https://yandex.cloud/ru/docs/ydb/quickstart), если у вас ее еще нет.
-1. Создайте [очередь Yandex Data Streams](https://yandex.cloud/ru/docs/data-streams/quickstart).
-1. Создайте [сервисный аккаунт](https://yandex.cloud/ru/docs/iam/operations/sa/create), если у вас его еще нет.
-1. Добавьте этому сервисному аккаунту следующие роли:
-
-    - ydb.viewer (для чтения данных из потока);
-    - ydb.editor (для записи данных в поток);
-    - ydb.kafkaApi.client (для доступа к потоку данных по Kafka API).
-
-1. Создайте [API ключ](https://yandex.cloud/ru/docs/iam/operations/sa/create-access-key) для этого сервисного аккаунта.
-
-   - В поле **Описание** введите описание ключа.
-   - В поле **Область действия** выберите `yc.ydb.topics.manage`.
-   - В поле **Срок действия** укажите срок действия ключа.
-
-Для работы с Yandex Cloud требуется аутентификация, см примеры аутентификации [ниже](#authentication-in-cloud-examples).
-
 ## Примеры работы с Kafka API
 
 ### Чтение
@@ -166,48 +144,6 @@ Unexpected error in join group response: This most likely occurs because of a re
 Сейчас единственным доступным механизмом аутентификации с Kafka API в YDB Topics является `SASL_PLAIN`.
 
 {% endnote %}
-
-#### Примеры с аутентификацией в Yandex Cloud {#authentication-in-cloud-examples}
-
-Инструкцию, как попробовать работу с Kafka API поверх YDB Topics в Яндекс облаке, смотри [выше](#how-to-try-kafka-api-in-cloud).
-
-Для аутентификации добавьте в параметры подключения Apache Kafka следующие значения:
-
-- `security.protocol` со значением `SASL_SSL`;
-- `sasl.mechanism` со значением `PLAIN`;
-- `sasl.jaas.config` со значением `org.apache.kafka.common.security.plain.PlainLoginModule required username="@<path_to_database>" password="<API Key сервисного аккаунта>";`.
-
-Ниже приведены примеры чтения из топика облака, в которых:
-
-- <path_to_database> - это путь к базе данных со страницы топика в YDS Yandex Cloud;
-  ![path_to_database_example](./_assets/path_to_db_in_yds_cloud_ui.png)
-- <kafka_api_endpoint> - это Kafka API Endpoint со страницы описания YDS Yandex Cloud. Его нужно использовать в качестве `bootstrap.servers`;
-  ![kafka_endpoint_example](./_assets/kafka_api_endpoint_in_cloud_ui.png)
-- <api_key> - API Key сервисного аккаунта, у которого есть доступ к YDS.
-
-{% note warning %}
-
-Username не указывается. Указывается только `@`, а затем путь до вашей базы данных.
-
-{% endnote %}
-
-{% list tabs %}
-
-- Консольные утилиты Kafka
-
-  {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
-
-  {% include [index.md](../../../_includes/bash/kafka-api-console-read-with-sasl-creds-cloud.md) %}
-
-- kcat
-
-  {% include [index.md](../../../_includes/bash/kafka-api-kcat-read-with-sasl-creds-cloud.md) %}
-
-- Java
-
-  {% include [index.md](../../../_includes/java/kafka-api-java-read-with-sasl-creds-cloud.md) %}
-
-{% endlist %}
 
 #### Примеры аутентификации в самостоятельно развернутом YDB
 

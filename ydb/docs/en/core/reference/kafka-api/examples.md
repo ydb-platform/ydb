@@ -16,20 +16,6 @@ Before proceeding with the examples:
 
 Run Docker following [the quickstart guide](../../quickstart.md#install), and the Kafka API will be available on port 9092.
 
-### In Yandex Cloud {#how-to-try-kafka-api-in-cloud}
-
-You can try working with YDB topics via the Kafka API for free ([in small volumes](https://yandex.cloud/en/docs/data-streams/pricing?from=int-console-help-center-or-nav#prices)) in Yandex Cloud.
-To do this in your [Yandex Cloud console](https://console.yandex.cloud):
-
-1. Create a [YDB database](https://yandex.cloud/en/docs/ydb/quickstart) if you don't have one yet.
-1. Create a [Yandex Data Streams queue](https://yandex.cloud/en/docs/data-streams/quickstart).
-1. Create a [service account](https://yandex.cloud/en/docs/iam/operations/sa/create) if you don't have one yet,
-   and assign this service account the roles of ydb.viewer (to read data from the stream), ydb.editor (to write data to the stream), and ydb.kafkaApi.client (to access the data stream via the Kafka API).
-1. Create an [API key](https://yandex.cloud/en/docs/iam/operations/sa/create-access-key) for this service account.
-   For the key, select `yc.ydb.topics.manage` in the **Scope** field. You can also set a description and an expiration date.
-
-Authentication is required to work with Yandex Cloud, see authentication examples [below](#authentication-in-cloud-examples).
-
 ## Kafka API usage examples
 
 ### Reading
@@ -154,7 +140,6 @@ Otherwise, writing to Apache Kafka and {{ ydb-short-name }} Topics through Kafka
 
 ### Authentication examples {#authentication-examples}
 
-
 For more details on authentication, see the [Authentication](./auth.md) section. Below are examples of authentication in a cloud database and a local database.
 
 
@@ -164,51 +149,6 @@ Currently, the only available authentication mechanism with Kafka API in {{ ydb-
 
 
 {% endnote %}
-
-#### Authentication examples in Yandex Cloud {#authentication-in-cloud-examples}
-
-
-See instructions on how to start working with the Kafka API over YDB Topics in Yandex Cloud in the section [above](#how-to-try-kafka-api-in-cloud).
-
-
-For authentication, add the following values to the Kafka connection parameters:
-
-- `security.protocol` with value `SASL_SSL`
-- `sasl.mechanism` with value `PLAIN`
-- `sasl.jaas.config` with value `org.apache.kafka.common.security.plain.PlainLoginModule required username="@<path_to_database>" password="<Service Account API Key>";`
-
-Below are examples of reading from a cloud topic, where:
-
-- <path_to_database> is the path to the database from the topic page in YDS Yandex Cloud.
-  ![path_to_database_example](./_assets/path_to_db_in_yds_cloud_ui.png)
-- <kafka_api_endpoint> is the Kafka API Endpoint from the description page of YDS Yandex Cloud. It should be used as `bootstrap.servers`.
-  ![kafka_endpoint_example](./_assets/kafka_api_endpoint_in_cloud_ui.png)
-- <api_key> is the API Key of the service account that has access to YDS.
-
-
-{% note info %}
-
-The username is not specified in <path_to_database>. Only `@` is added, followed by the path to your database.
-
-{% endnote %}
-
-{% list tabs %}
-
-- Built-in Kafka CLI tools
-
-  {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
-
-  {% include [index.md](../../../_includes/bash/kafka-api-console-read-with-sasl-creds-cloud.md) %}
-
-- kcat
-
-  {% include [index.md](../../../_includes/bash/kafka-api-kcat-read-with-sasl-creds-cloud.md) %}
-
-- Java
-
-  {% include [index.md](../../../_includes/java/kafka-api-java-read-with-sasl-creds-cloud.md) %}
-
-{% endlist %}
 
 #### Authentication examples in on-prem YDB
 

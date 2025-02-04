@@ -367,8 +367,6 @@ protected:
     }
 
     void ProcessOutputsImpl(ERunStatus status) {
-        CA_LOG_T("ProcessOutputsImpl LastRunStatus " << status);
-
         ProcessOutputsState.LastRunStatus = status;
 
         CA_LOG_T("ProcessOutputsState.Inflight: " << ProcessOutputsState.Inflight);
@@ -417,12 +415,10 @@ protected:
 
     virtual void CheckRunStatus() {
         if (ProcessOutputsState.Inflight != 0) {
-            CA_LOG_D("CheckRunStatus Inflight!=0");
             return;
         }
 
         auto status = ProcessOutputsState.LastRunStatus;
-        CA_LOG_D("CheckRunStatus  " << status);
 
         if (status == ERunStatus::PendingInput && ProcessOutputsState.AllOutputsFinished) {
             CA_LOG_D("All outputs have been finished. Consider finished");
@@ -464,15 +460,12 @@ protected:
                 if (ProcessOutputsState.DataWasSent) {
                     ContinueExecute(EResumeSource::CADataSent);
                 }
-                CA_LOG_D("CheckRunStatus return 1 () pollSent " << pollSent);
                 return;
             }
         }
 
         if (status == ERunStatus::PendingOutput) {
-            CA_LOG_D("CheckRunStatus (PendingOutput)");
             if (ProcessOutputsState.DataWasSent) {
-                CA_LOG_D("CheckRunStatus (PendingOutput) DataWasSent");
                 // we have sent some data, so we have space in output channel(s)
                 ContinueExecute(EResumeSource::CAPendingOutput);
             }
@@ -678,10 +671,8 @@ protected:
     }
 
     void ContinueExecute(EResumeSource source = EResumeSource::Default) {
-        CA_LOG_D("ContinueExecute ");
         if (!ResumeEventScheduled && Running) {
             ResumeEventScheduled = true;
-            CA_LOG_D("ContinueExecute  send TEvResumeExecution");
             this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution{source});
         }
     }

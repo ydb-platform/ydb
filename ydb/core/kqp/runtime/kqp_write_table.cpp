@@ -855,6 +855,7 @@ struct TMetadata {
     const TVector<NKikimrKqp::TKqpColumnMetadataProto> InputColumnsMetadata;
     const std::vector<ui32> WriteIndex;
     const i64 Priority;
+    const bool AllowStreamWrite;
 };
 
 struct TBatchWithMetadata {
@@ -1135,7 +1136,7 @@ public:
         const i64 priority,
         const bool allowStreamWrite) override {
         // Priority can't be used with stream write. It's used only as temporary fix for working with secondary indexes.
-        YQL_ENSURE(priority == 0 || allowStreamWrite);
+        YQL_ENSURE(priority == 0 || !allowStreamWrite);
 
         auto token = CurrentWriteToken++;
         auto iter = WriteInfos.emplace(
@@ -1148,6 +1149,7 @@ public:
                     .InputColumnsMetadata = std::move(inputColumns),
                     .WriteIndex = std::move(writeIndex),
                     .Priority = priority,
+                    .AllowStreamWrite = allowStreamWrite,
                 },
                 .Serializer = nullptr,
                 .Closed = false,
@@ -1175,10 +1177,8 @@ public:
         YQL_ENSURE(info.Serializer);
         info.Serializer->AddData(std::move(data));
 
-        if (info.Metadata.Priority == 0) {
+        if (info.Metadata.AllowStreamWrite && info.Metadata.Priority == 0) {
             FlushSerializer(token, GetMemory() >= Settings.MemoryLimitTotal);
-        } else {
-            YQL_ENSURE(GetMemory() <= Settings.MemoryLimitTotal);
         }
     }
 
@@ -1188,7 +1188,7 @@ public:
         YQL_ENSURE(info.Serializer);
         info.Closed = true;
         info.Serializer->Close();
-        if (info.Metadata.Priority == 0) {
+        if (info.Metadata.AllowStreamWrite && info.Metadata.Priority == 0) {
             FlushSerializer(token, true);
             YQL_ENSURE(info.Serializer->IsFinished());
         }
@@ -1198,7 +1198,7 @@ public:
         TVector<TWriteToken> writeTokensFoFlush;
         for (const auto& [token, writeInfo] : WriteInfos) {
             YQL_ENSURE(writeInfo.Closed);
-            if (writeInfo.Metadata.Priority != 0) {
+            if (!writeInfo.Metadata.AllowStreamWrite || writeInfo.Metadata.Priority != 0) {
                 if (!writeInfo.Serializer->IsFinished()) {
                     writeTokensFoFlush.push_back(token);
                 }

@@ -1564,6 +1564,7 @@ public:
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
 
+            AllowStreamWrite &= settings.AllowStreamWrite;
             auto cookie = writeInfo.WriteTableActor->Open(
                 settings.OperationType,
                 std::move(settings.KeyColumns),
@@ -1653,17 +1654,20 @@ public:
     }
 
     void ProcessWrite() {
-        const bool needToFlush = GetTotalFreeSpace() <= 0
+        const bool outOfMemory = GetTotalFreeSpace() <= 0;
+        const bool needToFlush = outOfMemory
             || State == EState::FLUSHING
             || State == EState::PREPARING
             || State == EState::COMMITTING
             || State == EState::ROLLINGBACK;
 
-        //ReplyErrorAndDie(
-        //    NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
-        //    NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-        //    TStringBuilder() << "Stream write queries aren't allowed.",
-        //    {});
+        if (AllowStreamWrite && outOfMemory) {
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                TStringBuilder() << "Stream write queries aren't allowed.",
+                {});
+        }
 
         if (needToFlush) {
             CA_LOG_D("Flush data");
@@ -2550,6 +2554,7 @@ private:
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;
+    bool AllowStreamWrite = true;
 
     bool IsImmediateCommit = false;
     bool TxPlanned = false;

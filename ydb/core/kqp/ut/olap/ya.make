@@ -30,7 +30,6 @@ SRCS(
     sys_view_ut.cpp
     tiering_ut.cpp
     write_ut.cpp
-    optimizer_ut.cpp
 )
 
 PEERDIR(

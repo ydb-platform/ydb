@@ -37,10 +37,16 @@ void ResolveAndParseYamlConfig(
     const TMap<ui64, TString>& volatileYamlConfigs,
     const TMap<TString, TString>& labels,
     NKikimrConfig::TAppConfig& appConfig,
+    std::optional<TString> databaseConfig,
     TString* resolvedYamlConfig,
     TString* resolvedJsonConfig)
 {
     auto tree = NFyaml::TDocument::Parse(yamlConfig);
+
+    if (databaseConfig) {
+        auto d = NFyaml::TDocument::Parse(*databaseConfig);
+        NYamlConfig::AppendDatabaseConfig(tree, d);
+    }
 
     for (auto& [_, config] : volatileYamlConfigs) {
         auto d = NFyaml::TDocument::Parse(config);

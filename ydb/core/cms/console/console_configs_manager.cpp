@@ -52,35 +52,37 @@ bool TConfigsManager::CheckConfig(const NKikimrConsole::TConfigsConfig &config,
     return true;
 }
 
-TConfigsManager::TValidateConfigResult TConfigsManager::ValidateConfigAndReplaceMetadata(const TString &config, bool force, bool allowUnknownFields) {
-    TValidateConfigResult result;
+void TConfigsManager::ReplaceMainConfigMetadata(const TString &config, bool force, TUpdateConfigOpContext& opCtx) {
     try {
         if (!force) {
             auto metadata = NYamlConfig::GetMetadata(config);
-            result.Cluster = metadata.Cluster.value_or(TString("unknown"));
-            result.Version = metadata.Version.value_or(0);
+            opCtx.Cluster = metadata.Cluster.value_or(TString("unknown"));
+            opCtx.Version = metadata.Version.value_or(0);
         } else {
-            result.Cluster = ClusterName;
-            result.Version = YamlVersion;
+            opCtx.Cluster = ClusterName;
+            opCtx.Version = YamlVersion;
         }
 
-        result.UpdatedConfig = NYamlConfig::ReplaceMetadata(config, NYamlConfig::TMetadata{
-                .Version = result.Version + 1,
-                .Cluster = result.Cluster,
+        opCtx.UpdatedConfig = NYamlConfig::ReplaceMetadata(config, NYamlConfig::TMainMetadata{
+                .Version = opCtx.Version + 1,
+                .Cluster = opCtx.Cluster,
             });
+    } catch (const yexception &e) {
+        opCtx.Error = e.what();
+    }
+}
 
-        result.HasForbiddenUnknown = false;
-        if (result.UpdatedConfig != YamlConfig || YamlDropped) {
-            result.Modify = true;
-
-            auto tree = NFyaml::TDocument::Parse(result.UpdatedConfig);
+void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
+    try {
+        if (opCtx.UpdatedConfig != YamlConfig || YamlDropped) {
+            auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
             auto resolved = NYamlConfig::ResolveAll(tree);
 
-            if (ClusterName != result.Cluster) {
+            if (ClusterName != opCtx.Cluster) {
                 ythrow yexception() << "ClusterName mismatch";
             }
 
-            if (result.Version != YamlVersion) {
+            if (opCtx.Version != YamlVersion) {
                 ythrow yexception() << "Version mismatch";
             }
 
@@ -103,19 +105,82 @@ TConfigsManager::TValidateConfigResult TConfigsManager::ValidateConfigAndReplace
 
             for (const auto& [path, info] : unknownFieldsCollector->GetUnknownKeys()) {
                 if (deprecatedPaths.contains(path)) {
-                    result.DeprecatedFields[path] = info;
+                    opCtx.DeprecatedFields[path] = info;
                 } else {
-                    result.UnknownFields[path] = info;
+                    opCtx.UnknownFields[path] = info;
+                }
+            }
+        }
+    } catch (const yexception &e) {
+        opCtx.Error = e.what();
+    }
+}
+
+void TConfigsManager::ReplaceDatabaseConfigMetadata(const TString &config, bool force, TUpdateDatabaseConfigOpContext& opCtx) {
+    try {
+        auto metadata = NYamlConfig::GetDatabaseMetadata(config);
+
+        if (!metadata.Database) {
+            ythrow yexception() << "metadata.database is not present, unable to infer target database";
+        }
+
+        opCtx.TargetDatabase = *metadata.Database;
+
+        if (!force) {
+            opCtx.Version = metadata.Version.value_or(0);
+        } else {
+            opCtx.Version = YamlVersion;
+        }
+
+        opCtx.UpdatedConfig = NYamlConfig::ReplaceMetadata(config, NYamlConfig::TDatabaseMetadata{
+                .Version = opCtx.Version + 1,
+                .Database = opCtx.TargetDatabase,
+            });
+    } catch (const yexception &e) {
+        opCtx.Error = e.what();
+    }
+}
+
+void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opCtx) {
+    try {
+        TString currentConfig;
+        if (auto it = YamlConfigPerDatabase.find(opCtx.TargetDatabase); it != YamlConfigPerDatabase.end()) {
+            currentConfig = it->second.Config;
+        }
+        if (opCtx.UpdatedConfig != currentConfig) {
+            auto tree = NFyaml::TDocument::Parse(YamlConfig);
+            auto d = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
+            NYamlConfig::AppendDatabaseConfig(tree, d);
+            auto resolved = NYamlConfig::ResolveAll(tree);
+
+            TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
+
+            std::vector<TString> errors;
+            for (auto& [_, config] : resolved.Configs) {
+                auto cfg = NYamlConfig::YamlToProto(
+                    config.second,
+                    true,
+                    true,
+                    unknownFieldsCollector);
+                NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
+                if (result == NKikimr::NConfig::EValidationResult::Error) {
+                    ythrow yexception() << errors.front();
                 }
             }
 
-            result.HasForbiddenUnknown = !result.UnknownFields.empty() && !allowUnknownFields;
-            result.ValidationFinished = true;
+            const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
+
+            for (const auto& [path, info] : unknownFieldsCollector->GetUnknownKeys()) {
+                if (deprecatedPaths.contains(path)) {
+                    opCtx.DeprecatedFields[path] = info;
+                } else {
+                    opCtx.UnknownFields[path] = info;
+                }
+            }
         }
     } catch (const yexception &e) {
-        result.ErrorReason = e.what();
+        opCtx.Error = e.what();
     }
-    return result;
 }
 
 void TConfigsManager::Bootstrap(const TActorContext &ctx)
@@ -391,14 +456,18 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
     auto subscriptionRowset = db.Table<Schema::ConfigSubscriptions>().Range().Select<Schema::ConfigSubscriptions::TColumns>();
     auto validatorsRowset = db.Table<Schema::DisabledValidators>().Range().Select<Schema::DisabledValidators::TColumns>();
     auto yamlConfigRowset = db.Table<Schema::YamlConfig>().Reverse().Select<Schema::YamlConfig::TColumns>();
+    auto perDatabaseYamlConfigRowset = db.Table<Schema::PerTenantYamlConfig>().Select<Schema::PerTenantYamlConfig::TColumns>();
 
     if (!configItemRowset.IsReady()
         || !nextConfigItemIdRow.IsReady()
         || !nextSubscriptionIdRow.IsReady()
         || !subscriptionRowset.IsReady()
         || !validatorsRowset.IsReady()
-        || !yamlConfigRowset.IsReady())
+        || !yamlConfigRowset.IsReady()
+        || !perDatabaseYamlConfigRowset.IsReady())
+    {
         return false;
+    }
 
     if (nextConfigItemIdRow.IsValid()) {
         TString value = nextConfigItemIdRow.GetValue<Schema::Config::Value>();
@@ -430,6 +499,21 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         // ignore this as deprecated
         // now used only for disabling new config layout for older console
         YamlDropped = false;
+    }
+
+    while (!perDatabaseYamlConfigRowset.EndOfSet()) {
+        TString tenant = perDatabaseYamlConfigRowset.GetValue<Schema::PerTenantYamlConfig::Path>();
+        ui32 version = perDatabaseYamlConfigRowset.GetValue<Schema::PerTenantYamlConfig::Version>();
+        TString config = perDatabaseYamlConfigRowset.GetValue<Schema::PerTenantYamlConfig::Config>();
+
+        YamlConfigPerDatabase[tenant] = TDatabaseYamlConfig {
+            .Config = config,
+            .Version = version,
+        };
+
+        if (!perDatabaseYamlConfigRowset.Next()) {
+            return false;
+        }
     }
 
     while (!configItemRowset.EndOfSet()) {
@@ -683,12 +767,68 @@ void TConfigsManager::Handle(TEvConsole::TEvToggleConfigValidatorRequest::TPtr &
 
 void TConfigsManager::Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
-    TxProcessor->ProcessTx(CreateTxReplaceYamlConfig(ev), ctx);
+    auto metadata = NYamlConfig::GetGenericMetadata(ev->Get()->Record.GetRequest().config());
+
+    std::visit(TOverloaded{
+            [&](const NYamlConfig::TMainMetadata& /* value */) {
+                TxProcessor->ProcessTx(CreateTxReplaceMainYamlConfig(ev), ctx);
+            },
+            [&](const NYamlConfig::TDatabaseMetadata&  value) {
+                if (!value.Database || !Self.HasTenant(*value.Database)) {
+                    return FailReplaceConfig(ev->Sender, "Unknown database", ctx);
+                }
+                TxProcessor->ProcessTx(CreateTxReplaceDatabaseYamlConfig(ev), ctx);
+            },
+            [&](const NYamlConfig::TError& error) {
+                AuditLogReplaceConfigTransaction(
+                    /* peer = */ ev->Get()->Record.GetPeerName(),
+                    /* userSID = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID(),
+                    /* sanitizedToken = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetSanitizedToken(),
+                    /* oldConfig = */ YamlConfig,
+                    /* newConfig = */ ev->Get()->Record.GetRequest().config(),
+                    /* reason = */ error.Error,
+                    /* success = */ false);
+                return FailReplaceConfig(ev->Sender, error.Error, ctx);
+            }
+        }, metadata);
 }
 
 void TConfigsManager::Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
-    TxProcessor->ProcessTx(CreateTxSetYamlConfig(ev), ctx);
+    auto metadata = NYamlConfig::GetGenericMetadata(ev->Get()->Record.GetRequest().config());
+
+    std::visit(TOverloaded{
+            [&](const NYamlConfig::TMainMetadata& /* value */) {
+                TxProcessor->ProcessTx(CreateTxSetMainYamlConfig(ev), ctx);
+            },
+            [&](const NYamlConfig::TDatabaseMetadata& value) {
+                if (!value.Database || !Self.HasTenant(*value.Database)) {
+                    return FailReplaceConfig(ev->Sender, "Unknown database", ctx);
+                }
+                TxProcessor->ProcessTx(CreateTxSetDatabaseYamlConfig(ev), ctx);
+            },
+            [&](const NYamlConfig::TError& error) {
+                AuditLogReplaceConfigTransaction(
+                    /* peer = */ ev->Get()->Record.GetPeerName(),
+                    /* userSID = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID(),
+                    /* sanitizedToken = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetSanitizedToken(),
+                    /* oldConfig = */ YamlConfig,
+                    /* newConfig = */ ev->Get()->Record.GetRequest().config(),
+                    /* reason = */ error.Error,
+                    /* success = */ false);
+                return FailReplaceConfig(ev->Sender, error.Error, ctx);
+            }
+        }, metadata);
+}
+
+void TConfigsManager::FailReplaceConfig(TActorId Sender, const TString& error, const TActorContext &ctx) {
+    auto resp = MakeHolder<TEvConsole::TEvGenericError>();
+    resp->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+    auto *issue = resp->Record.AddIssues();
+    issue->set_severity(NYql::TSeverityIds::S_ERROR);
+    issue->set_message(error);
+    auto response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, resp.Release());
+    ctx.Send(response.Release());
 }
 
 void TConfigsManager::Handle(TEvConsole::TEvDropConfigRequest::TPtr &ev, const TActorContext &ctx)
@@ -989,7 +1129,7 @@ void TConfigsManager::Handle(TEvPrivate::TEvStateLoaded::TPtr &/*ev*/, const TAc
     ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvSetSubscriptions(SubscriptionIndex.GetSubscriptions()));
     ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
     if (!YamlConfig.empty()) {
-        ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig(YamlConfig, VolatileYamlConfigs));
+        ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig(YamlConfig, YamlConfigPerDatabase, VolatileYamlConfigs));
     }
     ScheduleLogCleanup(ctx);
 }

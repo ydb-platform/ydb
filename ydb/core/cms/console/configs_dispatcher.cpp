@@ -262,6 +262,7 @@ private:
     TString YamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
     TMap<ui64, size_t> VolatileYamlConfigHashes;
+    std::optional<TString> DatabaseYamlConfig;
     TString ResolvedYamlConfig;
     TString ResolvedJsonConfig;
     NKikimrConfig::TAppConfig YamlProtoConfig;
@@ -378,6 +379,7 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
             VolatileYamlConfigs,
             Labels,
             newYamlProtoConfig,
+            DatabaseYamlConfig,
             &ResolvedYamlConfig,
             &ResolvedJsonConfig);
     } catch (const yexception& ex) {
@@ -681,6 +683,26 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                     }
                                 }
                                 str << "<hr/>" << Endl;
+                                TAG(TH5) {
+                                    str << "Database Config" << Endl;
+                                }
+                                TAG_CLASS_STYLE(TDiv, "configs-dispatcher", "padding: 0 12px;") {
+                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap fold-yaml-config yaml-btn-3"}, {"title", "fold"}}) {
+                                        DIV_CLASS("yaml-sticky-btn") { }
+                                    }
+                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap unfold-yaml-config yaml-btn-2"}, {"title", "unfold"}}) {
+                                        DIV_CLASS("yaml-sticky-btn") { }
+                                    }
+                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap copy-yaml-config yaml-btn-1"}, {"title", "copy"}}) {
+                                        DIV_CLASS("yaml-sticky-btn") { }
+                                    }
+                                    DIV_CLASS("yaml-config-item") {
+                                        if (DatabaseYamlConfig) {
+                                            str << *DatabaseYamlConfig;
+                                        }
+                                    }
+                                }
+                                str << "<hr/>" << Endl;
                                 for (auto &[id, config] : VolatileYamlConfigs) {
                                     DIV() {
                                         TAG(TH5) {
@@ -767,25 +789,34 @@ class TConfigurationResult
 {
 public:
     // TODO make ref
-    const NKikimrConfig::TAppConfig& GetConfig() const {
+    const NKikimrConfig::TAppConfig& GetConfig() const override {
         return Config;
     }
 
-    bool HasYamlConfig() const {
+    bool HasYamlConfig() const override {
         return !YamlConfig.empty();
     }
 
-    const TString& GetYamlConfig() const {
+    const TString& GetYamlConfig() const override {
         return YamlConfig;
     }
 
-    TMap<ui64, TString> GetVolatileYamlConfigs() const {
+    TMap<ui64, TString> GetVolatileYamlConfigs() const override {
         return VolatileYamlConfigs;
+    }
+
+    bool HasDatabaseYamlConfig() const override {
+        return !DatabaseYamlConfig.empty();
+    }
+
+    const TString& GetDatabaseYamlConfig() const override {
+        return DatabaseYamlConfig;
     }
 
     NKikimrConfig::TAppConfig Config;
     TString YamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
+    TString DatabaseYamlConfig;
 };
 
 void TConfigsDispatcher::UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
@@ -806,6 +837,9 @@ try {
     dcClient->SavedResult = configs;
     configs->Config = rec.GetRawConsoleConfig();
     configs->YamlConfig = rec.GetYamlConfig();
+    if (rec.HasDatabaseConfig()) {
+        configs->DatabaseYamlConfig = rec.GetDatabaseConfig();
+    }
     // TODO volatile
     RecordedInitialConfiguratorDeps->DynConfigClient = std::move(dcClient);
     auto deps = RecordedInitialConfiguratorDeps->GetDeps();
@@ -870,9 +904,14 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
     CurrentConfig = rec.GetConfig();
 
-    const auto& newYamlConfig = rec.GetYamlConfig();
+    auto newYamlConfig = rec.GetYamlConfig();
 
     bool isYamlChanged = newYamlConfig != YamlConfig;
+
+    if (rec.HasDatabaseConfig() && rec.GetDatabaseConfig() != DatabaseYamlConfig.value_or("")) {
+        DatabaseYamlConfig = rec.GetDatabaseConfig();
+        isYamlChanged = true;
+    }
 
     if (rec.VolatileConfigsSize() != VolatileYamlConfigs.size()) {
         isYamlChanged = true;

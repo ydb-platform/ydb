@@ -7,125 +7,166 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
 
-class TConfigsManager::TTxReplaceYamlConfig : public TTransactionBase<TConfigsManager> {
+class TConfigsManager::TTxReplaceYamlConfigBase
+    : public TTransactionBase<TConfigsManager>
+{
     template <class T>
-    TTxReplaceYamlConfig(TConfigsManager *self,
-                         T &ev,
-                         bool force)
-        : TBase(self)
-        , Config(ev->Get()->Record.GetRequest().config())
-        , Peer(ev->Get()->Record.GetPeerName())
-        , Sender(ev->Sender)
-        , UserToken(ev->Get()->Record.GetUserToken())
-        , Force(force)
-        , AllowUnknownFields(ev->Get()->Record.GetRequest().allow_unknown_fields())
-        , DryRun(ev->Get()->Record.GetRequest().dry_run())
+    TTxReplaceYamlConfigBase(
+        TConfigsManager *self,
+        T &ev,
+        bool force)
+            : TBase(self)
+            , Config(ev->Get()->Record.GetRequest().config())
+            , Peer(ev->Get()->Record.GetPeerName())
+            , Sender(ev->Sender)
+            , UserToken(ev->Get()->Record.GetUserToken())
+            , Force(force)
+            , AllowUnknownFields(ev->Get()->Record.GetRequest().allow_unknown_fields())
+            , DryRun(ev->Get()->Record.GetRequest().dry_run())
+            , IngressDatabase(ev->Get()->Record.HasDatabase() ? TMaybe<TString>{ev->Get()->Record.GetDatabase()} : TMaybe<TString>{})
     {
     }
 
 public:
-    TTxReplaceYamlConfig(TConfigsManager *self,
-                         TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)
-        : TTxReplaceYamlConfig(self, ev, false)
+    TTxReplaceYamlConfigBase(
+        TConfigsManager *self,
+        TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)
+            : TTxReplaceYamlConfigBase(self, ev, false)
     {
     }
 
-    TTxReplaceYamlConfig(TConfigsManager *self,
-                         TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
-        : TTxReplaceYamlConfig(self, ev, true)
+    TTxReplaceYamlConfigBase(
+        TConfigsManager *self,
+        TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
+            : TTxReplaceYamlConfigBase(self, ev, true)
     {
     }
 
-    void DoInternalAudit(TTransactionContext &txc, const TActorContext &ctx)
-    {
-        auto logData = NKikimrConsole::TLogRecordData{};
-
-        // for backward compatibility in ui
-        logData.MutableAction()->AddActions()->MutableModifyConfigItem()->MutableConfigItem();
-        logData.AddAffectedKinds(NKikimrConsole::TConfigItem::YamlConfigChangeItem);
-
-        auto& yamlConfigChange = *logData.MutableYamlConfigChange();
-        yamlConfigChange.SetOldYamlConfig(Self->YamlConfig);
-        yamlConfigChange.SetNewYamlConfig(UpdatedConfig);
-        for (auto& [id, config] : Self->VolatileYamlConfigs) {
-            auto& oldVolatileConfig = *yamlConfigChange.AddOldVolatileYamlConfigs();
-            oldVolatileConfig.SetId(id);
-            oldVolatileConfig.SetConfig(config);
+    THolder<NActors::IEventHandle> FillResponse(const TUpdateConfigOpBaseContext& opCtx, auto& ev, auto errorLevel, const TActorContext &ctx) {
+        for (auto& [path, info] : opCtx.UnknownFields) {
+            auto *issue = ev->Record.AddIssues();
+            issue->set_severity(errorLevel);
+            issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
         }
 
-        Self->Logger.DbLogData(UserToken.GetUserSID(), logData, txc, ctx);
+        for (auto& [path, info] : opCtx.DeprecatedFields) {
+            auto *issue = ev->Record.AddIssues();
+            issue->set_severity(NYql::TSeverityIds::S_WARNING);
+            issue->set_message(TStringBuilder{} << "Deprecated key# " << info.first << " in proto# " << info.second << " found in path# " << path);
+        }
+
+        return MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+    }
+
+    void HandleError(const TString& error, const TActorContext& ctx) {
+        Error = true;
+        auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+        ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        auto *issue = ev->Record.AddIssues();
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        issue->set_message(error);
+        ErrorReason = error;
+        Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+    }
+
+protected:
+    const TString Config;
+    const TString Peer;
+    const TActorId Sender;
+    const NACLib::TUserToken UserToken;
+    const bool Force = false;
+    const bool AllowUnknownFields = false;
+    const bool DryRun = false;
+    THolder<NActors::IEventHandle> Response;
+    bool Error = false;
+    TString ErrorReason;
+    bool Modify = false;
+    TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> UnknownFieldsCollector = nullptr;
+    TMaybe<TString> IngressDatabase;
+    bool WarnDatabaseBypass = false;
+};
+
+class TConfigsManager::TTxReplaceMainYamlConfig
+    : public TConfigsManager::TTxReplaceYamlConfigBase
+{
+public:
+     TTxReplaceMainYamlConfig(
+        TConfigsManager *self,
+        TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)
+            : TTxReplaceYamlConfigBase(self, ev)
+    {
+    }
+
+    TTxReplaceMainYamlConfig(
+        TConfigsManager *self,
+        TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
+            : TTxReplaceYamlConfigBase(self, ev)
+    {
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         NIceDb::TNiceDb db(txc.DB);
-        TValidateConfigResult result = Self->ValidateConfigAndReplaceMetadata(Config, Force, AllowUnknownFields);
-        if (result.ErrorReason) {
-            HandleError(result.ErrorReason.value(), ctx);
+
+        TUpdateConfigOpContext opCtx;
+        Self->ReplaceMainConfigMetadata(Config, false, opCtx);
+        Self->ValidateMainConfig(opCtx);
+
+        bool hasForbiddenUnknown = !opCtx.UnknownFields.empty() && !AllowUnknownFields;
+        if (opCtx.Error) {
+            HandleError(opCtx.Error.value(), ctx);
             return true;
         }
+
         try {
+            Version = opCtx.Version;
+            UpdatedConfig = opCtx.UpdatedConfig;
+            Cluster = opCtx.Cluster;
+            Modify = opCtx.UpdatedConfig != Self->YamlConfig || Self->YamlDropped;
 
-            Version = result.Version;
-            UpdatedConfig = result.UpdatedConfig;
-            Cluster = result.Cluster;
-            Modify = result.Modify;
-
-            if (result.ValidationFinished) {
-                if (!DryRun && !result.HasForbiddenUnknown) {
-                    DoInternalAudit(txc, ctx);
-
-                    db.Table<Schema::YamlConfig>().Key(Version + 1)
-                        .Update<Schema::YamlConfig::Config>(UpdatedConfig)
-                        // set config dropped by default to support rollback to previous versions
-                        // where new config layout is not supported
-                        // it will lead to ignoring config from new versions
-                        .Update<Schema::YamlConfig::Dropped>(true);
-
-                    /* Later we shift this boundary to support rollback and history */
-                    db.Table<Schema::YamlConfig>().Key(Version)
-                        .Delete();
-                }
+            if (IngressDatabase) {
+                WarnDatabaseBypass = true;
             }
 
-            auto fillResponse = [&](auto& ev, auto errorLevel){
-                for (auto& [path, info] : result.UnknownFields) {
-                    auto *issue = ev->Record.AddIssues();
-                        issue->set_severity(errorLevel);
-                        issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
-                }
+            if (!DryRun && !hasForbiddenUnknown) {
+                DoInternalAudit(txc, ctx);
 
-                for (auto& [path, info] : result.DeprecatedFields) {
-                    auto *issue = ev->Record.AddIssues();
-                        issue->set_severity(NYql::TSeverityIds::S_WARNING);
-                        issue->set_message(TStringBuilder{} << "Deprecated key# " << info.first << " in proto# " << info.second << " found in path# " << path);
-                }
+                db.Table<Schema::YamlConfig>().Key(Version + 1)
+                    .Update<Schema::YamlConfig::Config>(UpdatedConfig)
+                    // set config dropped by default to support rollback to previous versions
+                    // where new config layout is not supported
+                    // it will lead to ignoring config from new versions
+                    .Update<Schema::YamlConfig::Dropped>(true);
 
-                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
-            };
+                /* Later we shift this boundary to support rollback and history */
+                db.Table<Schema::YamlConfig>().Key(Version)
+                    .Delete();
+            }
 
-            if (result.HasForbiddenUnknown) {
+            if (hasForbiddenUnknown) {
                 Error = true;
                 auto ev = MakeHolder<TEvConsole::TEvGenericError>();
                 ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
                 ErrorReason = "Unknown keys in config.";
-                fillResponse(ev, NYql::TSeverityIds::S_ERROR);
+                Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_ERROR, ctx);
             } else if (!Force) {
                 auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
-                fillResponse(ev, NYql::TSeverityIds::S_WARNING);
+                Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_WARNING, ctx);
             } else {
                 auto ev = MakeHolder<TEvConsole::TEvSetYamlConfigResponse>();
-                fillResponse(ev, NYql::TSeverityIds::S_WARNING);
+                Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_WARNING, ctx);
             }
         }
         catch (const yexception& ex) {
             HandleError(ex.what(), ctx);
         }
+
         return true;
     }
 
@@ -151,7 +192,7 @@ public:
 
             Self->VolatileYamlConfigs.clear();
 
-            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->YamlConfig);
+            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->YamlConfig, Self->YamlConfigPerDatabase);
             ctx.Send(Self->ConfigsProvider, resp.Release());
         } else if (Error && !DryRun) {
             AuditLogReplaceConfigTransaction(
@@ -167,43 +208,218 @@ public:
         Self->TxProcessor->TxCompleted(this, ctx);
     }
 
-    void HandleError(const TString& error, const TActorContext& ctx) {
-        Error = true;
-        auto ev = MakeHolder<TEvConsole::TEvGenericError>();
-        ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-        auto *issue = ev->Record.AddIssues();
-        issue->set_severity(NYql::TSeverityIds::S_ERROR);
-        issue->set_message(error);
-        ErrorReason = error;
-        Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+    void DoInternalAudit(TTransactionContext &txc, const TActorContext &ctx)
+    {
+        auto logData = NKikimrConsole::TLogRecordData{};
+
+        // for backward compatibility in ui
+        logData.MutableAction()->AddActions()->MutableModifyConfigItem()->MutableConfigItem();
+        logData.AddAffectedKinds(NKikimrConsole::TConfigItem::YamlConfigChangeItem);
+
+        auto& yamlConfigChange = *logData.MutableYamlConfigChange();
+        yamlConfigChange.SetOldYamlConfig(Self->YamlConfig);
+        yamlConfigChange.SetNewYamlConfig(UpdatedConfig);
+        for (auto& [id, config] : Self->VolatileYamlConfigs) {
+            auto& oldVolatileConfig = *yamlConfigChange.AddOldVolatileYamlConfigs();
+            oldVolatileConfig.SetId(id);
+            oldVolatileConfig.SetConfig(config);
+        }
+
+        Self->Logger.DbLogData(UserToken.GetUserSID(), logData, txc, ctx);
     }
 
 private:
-    const TString Config;
-    const TString Peer;
-    const TActorId Sender;
-    const NACLib::TUserToken UserToken;
-    const bool Force = false;
-    const bool AllowUnknownFields = false;
-    const bool DryRun = false;
-    THolder<NActors::IEventHandle> Response;
-    bool Error = false;
-    TString ErrorReason;
-    bool Modify = false;
-    TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> UnknownFieldsCollector = nullptr;
     ui32 Version;
     TString Cluster;
     TString UpdatedConfig;
 };
 
-ITransaction *TConfigsManager::CreateTxReplaceYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)
+class TConfigsManager::TTxReplaceDatabaseYamlConfig
+    : public TConfigsManager::TTxReplaceYamlConfigBase
 {
-    return new TTxReplaceYamlConfig(this, ev);
+public:
+     TTxReplaceDatabaseYamlConfig(
+        TConfigsManager *self,
+        TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)
+            : TTxReplaceYamlConfigBase(self, ev)
+    {
+    }
+
+    TTxReplaceDatabaseYamlConfig(
+        TConfigsManager *self,
+        TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
+            : TTxReplaceYamlConfigBase(self, ev)
+    {
+    }
+
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
+    {
+        NIceDb::TNiceDb db(txc.DB);
+
+        TUpdateDatabaseConfigOpContext opCtx;
+        Self->ReplaceDatabaseConfigMetadata(Config, false, opCtx);
+        Self->ValidateDatabaseConfig(opCtx);
+
+        bool hasForbiddenUnknown = !opCtx.UnknownFields.empty() && !AllowUnknownFields;
+        if (opCtx.Error) {
+            HandleError(opCtx.Error.value(), ctx);
+            return true;
+        }
+
+        try {
+            Version = opCtx.Version;
+            UpdatedConfig = opCtx.UpdatedConfig;
+            TString currentConfig;
+            if (auto it = Self->YamlConfigPerDatabase.find(opCtx.TargetDatabase); it != Self->YamlConfigPerDatabase.end()) {
+                currentConfig = it->second.Config;
+            }
+            Modify = opCtx.UpdatedConfig != currentConfig;
+
+            if (IngressDatabase != opCtx.TargetDatabase) {
+                WarnDatabaseBypass = true;
+            }
+
+            if (!AppData(ctx)->FeatureFlags.GetPerDatabaseConfigAllowed()) {
+                Error = true;
+                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+
+                auto *issue = ev->Record.AddIssues();
+                ErrorReason = "Per database config is disabled";
+                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                issue->set_message(ErrorReason);
+                ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+                return true;
+            }
+
+            if (!DryRun && !hasForbiddenUnknown) {
+                DoInternalAudit(txc, ctx);
+
+                db.Table<Schema::PerTenantYamlConfig>().Key(TargetDatabase, Version + 1)
+                    .Update<Schema::PerTenantYamlConfig::Config>(Config);
+
+                /* Later we shift this boundary to support rollback and history */
+                db.Table<Schema::PerTenantYamlConfig>().Key(TargetDatabase, Version)
+                    .Delete();
+            }
+
+            if (hasForbiddenUnknown) {
+                Error = true;
+                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+                ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                ErrorReason = "Unknown keys in config.";
+                Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_ERROR, ctx);
+            } else if (!Force) {
+                auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
+                Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_WARNING, ctx);
+            } else {
+                auto ev = MakeHolder<TEvConsole::TEvSetYamlConfigResponse>();
+                Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_WARNING, ctx);
+            }
+        }
+        catch (const yexception& ex) {
+            HandleError(ex.what(), ctx);
+        }
+
+        return true;
+    }
+
+    void DoInternalAudit(TTransactionContext &txc, const TActorContext &ctx)
+    {
+        TString oldConfig;
+
+        if (Self->YamlConfigPerDatabase.contains(TargetDatabase)) {
+            oldConfig = Self->YamlConfigPerDatabase[TargetDatabase].Config;
+        }
+
+        auto logData = NKikimrConsole::TLogRecordData{};
+
+        // for backward compatibility in ui
+        logData.MutableAction()->AddActions()->MutableModifyConfigItem()->MutableConfigItem();
+        logData.AddAffectedKinds(NKikimrConsole::TConfigItem::DatabaseYamlConfigChangeItem);
+
+        auto& databaseConfigChange = *logData.MutableDatabaseConfigChange();
+        databaseConfigChange.SetDatabase(TargetDatabase);
+        databaseConfigChange.SetOldYamlConfig(oldConfig);
+        databaseConfigChange.SetNewYamlConfig(UpdatedConfig);
+
+        Self->Logger.DbLogData(UserToken.GetUserSID(), logData, txc, ctx);
+    }
+
+    void Complete(const TActorContext &ctx) override
+    {
+        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceYamlConfig Complete");
+
+        ctx.Send(Response.Release());
+
+        TString oldConfig;
+
+        if (Self->YamlConfigPerDatabase.contains(TargetDatabase)) {
+            oldConfig = Self->YamlConfigPerDatabase[TargetDatabase].Config;
+        }
+
+        if (!Error && Modify && !DryRun) {
+            AuditLogReplaceDatabaseConfigTransaction(
+                /* peer = */ Peer,
+                /* userSID = */ UserToken.GetUserSID(),
+                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                /* database =  */ TargetDatabase,
+                /* oldConfig = */ oldConfig,
+                /* newConfig = */ Config,
+                /* reason = */ {},
+                /* success = */ true);
+
+            Self->YamlConfigPerDatabase[*IngressDatabase] = TDatabaseYamlConfig {
+                .Config = UpdatedConfig,
+                .Version = Version + 1,
+            };
+
+            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
+                Self->YamlConfig,
+                Self->YamlConfigPerDatabase,
+                Self->VolatileYamlConfigs,
+                TargetDatabase);
+
+            ctx.Send(Self->ConfigsProvider, resp.Release());
+        } else if (Error && !DryRun) {
+            AuditLogReplaceDatabaseConfigTransaction(
+                /* peer = */ Peer,
+                /* userSID = */ UserToken.GetUserSID(),
+                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                /* database =  */ TargetDatabase,
+                /* oldConfig = */ oldConfig,
+                /* newConfig = */ Config,
+                /* reason = */ ErrorReason,
+                /* success = */ false);
+        }
+
+        Self->TxProcessor->TxCompleted(this, ctx);
+    }
+
+private:
+    ui32 Version;
+    TString TargetDatabase;
+    TString UpdatedConfig;
+};
+
+ITransaction *TConfigsManager::CreateTxReplaceMainYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)
+{
+    return new TTxReplaceMainYamlConfig(this, ev);
 }
 
-ITransaction *TConfigsManager::CreateTxSetYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxSetMainYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
 {
-    return new TTxReplaceYamlConfig(this, ev);
+    return new TTxReplaceMainYamlConfig(this, ev);
+}
+
+ITransaction *TConfigsManager::CreateTxReplaceDatabaseYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)
+{
+    return new TTxReplaceDatabaseYamlConfig(this, ev);
+}
+
+ITransaction *TConfigsManager::CreateTxSetDatabaseYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
+{
+    return new TTxReplaceDatabaseYamlConfig(this, ev);
 }
 
 } // namespace NKikimr::NConsole

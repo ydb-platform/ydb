@@ -38,6 +38,12 @@ message TYamlConfigChange {
     repeated TVolatileConfig NewVolatileYamlConfigs = 4;
 }
 
+message TDatabaseConfigChange {
+    optional string Database = 1;
+    optional string OldYamlConfig = 2;
+    optional string NewYamlConfig = 3;
+}
+
 message TLogRecordData {
     // Old configs
     optional TConfigureRequest Action = 1;
@@ -45,6 +51,7 @@ message TLogRecordData {
     repeated uint32 AffectedKinds = 3;
     // New configs
     optional TYamlConfigChange YamlConfigChange = 4;
+    optional TDatabaseConfigChange DatabaseConfigChange = 5;
 }
 
 message TLogRecord {

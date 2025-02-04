@@ -693,6 +693,8 @@ public:
     bool HasYamlConfig() const;
     const TString& GetYamlConfig() const;
     TMap<ui64, TString> GetVolatileYamlConfigs() const;
+    bool HasDatabaseYamlConfig() const;
+    const TString& GetDatabaseYamlConfig() const;
 
     const NKikimrClient::TConsoleResponse &Record() const;
 

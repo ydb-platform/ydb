@@ -135,19 +135,23 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerValidateConfigRequest:
     auto& record = response->Record;
     auto yamlConfig = ev->Get()->Record.GetYAML();
 
-    if (auto res = ValidateConfigAndReplaceMetadata(yamlConfig); res.ErrorReason || res.HasForbiddenUnknown) {
+    TUpdateConfigOpContext opCtx;
+    ReplaceMainConfigMetadata(yamlConfig, false, opCtx);
+    ValidateMainConfig(opCtx);
+
+    if (opCtx.Error || !opCtx.UnknownFields.empty()) {
         record.SetStatus(NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigNotValid);
         TStringStream s;
-        if (res.ErrorReason) {
-            s << *res.ErrorReason << (res.HasForbiddenUnknown ? " and " : "");
+        if (opCtx.Error) {
+            s << *opCtx.Error<< (opCtx.HasForbiddenUnknown ? " and " : "");
         }
-        if (res.HasForbiddenUnknown) {
+        if (!opCtx.UnknownFields.empty()) {
             s << "has forbidden unknown fields";
         }
         record.SetErrorReason(s.Str());
     } else {
         record.SetStatus(NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigIsValid);
-        record.SetYAML(res.UpdatedConfig);
+        record.SetYAML(opCtx.UpdatedConfig);
     }
     SendInReply(ev->Sender, ev->InterconnectSession, std::move(response), ev->Cookie);
 }

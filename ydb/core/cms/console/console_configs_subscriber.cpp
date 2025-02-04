@@ -220,6 +220,9 @@ public:
         bool notChanged = true;
 
         if (ServeYaml) {
+            if (!(rec.HasDatabaseConfigNotChanged() && rec.GetDatabaseConfigNotChanged())) {
+                notChanged = false;
+            }
             if (!(rec.HasYamlConfigNotChanged() && rec.GetYamlConfigNotChanged())) {
                 if (rec.HasYamlConfig()) {
                     YamlConfig = rec.GetYamlConfig();
@@ -285,7 +288,8 @@ public:
                      changes,
                      YamlConfig,
                      VolatileYamlConfigs,
-                     CurrentDynConfig),
+                     CurrentDynConfig,
+                     rec.HasDatabaseConfig() ? TMaybe<TString>(rec.GetDatabaseConfig()) : TMaybe<TString>{}),
                 IEventHandle::FlagTrackDelivery, Cookie);
 
             FirstUpdateSent = true;

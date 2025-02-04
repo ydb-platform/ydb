@@ -13,6 +13,11 @@
 
 namespace NKikimr::NConsole {
 
+struct TDatabaseYamlConfig {
+    TString Config;
+    ui32 Version;
+};
+
 class TConfigsProvider : public TActorBootstrapped<TConfigsProvider> {
 public:
     struct TEvPrivate {
@@ -100,14 +105,48 @@ public:
         };
 
         struct TEvUpdateYamlConfig : public TEventLocal<TEvUpdateYamlConfig, EvUpdateYamlConfig> {
-            TEvUpdateYamlConfig(const TString &yamlConfig, const TMap<ui64, TString> &volatileYamlConfigs = {})
+            TEvUpdateYamlConfig(
+                const TString &yamlConfig,
+                const TMap<ui64, TString> &volatileYamlConfigs = {})
                 : YamlConfig(yamlConfig)
                 , VolatileYamlConfigs(volatileYamlConfigs)
             {
             }
 
+            TEvUpdateYamlConfig(
+                const TString &yamlConfig,
+                const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase)
+                : YamlConfig(yamlConfig)
+                , YamlConfigPerDatabase(yamlConfigPerDatabase)
+            {
+            }
+
+            TEvUpdateYamlConfig(
+                const TString &yamlConfig,
+                const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase,
+                const TMap<ui64, TString> &volatileYamlConfigs)
+                : YamlConfig(yamlConfig)
+                , YamlConfigPerDatabase(yamlConfigPerDatabase)
+                , VolatileYamlConfigs(volatileYamlConfigs)
+            {
+            }
+
+            TEvUpdateYamlConfig(
+                const TString &yamlConfig,
+                const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase,
+                const TMap<ui64, TString> &volatileYamlConfigs,
+                const TString& changedDatabase)
+                : YamlConfig(yamlConfig)
+                , YamlConfigPerDatabase(yamlConfigPerDatabase)
+                , VolatileYamlConfigs(volatileYamlConfigs)
+                , ChangedDatabase(changedDatabase)
+            {
+            }
+
             TString YamlConfig;
+            THashMap<TString, TDatabaseYamlConfig> YamlConfigPerDatabase;
             TMap<ui64, TString> VolatileYamlConfigs;
+            TString ChangedDatabase;
         };
 
         struct TEvUpdateSubscriptions : public TEventLocal<TEvUpdateSubscriptions, EvUpdateSubscriptions> {
@@ -141,6 +180,9 @@ private:
                            const TActorContext &ctx);
     void CheckSubscription(TInMemorySubscription::TPtr subscriptions,
                            const TActorContext &ctx);
+
+    void UpdateConfig(TInMemorySubscription::TPtr subscription,
+                      const TActorContext &ctx);
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx);
@@ -229,6 +271,7 @@ private:
 
     TString YamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
+    THashMap<TString, TDatabaseYamlConfig> YamlConfigPerDatabase;
     ui64 YamlConfigVersion = 0;
     TMap<ui64, ui64> VolatileYamlConfigHashes;
 };

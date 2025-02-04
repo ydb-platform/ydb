@@ -77,6 +77,7 @@ void ResolveAndParseYamlConfig(
     const TMap<ui64, TString>& volatileYamlConfigs,
     const TMap<TString, TString>& labels,
     NKikimrConfig::TAppConfig& appConfig,
+    std::optional<TString> databaseConfig = std::nullopt,
     TString* resolvedYamlConfig = nullptr,
     TString* resolvedJsonConfig = nullptr);
 

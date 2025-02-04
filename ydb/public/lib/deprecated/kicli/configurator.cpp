@@ -56,6 +56,16 @@ TMap<ui64, TString> TConfigurationResult::GetVolatileYamlConfigs() const
     return volatileConfigs;
 }
 
+bool TConfigurationResult::HasDatabaseYamlConfig() const
+{
+    return Record().GetGetNodeConfigResponse().HasDatabaseYamlConfig();
+}
+
+const TString& TConfigurationResult::GetDatabaseYamlConfig() const
+{
+    return Record().GetGetNodeConfigResponse().GetDatabaseYamlConfig();
+}
+
 TNodeConfigurator::TNodeConfigurator(TKikimr& kikimr)
     : Kikimr(&kikimr)
 {

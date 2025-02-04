@@ -72,6 +72,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableBackupService, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicTransfer, std::nullopt);
         OPTION(bool, SetupKqpProxy, false);
+        OPTION(bool, EnableStrictAclCheck, false);
 
         #undef OPTION
     };

@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/tx/tiering/tier/identifier.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -26,6 +27,7 @@ class TColumnEngineChanges;
 class IBlobsGCAction;
 class TPortionInfo;
 class TDataAccessorsResult;
+class IBlobsStorageOperator;
 namespace NIndexes {
 class TIndexMetaContainer;
 }
@@ -35,6 +37,10 @@ class ILock;
 }   // namespace NKikimr::NOlap
 namespace arrow {
 class RecordBatch;
+}
+
+namespace NKikimr::NWrappers::NExternalStorage {
+class IExternalStorageOperator;
 }
 
 namespace NKikimr::NYDBTest {
@@ -212,6 +218,11 @@ public:
     virtual NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(
         const NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& /*actions*/) const {
         return original;
+    }
+
+    virtual std::shared_ptr<NWrappers::NExternalStorage::IExternalStorageOperator> GetStorageOperatorOverride(
+        const NColumnShard::NTiers::TExternalStorageId& /*storageId*/) const {
+        return nullptr;
     }
 
     TDuration GetActualizationTasksLag() const {

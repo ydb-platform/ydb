@@ -219,6 +219,8 @@ private:
         ui64 Generation = std::numeric_limits<ui64>::max();
         THashMap<ui32, TPartition> Partitions;
         bool IsWaitingStartSessionAck = false;
+        ui64 QueuedBytes = 0;
+        ui64 QueuedRows = 0;
     };
     
     TMap<NActors::TActorId, TSession> Sessions;
@@ -315,6 +317,7 @@ public:
     void ProcessGlobalState();
     void ProcessSessionsState();
     void UpdateSessions();
+    void UpdateQueuedSize();
 };
 
 TDqPqRdReadActor::TDqPqRdReadActor(
@@ -594,6 +597,12 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
         return;
     }
     IngressStats.Bytes += ev->Get()->Record.GetReadBytes();
+    IngressStats.FilteredBytes += ev->Get()->Record.GetFilteredBytes();
+    IngressStats.FilteredRows += ev->Get()->Record.GetFilteredRows();
+    session->QueuedBytes = ev->Get()->Record.GetQueuedBytes();
+    session->QueuedRows = ev->Get()->Record.GetQueuedRows();
+    UpdateQueuedSize();
+
     for (auto partition : ev->Get()->Record.GetPartition()) {
         ui64 partitionId = partition.GetPartitionId();
         auto& nextOffset = NextOffsetFromRD[partitionId];
@@ -1008,6 +1017,17 @@ void TDqPqRdReadActor::UpdateSessions() {
         ReadActorByEventQueueId[queueId] = rowDispatcherActorId;
     }
     LastUsedPartitionDistribution = LastReceivedPartitionDistribution;
+}
+
+void TDqPqRdReadActor::UpdateQueuedSize() {
+    ui64 queuedBytes = 0;
+    ui64 queuedRows = 0;
+    for (auto& [_, sessionInfo] : Sessions) {
+        queuedBytes += sessionInfo.QueuedBytes;
+        queuedRows += sessionInfo.QueuedRows;
+    }
+    IngressStats.QueuedBytes = queuedBytes;
+    IngressStats.QueuedRows = queuedRows;
 }
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvNotifyCA::TPtr&) {

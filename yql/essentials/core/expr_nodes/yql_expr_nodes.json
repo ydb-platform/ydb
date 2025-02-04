@@ -1563,10 +1563,10 @@
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "MatchRecognize"},
             "Children": [
-                {"Index": 1, "Name": "partitionKeySelector", "Type": "TExprBase"},
-                {"Index": 2, "Name": "partitionColumns", "Type": "TExprBase"},
-                {"Index": 3, "Name": "sortTraits", "Type": "TExprBase"},
-                {"Index": 4, "Name": "params", "Type": "TExprBase"}
+                {"Index": 1, "Name": "PartitionKeySelector", "Type": "TExprBase"},
+                {"Index": 2, "Name": "PartitionColumns", "Type": "TExprBase"},
+                {"Index": 3, "Name": "SortTraits", "Type": "TExprBase"},
+                {"Index": 4, "Name": "Params", "Type": "TExprBase"}
             ]
         },
         {

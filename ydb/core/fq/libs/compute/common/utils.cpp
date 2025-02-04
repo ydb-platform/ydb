@@ -80,6 +80,10 @@ struct TTotalStatistics {
     TAggregate EgressRows;
     TAggregate Tasks;
     TAggregates Aggregates;
+    TAggregate IngressFilteredBytes;
+    TAggregate IngressFilteredRows;
+    TAggregate IngressQueuedBytes;
+    TAggregate IngressQueuedRows;
 };
 
 TString FormatDurationMs(ui64 durationMs) {
@@ -309,6 +313,14 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                         totals.SourceCpuTimeUs.Add(*sum);
                     } else if (name == "Tasks") {
                         totals.Tasks.Add(*sum);
+                    } else if (name == "IngressFilteredBytes") {
+                        totals.IngressFilteredBytes.Add(*sum);
+                    } else if (name == "IngressFilteredRows") {
+                        totals.IngressFilteredRows.Add(*sum);
+                    } else if (name == "IngressQueuedBytes") {
+                        totals.IngressQueuedBytes.Add(*sum);
+                    } else if (name == "IngressQueuedRows") {
+                        totals.IngressQueuedRows.Add(*sum);
                     }
                 }
             }
@@ -468,6 +480,10 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
                         totals.IngressRows.Write(writer, "IngressRows");
                         totals.EgressBytes.Write(writer, "EgressBytes");
                         totals.EgressRows.Write(writer, "EgressRows");
+                        totals.IngressFilteredBytes.Write(writer, "IngressFilteredBytes");
+                        totals.IngressFilteredRows.Write(writer, "IngressFilteredRows");
+                        totals.IngressQueuedBytes.Write(writer, "IngressQueuedBytes");
+                        totals.IngressQueuedRows.Write(writer, "IngressQueuedRows");
                         totals.Tasks.Write(writer, "Tasks");
                         writer.OnEndMap();
                     }
@@ -532,6 +548,26 @@ struct TStatsAggregator {
             Aggregates[source + ".Splits"] += ingress->GetIntegerSafe();
             success = true;
         }
+        if (auto ingress = node.GetValueByPath("Ingress.FilteredBytes.Sum")) {
+            auto source = name.substr(prefix.size());
+            Aggregates[source + ".FilteredBytes"] += ingress->GetIntegerSafe();
+            success = true;
+        }
+        if (auto ingress = node.GetValueByPath("Ingress.FilteredRows.Sum")) {
+            auto source = name.substr(prefix.size());
+            Aggregates[source + ".FilteredRows"] += ingress->GetIntegerSafe();
+            success = true;
+        }
+        if (auto ingress = node.GetValueByPath("Ingress.QueuedBytes.Sum")) {
+            auto source = name.substr(prefix.size());
+            Aggregates[source + ".QueuedBytes"] += ingress->GetIntegerSafe();
+            success = true;
+        }
+        if (auto ingress = node.GetValueByPath("Ingress.QueuedRows.Sum")) {
+            auto source = name.substr(prefix.size());
+            Aggregates[source + ".QueuedRows"] += ingress->GetIntegerSafe();
+            success = true;
+        }
         return success;
     }
 
@@ -543,7 +579,11 @@ struct TStatsAggregator {
         {"EgressRows", 0},
         {"InputBytes", 0},
         {"OutputBytes", 0},
-        {"CpuTimeUs", 0}
+        {"CpuTimeUs", 0},
+        {"IngressFilteredBytes", 0},
+        {"IngressFilteredRows", 0},
+        {"IngressQueuedBytes", 0},
+        {"IngressQueuedRows", 0}
     };
 };
 
@@ -989,6 +1029,10 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.MkqlMaxMemoryUsage", "MaxMemoryUsage");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressFilteredBytes", "IngressFilteredBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressFilteredRows", "IngressFilteredRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressQueuedBytes", "IngressQueuedBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressQueuedRows", "IngressQueuedRows");
                 writer.OnEndMap();
             }
             // YQv2
@@ -1010,6 +1054,10 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
                     RemapNode(writer, p.second, "EgressRows", "EgressRows");
                     RemapNode(writer, p.second, "MaxMemoryUsage", "MaxMemoryUsage");
+                    RemapNode(writer, p.second, "IngressFilteredBytes", "IngressFilteredBytes");
+                    RemapNode(writer, p.second, "IngressFilteredRows", "IngressFilteredRows");
+                    RemapNode(writer, p.second, "IngressQueuedBytes", "IngressQueuedBytes");
+                    RemapNode(writer, p.second, "IngressQueuedRows", "IngressQueuedRows");
                 writer.OnEndMap();
             }
         }

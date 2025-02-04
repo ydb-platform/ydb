@@ -8,15 +8,20 @@
 
 ### Функциональность
 
-* Добавлена поддержка [представлений (VIEW)](./concepts/datamodel/view.md) при выполнении операций `ydb export s3` и `ydb import s3`. Представления экспортируются как YQL-выражение `CREATE VIEW`, которое выполняется при импорте.
 * Добавлена поддержка [потоков изменений (changefeeds)](./concepts/cdc.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `ydb tools dump` и `ydb tools restore`. В результате появились изменения в файле бэкапа: для таблиц с потоками изменений создаётся одноимённая директория на каждый поток изменений. Каждая такая директория содержит два файла: `changefeed_description.pb` с описанием потока изменений и `topic_description.pb` с информацией о связанном топике.
 * Добавлена рекомендация с текстом `CREATE TABLE` при схемной ошибке во время выполнения [команды](./reference/ydb-cli/export-import/import-file.md) `ydb import file csv`.
-* Добавлена опция `--skip-checksum-validation` для [команды](./reference/ydb-cli/export-import/import-s3.md) `ydb import s3`, позволяющая отключить валидацию контрольной суммы на стороне сервера.
 * Добавлен вывод статистики для текущего процесса при выполнении [команды](./reference/ydb-cli/commands/workload/) `ydb workload`.
 * Добавлен текст запроса к сообщению, если запрос завершился ошибкой при выполнении [команды](./reference/ydb-cli/commands/workload/) `ydb workload run`.
 * Добавлено сообщение в случае ошибки истечения глобального таймаута при выполнении [команды](./reference/ydb-cli/commands/workload/) `ydb workload run`.
-* Добавлены новые экспериментальные опции `--chain-length`, `--chain-work-duration`, `--no-tail-chain` для команды `ydb debug ping`.
 * Внесены временные изменения в экспериментальной команде `ydb admin storage`.
+
+{% note info "Следующие изменения требуют версию сервера YDB 25.1+" %}
+
+* Добавлена поддержка [представлений (VIEW)](./concepts/datamodel/view.md) при выполнении операций `ydb export s3` и `ydb import s3`. Представления экспортируются как YQL-выражение `CREATE VIEW`, которое выполняется при импорте.
+* Добавлена опция `--skip-checksum-validation` для [команды](./reference/ydb-cli/export-import/import-s3.md) `ydb import s3`, позволяющая отключить валидацию контрольной суммы на стороне сервера.
+* Добавлены новые экспериментальные опции `--chain-length`, `--chain-work-duration`, `--no-tail-chain` для команды `ydb debug ping`.
+
+{% endnote %}
 
 ### Исправления ошибок
 
@@ -50,6 +55,14 @@
 ## Версия 2.17.0 {#2-17-0}
 
 Дата выхода 4 декабря 2024. Для обновления до версии **2.17.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+### Функциональность
+
+{% note info "Следующие изменения требуют версию сервера YDB 25.1+" %}
+
+* Добавлена команда `ydb debug ping` для проверки производительности и внутренней связности сервера
+
+{% endnote %}
 
 ### Производительность
 

@@ -301,6 +301,19 @@ namespace NActors {
                         }
                         return typeWithoutSpace;
                     };
+                    auto getThreadNameWithoutSpace = []() {
+                        auto name = TThread::CurrentThreadName();
+                        std::string nameWithoutSpace;
+                        for (auto sym : name) {
+                            if (sym == ' ') {
+                                nameWithoutSpace += '+';
+                            } else {
+                                nameWithoutSpace += sym;
+                            }
+                        }
+
+                        return nameWithoutSpace;
+                    };
                     if (ev) {
    		        TStringStream logOut;
                         logOut << "Receive "
@@ -310,7 +323,8 @@ namespace NActors {
                             << TInstant::Now().ToString() << " "
                             << getNameWithoutSpace() << " "
                             << getMessageTypeWithoutSpace() << " "
-                            << TThread::CurrentThreadId() << "\n";
+                            << TThread::CurrentThreadId() << " "
+                            << getThreadNameWithoutSpace() << "\n";
                         Cerr << logOut.Str();
                     }
 

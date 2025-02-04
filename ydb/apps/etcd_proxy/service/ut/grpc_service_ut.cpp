@@ -104,6 +104,7 @@ public:
         const auto driver = NYdb::TDriver(config);
         NEtcd::TSharedStuff::Get()->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
         NEtcd::TSharedStuff::Get()->Revision.store(1LL);
+        NEtcd::TSharedStuff::Get()->Lease.store(1LL);
     }
 
     ui16 GetPort() {

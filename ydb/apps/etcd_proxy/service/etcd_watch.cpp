@@ -37,7 +37,7 @@ private:
         EWatchKind Kind = EWatchKind::Unsubscribe;
     };
 
-    using TSubscriptionsMap = std::multimap<std::pair<TString, TString>, TSubscription::TWeakPtr>;
+    using TSubscriptionsMap = std::multimap<std::pair<std::string, std::string>, TSubscription::TWeakPtr>;
     using TUserSubscriptionsMap = std::unordered_multimap<i64, TSubscription::TPtr>;
 
     STFUNC(StateFunc) {
@@ -121,7 +121,7 @@ private:
     }
 
     void Handle(TEvChange::TPtr& ev, const TActorContext& ctx) {
-        const auto range = SubscriptionsMap.equal_range(std::make_pair(ev->Get()->Key, TString()));
+        const auto range = SubscriptionsMap.equal_range(std::make_pair(ev->Get()->Key, std::string()));
         for (auto it = range.first; range.second != it; ++it) {
             if (const auto sub = it->second.lock()) {
                 if (EWatchKind::OnChanges == sub->Kind ||
@@ -231,10 +231,10 @@ private:
 
         TSubscriptions(const TActorId& watchman) : Watchman(watchman) {}
         const TActorId Watchman;
-        std::set<std::pair<TString, TString>> Subscriptions;
+        std::set<std::pair<std::string, std::string>> Subscriptions;
     };
 
-    using TSubscriptionsMap = std::multimap<std::pair<TString, TString>, TSubscriptions::TWeakPtr>;
+    using TSubscriptionsMap = std::multimap<std::pair<std::string, std::string>, TSubscriptions::TWeakPtr>;
     using TWatchmanSubscriptionsMap = std::unordered_map<TActorId, TSubscriptions::TPtr>;
 
     STFUNC(StateFunc) {
@@ -269,7 +269,7 @@ private:
     }
 
     void Handle(TEvChange::TPtr& ev, const TActorContext& ctx) {
-        const auto range = SubscriptionsMap.equal_range(std::make_pair(ev->Get()->Key, TString()));
+        const auto range = SubscriptionsMap.equal_range(std::make_pair(ev->Get()->Key, std::string()));
         for (auto it = range.first; range.second != it; ++it) {
             if (const auto sub = it->second.lock()) {
                 ctx.Send(sub->Watchman, new TEvChange(*ev->Get()));

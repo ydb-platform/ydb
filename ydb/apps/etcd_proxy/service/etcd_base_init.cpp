@@ -9,7 +9,7 @@ TString GetCreateTablesSQL() {
 }
 
 TString GetLastRevisionSQL() {
-    return "select coalesce(max(`modified`), 0L) + 1L from `verhaal`;";
+    return "select nvl(max(`modified`), 0L) + 1L from `verhaal`; select nvl(max(`id`), 0L) + 1L from `leases`;";
 }
 
 }

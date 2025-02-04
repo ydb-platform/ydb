@@ -44,4 +44,12 @@ private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) final;
 };
 
+class TEtcdLeaseService : public TEtcdServiceBase<etcdserverpb::Lease>
+{
+public:
+    TEtcdLeaseService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId = {});
+private:
+    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) final;
+};
+
 } // namespace NKikimr::NGRpcService

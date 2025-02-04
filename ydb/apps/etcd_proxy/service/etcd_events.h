@@ -12,7 +12,7 @@
 namespace NEtcd {
 
 struct TData {
-    TString Value;
+    std::string Value;
     i64 Created = 0LL, Modified = 0LL, Version = 0LL, Lease = 0LL;
 };
 
@@ -27,7 +27,10 @@ enum EEv : ui32 {
     EvBegin = 5000,
     EvQueryResult,
     EvQueryError,
+
     EvWatch,
+    EvLeaseKeepAlive,
+
     EvSubscribe,
     EvChange,
     EvEnd
@@ -46,7 +49,7 @@ struct TEvQueryError : public NActors::TEventLocal<TEvQueryError, EvQueryError> 
 };
 
 struct TEvSubscribe : public NActors::TEventLocal<TEvSubscribe, EvSubscribe> {
-    const TString Key, RangeEnd;
+    const std::string Key, RangeEnd;
     const EWatchKind Kind;
     bool WithPrevious = false;
 
@@ -56,7 +59,7 @@ struct TEvSubscribe : public NActors::TEventLocal<TEvSubscribe, EvSubscribe> {
 };
 
 struct TEvChange : public NActors::TEventLocal<TEvChange, EvChange> {
-    TEvChange(TString&& key, TData&& oldData, TData&& newData)
+    TEvChange(std::string&& key, TData&& oldData, TData&& newData = {})
         : Key(std::move(key)), OldData(std::move(oldData)), NewData(std::move(newData))
     {}
 
@@ -64,7 +67,7 @@ struct TEvChange : public NActors::TEventLocal<TEvChange, EvChange> {
         : Key(put.Key), OldData(put.OldData), NewData(put.NewData)
     {}
 
-    const TString Key;
+    const std::string Key;
     const TData OldData, NewData;
 };
 
@@ -294,5 +297,6 @@ private:
 };
 
 using TEvWatchRequest = TEtcdRequestStreamWrapper<NEtcd::EvWatch, etcdserverpb::WatchRequest, etcdserverpb::WatchResponse>;
+using TEvLeaseKeepAliveRequest = TEtcdRequestStreamWrapper<NEtcd::EvLeaseKeepAlive, etcdserverpb::LeaseKeepAliveRequest, etcdserverpb::LeaseKeepAliveResponse>;
 
 } // namespace NEtcd

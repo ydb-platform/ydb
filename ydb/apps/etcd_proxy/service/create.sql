@@ -9,6 +9,15 @@ CREATE TABLE verhaal
     PRIMARY KEY (`key`, `modified`)
 );
 
+CREATE TABLE leases
+(
+    `id` Int64 NOT NULL,
+    `ttl` Int64 NOT NULL,
+    `created` Datetime64 NOT NULL,
+    `updated` Datetime64 NOT NULL,
+    PRIMARY KEY (`id`)
+);
+
 CREATE TABLE huidig
 (
     `key` Bytes NOT NULL,

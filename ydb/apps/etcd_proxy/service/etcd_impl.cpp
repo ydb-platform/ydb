@@ -21,29 +21,32 @@ using TEvDeleteRangeKVRequest = TGrpcRequestOperationCall<etcdserverpb::DeleteRa
 using TEvTxnKVRequest = TGrpcRequestOperationCall<etcdserverpb::TxnRequest, etcdserverpb::TxnResponse>;
 using TEvCompactKVRequest = TGrpcRequestOperationCall<etcdserverpb::CompactionRequest, etcdserverpb::CompactionResponse>;
 
+using TEvLeaseGrantRequest = TGrpcRequestOperationCall<etcdserverpb::LeaseGrantRequest, etcdserverpb::LeaseGrantResponse>;
+using TEvLeaseRevokeRequest = TGrpcRequestOperationCall<etcdserverpb::LeaseRevokeRequest, etcdserverpb::LeaseRevokeResponse>;
+
 using namespace NActors;
 using namespace Ydb;
 
 namespace {
 
-TString GetNameWithIndex(const std::string_view& name, const size_t* counter) {
-    auto param = TString('$') += name;
+std::string GetNameWithIndex(const std::string_view& name, const size_t* counter) {
+    auto param = std::string(1U, '$') += name;
     if (counter)
         param += ToString(*counter);
     return param;
 }
 
-TString GetParamName(const std::string_view& name, size_t* counter = nullptr) {
-    auto param = TString('$') += name;
+std::string GetParamName(const std::string_view& name, size_t* counter = nullptr) {
+    auto param = std::string(1U, '$') += name;
     if (counter)
         param += ToString((*counter)++);
     return param;
 }
 
 template<typename TValueType>
-TString AddParam(const std::string_view& name, NYdb::TParamsBuilder& params, const TValueType& value, size_t* counter = nullptr) {
+std::string AddParam(const std::string_view& name, NYdb::TParamsBuilder& params, const TValueType& value, size_t* counter = nullptr) {
     const auto param = GetParamName(name, counter);
-    if constexpr (std::is_same<TValueType, TString>::value) {
+    if constexpr (std::is_same<TValueType, std::string>::value) {
         params.AddParam(param).String(value).Build();
     } else if constexpr (std::is_same<TValueType, i64>::value) {
         params.AddParam(param).Int64(value).Build();
@@ -53,7 +56,7 @@ TString AddParam(const std::string_view& name, NYdb::TParamsBuilder& params, con
     return param;
 }
 
-void MakeSimplePredicate(const TString& key, const TString& rangeEnd, TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) {
+void MakeSimplePredicate(const std::string& key, const std::string& rangeEnd, TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) {
     if (rangeEnd.empty())
         sql << "`key` = " << AddParam("Key", params, key, paramsCounter);
     else if (rangeEnd == key)
@@ -67,7 +70,7 @@ struct TOperation {
 };
 
 struct TRange : public TOperation {
-    TString Key, RangeEnd;
+    std::string Key, RangeEnd;
     bool KeysOnly, CountOnly;
     ui64 Limit;
     i64 KeyRevision;
@@ -176,10 +179,10 @@ struct TRange : public TOperation {
 };
 
 constexpr bool NotifyWatchtower = true;
-using TNotifier = std::function<void(TString&&, NEtcd::TData&&, NEtcd::TData&&)>;
+using TNotifier = std::function<void(std::string&&, NEtcd::TData&&, NEtcd::TData&&)>;
 
 struct TPut : public TOperation {
-    TString Key, Value;
+    std::string Key, Value;
     i64 Lease = 0LL;
     bool GetPrevious = false;
     bool IgnoreValue = false;
@@ -197,8 +200,8 @@ struct TPut : public TOperation {
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         const auto& keyParamName = AddParam("Key", params, Key, paramsCounter);
-        const auto& valueParamName = IgnoreValue ? TString("NULL") : AddParam("Value", params, Value, paramsCounter);
-        const auto& leaseParamName = IgnoreLease ? TString("NULL") : AddParam("Lease", params, Lease, paramsCounter);
+        const auto& valueParamName = IgnoreValue ? std::string("NULL") : AddParam("Value", params, Value, paramsCounter);
+        const auto& leaseParamName = IgnoreLease ? std::string("NULL") : AddParam("Lease", params, Lease, paramsCounter);
 
         const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
         const auto& newResultSetName = GetNameWithIndex("New", resultsCounter);
@@ -269,7 +272,7 @@ struct TPut : public TOperation {
                 newData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
                 newData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
                 newData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
-                notifier(TString(Key), std::move(oldData), std::move(newData));
+                notifier(std::string(Key), std::move(oldData), std::move(newData));
             }
         }
         return response;
@@ -277,7 +280,7 @@ struct TPut : public TOperation {
 };
 
 struct TDeleteRange : public TOperation {
-    TString Key, RangeEnd;
+    std::string Key, RangeEnd;
     bool GetPrevious = false;
 
     bool Parse(const etcdserverpb::DeleteRangeRequest& rec) {
@@ -299,15 +302,15 @@ struct TDeleteRange : public TOperation {
 
         const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
 
-        sql << oldResultSetName << " = select `key`,`value`, `created`, `modified`, `version`,`lease` from `huidig` " << where << ';' << Endl;
+        sql << oldResultSetName << " = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` " << where << ';' << Endl;
         sql << "insert into `verhaal`" << Endl;
-        sql << "select `key`, `created`, $Revision as `modified`, 0L as `version`, `value`, `lease` from $Old;" << Endl;
+        sql << "select `key`, `created`, $Revision as `modified`, 0L as `version`, `value`, `lease` from " << oldResultSetName << ';' << Endl;
 
         sql << "select count(*) from " << oldResultSetName << ';' << Endl;
         if (GetPrevious || NotifyWatchtower) {
             if (resultsCounter)
                 ++(*resultsCounter);
-            sql << "select `key`,`value`, `created`, `modified`, `version`, `lease` from " << oldResultSetName << ';' << Endl;
+            sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from " << oldResultSetName << ';' << Endl;
         }
 
         sql << "delete from `huidig` " << where << ';' << Endl;
@@ -340,7 +343,8 @@ struct TDeleteRange : public TOperation {
                 oldData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
                 oldData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
                 oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
-                notifier(TString(Key), std::move(oldData), {});
+                auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
+                notifier(std::move(key), std::move(oldData), {});
             }
         }
         return response;
@@ -348,9 +352,9 @@ struct TDeleteRange : public TOperation {
 };
 
 struct TCompare {
-    TString Key, RangeEnd;
+    std::string Key, RangeEnd;
 
-    std::variant<i64, TString> Value;
+    std::variant<i64, std::string> Value;
 
     size_t Result, Target;
 
@@ -386,7 +390,7 @@ struct TCompare {
         static constexpr std::string_view Fields[] = {"version"sv, "created"sv, "modified"sv, "value"sv, "lease"sv};
         static constexpr std::string_view Comparator[] = {"="sv, ">"sv, "<"sv, "!="sv};
         sql << '`' << Fields[Target] << '`' << Comparator[Result];
-        if (const auto val = std::get_if<TString>(&Value))
+        if (const auto val = std::get_if<std::string>(&Value))
             sql << AddParam("Value", params, *val, paramsCounter);
         else if (const auto val = std::get_if<i64>(&Value))
             sql << AddParam("Arg", params, *val, paramsCounter);
@@ -451,7 +455,7 @@ struct TTxn : public TOperation {
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         ResultIndex = (*resultsCounter)++;
 
-        std::unordered_map<std::pair<TString, TString>, std::vector<TCompare>> map(Compares.size());
+        std::unordered_map<std::pair<std::string, std::string>, std::vector<TCompare>> map(Compares.size());
         for (const auto& compare : Compares)
             map[std::make_pair(compare.Key, compare.RangeEnd)].emplace_back(compare);
         const bool manyRanges = map.size() > 1U;
@@ -815,7 +819,7 @@ private:
         TStringBuilder sql;
         NYdb::TParamsBuilder params;
         this->MakeQueryWithParams(sql, params);
-        Cerr << Endl << sql << Endl;
+        Cerr << Endl << TRequest::TRequest::descriptor()->name() << ':' << Endl << sql << Endl;
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
         NEtcd::TSharedStuff::Get()->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
@@ -890,7 +894,7 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
         const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
-        const auto notifier = [&watcher, &ctx](TString&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
+        const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
         };
 
@@ -924,7 +928,7 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
         const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
-        const auto notifier = [&watcher, &ctx](TString&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
+        const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
         };
 
@@ -959,7 +963,7 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
         const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
-        const auto notifier = [&watcher, &ctx](TString&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
+        const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
         };
 
@@ -986,7 +990,7 @@ private:
 
         const auto &rec = *GetProtoRequest();
         KeyRevision = rec.revision();
-        return KeyRevision > 0 && KeyRevision < Revision;
+        return KeyRevision > 0LL && KeyRevision < Revision;
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
@@ -1004,6 +1008,98 @@ private:
     }
 
     i64 KeyRevision;
+};
+
+class TLeaseGrantRequest
+    : public TEtcdRequestGrpc<TLeaseGrantRequest, TEvLeaseGrantRequest> {
+public:
+    using TBase = TEtcdRequestGrpc<TLeaseGrantRequest, TEvLeaseGrantRequest>;
+    using TBase::TBase;
+private:
+    bool ParseGrpcRequest() final {
+        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
+        Lease = NEtcd::TSharedStuff::Get()->Lease.fetch_add(1L);
+
+        const auto &rec = *GetProtoRequest();
+        TTL = rec.ttl();
+        return !rec.id();
+    }
+
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        sql << "insert into `leases` (`id`,`ttl`,`created`,`updated`)" << Endl;
+        sql << '\t' << "values (" << AddParam("Lease", params, Lease) << ',' << AddParam("TimeToLive", params, TTL) << ",CurrentUtcDatetime(),CurrentUtcDatetime());" << Endl;
+    }
+
+    void ReplyWith(const NYdb::TResultSets&, const TActivationContext&) final {
+        etcdserverpb::LeaseGrantResponse response;
+        const auto header = response.mutable_header();
+        header->set_revision(Revision);
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+        response.set_id(Lease);
+        response.set_ttl(TTL);
+        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+    }
+
+    i64 Lease, TTL;
+};
+
+class TLeaseRevokeRequest
+    : public TEtcdRequestGrpc<TLeaseRevokeRequest, TEvLeaseRevokeRequest> {
+public:
+    using TBase = TEtcdRequestGrpc<TLeaseRevokeRequest, TEvLeaseRevokeRequest>;
+    using TBase::TBase;
+private:
+    bool ParseGrpcRequest() final {
+        Revision = NEtcd::TSharedStuff::Get()->Revision.fetch_add(1LL);
+
+        const auto &rec = *GetProtoRequest();
+        Lease = rec.id();
+        return Lease != 0LL;
+    }
+
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        const auto& revisionParamName = AddParam("Revision", params, Revision);
+        const auto where = TString("where `lease` = ") += AddParam("Lease", params, Lease);
+
+        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` " << where << ';' << Endl;
+        sql << "insert into `verhaal`" << Endl;
+        sql << "select `key`, `created`, " << revisionParamName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << Endl;
+
+        if (NotifyWatchtower) {
+            sql << "select `key`,`value`, `created`, `modified`, `version`, `lease` from $Victims;" << Endl;
+        }
+
+        sql << "delete from `huidig` " << where << ';' << Endl;
+    }
+
+    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
+        if (NotifyWatchtower) {
+            auto parser = NYdb::TResultSetParser(results.front());
+            while (parser.TryNextRow()) {
+                NEtcd::TData oldData;
+                oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
+                oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
+                oldData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
+                oldData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
+                oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
+                auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
+
+                ctx.Send(NEtcd::TSharedStuff::Get()->Watchtower, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData)));
+            }
+        }
+
+        etcdserverpb::LeaseRevokeResponse response;
+        const auto header = response.mutable_header();
+        header->set_revision(Revision);
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+    }
+
+    i64 Lease;
 };
 
 }
@@ -1026,6 +1122,14 @@ NActors::IActor* MakeTxn(IRequestOpCtx* p) {
 
 NActors::IActor* MakeCompact(IRequestOpCtx* p) {
     return new TCompactRequest(p);
+}
+
+NActors::IActor* MakeLeaseGrant(IRequestOpCtx* p) {
+    return new TLeaseGrantRequest(p);
+}
+
+NActors::IActor* MakeLeaseRevoke(IRequestOpCtx* p) {
+    return new TLeaseRevokeRequest(p);
 }
 
 } // namespace NKikimr::NGRpcService

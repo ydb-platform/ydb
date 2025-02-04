@@ -12,8 +12,8 @@ struct TSharedStuff {
     static TPtr Get();
 
     std::unique_ptr<NYdb::NQuery::TQueryClient> Client;
-    std::atomic_int64_t Revision = 0LL;
-    NActors::TActorId Watchtower;
+    std::atomic_int64_t Revision = 0LL, Lease = 0LL;
+    NActors::TActorId Watchtower, LeasingOffice;
 };
 
 TString DecrementKey(TString key);

@@ -72,6 +72,14 @@ int TProxy::StartServer() {
             Cout << "Unexpected result of get max revision." << Endl;
             return 1;
         }
+        if (auto result = res.GetResultSetParser(1); result.TryNextRow()) {
+            const auto lease = NYdb::TValueParser(result.GetValue(0)).GetInt64();
+            Cout << "The current lease is " << lease << '.' << Endl;
+            NEtcd::TSharedStuff::Get()->Lease.store(lease);
+        } else {
+            Cout << "Unexpected result of get max lease." << Endl;
+            return 1;
+        }
     } else {
         Cout << res.GetIssues().ToString() << Endl;
         return 1;
@@ -85,6 +93,7 @@ int TProxy::StartServer() {
     GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts, Counters);
     GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdKVService(ActorSystem.get(), Counters));
     GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdWatchService(ActorSystem.get(), Counters));
+    GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdLeaseService(ActorSystem.get(), Counters));
     GRpcServer->Start();
     Cout << "Etcd service over " << Database << " on " << Endpoint << " was started." << Endl;
     return 0;

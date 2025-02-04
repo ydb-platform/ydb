@@ -636,7 +636,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
     }
     auto partitionIt = session->Partitions.find(ev->Get()->Record.GetPartitionId());
     if (partitionIt == session->Partitions.end()) {
-        SRC_LOG_E("TEvNewDataArrived: wrong partition id " << ev->Get()->Record.GetPartitionId());
+        SRC_LOG_E("Received TEvNewDataArrived  from " << ev->Sender << " with wrong partition id " << ev->Get()->Record.GetPartitionId());
         Stop(NDqProto::StatusIds::INTERNAL_ERROR, {TIssue(TStringBuilder() << LogPrefix << "No partition with id " << ev->Get()->Record.GetPartitionId())});
         return;
     }

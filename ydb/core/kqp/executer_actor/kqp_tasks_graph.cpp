@@ -382,7 +382,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 
     settings->MutableTable()->CopyFrom(streamLookup.GetTable());
 
-    auto columnToProto = [] (TString columnName, 
+    auto columnToProto = [] (TString columnName,
         TMap<TString, NSharding::IShardingBase::TColumn>::const_iterator columnIt,
         ::NKikimrKqp::TKqpColumnMetadataProto* columnProto)
     {
@@ -1182,7 +1182,7 @@ void SerializeTaskToProto(
 
     bool enableSpilling = false;
     if (task.Outputs.size() > 1) {
-        enableSpilling = AppData()->EnableKqpSpilling;
+        enableSpilling = tasksGraph.GetMeta().AllowWithSpilling;
     }
     for (const auto& output : task.Outputs) {
         FillOutputDesc(tasksGraph, *result->AddOutputs(), output, enableSpilling);

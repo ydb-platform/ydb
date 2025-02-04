@@ -3366,6 +3366,235 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateAlterUserWithHash) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user1 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user2 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "wrongSaltLength",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'salt\' is 15, but it must be equal 24");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user3 HASH '{
+                    "hash": "wrongHashLength",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'hash\' is 15, but it must be equal 44");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user4 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "wrongtype"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'type\' must be equal \"argon2id\"");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user5 HASH '{{{{}}}
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                ';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hash value; it should be in JSON-format");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user6 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id",
+                    "some_strange_field": "some_strange_value"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "There should be strictly three fields here: salt, hash and type");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user7 HASH '{
+                    "hash": "Field not in base64format but with 44 length",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'hash\' must be in base64 format");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user8 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "Not in base64 format =) ",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'salt\' must be in base64 format");
+        }
+
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user9;
+                ALTER USER user9 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user10;
+                ALTER USER user10 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "wrongSaltLength",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'salt\' is 15, but it must be equal 24");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user11;
+                ALTER USER user11 HASH '{
+                    "hash": "wrongHashLength",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'hash\' is 15, but it must be equal 44");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user12;
+                ALTER USER user12 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "wrongtype"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'type\' must be equal \"argon2id\"");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user13;
+                ALTER USER user13 HASH '{{{{}}}
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                ';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hash value; it should be in JSON-format");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user14;
+                ALTER USER user14 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id",
+                    "some_strange_field": "some_strange_value"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "There should be strictly three fields here: salt, hash and type");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user15;
+                ALTER USER user15 HASH '{
+                    "hash": "Field not in base64format but with 44 length",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'hash\' must be in base64 format");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user16;
+                ALTER USER user16 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "Not in base64 format =) ",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'salt\' must be in base64 format");
+        }
+    }
+
     Y_UNIT_TEST(CreateAlterUserLoginNoLogin) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

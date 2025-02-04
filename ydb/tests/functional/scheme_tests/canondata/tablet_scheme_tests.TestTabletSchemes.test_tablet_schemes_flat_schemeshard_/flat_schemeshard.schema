@@ -6191,6 +6191,16 @@
                 "ColumnId": 12,
                 "ColumnName": "Metadata",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "CreationQuery",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "PreparedCreationQuery",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6208,7 +6218,9 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,

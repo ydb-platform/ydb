@@ -32,6 +32,10 @@ ydb/core/kqp/ut/tx KqpSinkTx.OlapDeferredEffects
 ydb/core/persqueue/ut TPQTest.TestReadAndDeleteConsumer
 ydb/core/viewer/tests test.py.test_viewer_nodes
 ydb/core/viewer/tests test.py.test_viewer_sysinfo
+ydb/core/viewer/tests test.py.test_viewer_healthcheck
+ydb/core/viewer/tests test.py.test_viewer_describe
+ydb/core/viewer/tests test.py.test_viewer_tenantinfo
+ydb/core/viewer/tests test.py.test_viewer_cluster
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_tablets
 ydb/tests/functional/restarts test_restarts.py.TestRestartMultipleBlock42.test_tablets_are_successfully_started_after_few_killed_nodes
 ydb/tests/functional/restarts test_restarts.py.TestRestartMultipleMirror34.test_tablets_are_successfully_started_after_few_killed_nodes

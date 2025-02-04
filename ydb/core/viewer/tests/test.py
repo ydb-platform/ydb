@@ -318,3 +318,10 @@ def test_viewer_query_issue_13757():
         'query': 'SELECT CAST(<|one:"8912", two:42|> AS Struct<two:Utf8, three:Date?>);',
         'schema': 'multi'
     })
+
+
+def test_viewer_query_issue_13945():
+    return get_viewer_db("/viewer/query", {
+        'query': 'SELECT AsList();',
+        'schema': 'multi'
+    })

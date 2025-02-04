@@ -9,6 +9,7 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
+
 bool IsStreaming(const TExprNode::TPtr& input, const TTypeAnnotationContext& typeAnnCtx) {
     if (EMatchRecognizeStreamingMode::Disable == typeAnnCtx.MatchRecognizeStreaming){
         return false;
@@ -29,65 +30,147 @@ bool IsStreaming(const TExprNode::TPtr& input, const TTypeAnnotationContext& typ
     });
     return hasPq;
 }
-} //namespace
 
-// returns std::nullopt if all vars could be used
-std::optional<TSet<TStringBuf>> FindUsedVars(const TExprNode::TPtr& params) {
-    TSet<TStringBuf> usedVars;
-    bool allVarsUsed = false;
+TExprNode::TPtr ExpandMatchRecognizeMeasuresAggregates(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& /* typeAnnCtx */) {
+    const auto pos = node->Pos();
+    const auto vars = node->Child(3);
+    static constexpr size_t AggregatesLambdasStartPos = 4;
+    static constexpr size_t MeasuresLambdasStartPos = 3;
 
-    const auto createVisitor = [&usedVars, &allVarsUsed](const TExprNode::TPtr& varsArg) {
-        return [&varsArg, &usedVars, &allVarsUsed](const TExprNode::TPtr& node) -> bool {
-            if (node->IsCallable("Member")) {
-                if (node->Child(0) == varsArg) {
-                    usedVars.insert(node->Child(1)->Content());
-                    return false;
+    return ctx.Builder(pos)
+        .Callable("MatchRecognizeMeasures")
+            .Add(0, node->ChildPtr(0))
+            .Add(1, node->ChildPtr(1))
+            .Add(2, node->ChildPtr(2))
+            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                for (size_t i = 0; i < vars->ChildrenSize(); ++i) {
+                    const auto var = vars->Child(i)->Content();
+                    const auto handler = node->ChildPtr(AggregatesLambdasStartPos + i);
+                    if (!var) {
+                        auto value = handler->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional
+                            ? ctx.Builder(pos).Callable("Just").Add(0, handler).Seal().Build()
+                            : handler;
+                        parent.Add(
+                            MeasuresLambdasStartPos + i,
+                            ctx.Builder(pos)
+                                .Lambda()
+                                    .Param("data")
+                                    .Param("vars")
+                                    .Add(0, std::move(value))
+                                .Seal()
+                            .Build()
+                        );
+                        continue;
+                    }
+                    parent.Add(
+                        MeasuresLambdasStartPos + i,
+                        ctx.Builder(pos)
+                            .Lambda()
+                                .Param("data")
+                                .Param("vars")
+                                .Callable(0, "Member")
+                                    .Callable(0, "Head")
+                                        .Callable(0, "Aggregate")
+                                            .Callable(0, "OrderedMap")
+                                                .Callable(0, "OrderedFlatMap")
+                                                    .Callable(0, "Member")
+                                                        .Arg(0, "vars")
+                                                        .Atom(1, var)
+                                                    .Seal()
+                                                    .Lambda(1)
+                                                        .Param("item")
+                                                        .Callable(0, "ListFromRange")
+                                                            .Callable(0, "Member")
+                                                                .Arg(0, "item")
+                                                                .Atom(1, "From")
+                                                            .Seal()
+                                                            .Callable(1, "+MayWarn")
+                                                                .Callable(0, "Member")
+                                                                    .Arg(0, "item")
+                                                                    .Atom(1, "To")
+                                                                .Seal()
+                                                                .Callable(1, "Uint64")
+                                                                    .Atom(0, "1")
+                                                                .Seal()
+                                                            .Seal()
+                                                        .Seal()
+                                                    .Seal()
+                                                .Seal()
+                                                .Lambda(1)
+                                                    .Param("index")
+                                                    .Callable(0, "Unwrap")
+                                                        .Callable(0, "Lookup")
+                                                            .Callable(0, "ToIndexDict")
+                                                                .Arg(0, "data")
+                                                            .Seal()
+                                                            .Arg(1, "index")
+                                                        .Seal()
+                                                    .Seal()
+                                                .Seal()
+                                            .Seal()
+                                            .List(1).Seal()
+                                            .List(2)
+                                                .Add(0, handler)
+                                            .Seal()
+                                            .List(3).Seal()
+                                        .Seal()
+                                    .Seal()
+                                    .Atom(1, handler->Child(0)->Content())
+                                .Seal()
+                            .Seal()
+                        .Build()
+                    );
                 }
-            }
-            if (node == varsArg) {
-                allVarsUsed = true;
-            }
-            return true;
-        };
-    };
+                return parent;
+            })
+        .Seal()
+    .Build();
+}
+
+THashSet<TStringBuf> FindUsedVars(const TExprNode::TPtr& params) {
+    THashSet<TStringBuf> result;
 
     const auto measures = params->Child(0);
-    static constexpr size_t measureLambdasStartPos = 3;
-    for (size_t pos = measureLambdasStartPos; pos != measures->ChildrenSize(); pos++) {
-        const auto lambda = measures->Child(pos);
-        const auto lambdaArgs = lambda->Child(0);
-        const auto lambdaBody = lambda->ChildPtr(1);
-        const auto varsArg = lambdaArgs->ChildPtr(1);
-        NYql::VisitExpr(lambdaBody, createVisitor(varsArg));
+    const auto measuresVars = measures->Child(3);
+    for (const auto& var : measuresVars->Children()) {
+        result.insert(var->Content());
     }
 
     const auto defines = params->Child(4);
     static constexpr size_t defineLambdasStartPos = 3;
-    for (size_t pos = defineLambdasStartPos; pos != defines->ChildrenSize(); pos++) {
-        const auto lambda = defines->Child(pos);
+    for (auto i = defineLambdasStartPos; i < defines->ChildrenSize(); ++i) {
+        const auto lambda = defines->Child(i);
         const auto lambdaArgs = lambda->Child(0);
         const auto lambdaBody = lambda->ChildPtr(1);
-        const auto varsArg = lambdaArgs->ChildPtr(1);
-        NYql::VisitExpr(lambdaBody, createVisitor(varsArg));
+        const auto varsArg = lambdaArgs->Child(1);
+        NYql::VisitExpr(
+            lambdaBody,
+            [varsArg, &result](const TExprNode::TPtr& node) {
+                if (node->IsCallable("Member") && node->Child(0) == varsArg) {
+                    result.insert(node->Child(1)->Content());
+                    return false;
+                }
+                return true;
+            }
+        );
     }
 
-    return allVarsUsed ? std::nullopt : std::make_optional(usedVars);
+    return result;
 }
 
-// usedVars can be std::nullopt if all vars could probably be used
-TExprNode::TPtr MarkUnusedPatternVars(const TExprNode::TPtr& node, TExprContext& ctx, const std::optional<TSet<TStringBuf>> &usedVars, TStringBuf rowsPerMatch) {
+TExprNode::TPtr MarkUnusedPatternVars(const TExprNode::TPtr& node, TExprContext& ctx, const THashSet<TStringBuf>& usedVars, TStringBuf rowsPerMatch) {
     const auto pos = node->Pos();
     if (node->ChildrenSize() != 0 && node->Child(0)->IsAtom()) {
         const auto varName = node->Child(0)->Content();
-        const auto output = node->Child(4);
-        const auto varUnused = ("RowsPerMatch_AllRows" != rowsPerMatch || !output) && usedVars && !usedVars->contains(varName);
+        const auto output = FromString<bool>(node->Child(4)->Content());
+        const auto varUnused = ("RowsPerMatch_AllRows" != rowsPerMatch || !output) && !usedVars.contains(varName);
         return ctx.Builder(pos)
             .List()
                 .Add(0, node->ChildPtr(0))
                 .Add(1, node->ChildPtr(1))
                 .Add(2, node->ChildPtr(2))
                 .Add(3, node->ChildPtr(3))
-                .Add(4, output)
+                .Add(4, node->ChildPtr(4))
                 .Add(5, ctx.NewAtom(pos, ToString(varUnused)))
             .Seal()
         .Build();
@@ -105,13 +188,15 @@ TExprNode::TPtr MarkUnusedPatternVars(const TExprNode::TPtr& node, TExprContext&
     }
 }
 
+} // anonymous namespace
+
 TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typeAnnCtx) {
-    YQL_ENSURE(node->IsCallable({"MatchRecognize"}));
+    YQL_ENSURE(node->IsCallable("MatchRecognize"));
     const auto input = node->Child(0);
     const auto partitionKeySelector = node->Child(1);
     const auto partitionColumns = node->Child(2);
     const auto sortTraits = node->Child(3);
-    const auto params = node->ChildPtr(4);
+    const auto params = node->Child(4);
     const auto pos = node->Pos();
 
     const bool isStreaming = IsStreaming(input, typeAnnCtx);
@@ -120,6 +205,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
           "Streaming", ctx.NewAtom(pos, ToString(isStreaming)), ctx);
 
     const auto rowsPerMatch = params->Child(1)->Content();
+    auto measures = ExpandMatchRecognizeMeasuresAggregates(params->ChildPtr(0), ctx, typeAnnCtx);
     const auto matchRecognize = ctx.Builder(pos)
         .Lambda()
             .Param("sortedPartition")
@@ -131,7 +217,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
                     .Add(1, partitionKeySelector)
                     .Add(2, partitionColumns)
                     .Callable(3, params->Content())
-                        .Add(0, params->ChildPtr(0))
+                        .Add(0, std::move(measures))
                         .Add(1, params->ChildPtr(1))
                         .Add(2, params->ChildPtr(2))
                         .Add(3, MarkUnusedPatternVars(params->ChildPtr(3), ctx, FindUsedVars(params), rowsPerMatch))

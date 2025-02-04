@@ -381,7 +381,7 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
     ev->Record.SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
     ev->Record.SetGeneration(Executor()->Generation());
     ev->Record.SetRound(StatsReportRound++);
-    ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+    ev->Record.SetNodeId(ctx.SelfID.NodeId());
     ev->Record.SetStartTime(StartTime().MilliSeconds());
     if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
         resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
@@ -408,7 +408,7 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
         periodicTableStats->SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
         periodicTableStats->SetGeneration(Executor()->Generation());
         periodicTableStats->SetRound(StatsReportRound++);
-        periodicTableStats->SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+        periodicTableStats->SetNodeId(ctx.SelfID.NodeId());
         periodicTableStats->SetStartTime(StartTime().MilliSeconds());
 
         if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {

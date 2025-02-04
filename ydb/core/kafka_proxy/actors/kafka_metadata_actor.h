@@ -82,7 +82,7 @@ private:
     EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 
     TActorId DiscoveryCacheActor;
-    bool NeedCurrentNode = false;
+    bool NeedAllNodes = false;
     bool HaveError = false;
     bool FallbackToIcDiscovery = false;
     TMap<ui64, TAutoPtr<TEvLocationResponse>> PendingTopicResponses;

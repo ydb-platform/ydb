@@ -37,6 +37,7 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
                     SelfId(), Context->DatabasePath, GetUserSerializedToken(Context), true, {}, {}));
 
             PendingResponses++;
+            NeedAllNodes = true;
         }
     }
 
@@ -132,12 +133,8 @@ void TKafkaMetadataActor::HandleListTopics(NKikimr::TEvPQ::TEvListAllTopicsRespo
     PendingResponses--;
     auto topics = std::move(ev->Get()->Topics);
     Response->Topics.resize(topics.size());
-    if (topics.empty()) {
-        NeedCurrentNode = true;
-    } else {
-        for (size_t i = 0; i < topics.size(); ++i) {
-            AddTopic(topics[i], i);
-        }
+    for (size_t i = 0; i < topics.size(); ++i) {
+        AddTopic(topics[i], i);
     }
     RespondIfRequired(ActorContext());
 }
@@ -216,7 +213,7 @@ void TKafkaMetadataActor::AddTopicResponse(
 
         topic.Partitions.emplace_back(std::move(responsePartition));
 
-        if (!WithProxy) {
+        if (!WithProxy && !NeedAllNodes) {
             auto ins = AllClusterNodes.insert(part.NodeId);
             if (ins.second) {
                 auto hostname = (*nodeIter)->Host;
@@ -288,16 +285,6 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         return;
     }
 
-    if (NeedCurrentNode) {
-        auto nodeIter = Nodes.find(SelfId().NodeId());
-        if (nodeIter.IsEnd()) {
-            // Node info was not found, request from IC nodes cache instead
-            RequestICNodeCache();
-            return;
-        }
-        AddBroker(nodeIter->first, nodeIter->second.Host, nodeIter->second.Port);
-        NeedCurrentNode = false;
-    }
     while (!PendingTopicResponses.empty()) {
         auto& [index, ev] = *PendingTopicResponses.begin();
         auto& topic = Response->Topics[index];
@@ -316,6 +303,11 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
             AddTopicResponse(topic, ev.Get(), topicNodes);
         }
         PendingTopicResponses.erase(PendingTopicResponses.begin());
+    }
+
+    if (NeedAllNodes) {
+        for (const auto& [id, nodeInfo] : Nodes)
+        AddBroker(id, nodeInfo.Host, nodeInfo.Port);
     }
 
     Respond();

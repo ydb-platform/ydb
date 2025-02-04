@@ -524,28 +524,6 @@ private:
         return true;
     }
 
-    // bool CancelChangefeedCreating(TImportInfo::TPtr importInfo, ui32 itemIdx) {
-    //     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-    //     const auto& item = importInfo->Items.at(itemIdx);
-
-    //     if (item.WaitTxId == InvalidTxId) {
-    //         if (item.SubState == ESubState::Proposed) {
-    //             importInfo->State = EState::Cancellation;
-    //         }
-
-    //         return false;
-    //     }
-
-    //     importInfo->State = EState::Cancellation;
-
-    //     LOG_I("TImport::TTxProgress: cancel index building"
-    //         << ": info# " << importInfo->ToString()
-    //         << ", item# " << item.ToString(itemIdx));
-
-    //     Send(Self->SelfId(), CancelIndexBuildPropose(Self, importInfo, item.WaitTxId), 0, importInfo->Id);
-    //     return true;
-    // }
-
     void AllocateTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
@@ -1258,15 +1236,10 @@ private:
             break;
         
         case EState::CreateChangefeed:
-            if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
-                item.Issue = *issue;
-                Cancel(importInfo, itemIdx, "issues during changefeed creating");
+            if (++item.NextChangefeedIdx < item.Changefeeds.size()) {
+                AllocateTxId(importInfo, itemIdx);
             } else {
-                if (item.NextChangefeedIdx++ < item.Changefeeds.size()) {
-                    AllocateTxId(importInfo, itemIdx);
-                } else {
-                    item.State = EState::Done;
-                }
+                item.State = EState::Done;
             }
             break;
 

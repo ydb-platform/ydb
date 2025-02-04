@@ -1201,6 +1201,12 @@ public:
         std::vector<size_t> SpillingSizes_;
 
         ISpiller::TPtr Spiller_;
+
+        TOutputBuffer KeysBuffer;
+        TOutputBuffer StateBuffer;
+
+        NYql::TChunkedBuffer SpillingBuffer;
+
     };
 
     static constexpr ui64 NumberOfSpillingBuckets_ = 10;
@@ -1274,6 +1280,8 @@ public:
         for (auto &b: SpillingBuckets_) {
             b.Spiller_ = spiller;
         }
+
+        std::cerr << "maxBlockLen: " << MaxBlockLen_ << std::endl;
     }
 
     void Clear() {
@@ -1292,9 +1300,26 @@ public:
 
     }
 
+    void UniteKeysAndStates() {
+        auto kb = SpillingBuckets_[0].KeysBuffer.Finish();
+        if (!kb.size()) return;
+        TString k = TString(kb.begin(), kb.size());
+
+        auto sb = SpillingBuckets_[0].StateBuffer.Finish();
+        TString s = TString(sb.begin(), sb.size());
+
+        NYql::TChunkedBuffer keyb = NYql::TChunkedBuffer(std::move(k));
+        NYql::TChunkedBuffer stateb = NYql::TChunkedBuffer(std::move(s));
+        SpillingBuckets_[0].SpillingBuffer.Append(std::move(keyb));
+        SpillingBuckets_[0].SpillingBuffer.Append(std::move(stateb));
+
+        SpillingBuckets_[0].KeysBuffer.Rewind();
+        SpillingBuckets_[0].StateBuffer.Rewind();
+    }   
+
 
     template <typename THash>
-    bool SpillingIterate(THash& hash, typename THash::const_iterator& iter, TOutputBuffer& buf) {
+    bool SpillingIterate(THash& hash, typename THash::const_iterator& iter) {
         std::array<typename THash::const_iterator, PrefetchBatchSize> iters;
         ui32 itersLen = 0;
 
@@ -1303,7 +1328,7 @@ public:
                 auto iter = iters[i];
                 const TKey& key = hash.GetKey(iter);
 
-                buf.PushString(GetKeyView<TKey>(key, KeyLength_));
+                SpillingBuckets_[0].KeysBuffer.PushString(GetKeyView<TKey>(key, KeyLength_));
             }
 
             for (ui32 i = 0; i < itersLen; ++i) {
@@ -1325,7 +1350,7 @@ public:
                 }
 
                 for (size_t i = 0; i < Aggs_.size(); ++i) {
-                    Aggs_[i]->SerializeState(ptr, buf);
+                    Aggs_[i]->SerializeState(ptr, SpillingBuckets_[0].StateBuffer);
                     // Aggs_[i]->DestroyState(ptr);
 
 
@@ -1343,12 +1368,14 @@ public:
 
             if (SpillingOutputBlockSize_ == MaxBlockLen_) {
                 iterateBatch();
+                UniteKeysAndStates();
                 return false;
             }
 
             if (itersLen == iters.size()) {
                 iterateBatch();
                 itersLen = 0;
+                UniteKeysAndStates();
             }
 
             iters[itersLen] = iter;
@@ -1372,6 +1399,7 @@ public:
         }
 
         iterateBatch();
+        UniteKeysAndStates();
         return true;
     }
 
@@ -1393,19 +1421,17 @@ public:
         }
 
         while (!IsExtractingFinished) {
-            TOutputBuffer spillingBuffer;
+            SpillingBuckets_[0].KeysBuffer.Rewind();
+            SpillingBuckets_[0].StateBuffer.Rewind();
             IsExtractingFinished = InlineAggState ?
-                SpillingIterate(*HashMap_, SpillingHashMapIt_, spillingBuffer) :
-                SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_, spillingBuffer);
+                SpillingIterate(*HashMap_, SpillingHashMapIt_) :
+                SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_);
             SpillingBuckets_[0].SpillingSizes_.push_back(SpillingOutputBlockSize_);
-            auto sb = spillingBuffer.Finish();
-            if (!sb.size()) continue;
-            TString s = TString(sb.begin(), sb.size());
-            int stringSize = s.size();
-            NYql::TChunkedBuffer cb = NYql::TChunkedBuffer(std::move(s));
-            SpillingBuckets_[0].SpillingOperation_ = SpillingBuckets_[0].Spiller_->Put(std::move(cb));
-            std::cerr << "Spilled block " << stringSize << "SpillingOutputBlockSize: " << SpillingOutputBlockSize_ << std::endl;
+
+            std::cerr << "Spilled block " << SpillingBuckets_[0].SpillingBuffer.Size() << " SpillingOutputBlockSize: " << SpillingOutputBlockSize_ << std::endl;
+            SpillingBuckets_[0].SpillingOperation_ = SpillingBuckets_[0].Spiller_->Put(std::move(SpillingBuckets_[0].SpillingBuffer));
             SpillingOutputBlockSize_ = 0;
+            SpillingBuckets_[0].SpillingBuffer = NYql::TChunkedBuffer();
             break;
         }
         return !SpillingBuckets_[0].SpillingOperation_.has_value();
@@ -1419,7 +1445,7 @@ public:
             auto data = *SpillingBuckets_[0].LoadingOperation_->ExtractValue();
             SpillingBuckets_[0].LoadingOperation_ = std::nullopt;
 
-            std::cerr << "ProcessingLoaded" << std::endl;
+            std::cerr << "ProcessingLoaded." << std::endl;
             SpillingProcessInput(data);
         }
         if (!SpillingBuckets_[0].SpillingKeys_.empty()) {
@@ -1440,6 +1466,8 @@ public:
 
         TStringBuf tmp = stream.Str();
 
+        auto strSize = data.Size();
+
         NYql::NUdf::TInputBuffer input(tmp);
 
         ++BatchNum_;
@@ -1449,6 +1477,8 @@ public:
             return;
         }
         HasValues_ = true;
+
+        std::cerr << "Size: " << strSize << " Batch length: " << batchLength << std::endl;
 
         std::array<TOutputBuffer, PrefetchBatchSize> out;
         for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
@@ -1462,6 +1492,7 @@ public:
         ui32 insertBatchLen = 0;
 
         const auto processInsertBatch = [&]() {
+            std::cerr << "Processing insert batch. InsertBatvhLen: " << insertBatchLen<< std::endl;
             for (ui32 i = 0; i < insertBatchLen; ++i) {
                 auto& r = insertBatch[i];
                 TStringBuf str = out[i].Finish();
@@ -1540,6 +1571,7 @@ public:
         };
 
         for (ui64 row = 0; row < batchLength; ++row) {
+            std::cerr << "Row: " << row << "/" << batchLength << std::endl;
 
             // encode key
             out[insertBatchLen].Rewind();

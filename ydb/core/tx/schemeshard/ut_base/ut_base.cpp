@@ -1093,7 +1093,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             TableDescription {
               Name: "src2"
               Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value0" Type: "Utf8" }
+              Columns { Name: "value0" Type: "String" }
               Columns { Name: "value1" Type: "Utf8" }
               KeyColumnNames: ["key"]
             }
@@ -1110,6 +1110,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               KeyColumnNames: ["value0"]
               DataColumnNames: ["value1"]
             }
+            IndexDescription {
+              Name: "UserDefinedVectorIndexByValue0CoveringValue1"
+              Type: EIndexTypeGlobalVectorKmeansTree
+              KeyColumnNames: ["value0"]
+              DataColumnNames: ["value1"]
+              VectorIndexKmeansTreeDescription {
+                Settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_INT8
+                    vector_dimension: 2
+                  }
+                  clusters: 3
+                  levels: 5
+                }
+              }
+            }
         )");
 
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
@@ -1118,12 +1135,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         env.TestWaitNotification(runtime, {txId, txId-1 , txId-2});
 
+        static constexpr ui64 PathsInsideWithoutIndexes = 2;
+        static constexpr ui64 PathsInside = PathsInsideWithoutIndexes + 2 + 2 + 2 + 3;
+        static constexpr ui64 ShardsInsideWithoutIndexes = 2;
+        static constexpr ui64 ShardsInside = ShardsInsideWithoutIndexes + 1 + 1 + 1 + 2;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::PathVersionEqual(8),
                             NLs::Finished,
                             NLs::PathExist,
-                            NLs::PathsInsideDomain(9),
-                            NLs::ShardsInsideDomain(5),
+                            NLs::PathsInsideDomain(1 + 1 * PathsInside),
+                            NLs::ShardsInsideDomain(1 * ShardsInside),
                             NLs::ChildrenCount(2)
                            });
 
@@ -1153,8 +1175,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                NLs::PathExist,
                                                NLs::Finished,
                                                NLs::PathExist,
-                                               NLs::PathsInsideDomain(17),
-                                               NLs::ShardsInsideDomain(10)});
+                                               NLs::PathsInsideDomain(1 + 2 * PathsInside),
+                                               NLs::ShardsInsideDomain(2 * ShardsInside)});
 
         TestConsistentCopyTables(runtime, ++txId, "/", R"(
                        CopyTableDescriptions {
@@ -1172,8 +1194,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(18),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathsInsideDomain(25),
-                            NLs::ShardsInsideDomain(15),
+                            NLs::PathsInsideDomain(1 + 3 * PathsInside),
+                            NLs::ShardsInsideDomain(3 * ShardsInside),
                             NLs::ChildrenCount(6)
                            });
 
@@ -1212,6 +1234,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::IndexKeys({"value0"}),
                             NLs::IndexDataColumns({"value1"})});
 
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/dst2/UserDefinedVectorIndexByValue0CoveringValue1"),
+                           {NLs::Finished,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                            NLs::IndexKeys({"value0"}),
+                            NLs::IndexDataColumns({"value1"})});
+
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/dst2/UserDefinedIndexByValue0CoveringValue1/indexImplTable"),
                            {NLs::Finished});
 
@@ -1227,7 +1256,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(3),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::IndexesCount(3),
+                            NLs::IndexesCount(4),
                             NLs::CreatedAt(txId)
                            });
 
@@ -1248,8 +1277,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(22),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathsInsideDomain(27),
-                            NLs::ShardsInsideDomain(17),
+                            NLs::PathsInsideDomain(1 + 3 * PathsInside + PathsInsideWithoutIndexes),
+                            NLs::ShardsInsideDomain(3 * ShardsInside + ShardsInsideWithoutIndexes),
                             NLs::ChildrenCount(8)
                            });
 

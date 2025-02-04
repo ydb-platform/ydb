@@ -2,8 +2,6 @@
 
 {% include [warning.md](_includes/warning.md) %}
 
-Currently, only building from source is available as an installation option. The pre-compiled executables will be available later.
-
 ## Building from source
 
 1. [Install Go](https://go.dev/doc/install). The minimal required Go version is 1.21.
@@ -43,19 +41,19 @@ Currently, only building from source is available as an installation option. The
 
    Optional parameters:
 
-  - `INSTALL_DIR`: The folder, to which the executable file will be installed. Default value: `~/ydb/bin`.
+    - `INSTALL_DIR`: The folder, to which the executable file will be installed. Default value: `~/ydb/bin`.
 
-  - `BUILD_DIR`: The folder that contains the generated binary file. Use this parameter if you created the binary file manually. For example, use `BUILD_DIR=.` if the executable file is in the root repository folder.
+    - `BUILD_DIR`: The folder that contains the generated binary file. Use this parameter if you created the binary file manually. For example, use `BUILD_DIR=.` if the executable file is in the root repository folder.
 
-   ```bash
-   make install [INSTALL_DIR=<path_to_install_folder>] [BUILD_DIR=<path_to_build_folder>]
-   ```
+    ```bash
+    make install [INSTALL_DIR=<path_to_install_folder>] [BUILD_DIR=<path_to_build_folder>]
+    ```
 
-   You must replace source folder if you have created binary file manually:
+    Sample command to install into `install_folder` from the current folder:
 
-   ```bash
-   make install INSTALL_DIR=install_folder BUILD_DIR=.
-   ```
+    ```bash
+    make install INSTALL_DIR=install_folder BUILD_DIR=.
+    ```
 
 ## Download the binary from releases page
 

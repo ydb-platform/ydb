@@ -10,6 +10,8 @@
 #include <util/system/info.h>
 #include <util/thread/lfstack.h>
 
+#include <sanitizer/asan_interface.h>
+
 #if defined(_win_)
 #   include <util/system/winint.h>
 #elif defined(_unix_)
@@ -110,6 +112,7 @@ private:
     }
 
     void FreePage(void* addr) {
+        // TODO: poison?
         auto res = T::Munmap(addr, PageSize);
         Y_DEBUG_ABORT_UNLESS(0 == res, "Munmap failed: %s", LastSystemErrorText());
     }
@@ -148,6 +151,7 @@ public:
 
         void* res = T::Mmap(size);
         TotalMmappedBytes += size;
+        ASAN_POISON_MEMORY_REGION(res, size);
         return res;
     }
 
@@ -405,6 +409,8 @@ void TAlignedPagePoolImpl<T>::OffloadFree(ui64 size) noexcept {
 
 template<typename T>
 void* TAlignedPagePoolImpl<T>::GetPage() {
+    // DON'T UNPOISON!
+
     ++PageAllocCount;
     if (!FreePages.empty()) {
         ++PageHitCount;
@@ -457,6 +463,8 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
+    // DON'T POISON!
+
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_UNLIKELY(IsDefaultAllocator)) {
         ReturnBlock(addr, POOL_PAGE_SIZE);
@@ -470,6 +478,8 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
 
 template<typename T>
 void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
+    // DON'T UNPOISON!
+
     Y_DEBUG_ABORT_UNLESS(size >= POOL_PAGE_SIZE);
 
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
@@ -487,7 +497,7 @@ void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
     if (size == POOL_PAGE_SIZE) {
         return GetPage();
     } else {
-        const auto ptr = Alloc(size);
+        auto* ptr = Alloc(size);
         Y_DEBUG_ABORT_UNLESS(ActiveBlocks.emplace(ptr, size).second);
         return ptr;
     }
@@ -506,6 +516,8 @@ void TAlignedPagePoolImpl<T>::ReturnBlock(void* ptr, size_t size) noexcept {
     }
 #endif
 
+    ASAN_POISON_MEMORY_REGION(ptr, size);
+
     if (size == POOL_PAGE_SIZE) {
         ReturnPage(ptr);
     } else {
@@ -517,6 +529,8 @@ void TAlignedPagePoolImpl<T>::ReturnBlock(void* ptr, size_t size) noexcept {
 
 template<typename T>
 void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
+    // DON'T UNPOISON!
+
     void* res = nullptr;
     size = AlignUp(size, SYS_PAGE_SIZE);
 
@@ -613,6 +627,8 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::Free(void* ptr, size_t size) noexcept {
+    // DON'T POISON!
+
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size <= MaxMidSize)
         size = FastClp2(size);
@@ -699,6 +715,8 @@ template class TAlignedPagePoolImpl<TFakeUnalignedMmap>;
 
 template<typename TMmap>
 void* GetAlignedPage(ui64 size) {
+    // DON'T UNPOISON!
+
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size < TAlignedPagePool::POOL_PAGE_SIZE) {
         size = TAlignedPagePool::POOL_PAGE_SIZE;
@@ -744,6 +762,8 @@ void* GetAlignedPage(ui64 size) {
 
 template<typename TMmap>
 void ReleaseAlignedPage(void* mem, ui64 size) {
+    ASAN_POISON_MEMORY_REGION(mem, size);
+
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size < TAlignedPagePool::POOL_PAGE_SIZE) {
         size = TAlignedPagePool::POOL_PAGE_SIZE;

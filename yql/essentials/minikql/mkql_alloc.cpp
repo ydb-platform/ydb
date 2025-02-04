@@ -1,11 +1,6 @@
 #include "mkql_alloc.h"
-#include <util/system/align.h>
-#include <yql/essentials/public/udf/udf_value.h>
-#include <tuple>
 
-namespace NKikimr {
-
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_POD_THREAD(TAllocState*) TlsAllocState;
 
@@ -39,6 +34,7 @@ void TAllocState::CleanupPAllocList(TListEntry* root) {
         auto next = curr->Right;
         auto size = ((TMkqlPAllocHeader*)curr)->Size;
         auto fullSize = size + sizeof(TMkqlPAllocHeader);
+        // TODO: poison?
         MKQLFreeWithSize(curr, fullSize, EMemorySubPool::Default); // may free items from OffloadedBlocksRoot
         curr = next;
     }
@@ -47,10 +43,11 @@ void TAllocState::CleanupPAllocList(TListEntry* root) {
 }
 
 void TAllocState::CleanupArrowList(TListEntry* root) {
-    for (auto curr = root->Right; curr != root; ) {
-        auto next = curr->Right;
+    for (auto* curr = root->Right; curr != root; ) {
+        auto* next = curr->Right;
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
         if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
+            antidote.Poison();
             free(curr);
         } else {
 #endif
@@ -60,7 +57,6 @@ void TAllocState::CleanupArrowList(TListEntry* root) {
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
         }
 #endif
-
         curr = next;
     }
 
@@ -69,8 +65,8 @@ void TAllocState::CleanupArrowList(TListEntry* root) {
 
 void TAllocState::KillAllBoxed() {
     {
-        const auto root = GetRoot();
-        for (auto next = root->GetRight(); next != root; next = root->GetLeft()) {
+        const auto* root = GetRoot();
+        for (auto* next = root->GetRight(); next != root; next = root->GetLeft()) {
             next->Ref();
             next->~TBoxedValueLink();
         }
@@ -84,9 +80,10 @@ void TAllocState::KillAllBoxed() {
     }
 
     {
-        const auto root = &OffloadedBlocksRoot;
-        for (auto curr = root->Right; curr != root; ) {
-            auto next = curr->Right;
+        const auto* root = &OffloadedBlocksRoot;
+
+        for (auto* curr = root->Right; curr != root; ) {
+            auto* next = curr->Right;
             free(curr);
             curr = next;
         }
@@ -193,44 +190,65 @@ void TScopedAlloc::Release() {
 }
 
 void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
+    // DON'T UNPOISON!
+
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
     auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
-    auto currPage = (TAllocPageHeader*)state->GetBlock(capacity);
-    currPage->Deallocated = 0;
-    currPage->Capacity = capacity;
-    currPage->Offset = roundedSize;
 
-    auto& mPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
+    auto* page = (TAllocPageHeader*)state->GetBlock(capacity);
+
+    // TODO: Unpoison header only?
+    ASAN_UNPOISON_MEMORY_REGION(page, sizeof(TAllocPageHeader));
+
+    page->Deallocated = 0;
+    page->Capacity = capacity;
+    page->Offset = roundedSize;
+
+    auto*& mPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
+
     auto newPageAvailable = capacity - roundedSize;
     auto curPageAvailable = mPage->Capacity - mPage->Offset;
 
     if (newPageAvailable > curPageAvailable) {
-        mPage = currPage;
+        mPage = page;
     }
 
-    void* ret = (char*)currPage + sizeof(TAllocPageHeader);
-    currPage->UseCount = 1;
-    currPage->MyAlloc = state;
-    currPage->Link = nullptr;
+    void* ret = (char*)page + sizeof(TAllocPageHeader);
+    page->UseCount = 1;
+    page->MyAlloc = state;
+    page->Link = nullptr;
+
     return ret;
 }
 
 void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept {
+    // Header should be unpoisoned.
+
     Y_DEBUG_ABORT_UNLESS(state);
     Y_DEBUG_ABORT_UNLESS(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << header->MyAlloc->GetDebugInfo() << " freed with: " << TlsAllocState->GetDebugInfo()).data());
     state->ReturnBlock(header, header->Capacity);
+
+    // Now header is poisoned.
+
     if (header == state->CurrentPages[(TMemorySubPoolIdx)mPool]) {
         state->CurrentPages[(TMemorySubPoolIdx)mPool] = &TAllocState::EmptyPageHeader;
     }
 }
 
 void* TPagedArena::AllocSlow(const size_t sz, const EMemorySubPool mPool) {
-    auto& currentPage = CurrentPages_[(TMemorySubPoolIdx)mPool];
+    // DON'T UNPOISON!
+
+    auto*& currentPage = CurrentPages_[(TMemorySubPoolIdx)mPool];
     auto prevLink = currentPage;
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
     auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
+
     currentPage = (TAllocPageHeader*)PagePool_->GetBlock(capacity);
+
+    // Unpoison header only
+    ASAN_UNPOISON_MEMORY_REGION(currentPage, sizeof(TAllocPageHeader));
+
     currentPage->Capacity = capacity;
     void* ret = (char*)currentPage + sizeof(TAllocPageHeader);
     currentPage->Offset = roundedSize;
@@ -242,18 +260,19 @@ void* TPagedArena::AllocSlow(const size_t sz, const EMemorySubPool mPool) {
 
 void TPagedArena::Clear() noexcept {
     for (auto&& i : CurrentPages_) {
-        auto current = i;
-        while (current != &TAllocState::EmptyPageHeader) {
-            auto next = current->Link;
-            PagePool_->ReturnBlock(current, current->Capacity);
-            current = next;
+        auto* page = i;
+        while (page != &TAllocState::EmptyPageHeader) {
+            auto* next = page->Link;
+            auto capacity = page->Capacity;
+            PagePool_->ReturnBlock(page, capacity);
+            page = next;
         }
 
         i = &TAllocState::EmptyPageHeader;
     }
 }
 
-void* MKQLArrowAllocate(ui64 size) {
+void* MKQLArrowAllocate(const ui64 size) {
     TAllocState* state = TlsAllocState;
     Y_ENSURE(state);
     auto fullSize = size + sizeof(TMkqlArrowHeader);
@@ -271,11 +290,13 @@ void* MKQLArrowAllocate(ui64 size) {
     } else {
 #endif
         ptr = GetAlignedPage(fullSize);
+        ASAN_UNPOISON_MEMORY_REGION(ptr, fullSize);
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     }
 #endif
 
     auto* header = (TMkqlArrowHeader*)ptr;
+
     if (state->EnableArrowTracking) {
         header->Entry.Link(&state->ArrowBlocksRoot);
         Y_ENSURE(state->ArrowBuffers.insert(header + 1).second);
@@ -294,9 +315,11 @@ void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size) {
     return res;
 }
 
-void MKQLArrowFree(const void* mem, ui64 size) {
+void MKQLArrowFree(const void* mem, const ui64 size) {
     auto fullSize = size + sizeof(TMkqlArrowHeader);
-    auto header = ((TMkqlArrowHeader*)mem) - 1;
+
+    auto* header = ((TMkqlArrowHeader*)mem) - 1;
+
     if (!header->Entry.IsUnlinked()) {
         TAllocState* state = TlsAllocState;
         Y_ENSURE(state);
@@ -330,7 +353,8 @@ void MKQLArrowUntrack(const void* mem) {
         return;
     }
 
-    auto header = ((TMkqlArrowHeader*)mem) - 1;
+    auto* header = ((TMkqlArrowHeader*)mem) - 1;
+
     if (!header->Entry.IsUnlinked()) {
         header->Entry.Unlink();
         auto fullSize = header->Size + sizeof(TMkqlArrowHeader);
@@ -339,6 +363,4 @@ void MKQLArrowUntrack(const void* mem) {
     }
 }
 
-} // NMiniKQL
-
-} // NKikimr
+} // namespace NKikimr::NMiniKQL

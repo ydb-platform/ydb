@@ -10,18 +10,18 @@ Released on February 4, 2025. To update to version **2.19.0**, select the [Downl
 * Added [changefeeds](./concepts/cdc.md) support in `ydb tools dump` and `ydb tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md). As a result, there are changes in the backup file structure: for tables with changefeeds, a subdirectory is created for each changefeed, named after the changefeed. This subdirectory contains two files: `changefeed_description.pb`, which contains the changefeed description, and `topic_description.pb`, which contains information about the underlying topic.
 * Added `CREATE TABLE` text suggestion on schema error during `ydb import file csv` [command](./reference/ydb-cli/export-import/import-file.md).
 * Added the `--skip-checksum-validation` option to the `ydb import s3` [command](./reference/ydb-cli/export-import/import-s3.md) to skip server-side checksum validation.
-* Added statistics output on the current progress of the query in the `ydb workload` [command](./reference/ydb-cli/commands/workload.md).
-* Added query text to the error message if a query fails in the `ydb workload run` [command](./reference/ydb-cli/commands/workload.md).
-* Added a message if the global timeout expired in the `ydb workload run` [command](./reference/ydb-cli/commands/workload.md).
+* Added statistics output on the current progress of the query in the `ydb workload` [command](./reference/ydb-cli/commands/workload/).
+* Added query text to the error message if a query fails in the `ydb workload run` [command](./reference/ydb-cli/commands/workload/).
+* Added a message if the global timeout expired in the `ydb workload run` [command](./reference/ydb-cli/commands/workload/).
 * Added new experimental options for the `ydb debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
 * Added some temporary changes to the experimental `ydb admin storage` command.
 
 ### Bug fixes
 
 * Fixed a bug where the arm64 {{ ydb-short-name }} CLI binary was downloading the amd64 binary to replace itself during `ydb update` [command](./reference/ydb-cli/commands/service.md). To update already installed binaries to the latest arm64 version, {{ ydb-short-name }} CLI should be reinstalled.
-* Fixed the return code of the `ydb workload run` [command](./reference/ydb-cli/commands/workload.md).
+* Fixed the return code of the `ydb workload run` [command](./reference/ydb-cli/commands/workload/).
 * Fixed a bug where the `ydb workload tpch import generator` and `ydb workload tpcds import generator` [commands](./reference/ydb-cli/workload-tpch.md) were failing because not all tables had been created.
-* Fixed a bug with backslashes in `ydb workload` [commands](./reference/ydb-cli/commands/workload.md) paths on Windows.
+* Fixed a bug with backslashes in `ydb workload` [commands](./reference/ydb-cli/commands/workload/) paths on Windows.
 
 ## Version 2.18.0 {#2-18-0}
 
@@ -32,7 +32,7 @@ Released on December 24, 2024. To update to version **2.18.0**, select the [Down
 * Added support for [views](./concepts/datamodel/view) in local backups: `ydb tools dump` and `ydb tools restore`. Views are backed up as `CREATE VIEW` queries saved in the `create_view.sql` files, which can be executed to recreate the original views.
 * Added new options to the `ydb workload topic run` [command](./reference/ydb-cli/workload-topic#run-write): `--tx-commit-interval` and `--tx-commit-messages`, allowing you to specify the interval between transaction commits in milliseconds or in the number of messages written, respectively.
 * Made the `--consumer` flag in the `ydb topic read` [command](./reference/ydb-cli/topic-read) optional. In the non-subscriber reading mode, the partition IDs must be specified with the `--partition-ids` option. In this case, the read is performed without saving the offset commit.
-* The `ydb import file csv` [command]((./reference/ydb-cli/export-import/import-file)) now saves the import progress. Relaunching the import command will resume the process from the row where it was interrupted.
+* The `ydb import file csv` [command](./reference/ydb-cli/export-import/import-file.md) now saves the import progress. Relaunching the import command will resume the process from the row where it was interrupted.
 * In the `ydb workload kv` and `ydb workload stock` commands, the default value of the `--executer` option has been changed to `generic`, which makes them no longer rely on the legacy query execution infrastructure.
 * Replaced the CSV format with Parquet for filling tables in `ydb workload` benchmarks.
 

@@ -12,18 +12,18 @@
 * Добавлена поддержка [потоков изменений (changefeeds)](./concepts/cdc.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `ydb tools dump` и `ydb tools restore`. В результате появились изменения в файле бэкапа: для таблиц с потоками изменений создаётся одноимённая директория на каждый поток изменений. Каждая такая директория содержит два файла: `changefeed_description.pb` с описанием потока изменений и `topic_description.pb` с информацией о связанном топике.
 * Добавлена рекомендация с текстом `CREATE TABLE` при схемной ошибке во время выполнения [команды](./reference/ydb-cli/export-import/import-file.md) `ydb import file csv`.
 * Добавлена опция `--skip-checksum-validation` для [команды](./reference/ydb-cli/export-import/import-s3.md) `ydb import s3`, позволяющая отключить валидацию контрольной суммы на стороне сервера.
-* Добавлен вывод статистики для текущего процесса при выполнении [команды](./reference/ydb-cli/commands/workload.md) `ydb workload`.
-* Добавлен текст запроса к сообщению, если запрос завершился ошибкой при выполнении [команды](./reference/ydb-cli/commands/workload.md) `ydb workload run`.
-* Добавлено сообщение в случае ошибки истечения глобального таймаута при выполнении [команды](./reference/ydb-cli/commands/workload.md) `ydb workload run`.
+* Добавлен вывод статистики для текущего процесса при выполнении [команды](./reference/ydb-cli/commands/workload/) `ydb workload`.
+* Добавлен текст запроса к сообщению, если запрос завершился ошибкой при выполнении [команды](./reference/ydb-cli/commands/workload/) `ydb workload run`.
+* Добавлено сообщение в случае ошибки истечения глобального таймаута при выполнении [команды](./reference/ydb-cli/commands/workload/) `ydb workload run`.
 * Добавлены новые экспериментальные опции `--chain-length`, `--chain-work-duration`, `--no-tail-chain` для команды `ydb debug ping`.
 * Внесены временные изменения в экспериментальной команде `ydb admin storage`.
 
 ### Исправления ошибок
 
 * Исправлена ошибка, из-за которой [команда](./reference/ydb-cli/commands/service.md) `ydb update` в arm64-версии исполняемого файла YDB CLI скачивала и заменяла себя исполняемым файлом amd64-версии. Чтобы обновить ранее установленный YDB CLI до последней arm64-версии (а не amd64), его нужно переустановить.
-* [Команда](./reference/ydb-cli/commands/workload.md) `ydb workload run` теперь возвращает корректный код возврата.
+* [Команда](./reference/ydb-cli/commands/workload/) `ydb workload run` теперь возвращает корректный код возврата.
 * Исправлена ошибка, из-за которой [команды](./reference/ydb-cli/workload-tpch.md) `ydb workload tpch import generator` и `ydb workload tpcds import generator` завершались с ошибкой из-за отсутствия необходимых таблиц в схеме.
-* Исправлена ошибка с обратными слешами при указании путей в [команде]](./reference/ydb-cli/commands/workload.md) `ydb workload` на Windows.
+* Исправлена ошибка с обратными слешами при указании путей в [команде]](./reference/ydb-cli/commands/workload/) `ydb workload` на Windows.
 
 ## Версия 2.18.0 {#2-18-0}
 

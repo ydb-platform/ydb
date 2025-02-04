@@ -58,6 +58,7 @@ struct TAllocState : public TAlignedPagePool
 #endif
     bool SupportsSizedAllocators = false;
 
+    // unpoisoned: [0, +size)
     void* LargeAlloc(const size_t size) {
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
         if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
@@ -281,6 +282,7 @@ public:
         Clear();
     }
 
+    // unpoisoned: [0, +sz)
     void* Alloc(const size_t sz, const EMemorySubPool pagePool = EMemorySubPool::Default) {
         auto* page = CurrentPages_[(TMemorySubPoolIdx)pagePool];
 
@@ -292,22 +294,22 @@ public:
         }
 
         void* ret = AllocSlow(sz, pagePool);
-        ASAN_UNPOISON_MEMORY_REGION(ret, sz);
         return ret;
     }
 
     void Clear() noexcept;
 
 private:
-    void* AllocSlow(const size_t sz, const EMemorySubPool pagePool);
+    void* AllocSlow(const size_t sz, const EMemorySubPool pagePool); // unpoisoned: [-sizeof(TAllocPageHeader), +sz)
 
 private:
     TAlignedPagePool* PagePool_;
     TAllocState::TCurrentPages CurrentPages_ = TAllocState::EmptyCurrentPages;
 };
 
-void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool);
+void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool); // unpoisoned: [-sizeof(TAllocPageHeader), +sz)
 
+// unpoisoned: [0, +sz)
 inline void* MKQLAllocFastDeprecated(const size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     Y_DEBUG_ABORT_UNLESS(state);
 
@@ -334,10 +336,10 @@ inline void* MKQLAllocFastDeprecated(const size_t sz, TAllocState* state, const 
     }
 
     void* ret = MKQLAllocSlow(sz, state, mPool);
-    ASAN_UNPOISON_MEMORY_REGION(ret, sz);
     return ret;
 }
 
+// unpoisoned: [0, +sz)
 inline void* MKQLAllocFastWithSize(const size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     Y_DEBUG_ABORT_UNLESS(state);
 
@@ -368,7 +370,6 @@ inline void* MKQLAllocFastWithSize(const size_t sz, TAllocState* state, const EM
     }
 
     void* ret = MKQLAllocSlow(sz, state, mPool);
-    ASAN_UNPOISON_MEMORY_REGION(ret, sz);
     return ret;
 }
 
@@ -454,7 +455,7 @@ inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
     value->Unlink();
 }
 
-void* MKQLArrowAllocate(ui64 size);
+void* MKQLArrowAllocate(ui64 size); // unpoisoned: [-sizeof(TMkqlArrowHeader), +size)
 void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size);
 void MKQLArrowFree(const void* mem, ui64 size);
 void MKQLArrowUntrack(const void* mem);

@@ -190,19 +190,17 @@ void TScopedAlloc::Release() {
 }
 
 void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
-    // DON'T UNPOISON!
-
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
     auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
 
     auto* page = (TAllocPageHeader*)state->GetBlock(capacity);
 
-    // TODO: Unpoison header only?
-    ASAN_UNPOISON_MEMORY_REGION(page, sizeof(TAllocPageHeader));
-
     page->Deallocated = 0;
     page->Capacity = capacity;
     page->Offset = roundedSize;
+    page->UseCount = 1;
+    page->MyAlloc = state;
+    page->Link = nullptr;
 
     auto*& mPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
 
@@ -214,10 +212,7 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     }
 
     void* ret = (char*)page + sizeof(TAllocPageHeader);
-    page->UseCount = 1;
-    page->MyAlloc = state;
-    page->Link = nullptr;
-
+    ASAN_POISON_MEMORY_REGION((char*)ret + sz, capacity - sz - sizeof(TAllocPageHeader));
     return ret;
 }
 
@@ -237,24 +232,20 @@ void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySub
 }
 
 void* TPagedArena::AllocSlow(const size_t sz, const EMemorySubPool mPool) {
-    // DON'T UNPOISON!
-
     auto*& currentPage = CurrentPages_[(TMemorySubPoolIdx)mPool];
     auto prevLink = currentPage;
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
     auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
 
     currentPage = (TAllocPageHeader*)PagePool_->GetBlock(capacity);
-
-    // Unpoison header only
-    ASAN_UNPOISON_MEMORY_REGION(currentPage, sizeof(TAllocPageHeader));
-
     currentPage->Capacity = capacity;
-    void* ret = (char*)currentPage + sizeof(TAllocPageHeader);
     currentPage->Offset = roundedSize;
     currentPage->UseCount = 0;
     currentPage->MyAlloc = PagePool_;
     currentPage->Link = prevLink;
+
+    void* ret = (char*)currentPage + sizeof(TAllocPageHeader);
+    ASAN_POISON_MEMORY_REGION((char*)ret + sz, capacity - sz - sizeof(TAllocPageHeader));
     return ret;
 }
 

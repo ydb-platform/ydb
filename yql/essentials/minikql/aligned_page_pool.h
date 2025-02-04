@@ -113,7 +113,7 @@ public:
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) & PAGE_ADDR_MASK);
     }
 
-    void* GetPage();
+    void* GetPage(); // poisoned
 
     void ReturnPage(void* addr) noexcept;
 
@@ -145,7 +145,7 @@ public:
         return ToString(DebugInfo);
     }
 
-    void* GetBlock(size_t size);
+    void* GetBlock(size_t size); // unpoisoned: [0, +size)
 
     void ReturnBlock(void* ptr, size_t size) noexcept;
 
@@ -243,7 +243,7 @@ public:
 #endif
 
 protected:
-    void* Alloc(size_t size);
+    void* Alloc(size_t size); // poisoned
     void Free(void* ptr, size_t size) noexcept;
 
     void UpdatePeaks() {

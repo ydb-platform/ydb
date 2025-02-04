@@ -409,8 +409,6 @@ void TAlignedPagePoolImpl<T>::OffloadFree(ui64 size) noexcept {
 
 template<typename T>
 void* TAlignedPagePoolImpl<T>::GetPage() {
-    // DON'T UNPOISON!
-
     ++PageAllocCount;
     if (!FreePages.empty()) {
         ++PageHitCount;
@@ -478,8 +476,6 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
 
 template<typename T>
 void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
-    // DON'T UNPOISON!
-
     Y_DEBUG_ABORT_UNLESS(size >= POOL_PAGE_SIZE);
 
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
@@ -495,9 +491,12 @@ void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
 #endif
 
     if (size == POOL_PAGE_SIZE) {
-        return GetPage();
+        auto* page = GetPage();
+        ASAN_UNPOISON_MEMORY_REGION(page, size);
+        return page;
     } else {
         auto* ptr = Alloc(size);
+        ASAN_UNPOISON_MEMORY_REGION(ptr, size);
         Y_DEBUG_ABORT_UNLESS(ActiveBlocks.emplace(ptr, size).second);
         return ptr;
     }
@@ -529,8 +528,6 @@ void TAlignedPagePoolImpl<T>::ReturnBlock(void* ptr, size_t size) noexcept {
 
 template<typename T>
 void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
-    // DON'T UNPOISON!
-
     void* res = nullptr;
     size = AlignUp(size, SYS_PAGE_SIZE);
 
@@ -713,10 +710,9 @@ template class TAlignedPagePoolImpl<>;
 template class TAlignedPagePoolImpl<TFakeAlignedMmap>;
 template class TAlignedPagePoolImpl<TFakeUnalignedMmap>;
 
+// poisoned
 template<typename TMmap>
 void* GetAlignedPage(ui64 size) {
-    // DON'T UNPOISON!
-
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size < TAlignedPagePool::POOL_PAGE_SIZE) {
         size = TAlignedPagePool::POOL_PAGE_SIZE;

@@ -107,7 +107,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
         return nullptr;
     }
         
-    cdcStream.SetRetentionPeriodSeconds(topic.Getretention_period().seconds());
+    cdcStream.SetRetentionPeriodSeconds(topic.retention_period().seconds());
     
     return propose;
 }

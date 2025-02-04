@@ -447,6 +447,7 @@ message TEvDataCleanupRequest {
 }
 
 message TEvDataCleanupResult {
-    optional uint64 CurrentGeneration = 1; // current clean up iteration
-    optional bool Completed = 2; // is it completed?
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 CurrentGeneration = 2; // current clean up iteration
+    optional bool Completed = 3; // is it completed?
 }

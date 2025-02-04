@@ -362,7 +362,8 @@ public:
     TTenantDataErasureQueue* TenantDataErasureQueue = nullptr;
 
     ui64 DataErasureGeneration = 0;
-    THashSet<TPathId> RunningDataErasureForTenants;
+    THashMap<TPathId, bool> RequestedDataErasureForTenants;
+    THashMap<TPathId, TActorId> RunningDataErasureForTenants;
 
     struct TBackgroundCleaningState {
         THashSet<TTxId> TxIds;
@@ -1031,12 +1032,12 @@ public:
     void CleanBackgroundCleaningState(const TPathId& pathId);
     void ClearTempDirsState();
 
-    // void EnqueueDataErasure(const TShardIdx& shardIdx);
+    void EnqueueDataErasure(const TPathId& pathId);
     // void RemoveDataErasure(const TShardIdx& shardIdx);
     NOperationQueue::EStartStatus StartDataErasure(const TPathId& pathId);
     void OnDataErasureTimeout(const TPathId& pathId);
     void UpdateDataErasureQueueMetrics();
-    // void DataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId);
+    void DataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx);
 
     void EnqueueTenantDataErasure(const TShardIdx& shardIdx);
     void RemoveTenantDataErasure(const TShardIdx& shardIdx);
@@ -1125,6 +1126,9 @@ public:
 
     struct TTxRunDataErasure;
     NTabletFlatExecutor::ITransaction* CreateTxRunDataErasure(ui64 generation);
+
+    struct TTxCompleteDataErasure;
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasure(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev);
 
     void PublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths, const TActorContext& ctx);
     void PublishToSchemeBoard(TTxId txId, TDeque<TPathId>&& paths, const TActorContext& ctx);

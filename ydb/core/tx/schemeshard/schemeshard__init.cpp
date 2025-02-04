@@ -1883,7 +1883,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     Y_ABORT_UNLESS(Self->SubDomains.contains(pathId));
 
-                    Self->RunningDataErasureForTenants.insert(pathId);
+                    bool isCompleted = rowset.GetValue<Schema::DataErasure::IsCompleted>();
+
+                    Self->RequestedDataErasureForTenants[pathId] = isCompleted;
 
                     ui64 generation = rowset.GetValue<Schema::DataErasure::Generation>();
                     Self->DataErasureGeneration = Max(generation, Self->DataErasureGeneration);

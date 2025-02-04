@@ -687,10 +687,16 @@ namespace TEvSchemeShard {
     struct TEvDataCleanupResult : TEventPB<TEvDataCleanupResult, NKikimrScheme::TEvDataCleanupResult, EvDataCleanupResult> {
         TEvDataCleanupResult() = default;
 
-        TEvDataCleanupResult(ui64 generation, bool isCompleted) {
+        TEvDataCleanupResult(const TPathId& pathId, ui64 generation, bool isCompleted) {
+            Record.MutablePathId()->SetOwnerId(pathId.OwnerId);
+            Record.MutablePathId()->SetLocalId(pathId.LocalPathId);
             Record.SetCurrentGeneration(generation);
             Record.SetCompleted(isCompleted);
         }
+
+        TEvDataCleanupResult(ui64 ownerId, ui64 localPathId, ui64 generation, bool isCompleted)
+            : TEvDataCleanupResult(TPathId(ownerId, localPathId), generation, isCompleted)
+        {}
     };
 };
 

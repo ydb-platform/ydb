@@ -630,4 +630,6 @@ enum ETxTypes {
 
     TXTYPE_RUN_TENANT_DATA_ERASURE = 92 [(TxTypeOpts) = {Name: "TxRunTenantDataErasure"}];
     TXTYPE_RUN_DATA_ERASURE = 93 [(TxTypeOpts) = {Name: "TxRunDataErasure"}];
+
+    TXTYPE_COMPLETE_DATA_ERASURE = 94 [(TxTypeOpts) = {Name: "TxCompleteDataErasure"}];
 }

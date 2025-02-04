@@ -1943,12 +1943,14 @@ struct Schema : NIceDb::Schema {
     struct DataErasure : Table<114> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct Generation : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct IsCompleted : Column<3, NScheme::NTypeIds::Bool> {};
+        struct Generation : Column<4, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
             OwnerPathId,
             LocalPathId,
+            IsCompleted,
             Generation
         >;
     };

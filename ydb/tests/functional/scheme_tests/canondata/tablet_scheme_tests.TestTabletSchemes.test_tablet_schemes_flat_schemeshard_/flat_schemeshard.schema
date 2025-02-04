@@ -6210,7 +6210,7 @@
             {
                 "ColumnId": 16,
                 "ColumnName": "NextChangefeedIdx",
-                "ColumnType": "Uint64"
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],

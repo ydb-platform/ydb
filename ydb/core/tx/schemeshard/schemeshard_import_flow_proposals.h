@@ -20,12 +20,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    const TImportInfo::TItem& item
-);
-
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -50,6 +44,12 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
     TSchemeShard* ss,
     TImportInfo::TPtr importInfo,
     TTxId indexBuildId
+);
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo::TItem& item
 );
 
 } // NSchemeShard

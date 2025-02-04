@@ -1567,7 +1567,7 @@ struct Schema : NIceDb::Schema {
         struct State : Column<7, NScheme::NTypeIds::Byte> {};   
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
         struct NextIndexIdx : Column<9, NScheme::NTypeIds::Uint32> {};
-        struct NextChangefeedIdx : Column<16, NScheme::NTypeIds::Uint64> {};
+        struct NextChangefeedIdx : Column<16, NScheme::NTypeIds::Uint32> {};
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ImportId, Index>;

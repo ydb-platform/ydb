@@ -2865,7 +2865,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
         int NextIndexIdx = 0;
-        ui64 NextChangefeedIdx = 0;
+        int NextChangefeedIdx = 0;
         TString Issue;
         int ViewCreationRetries = 0;
 

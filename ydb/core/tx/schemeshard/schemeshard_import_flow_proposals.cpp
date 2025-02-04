@@ -86,32 +86,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     return CreateTablePropose(ss, txId, importInfo, itemIdx, unused);
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    const TImportInfo::TItem& item
-) {
-    Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.size());
-    const auto& [changefeed, topic] = item.Changefeeds[item.NextChangefeedIdx];
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
-    auto& record = propose->Record;
-    auto& modifyScheme = *record.AddTransaction();
-    auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
-
-    TString error;
-    Ydb::StatusIds::StatusCode status;
-
-    auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
-
-    if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
-        return nullptr;
-    }
-        
-    cdcStream.SetRetentionPeriodSeconds(topic.Getretention_period().seconds());
-    
-    return propose;
-}
-
 static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) {
     auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId);
     auto record = desc->GetRecord();
@@ -255,6 +229,32 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
 ) {
     const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
     return MakeHolder<TEvIndexBuilder::TEvCancelRequest>(ui64(indexBuildId), domainPath.PathString(), ui64(indexBuildId));
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo::TItem& item
+) {
+    Y_ABORT_UNLESS(static_cast<ui64>(item.NextChangefeedIdx) < item.Changefeeds.size());
+    const auto& [changefeed, topic] = item.Changefeeds[item.NextChangefeedIdx];
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto& record = propose->Record;
+    auto& modifyScheme = *record.AddTransaction();
+    auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
+
+    TString error;
+    Ydb::StatusIds::StatusCode status;
+
+    auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
+
+    if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
+        return nullptr;
+    }
+        
+    cdcStream.SetRetentionPeriodSeconds(topic.Getretention_period().seconds());
+    
+    return propose;
 }
 
 } // NSchemeShard

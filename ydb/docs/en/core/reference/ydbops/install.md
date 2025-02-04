@@ -43,7 +43,7 @@
 
     - `INSTALL_DIR`: The folder, to which the executable file will be installed. Default value: `~/ydb/bin`.
 
-    - `BUILD_DIR`: The folder that contains the generated binary file. Use this parameter if you created the binary file manually. For example, use `BUILD_DIR=.` if the executable file is in the root repository folder.
+    - `BUILD_DIR`: The folder that contains the generated binary file. Use this parameter if you created the binary file manually. For example, use `BUILD_DIR=.` if the executable file is in the current working folder.
 
     ```bash
     make install [INSTALL_DIR=<path_to_install_folder>] [BUILD_DIR=<path_to_build_folder>]

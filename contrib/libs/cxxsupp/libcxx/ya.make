@@ -35,8 +35,9 @@ ELSEIF (OS_IOS)
     )
 ELSEIF (OS_LINUX OR OS_DARWIN)
     IF (ARCH_ARM7)
-        # XXX: libcxxrt support for ARM is currently broken
-        SET(CXX_RT "glibcxx_static")
+        # libcxxrt support for ARM is currently broken, use libcxxabi instead
+        # But allow switching back to glibcxx_static via -DCXX_RT=glibcxx_static
+        DEFAULT(CXX_RT "libcxxabi")
         # ARM7 OS_SDK has old libstdc++ without aligned allocation support
         CFLAGS(
             GLOBAL -fno-aligned-new

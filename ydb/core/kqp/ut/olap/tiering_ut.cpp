@@ -58,16 +58,18 @@ public:
         }
     }
 
-    void CheckAllDataInTier(const TString& tierName) {
+    void CheckAllDataInTier(const TString& tierName, const bool onlyActive=true) {
         NYdb::NTable::TTableClient tableClient = TestHelper->GetKikimr().GetTableClient();
-        
-        auto selectQuery = TString(R"(
+
+        auto selectQuery = TStringBuilder();
+        selectQuery << R"(
             SELECT
                 TierName, SUM(ColumnRawBytes) AS RawBytes, SUM(Rows) AS Rows
-            FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
-            WHERE Activity == 1
-            GROUP BY TierName
-        )");
+            FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`)";
+        if (onlyActive) {
+            selectQuery << " WHERE Activity == 1";
+        }
+        selectQuery << " GROUP BY TierName";
 
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
@@ -303,6 +305,44 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 0);
         }
+    }
+
+    Y_UNIT_TEST(TieringGC) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier("tier1");
+        tieringHelper.WriteSampleData();
+
+        testHelper.SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier("/Root/tier1", false);
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
+
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::GC);
+        testHelper.ResetTiering("/Root/olapStore/olapTable");
+        csController->WaitActualization(TDuration::Seconds(5));
+
+        tieringHelper.CheckAllDataInTier("__DEFAULT", false);
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
+
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::GC);
+        csController->SetExternalStorageUnavailable(true);
+        testHelper.ResetTiering("/Root/olapStore/olapTable");
+        csController->WaitCleaning(TDuration::Seconds(5));
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
+
+        csController->SetExternalStorageUnavailable(false);
+        testHelper.ResetTiering("/Root/olapStore/olapTable");
+        csController->WaitCondition(TDuration::Seconds(60), []() {
+            return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() == 0;
+        });
     }
 }
 

@@ -604,6 +604,7 @@ void BackupTopic(TDriver driver, const TString& dbPath, const TFsPath& fsBackupF
 
     Ydb::Topic::CreateTopicRequest creationRequest;
     topicDescription.SerializeTo(creationRequest);
+    creationRequest.clear_attributes();
 
     WriteProtoToFile(creationRequest, fsBackupFolder, NDump::NFiles::CreateTopic());
     BackupPermissions(driver, dbPath, fsBackupFolder);

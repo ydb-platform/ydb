@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
             [prefix = connection->TablePathPrefix] (TSession session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
-                    false, // the only difference with ShouldRollbackTransactionWhenCheckFails
+                    true, // the only difference with ShouldRollbackTransactionWhenCheckFails
                     prefix,
                     "test",
                     "id",

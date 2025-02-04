@@ -214,6 +214,12 @@ TViewDescription DescribeView(TViewClient& viewClient, const TString& path) {
     return describeResult.GetViewDescription();
 }
 
+NTopic::TTopicDescription DescribeTopic(NTopic::TTopicClient& topicClient, const TString& path) {
+    const auto describeResult = topicClient.DescribeTopic(path).ExtractValueSync();
+    UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+    return describeResult.GetTopicDescription();
+}
+
 // note: the storage pool kind must be preconfigured in the server
 void CreateDatabase(TTenants& tenants, TStringBuf path, TStringBuf storagePoolKind) {
     Ydb::Cms::CreateDatabaseRequest request;
@@ -643,6 +649,58 @@ void TestViewReferenceTableIsPreserved(
     TestViewReferenceTableIsPreserved(view, table, view, session, std::move(backup), std::move(restore));
 }
 
+void TestTopicSettingsArePreserved(
+    const char* topic, NQuery::TSession& session, NTopic::TTopicClient& topicClient,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    constexpr int minPartitions = 2;
+    constexpr int maxPartitions = 5;
+    constexpr const char* autoPartitioningStrategy = "scale_up";
+    constexpr int retentionPeriodDays = 7;
+
+    ExecuteQuery(session, Sprintf(R"(
+            CREATE TOPIC `%s` (
+                CONSUMER basic_consumer,
+                CONSUMER important_consumer WITH (important = TRUE)
+            ) WITH (
+                min_active_partitions = %d,
+                max_active_partitions = %d,
+                auto_partitioning_strategy = '%s',
+                retention_period = Interval('%s')
+            );
+        )",
+        topic, minPartitions, maxPartitions, autoPartitioningStrategy, Sprintf("P%dD", retentionPeriodDays).c_str()
+    ), true);
+
+    const auto checkDescription = [&](const NTopic::TTopicDescription& description, const TString& debugHint) {
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetConsumers().at(0).GetConsumerName(), "basic_consumer", debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetConsumers().at(0).GetImportant(), false, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetConsumers().at(1).GetConsumerName(), "important_consumer", debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetConsumers().at(1).GetImportant(), true, debugHint);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitioningSettings().GetMinActivePartitions(), minPartitions, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitioningSettings().GetMaxActivePartitions(), maxPartitions, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), NTopic::EAutoPartitioningStrategy::ScaleUp, debugHint);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitions().size(), 2, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitions().at(0).GetActive(), true, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitions().at(1).GetActive(), true, debugHint);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetRetentionPeriod(), TDuration::Days(retentionPeriodDays), debugHint);
+    };
+    checkDescription(DescribeTopic(topicClient, topic), DEBUG_HINT);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+            DROP TOPIC `%s`;
+        )", topic
+    ), true);
+
+    restore();
+    checkDescription(DescribeTopic(topicClient, topic), DEBUG_HINT);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -730,7 +788,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(RestoreViewQueryText) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -752,7 +809,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(RestoreViewReferenceTable) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -787,8 +843,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         // query client lives on the node 0, so it is enough to enable the views only on it
         server.GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
-        // export would happen on the node 0
-        server.GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViewExport(true);
 
         const TString view = JoinFsPaths(alice, "view");
         const TString table = JoinFsPaths(alice, "a", "b", "c", "table");
@@ -879,7 +933,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestViewBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -891,6 +944,26 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestViewOutputIsPreserved(
             view,
             session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    void TestTopicBackupRestoreWithoutData() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        NTopic::TTopicClient topicClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* topic = "/Root/topic";
+
+        TestTopicSettingsArePreserved(
+            topic,
+            session,
+            topicClient,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
@@ -913,7 +986,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 TestDirectoryBackupRestore();
                 break;
             case EPathTypePersQueueGroup:
-                break; // https://github.com/ydb-platform/ydb/issues/10431
+                TestTopicBackupRestoreWithoutData();
+                break;
             case EPathTypeSubDomain:
             case EPathTypeExtSubDomain:
                 break; // https://github.com/ydb-platform/ydb/issues/10432

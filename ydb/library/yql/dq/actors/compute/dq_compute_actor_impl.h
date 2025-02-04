@@ -1748,6 +1748,10 @@ public:
 
             ui64 ingressBytes = 0;
             ui64 ingressRows = 0;
+            ui64 filteredBytes = 0;
+            ui64 filteredRows = 0;
+            ui64 queuedBytes = 0;
+            ui64 queuedRows = 0;
             ui64 ingressDecompressedBytes = 0;
             auto startTimeMs = protoTask->GetStartTimeMs();
 
@@ -1773,6 +1777,10 @@ public:
                                 startTimeMs = firstMessageMs;
                             }
                         }
+                        filteredBytes += ingressStats.FilteredBytes;
+                        filteredRows += ingressStats.FilteredRows;
+                        queuedBytes += ingressStats.QueuedBytes;
+                        queuedRows += ingressStats.QueuedRows;
                     }
                 }
             } else {
@@ -1786,6 +1794,10 @@ public:
                     // ingress rows are usually not reported, so we count rows in task runner input
                     ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
                     ingressDecompressedBytes += ingressStats.DecompressedBytes;
+                    filteredBytes += ingressStats.FilteredBytes;
+                    filteredRows += ingressStats.FilteredRows;
+                    queuedBytes += ingressStats.QueuedBytes;
+                    queuedRows += ingressStats.QueuedRows;
                 }
             }
 
@@ -1796,6 +1808,10 @@ public:
             protoTask->SetIngressBytes(ingressBytes);
             protoTask->SetIngressRows(ingressRows);
             protoTask->SetIngressDecompressedBytes(ingressDecompressedBytes);
+            protoTask->SetIngressFilteredBytes(filteredBytes);
+            protoTask->SetIngressFilteredRows(filteredRows);
+            protoTask->SetIngressQueuedBytes(queuedBytes);
+            protoTask->SetIngressQueuedRows(queuedRows);
 
             ui64 egressBytes = 0;
             ui64 egressRows = 0;

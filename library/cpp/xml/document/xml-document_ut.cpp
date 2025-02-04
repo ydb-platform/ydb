@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/map.h>
+#include <util/generic/yexception.h>
 
 #include "xml-document.h"
 
@@ -34,6 +35,27 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
 
         NXml::TConstNode text = root.Node("text");
         UNIT_ASSERT_EQUAL(text.Value<TString>(), "Некоторый текст");
+    }
+    Y_UNIT_TEST(GetAttributes) {
+        NXml::TDocument xml(R"(<?xml version="1.0"?>
+                            <root>
+                                <a><b len="15" correct="1">hello world</b></a>
+                                <text>Некоторый текст</text>
+                            </root>
+                            )",
+                            NXml::TDocument::String);
+
+        NXml::TConstNode root = xml.Root();
+        NXml::TConstNode b = root.Node("a/b");
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(b.Attr<int>("unknown attrib"), yexception, "@unknown attrib");
+
+        const auto unknownAttr = b.TryAttr<int>("unknown attrib");
+        UNIT_ASSERT(unknownAttr.Empty());
+
+        const auto knownAttr = b.TryAttr<int>("len");
+        UNIT_ASSERT(knownAttr.Defined());
+        UNIT_ASSERT_EQUAL(knownAttr.GetRef(), 15);
     }
     Y_UNIT_TEST(SerializeString) {
         NXml::TDocument xml("frob", NXml::TDocument::RootName);

@@ -822,7 +822,16 @@ TString StripMetadata(const TString& config) {
 std::variant<TMainMetadata, TDatabaseMetadata, TError> GetGenericMetadata(const TString& config) {
     try {
         auto doc = NFyaml::TDocument::Parse(config);
-        auto kind = doc.Root().Map().at("metadata").Map().at("kind").Scalar();
+        auto metadata = doc.Root().Map().at("metadata").Map();
+        // if we have metadata, but do not have kind
+        // we suppose it is MainConfig
+        // later we will remove this behaviour
+        // but we need it for compatibility for now
+        if (!metadata.Has("kind")) {
+            return GetMetadata(config);
+        }
+
+        auto kind = metadata.at("kind").Scalar();
         if (kind == "MainConfig") {
             return GetMetadata(config);
         } else if (kind == "DatabaseConfig") {

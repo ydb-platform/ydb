@@ -42,11 +42,11 @@ For code samples, see [{#T}](../../recipes/ydb-sdk/retry.md).
 
 ## Status codes {#status-codes}
 
-When an error occurs, YDB SDK returns an error object that includes status codes. The returned status code may come from the YDB server, gRPC transport, or the SDK itself.
+When an error occurs, the {{ ydb-short-name }} SDK returns an error object that includes status codes. The returned status code may come from the YDB server, gRPC transport, or the SDK itself.
 
-Status codes within the range of 400000-400999 are YDB server codes that are identical for all YDB SDKs. Refer to [Status codes from the YDB server](./ydb-status-codes.md).
+Status codes within the range of 400000-400999 are {{ ydb-short-name }}  server codes that are identical for all {{ ydb-short-name }}  SDKs. Refer to [Status codes from the YDB server](./ydb-status-codes.md).
 
-Status codes within the range of 401000-401999 are SDK-specific codes. For more information about SDK-specific codes, refer to the corresponding SDK documentation.
+Status codes within the range of 401000-401999 are SDK-specific. For more information about SDK-specific codes, refer to the corresponding SDK documentation.
 
 For more information about gRPC status codes, see the [gRPC documentation](https://grpc.io/docs/guides/status-codes/).
 
@@ -54,8 +54,8 @@ For more information about gRPC status codes, see the [gRPC documentation](https
 
 When using the SDK, we recommend logging all errors and exceptions:
 
-* Log the number of retries made. An increase in the number of regular retries often indicates some issues.
-* Log all errors, including their types, termination codes, and their causes.
+* Log the number of retries made. An increase in the number of regular retries often indicates issues.
+* Log all errors, including their types, termination codes, and causes.
 * Log the total operation execution time, including operations that terminate after retries.
 
 ## See also

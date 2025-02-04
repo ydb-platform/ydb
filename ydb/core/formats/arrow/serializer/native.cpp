@@ -2,6 +2,7 @@
 #include "stream.h"
 #include "parsing.h"
 #include <ydb/core/formats/arrow/dictionary/conversion.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/log.h>

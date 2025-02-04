@@ -247,7 +247,8 @@ public:
         while (SortedIterators.size()) {
             if (SortedIterators.front()->GetRecordIndex() > recordIndex) {
                 return;
-            } else if (SortedIterators.front()->GetRecordIndex() < recordIndex) {
+            }
+            while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() < recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
                 if (!itColumn.Next()) {

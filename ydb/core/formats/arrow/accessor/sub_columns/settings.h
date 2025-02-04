@@ -12,12 +12,16 @@ class TSettings {
 private:
     YDB_ACCESSOR(ui32, SparsedDetectorKff, 20);
     YDB_ACCESSOR(ui32, ColumnsLimit, 1024);
+    YDB_ACCESSOR(ui32, ChunkMemoryLimit, 50 * 1024 * 1024);
+    
 
 public:
     TSettings() = default;
-    TSettings(const ui32 sparsedDetectorKff, const ui32 columnsLimit)
+    TSettings(const ui32 sparsedDetectorKff, const ui32 columnsLimit, const ui32 chunkMemoryLimit)
         : SparsedDetectorKff(sparsedDetectorKff)
-        , ColumnsLimit(columnsLimit) {
+        , ColumnsLimit(columnsLimit)
+        , ChunkMemoryLimit(chunkMemoryLimit)
+    {
     }
 
     bool IsSparsed(const ui32 keyUsageCount, const ui32 recordsCount) const {
@@ -29,12 +33,15 @@ public:
         NKikimrArrowAccessorProto::TConstructor::TSubColumns::TSettings result;
         result.SetSparsedDetectorKff(SparsedDetectorKff);
         result.SetColumnsLimit(ColumnsLimit);
+        result.SetChunkMemoryLimit(ChunkMemoryLimit);
+        
         return result;
     }
 
     bool DeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor::TSubColumns::TSettings& proto) {
         SparsedDetectorKff = proto.GetSparsedDetectorKff();
         ColumnsLimit = proto.GetColumnsLimit();
+        ChunkMemoryLimit = proto.GetChunkMemoryLimit();
         return true;
     }
 
@@ -42,12 +49,14 @@ public:
         NKikimrArrowAccessorProto::TRequestedConstructor::TSubColumns::TSettings result;
         result.SetSparsedDetectorKff(SparsedDetectorKff);
         result.SetColumnsLimit(ColumnsLimit);
+        result.SetChunkMemoryLimit(ChunkMemoryLimit);
         return result;
     }
 
     bool DeserializeFromRequestedProto(const NKikimrArrowAccessorProto::TRequestedConstructor::TSubColumns::TSettings& proto) {
         SparsedDetectorKff = proto.GetSparsedDetectorKff();
         ColumnsLimit = proto.GetColumnsLimit();
+        ChunkMemoryLimit = proto.GetChunkMemoryLimit();
         return true;
     }
 };

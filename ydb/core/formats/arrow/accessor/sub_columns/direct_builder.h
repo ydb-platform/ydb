@@ -117,7 +117,7 @@ public:
 
         bool operator<(const THeapElements& item) const {
             if (Elements->GetRecordIndexes()[Index] == item.Elements->GetRecordIndexes()[item.Index]) {
-                return Elements->GetKeyName() < item.Elements->GetKeyName();
+                return item.Elements->GetKeyName() < Elements->GetKeyName();
             } else {
                 return item.Elements->GetRecordIndexes()[item.Index] < Elements->GetRecordIndexes()[Index];
             }

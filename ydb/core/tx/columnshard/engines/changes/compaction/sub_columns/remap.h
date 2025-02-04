@@ -41,6 +41,10 @@ private:
             , IsColumnKey(isColumnKey) {
         }
 
+        ui32 GetSourceIndex() const {
+            return SourceIndex;
+        }
+
         bool operator<(const TSourceAddress& item) const {
             return std::tie(SourceIndex, SourceKeyIndex, IsColumnKey) < std::tie(item.SourceIndex, item.SourceKeyIndex, item.IsColumnKey);
         }
@@ -69,6 +73,13 @@ public:
     }
 
     void StartSourceChunk(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats) {
+        for (auto it = RemapInfo.begin(); it != RemapInfo.end();) {
+            if (it->first.GetSourceIndex() == sourceIdx) {
+                it = RemapInfo.erase(it);
+            } else {
+                ++it;
+            }
+        }
         AFL_VERIFY(ResultColumnStats);
         for (ui32 i = 0; i < sourceColumnStats.GetColumnsCount(); ++i) {
             if (auto commonKeyIndex = ResultColumnStats->GetKeyIndexOptional(sourceColumnStats.GetColumnName(i))) {

@@ -29,7 +29,7 @@ private:
 
     void InitArray(const ui32 position) {
         if (OriginalArray) {
-            CurrentChunk = OriginalArray->GetArray(CurrentChunk, 0, OriginalArray);
+            CurrentChunk = OriginalArray->GetArray(CurrentChunk, position, OriginalArray);
             CurrentChunkStartPosition = CurrentChunk->GetAddress().GetGlobalStartPosition();
             AFL_VERIFY(CurrentChunk->GetAddress().GetLocalIndex(position) == 0)("pos", position)(
                 "local", CurrentChunk->GetAddress().GetLocalIndex(position));

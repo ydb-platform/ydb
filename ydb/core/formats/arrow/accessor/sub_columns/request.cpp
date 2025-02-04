@@ -20,6 +20,9 @@ NKikimr::TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::
     if (auto kff = features.Extract<ui32>("SPARSED_DETECTOR_KFF")) {
         Settings.SetSparsedDetectorKff(*kff);
     }
+    if (auto memLimit = features.Extract<ui32>("MEM_LIMIT_CHUNK")) {
+        Settings.SetChunkMemoryLimit(*memLimit);
+    }
     return TConclusionStatus::Success();
 }
 

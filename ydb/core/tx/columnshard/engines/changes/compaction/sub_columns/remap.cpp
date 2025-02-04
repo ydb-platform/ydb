@@ -8,11 +8,14 @@ TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(const s
     remap.resize(statsByKeyIndex.size(), Max<ui32>());
     ui32 idx = 0;
     for (auto&& i : TemporaryKeyIndex) {
-        AFL_VERIFY(i.second < statsByKeyIndex.size());
-        if (statsByKeyIndex[i.second].GetRecordsCount()) {
-            builder.Add(i.first, statsByKeyIndex[i.second].GetRecordsCount(), statsByKeyIndex[i.second].GetDataSize());
-            remap[i.second] = idx++;
+        if (i.second >= statsByKeyIndex.size()) {
+            continue;
         }
+        if (!statsByKeyIndex[i.second].GetRecordsCount()) {
+            continue;
+        }
+        builder.Add(i.first, statsByKeyIndex[i.second].GetRecordsCount(), statsByKeyIndex[i.second].GetDataSize());
+        remap[i.second] = idx++;
     }
     return TOthersData::TFinishContext(builder.Finish(), remap);
 }

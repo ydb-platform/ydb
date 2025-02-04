@@ -27,7 +27,9 @@ private:
     const TDictStats ResultColumnStats;
     const TChunkMergeContext& Context;
     std::shared_ptr<TOthersData::TBuilderWithStats> OthersBuilder;
+    ui32 TotalRecordsCount = 0;
     ui32 RecordIndex = 0;
+    ui32 SumValuesSize = 0;
     const TSettings Settings;
     const TRemapColumns& Remapper;
 
@@ -85,7 +87,7 @@ private:
     };
 
     std::vector<TGeneralAccessorBuilder> ColumnBuilders;
-    std::vector<std::shared_ptr<TSubColumnsArray>> Results;
+    std::vector<std::vector<std::shared_ptr<TSubColumnsArray>>> Results;
 
     void FlushData() {
         AFL_VERIFY(RecordIndex);
@@ -96,7 +98,7 @@ private:
         }
         TColumnsData cData(
             ResultColumnStats, std::make_shared<NArrow::TGeneralContainer>(ResultColumnStats.BuildColumnsSchema()->fields(), std::move(arrays)));
-        Results.emplace_back(
+        Results.back().emplace_back(
             std::make_shared<TSubColumnsArray>(std::move(cData), std::move(portionOthersData), arrow::binary(), RecordIndex, Settings));
         Initialize();
     }
@@ -112,6 +114,7 @@ private:
         }
         OthersBuilder = TOthersData::MakeMergedBuilder();
         RecordIndex = 0;
+        SumValuesSize = 0;
     }
 
 public:
@@ -123,6 +126,7 @@ public:
         , OthersBuilder(TOthersData::MakeMergedBuilder())
         , Settings(settings)
         , Remapper(remapper) {
+        Results.emplace_back();
         Initialize();
     }
 
@@ -145,7 +149,10 @@ public:
         std::vector<TColumnPortionResult> portions;
         for (auto&& i : Results) {
             TPortionColumn pColumn(cmContext.GetColumnId());
-            pColumn.AddChunk(i, cmContext);
+            AFL_VERIFY(i.size());
+            for (auto&& p : i) {
+                pColumn.AddChunk(p, cmContext);
+            }
             portions.emplace_back(std::move(pColumn));
         }
         return std::move(portions);
@@ -154,16 +161,26 @@ public:
     void StartRecord() {
     }
     void FinishRecord() {
-        if (++RecordIndex == Context.GetPortionRowsCountLimit()) {
+        Y_UNUSED(Context);
+        ++TotalRecordsCount;
+        ++RecordIndex;
+        if (TotalRecordsCount == Context.GetPortionRowsCountLimit()) {
+            TotalRecordsCount = 0;
+            FlushData();
+            Results.emplace_back();
+        } else if (SumValuesSize >= Settings.GetChunkMemoryLimit()) {
             FlushData();
         }
+
     }
     void AddColumnKV(const ui32 commonKeyIndex, const std::string_view value) {
         AFL_VERIFY(commonKeyIndex < ColumnBuilders.size());
         ColumnBuilders[commonKeyIndex].AddRecord(RecordIndex, value);
+        SumValuesSize += value.size();
     }
     void AddOtherKV(const ui32 commonKeyIndex, const std::string_view value) {
         OthersBuilder->Add(RecordIndex, commonKeyIndex, value);
+        SumValuesSize += value.size();
     }
 };
 

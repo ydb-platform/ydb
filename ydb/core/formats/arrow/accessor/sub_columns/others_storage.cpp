@@ -28,7 +28,7 @@ void TOthersData::TBuilderWithStats::Add(const ui32 recordIndex, const ui32 keyI
         LastRecordIndex = recordIndex;
         LastKeyIndex = keyIndex;
     } else {
-        AFL_VERIFY(*LastRecordIndex < recordIndex || (*LastRecordIndex == recordIndex && *LastKeyIndex < keyIndex));
+        AFL_VERIFY(*LastRecordIndex < recordIndex || (*LastRecordIndex == recordIndex/* && *LastKeyIndex < keyIndex*/));
     }
     TStatusValidator::Validate(RecordIndex->Append(recordIndex));
     RTKeyIndexes.emplace_back(keyIndex);
@@ -38,6 +38,10 @@ void TOthersData::TBuilderWithStats::Add(const ui32 recordIndex, const ui32 keyI
 
 TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishContext) {
     AFL_VERIFY(Builders.size());
+    auto arrRecordIndex = NArrow::FinishBuilder(std::move(Builders[0]));
+    auto arrValues = NArrow::FinishBuilder(std::move(Builders[2]));
+    AFL_VERIFY(arrRecordIndex->type()->id() == arrow::uint32()->id());
+    auto arrRecordIndexValue = std::static_pointer_cast<arrow::UInt32Array>(arrRecordIndex);
     std::optional<TDictStats> resultStats = finishContext.GetActualStats();
     if (finishContext.GetRemap()) {
         for (ui32 idx = 0; idx < RTKeyIndexes.size(); ++idx) {
@@ -45,13 +49,26 @@ TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishC
             const ui32 newIndex = (*finishContext.GetRemap())[RTKeyIndexes[idx]];
             AFL_VERIFY(newIndex < finishContext.GetActualStats().GetColumnsCount());
             TStatusValidator::Validate(KeyIndex->Append(newIndex));
+            if (idx) {
+                const ui32 predKeyIndex = (*finishContext.GetRemap())[RTKeyIndexes[idx - 1]];
+                AFL_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) || 
+                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && predKeyIndex < newIndex))("r1", arrRecordIndexValue->Value(idx - 1))(
+                                                                   "r2", arrRecordIndexValue->Value(idx))("k1", predKeyIndex)("k2", newIndex);
+            }
         }
     } else {
         for (ui32 idx = 0; idx < RTKeyIndexes.size(); ++idx) {
             TStatusValidator::Validate(KeyIndex->Append(RTKeyIndexes[idx]));
+            if (idx) {
+                AFL_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) || 
+                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && RTKeyIndexes[idx - 1] < RTKeyIndexes[idx]))("r1",
+                                                                   arrRecordIndexValue->Value(idx - 1))("r2", arrRecordIndexValue->Value(idx))(
+                                                                   "k1", RTKeyIndexes[idx - 1])("k2", RTKeyIndexes[idx]);
+            }
         }
     }
-    auto arrays = NArrow::Finish(std::move(Builders));
+    auto arrKeyIndexes = NArrow::FinishBuilder(std::move(Builders[1]));
+    std::vector<std::shared_ptr<arrow::Array>> arrays = { arrRecordIndex, arrKeyIndexes, arrValues };
     return TOthersData(*resultStats, std::make_shared<TGeneralContainer>(arrow::RecordBatch::Make(GetSchema(), RecordsCount, arrays)));
 }
 

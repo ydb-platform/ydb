@@ -13,6 +13,7 @@ message TRequestedConstructor {
         message TSettings {
             optional uint32 SparsedDetectorKff = 1 [default = 20];
             optional uint32 ColumnsLimit = 2 [default = 1024];
+            optional uint32 ChunkMemoryLimit = 3 [default = 50000000];
         }
         optional TSettings Settings = 1;
     }
@@ -37,6 +38,7 @@ message TConstructor {
         message TSettings {
             optional uint32 SparsedDetectorKff = 1 [default = 20];
             optional uint32 ColumnsLimit = 2 [default = 1024];
+            optional uint32 ChunkMemoryLimit = 3 [default = 50000000];
         }
         optional TSettings Settings = 1;
     }

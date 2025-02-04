@@ -335,7 +335,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &changefeed)) {
             return Reply(false, "Cannot parse сhangefeed");
         }
-        item.Changefeeds[IndexDownloadedChangefeed].ChangefeedDescription = std::move(changefeed);
+        item.Changefeeds[IndexDownloadedChangefeed].Changefeed = std::move(changefeed);
 
         auto nextStep = [this]() {
             HeadObject(TopicDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));

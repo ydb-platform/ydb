@@ -734,7 +734,7 @@ bool IsKikimrPureNode(const TExprNode::TPtr& node) {
         return false;
     }
 
-    return false;
+    return true;
 }
 
 bool ExploreTx(TExprBase root, TExprContext& ctx, const TKiDataSink& dataSink, TKiExploreTxResults& txRes,
@@ -931,11 +931,6 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
     }
 
     if (txExplore.HasExecute) {
-        return node.Ptr();
-    }
-
-    auto txSyncSet = txExplore.GetSyncSet();
-    if (!CheckTx(commit.World(), kiDataSink, txExplore.Ops, txSyncSet)) {
         return node.Ptr();
     }
 

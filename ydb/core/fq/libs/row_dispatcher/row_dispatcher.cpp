@@ -710,7 +710,7 @@ TString TRowDispatcher::GetInternalState() {
             }
 
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
-                if (consumer->Partitions.contains(key.PartitionId)) {
+                if (!consumer->Partitions.contains(key.PartitionId)) {
                     continue;
                 }
                 const auto& partition = consumer->Partitions[key.PartitionId];
@@ -947,8 +947,9 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
         TSessionInfo& sessionInfo = topicSessionInfo.Sessions[partition.TopicSessionId];
         if (!sessionInfo.Consumers.contains(consumer->ReadActorId)) {
             LOG_ROW_DISPATCHER_ERROR("Wrong readActorId " << consumer->ReadActorId << ", no such consumer");
+        } else {
+            sessionInfo.Consumers.erase(consumer->ReadActorId);
         }
-        sessionInfo.Consumers.erase(consumer->ReadActorId);
         if (sessionInfo.Consumers.empty()) {
             LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill to " << partition.TopicSessionId);
             topicSessionInfo.Sessions.erase(partition.TopicSessionId);

@@ -2435,6 +2435,8 @@ message TReqListJobs
 
     optional bool with_monitoring_descriptor = 21;
 
+    optional string operation_incarnation = 25;
+
     optional uint64 from_time = 22; // TInstant
     optional uint64 to_time = 23; // TInstant
 
@@ -3172,6 +3174,7 @@ message TJob
     optional uint64 job_cookie = 27;
     optional bytes archive_features = 29; // YSON
     optional string monitoring_descriptor = 30;
+    optional string operation_incarnation = 31;
 }
 
 message TListJobsStatistics

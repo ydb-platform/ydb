@@ -12,7 +12,7 @@
 namespace NYql {
 namespace NDq {
 
-constexpr TDuration MIN_QUOTED_CPU_TIME = TDuration::MilliSeconds(10);
+constexpr TDuration MIN_QUOTED_CPU_TIME = TDuration::MilliSeconds(1);
 
 using namespace NActors;
 
@@ -688,7 +688,7 @@ private:
     }
 
     TMaybe<NDqProto::TCheckpoint> GetCheckpointRequest() {
-        if (!CheckpointRequestedFromTaskRunner && Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved()) {
+        if (!CheckpointRequestedFromTaskRunner && HasPendingCheckpoint()) {
             CheckpointRequestedFromTaskRunner = true;
             return Checkpoints->GetPendingCheckpoint();
         }
@@ -806,10 +806,10 @@ private:
     }
 
     TDuration TakeCpuTimeDelta() {
-        auto newTicks = ComputeActorElapsedTicks + TaskRunnerActorElapsedTicks;
-        auto result = newTicks - LastQuotaElapsedTicks;
-        LastQuotaElapsedTicks = newTicks;
-        return TDuration::MicroSeconds(NHPTimer::GetSeconds(result) * 1'000'000ull);
+        // auto newTicks = ComputeActorElapsedTicks + TaskRunnerActorElapsedTicks;
+        // auto result = newTicks - LastQuotaElapsedTicks;
+        // LastQuotaElapsedTicks = newTicks;
+        return TDuration::MicroSeconds(10000);
     }
 
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TComputeActorState& state) const override {
@@ -1185,6 +1185,10 @@ private:
             CA_LOG_T("AsyncCheckRunStatus: TakeInputChannelDataRequests: " << TakeInputChannelDataRequests.size());
             return;
         }
+        if (HasPendingCheckpoint()) {
+            ContinueExecute();
+        }
+
         TBase::CheckRunStatus();
     }
 
@@ -1225,7 +1229,7 @@ private:
     // Cpu quota
     TActorId QuoterServiceActorId;
     TInstant CpuTimeQuotaAsked;
-    ui64 LastQuotaElapsedTicks = 0;
+    //ui64 LastQuotaElapsedTicks = 0;
     std::unique_ptr<NTaskRunnerActor::TEvContinueRun> ContinueRunEvent;
     TInstant ContinueRunStartWaitTime;
     bool ContinueRunInflight = false;

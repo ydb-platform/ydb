@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb/public/api/protos/ydb_cms.pb.h>
 
 namespace Ydb::Cms {
     class ListDatabasesResult;

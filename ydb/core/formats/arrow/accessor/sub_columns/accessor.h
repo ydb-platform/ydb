@@ -48,8 +48,8 @@ protected:
     }
 
 public:
-    NSubColumns::TReadIteratorOrderedKeys BuildOrderedIterator() const {
-        return NSubColumns::TReadIteratorOrderedKeys(ColumnsData, OthersData);
+    std::shared_ptr<NSubColumns::TReadIteratorOrderedKeys> BuildOrderedIterator() const {
+        return std::make_shared<NSubColumns::TReadIteratorOrderedKeys>(ColumnsData, OthersData);
     }
 
     NSubColumns::TReadIteratorUnorderedKeys BuildUnorderedIterator() const {

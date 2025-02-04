@@ -17,32 +17,34 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
     auto arr = std::static_pointer_cast<arrow::StringArray>(sourceArray);
     for (ui32 i = 0; i < arr->length(); ++i) {
         const auto view = arr->GetView(i);
-        NBinaryJson::TBinaryJson bJson(view.data(), view.size());
-//        auto bJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(view.data(), view.size()));
-//        const NBinaryJson::TBinaryJson* bJsonParsed = std::get_if<NBinaryJson::TBinaryJson>(&bJson);
-//        AFL_VERIFY(bJsonParsed)("error", *std::get_if<TString>(&bJson))("json", TStringBuf(view.data(), view.size()));
-        const NBinaryJson::TBinaryJson* bJsonParsed = &bJson;
-        auto reader = NBinaryJson::TBinaryJsonReader::Make(*bJsonParsed);
-        auto cursor = reader->GetRootCursor();
-        if (cursor.GetType() != NBinaryJson::EContainerType::Object) {
-            return TConclusionStatus::Fail("incorrect json data");
-        }
-        auto it = cursor.GetObjectIterator();
-        while (it.HasNext()) {
-            auto [key, value] = it.Next();
-            if (key.GetType() != NBinaryJson::EEntryType::String) {
-                continue;
+        if (view.size() && !arr->IsNull(i)) {
+            NBinaryJson::TBinaryJson bJson(view.data(), view.size());
+            //        auto bJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(view.data(), view.size()));
+            //        const NBinaryJson::TBinaryJson* bJsonParsed = std::get_if<NBinaryJson::TBinaryJson>(&bJson);
+            //        AFL_VERIFY(bJsonParsed)("error", *std::get_if<TString>(&bJson))("json", TStringBuf(view.data(), view.size()));
+            const NBinaryJson::TBinaryJson* bJsonParsed = &bJson;
+            auto reader = NBinaryJson::TBinaryJsonReader::Make(*bJsonParsed);
+            auto cursor = reader->GetRootCursor();
+            if (cursor.GetType() != NBinaryJson::EContainerType::Object) {
+                return TConclusionStatus::Fail("incorrect json data");
             }
-            if (value.GetType() == NBinaryJson::EEntryType::String) {
-                dataBuilder.AddKVOwn(key.GetString(), TString(value.GetString().data(), value.GetString().size()));
-            } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
-                dataBuilder.AddKVOwn(key.GetString(), ::ToString(value.GetNumber()));
-            } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {
-                dataBuilder.AddKVOwn(key.GetString(), "0");
-            } else if (value.GetType() == NBinaryJson::EEntryType::BoolTrue) {
-                dataBuilder.AddKVOwn(key.GetString(), "1");
-            } else {
-                continue;
+            auto it = cursor.GetObjectIterator();
+            while (it.HasNext()) {
+                auto [key, value] = it.Next();
+                if (key.GetType() != NBinaryJson::EEntryType::String) {
+                    continue;
+                }
+                if (value.GetType() == NBinaryJson::EEntryType::String) {
+                    dataBuilder.AddKVOwn(key.GetString(), TString(value.GetString().data(), value.GetString().size()));
+                } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
+                    dataBuilder.AddKVOwn(key.GetString(), ::ToString(value.GetNumber()));
+                } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {
+                    dataBuilder.AddKVOwn(key.GetString(), "0");
+                } else if (value.GetType() == NBinaryJson::EEntryType::BoolTrue) {
+                    dataBuilder.AddKVOwn(key.GetString(), "1");
+                } else {
+                    continue;
+                }
             }
         }
         dataBuilder.StartNextRecord();

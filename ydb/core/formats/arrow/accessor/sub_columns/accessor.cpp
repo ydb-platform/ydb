@@ -94,12 +94,11 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
 IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
     auto it = BuildUnorderedIterator();
-    ui32 recordsCount = 0;
     auto builder = NArrow::MakeBuilder(GetDataType());
-    while (it.IsValid()) {
+    for (ui32 recordIndex = 0; recordIndex < GetRecordsCount(); ++recordIndex) {
         NJson::TJsonValue value;
         auto onStartRecord = [&](const ui32 index) {
-            AFL_VERIFY(recordsCount++ == index)("count", recordsCount)("index", index);
+            AFL_VERIFY(recordIndex == index)("count", recordIndex)("index", index);
         };
         auto onFinishRecord = [&]() {
             auto str = value.GetStringRobust();
@@ -109,7 +108,11 @@ IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
             if (const TString* val = std::get_if<TString>(&bJson)) {
                 AFL_VERIFY(false)("error", *val);
             } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
-                NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(val->data(), val->size()));
+                if (value.IsNull() || !value.IsDefined()) {
+                    TStatusValidator::Validate(builder->AppendNull());
+                } else {
+                    NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(val->data(), val->size()));
+                }
             } else {
                 AFL_VERIFY(false);
             }
@@ -121,7 +124,7 @@ IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
                 value.InsertValue(OthersData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
             }
         };
-        it.ReadRecords(1, onStartRecord, onRecordKV, onFinishRecord);
+        it.ReadRecord(recordIndex, onStartRecord, onRecordKV, onFinishRecord);
     }
     return TLocalDataAddress(NArrow::FinishBuilder(std::move(builder)), 0, 0);
 }

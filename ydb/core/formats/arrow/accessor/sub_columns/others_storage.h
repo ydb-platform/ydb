@@ -90,6 +90,11 @@ public:
             return std::string_view(view.data(), view.size());
         }
 
+        bool HasValue() const {
+            AFL_VERIFY(IsValid());
+            return true;
+        }
+
         bool Next() {
             AFL_VERIFY(IsValid());
             return ++CurrentIndex < RecordsCount;

@@ -228,6 +228,31 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         }
     };
 
+    Y_UNIT_TEST(EmptyVariants) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1) VALUES (1u), (2u), (3u), (4u)
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+            EXPECTED: [[1u;#];[2u;#];[3u;#];[4u;#]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
     Y_UNIT_TEST(SimpleVariants) {
         TString script = R"(
             SCHEMA:            
@@ -267,7 +292,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`)
+                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')), 
@@ -277,10 +302,13 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(11u, JsonDocument('{"a" : "1a1"}')), (12u, JsonDocument('{"a" : "1a2"}')), 
                                                                     (13u, JsonDocument('{"b" : "1b3"}')), (14u, JsonDocument('{"b" : "1b4", "a" : "a4"}'))
             ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1) VALUES(10u)
+            ------
             WAIT_COMPACTION
             ------
             READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
-            EXPECTED: [[1u;["{\"a\":\"a1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4\"}"]];
+            EXPECTED: [[1u;["{\"a\":\"a1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4\"}"]];[10u;#];
                                    [11u;["{\"a\":\"1a1\"}"]];[12u;["{\"a\":\"1a2\"}"]];[13u;["{\"b\":\"1b3\"}"]];[14u;["{\"a\":\"a4\",\"b\":\"1b4\"}"]]]
             
         )";

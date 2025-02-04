@@ -24,7 +24,7 @@ private:
     using TSettings = NArrow::NAccessor::NSubColumns::TSettings;
     using TReadIteratorOrderedKeys = NArrow::NAccessor::NSubColumns::TReadIteratorOrderedKeys;
     std::vector<std::shared_ptr<TSubColumnsArray>> Sources;
-    std::vector<TReadIteratorOrderedKeys> OrderedIterators;
+    std::vector<std::shared_ptr<TReadIteratorOrderedKeys>> OrderedIterators;
     ui32 OutputRecordsCount = 0;
     ui32 InputRecordsCount = 0;
     std::optional<TDictStats> ResultColumnStats;
@@ -100,7 +100,9 @@ private:
             OutputRecordsCount += i.GetRecordsCount();
         }
         for (auto&& i : input) {
-            if (i->GetTypeDeep() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+            if (!i) {
+                Sources.emplace_back(nullptr);
+            } else if (i->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
                 Sources.emplace_back(std::static_pointer_cast<TSubColumnsArray>(i));
             } else {
                 auto subColumnsAccessor = Context.GetLoader()
@@ -112,6 +114,9 @@ private:
         }
         std::vector<const TDictStats*> stats;
         for (auto&& i : Sources) {
+            if (!i) {
+                continue;
+            }
             stats.emplace_back(&i->GetColumnsData().GetStats());
             stats.emplace_back(&i->GetOthersData().GetStats());
             InputRecordsCount += i->GetRecordsCount();
@@ -123,6 +128,10 @@ private:
 
         for (ui32 sourceIdx = 0; sourceIdx < Sources.size(); ++sourceIdx) {
             const auto& source = Sources[sourceIdx];
+            if (!source) {
+                OrderedIterators.emplace_back(nullptr);
+                continue;
+            }
             RemapKeyIndex.AddRemap(
                 sourceIdx, source->GetColumnsData().GetStats(), source->GetOthersData().GetStats(), *ResultColumnStats, *ResultOtherStats);
             OrderedIterators.emplace_back(source->BuildOrderedIterator());
@@ -300,7 +309,12 @@ private:
             const auto finishRecord = [&]() {
                 builder.FinishRecord();
             };
-            OrderedIterators[sourceIdx].ReadRecord(recordIdx, startRecord, addKV, finishRecord);
+            if (!OrderedIterators[sourceIdx]) {
+                startRecord(0);
+                finishRecord();
+            } else {
+                OrderedIterators[sourceIdx]->ReadRecord(recordIdx, startRecord, addKV, finishRecord);
+            }
         }
         return builder.Finish(Context);
     }

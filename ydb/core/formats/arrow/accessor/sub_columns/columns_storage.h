@@ -80,6 +80,10 @@ public:
             return std::string_view(view.data(), view.size());
         }
 
+        bool HasValue() const {
+            return !CurrentArray->IsNull(CurrentAddress.GetPosition());
+        }
+
         bool IsValid() const {
             return CurrentIndex < ChunkedArray->GetRecordsCount();
         }

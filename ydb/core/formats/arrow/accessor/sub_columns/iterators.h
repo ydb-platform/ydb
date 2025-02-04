@@ -94,6 +94,18 @@ public:
         return std::visit(TVisitor(), Iterator);
     }
 
+    bool HasValue() const {
+        struct TVisitor {
+            bool operator()(const TOthersData::TIterator& iterator) {
+                return iterator.HasValue();
+            }
+            bool operator()(const TColumnsData::TIterator& iterator) {
+                return iterator.HasValue();
+            }
+        };
+        return std::visit(TVisitor(), Iterator);
+    }
+
     bool operator<(const TGeneralIterator& item) const {
         return std::tuple(item.GetRecordIndex(), item.GetKeyIndex()) < std::tuple(GetRecordIndex(), GetKeyIndex());
     }
@@ -105,7 +117,6 @@ private:
     TOthersData OthersData;
     std::vector<TGeneralIterator> Iterators;
     std::vector<TGeneralIterator*> SortedIterators;
-    ui32 CurrentRecordIndex = 0;
 
 public:
     bool IsValid() const {
@@ -129,29 +140,29 @@ public:
     }
 
     template <class TStartRecordActor, class TKVActor, class TFinishRecordActor>
-    void ReadRecords(const ui32 recordsCount, const TStartRecordActor& startRecordActor, const TKVActor& kvActor,
+    void ReadRecord(const ui32 recordIndex, const TStartRecordActor& startRecordActor, const TKVActor& kvActor,
         const TFinishRecordActor& finishRecordActor) {
-        for (ui32 i = 0; i < recordsCount; ++i) {
-            startRecordActor(CurrentRecordIndex);
-            for (ui32 iIter = 0; iIter < SortedIterators.size();) {
-                auto& itColumn = *SortedIterators[iIter];
-                AFL_VERIFY(CurrentRecordIndex <= itColumn.GetRecordIndex());
-                while (itColumn.GetRecordIndex() == CurrentRecordIndex) {
+        startRecordActor(recordIndex);
+        for (ui32 iIter = 0; iIter < SortedIterators.size();) {
+            auto& itColumn = *SortedIterators[iIter];
+            AFL_VERIFY(recordIndex <= itColumn.GetRecordIndex());
+            while (itColumn.GetRecordIndex() == recordIndex) {
+                if (itColumn.HasValue()) {
                     kvActor(itColumn.GetKeyIndex(), itColumn.GetValue(), itColumn.IsColumnKey());
-                    if (!itColumn.Next()) {
-                        break;
-                    }
                 }
-                if (!itColumn.IsValid()) {
-                    std::swap(SortedIterators[iIter], SortedIterators[SortedIterators.size() - 1]);
-                    SortedIterators.pop_back();
-                } else if (itColumn.GetRecordIndex() != CurrentRecordIndex) {
-                    ++iIter;
+                if (!itColumn.Next()) {
+                    break;
                 }
             }
-            ++CurrentRecordIndex;
-            finishRecordActor();
+            if (!itColumn.IsValid()) {
+                std::swap(SortedIterators[iIter], SortedIterators[SortedIterators.size() - 1]);
+                SortedIterators.pop_back();
+            } else {
+                AFL_VERIFY(recordIndex < itColumn.GetRecordIndex());
+                ++iIter;
+            }
         }
+        finishRecordActor();
     }
 };
 
@@ -179,7 +190,7 @@ private:
         }
     };
 
-        std::vector<TKeyAddress> Addresses;
+    std::vector<TKeyAddress> Addresses;
 
 public:
     bool IsValid() const {

@@ -169,12 +169,27 @@ namespace NActors {
         const ui32 hint = recipient.Hint();
 
         // For logging
+        auto getThreadNameWithoutSpace = []() {
+            auto name = TThread::CurrentThreadName();
+            std::string nameWithoutSpace;
+            for (auto sym : name) {
+                if (sym == ' ') {
+                    nameWithoutSpace += '+';
+                } else {
+                    nameWithoutSpace += sym;
+                }
+            }
+
+            return nameWithoutSpace;
+        };
+
         TStringStream logOut;
         logOut << "Send "
             << recipient << " "
             << ev->Sender << " "
             << (void*)ev.Get() << " "
-            << TInstant::Now().ToString() << "\n";
+            << TInstant::Now().ToString() << " "
+            << getThreadNameWithoutSpace() << "\n";
         Cerr << logOut.Str(); 
 
         // copy-paste from Get to avoid duplicated type-switches

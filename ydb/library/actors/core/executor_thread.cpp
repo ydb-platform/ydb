@@ -301,10 +301,10 @@ namespace NActors {
                             << ev->Sender << " "
                             << (void*)ev.Get() << " "
                             << TInstant::Now().ToString() << " "
+                            << getThreadNameWithoutSpace() << " "
                             << getNameWithoutSpace() << " "
                             << getMessageTypeWithoutSpace() << " "
-                            << TThread::CurrentThreadId() << " "
-                            << getThreadNameWithoutSpace() << "\n";
+                            << TThread::CurrentThreadId() << "\n";
                         Cerr << logOut.Str();
                         logOut.Clear();
                     }

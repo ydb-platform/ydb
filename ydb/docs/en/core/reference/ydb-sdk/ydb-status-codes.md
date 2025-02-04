@@ -262,7 +262,7 @@ no
 
 The query was processed successfully.
 
-No response required. Continue application execution.
+No response is required. Continue application execution.
 
 <div class="tags_list">
 
@@ -272,7 +272,7 @@ No response required. Continue application execution.
 
 </div>
 
-Invalid query syntax or required fields were missing.
+Invalid query syntax or missing required fields.
 
 Correct the query.
 
@@ -284,9 +284,9 @@ Correct the query.
 
 </div>
 
-Access to the requested object (table, directory) is denied.
+Access to the requested schema object (for example, a table or directory) is denied.
 
-Request access from the DB administrator.
+Request access from its owner.
 
 <div class="tags_list">
 
@@ -298,7 +298,7 @@ Request access from the DB administrator.
 
 An unknown internal error occurred.
 
-Contact the developers.
+File a [GitHub issue](https://github.com/ydb-platform/ydb/issues/new) or contact {{ ydb-short-name }} technical support.
 
 <div class="tags_list">
 
@@ -308,7 +308,7 @@ Contact the developers.
 
 </div>
 
-The operation was aborted. Possible reasons might include lock invalidation, TRANSACTION_LOCKS_INVALIDATE in detailed error messages.
+The operation was aborted. Possible reasons might include lock invalidation with `TRANSACTION_LOCKS_INVALIDATE` in detailed error messages.
 
 Retry the entire transaction.
 
@@ -334,7 +334,7 @@ Retry the last action (query).
 
 A part of the system is overloaded.
 
-Retry the last action (query), reduce the rate of queries.
+Retry the last action (query) and reduce the query rate.
 
 <div class="tags_list">
 
@@ -358,7 +358,7 @@ Correct the query or schema.
 
 An unclassified error occurred, possibly related to the query.
 
-See the detailed error message and contact the developers.
+See the detailed error message. If necessary, file a [GitHub issue](https://github.com/ydb-platform/ydb/issues/new) or contact {{ ydb-short-name }} technical support.
 
 <div class="tags_list">
 
@@ -370,7 +370,7 @@ See the detailed error message and contact the developers.
 
 The query timeout expired.
 
-If idempotent, retry the query.
+If the query is idempotent, retry it.
 
 <div class="tags_list">
 
@@ -382,7 +382,7 @@ If idempotent, retry the query.
 
 This session is no longer available.
 
-Re-create a session.
+Create a new session.
 
 <div class="tags_list">
 
@@ -392,9 +392,9 @@ Re-create a session.
 
 </div>
 
-The query cannot be executed for the current state. For example, inserting data into a table with an existing key.
+The query cannot be executed in the current state. For example, inserting data into a table with an existing key.
 
-Correct the state or query and retry.
+Correct the state or query, then retry.
 
 <div class="tags_list">
 
@@ -417,7 +417,7 @@ The response depends on the application logic.
 
 </div>
 
-The database object is not found in the {{ ydb-short-name }} database.
+The database object was not found in the {{ ydb-short-name }} database.
 
 The response depends on the application logic.
 
@@ -431,7 +431,7 @@ The response depends on the application logic.
 
 The session has already expired.
 
-Re-create a session.
+Create a new session.
 
 <div class="tags_list">
 
@@ -441,9 +441,9 @@ Re-create a session.
 
 </div>
 
-The request was cancelled on the server. For example, a user cancelled the long-running query in the [Embedded UI](../embedded-ui/index.md) or the query included the [cancel_after](../../dev/timeouts.md#cancel) timeout option.
+The request was canceled on the server. For example, a user canceled a long-running query in the [Embedded UI](../embedded-ui/index.md), or the query included the [cancel_after](../../dev/timeouts.md#cancel) timeout option.
 
-If the query took too much time to complete, try to optimize the query. If you used the cancel_after timeout option, increase the timeout value.
+If the query took too long to complete, try optimizing it. If you used the `cancel_after` timeout option, increase the timeout value.
 
 <div class="tags_list">
 
@@ -453,9 +453,9 @@ If the query took too much time to complete, try to optimize the query. If you u
 
 </div>
 
-An unknown transaction status. The query ended with a failure, which made it impossible to determine the status of the transaction. Queries that terminate with this status are subject to transaction integrity and atomicity guarantees. That is, either all changes are registered or the entire transaction is canceled.
+An unknown transaction status. The query ended with a failure, making it impossible to determine the transaction status. Queries that terminate with this status are subject to transaction integrity and atomicity guarantees. That is, either all changes are registered, or the entire transaction is canceled.
 
-For idempotent transactions, you can retry the entire transaction after a small delay. Otherwise, the response depends on the application logic.
+For idempotent transactions, retry the entire transaction after a short delay. Otherwise, the response depends on the application logic.
 
 <div class="tags_list">
 
@@ -465,7 +465,7 @@ For idempotent transactions, you can retry the entire transaction after a small 
 
 </div>
 
-The query is not supported by {{ ydb-short-name }} either because support for such queries is not implemented yet or not enabled in {{ ydb-short-name }} configuration.
+The query is not supported by {{ ydb-short-name }} either because support for such queries is not yet implemented or is not enabled in the {{ ydb-short-name }} configuration.
 
 Correct the query or enable support for such queries in {{ ydb-short-name }}.
 
@@ -479,7 +479,7 @@ Correct the query or enable support for such queries in {{ ydb-short-name }}.
 
 The session is busy.
 
-Re-create the session.
+Create a new session.
 
 <div class="tags_list">
 
@@ -489,9 +489,9 @@ Re-create the session.
 
 </div>
 
-An error occurred in an external system, for example when processing a federated query or importing data from an external data source.
+An error occurred in an external system, for example, when processing a federated query or importing data from an external data source.
 
-See the detailed error message and contact the developers.
+See the detailed error message. If necessary, file a [GitHub issue](https://github.com/ydb-platform/ydb/issues/new) or contact {{ ydb-short-name }} technical support.
 
 
 ## See also

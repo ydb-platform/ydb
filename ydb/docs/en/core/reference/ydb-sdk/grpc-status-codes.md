@@ -1,6 +1,6 @@
 # gRPC status codes
 
-YDB provides the gRPC API, which you can use to manage your DB resources and data. The following table describes the gRPC status codes:
+{{ ydb-short-name }}  provides the gRPC API, which you can use to manage your database resources and data. The following table describes the gRPC status codes:  
 
 #|
 ||
@@ -242,7 +242,7 @@ The operation was cancelled, typically by the caller.
 
 </div>
 
-Unknown error. For example, this error may be returned when a `Status` value received from another address space belongs to an error space that is not known in this address space. Also errors raised by APIs that do not return enough error information may be converted to this error.
+Unknown error. For example, this error may be returned when a `Status` value received from another address space belongs to an error space that is not known in this address space. Errors raised by APIs that do not return enough error information may also be converted to this error.
 
 <div class="tags_list">
 
@@ -252,7 +252,7 @@ Unknown error. For example, this error may be returned when a `Status` value rec
 
 </div>
 
-The client specified an invalid argument. Note that this differs from `FAILED_PRECONDITION`. `INVALID_ARGUMENT` indicates arguments that are problematic regardless of the state of the system (e.g., a malformed file name).
+The client specified an invalid argument. Note that this differs from `FAILED_PRECONDITION`. `INVALID_ARGUMENT` indicates arguments that are problematic regardless of the system state (e.g., a malformed file name).
 
 <div class="tags_list">
 
@@ -262,9 +262,9 @@ The client specified an invalid argument. Note that this differs from `FAILED_PR
 
 </div>
 
-The query was not processed during the specified client timeout or a network issue occurred.
+The query was not processed within the specified client timeout, or a network issue occurred.
 
-Check the correctness of the specified timeout, network access, endpoint, or other network settings, reduce the rate of queries, and optimize them.
+Check the specified timeout, network access, endpoint, and other network settings. Reduce the query rate and optimize queries.
 
 <div class="tags_list">
 
@@ -274,7 +274,7 @@ Check the correctness of the specified timeout, network access, endpoint, or oth
 
 </div>
 
-Some requested database object (e.g., table or directory) was not found.
+A requested database object (for example, a table or directory) was not found.
 
 <div class="tags_list">
 
@@ -306,7 +306,7 @@ The caller does not have permission to execute the specified operation.
 
 There are not enough resources available to fulfill the query.
 
-Reduce the rate of queries and check client balancing.
+Reduce the query rate and check client balancing.
 
 <div class="tags_list">
 
@@ -316,9 +316,9 @@ Reduce the rate of queries and check client balancing.
 
 </div>
 
-The query cannot be executed for the current state (for example, inserting data into a table with an existing key).
+The query cannot be executed in the current state (for example, inserting data into a table with an existing key).
 
-Fix the state or query and retry.
+Fix the state or query, then retry.
 
 <div class="tags_list">
 
@@ -328,7 +328,7 @@ Fix the state or query and retry.
 
 </div>
 
-The operation was aborted, typically due to a concurrency issue such as a transaction abort.
+The operation was aborted, typically due to a concurrency issue, such as a transaction abort.
 
 <div class="tags_list">
 
@@ -348,7 +348,7 @@ The operation was attempted past the valid range. Unlike `INVALID_ARGUMENT`, thi
 
 </div>
 
-The operation is not implemented or is not supported/enabled in this service.
+The operation is not implemented, supported, or enabled in this service.
 
 <div class="tags_list">
 
@@ -358,7 +358,7 @@ The operation is not implemented or is not supported/enabled in this service.
 
 </div>
 
-Internal errors. This means that some invariants expected by the underlying system have been broken. This error code is reserved for serious errors.
+Internal errors. This means that some invariants expected by the underlying system have been broken. This error code is reserved for significant problems.
 
 <div class="tags_list">
 
@@ -368,7 +368,7 @@ Internal errors. This means that some invariants expected by the underlying syst
 
 </div>
 
-The service is currently unavailable. This is most likely a transient condition, which can be corrected by retrying with a backoff. Note that it is not always safe to retry non-idempotent operations.
+The service is currently unavailable. This is most likely a transient condition that can be corrected by retrying with a backoff. Note that it is not always safe to retry non-idempotent operations.
 
 <div class="tags_list">
 
@@ -388,7 +388,7 @@ Unrecoverable data loss or corruption.
 
 </div>
 
-The request does not have valid authentication credentials for the operation.
+The request did not have valid authentication credentials.
 
 [*instant]: {% include [instant](./_includes/tooltips/instant.md) %}
 

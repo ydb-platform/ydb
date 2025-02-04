@@ -1,1 +1,1 @@
-This article describes status codes within the range of 401000-402999 that are SDK-specific. For information about common {{ ydb-short-name }} server status codes within the range of 400000-400999, see [{#T}](../ydb-status-codes.md).
+Эта статья описывает коды завершения в диапазоне 401000-402999, которые специфичны для SDK. Информацию об общих кодах завершения сервера {{ ydb-short-name }} в диапазоне 400000-400999 см. в [{#T}](../ydb-status-codes.md).

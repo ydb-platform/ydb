@@ -2304,10 +2304,13 @@ private:
                                 if (spillingState == TSpillingState::Spilling) {
                                     if (!state.SpillEverything()) return NUdf::EFetchStatus::Yield;
                                     std::cerr << "MISHA blobs spilled: ";
-                                    for (auto blobId : state.SpillingBuckets_[0].SpillingKeys_) {
-                                        std::cerr << blobId << " ";
+                                    for (ui64 bucketId = 0; bucketId < state.NumberOfSpillingBuckets_; ++bucketId) {
+                                        std::cerr << "BucketID: " << bucketId << std::endl;
+                                        for (auto blobId : state.SpillingBuckets_[bucketId].SpillingKeys_) {
+                                            std::cerr << blobId << " ";
+                                        }
+                                        std::cerr << std::endl;
                                     }
-                                    std::cerr << std::endl;
                                     state.Clear();
 
                                     spillingState = TSpillingState::Restoring;

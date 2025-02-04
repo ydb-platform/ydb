@@ -334,7 +334,7 @@ private:
             return;
         }
 
-        if (!CheckEntryKind(entry, TNavigate::KindTable)) {
+        if (!CheckEntryKind(entry, TNavigate::KindTable) && !CheckEntryKind(entry, TNavigate::KindColumnTable)) {
             return;
         }
 

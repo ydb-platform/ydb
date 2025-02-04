@@ -1423,6 +1423,29 @@ public:
         return true;
     }
 
+    bool UpdateSpillingAndWait(bool finalize=false) {
+        for (ui64 bucketId = 0; bucketId < NumberOfSpillingBuckets_; ++bucketId) {
+            auto& bucket = SpillingBuckets_[bucketId];
+            if (bucket.SpillingOperation_.has_value() && !bucket.SpillingOperation_->HasValue()) return false;
+
+            if (bucket.SpillingOperation_.has_value()) {
+                bucket.SpillingKeys_.push_back(bucket.SpillingOperation_->ExtractValue());
+                bucket.SpillingOperation_ = std::nullopt;
+            }
+
+            if (bucket.GetSize() > BucketSizeLimit_ || bucket.GetSize() != 0 && finalize) {
+                std::cerr << "Spilling bucket: " << bucketId << " Size: " << bucket.SpillingBuffer.Size() << " Rows: " << bucket.Rows << std::endl;
+                bucket.SpillingSizes_.push_back(bucket.Rows);
+                bucket.SpillingOperation_ = bucket.Spiller_->Put(std::move(bucket.SpillingBuffer));
+                bucket.Clear();
+                return false;
+            }
+        }
+
+        return true;
+
+    }
+
     bool SpillEverything() {
         if (!IteratorsInitialized) {
             if constexpr (!InlineAggState) {
@@ -1433,29 +1456,16 @@ public:
             IteratorsInitialized = true;
         }
         std::cerr << "Spilling everything" << std::endl;
-        if (SpillingBuckets_[0].SpillingOperation_.has_value() && !SpillingBuckets_[0].SpillingOperation_->HasValue()) return false;
-
-        if (SpillingBuckets_[0].SpillingOperation_.has_value()) {
-            SpillingBuckets_[0].SpillingKeys_.push_back(SpillingBuckets_[0].SpillingOperation_->ExtractValue());
-            SpillingBuckets_[0].SpillingOperation_ = std::nullopt;
-        }
 
         while (!IsExtractingFinished) {
+            if (!UpdateSpillingAndWait(false)) return false;
             IsExtractingFinished = InlineAggState ?
                 SpillingIterate(*HashMap_, SpillingHashMapIt_) :
                 SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_);
-            SpillingBuckets_[0].SpillingSizes_.push_back(SpillingBuckets_[0].Rows);
 
-            // if (HasFullSpillingBuckets()) {
-
-            // }
-
-            std::cerr << "Spilled block " << SpillingBuckets_[0].SpillingBuffer.Size() << " Rows: " << SpillingBuckets_[0].Rows << std::endl;
-            SpillingBuckets_[0].SpillingOperation_ = SpillingBuckets_[0].Spiller_->Put(std::move(SpillingBuckets_[0].SpillingBuffer));
-            SpillingBuckets_[0].Clear();
             break;
         }
-        return !SpillingBuckets_[0].SpillingOperation_.has_value();
+        return UpdateSpillingAndWait(true);
     }
 
     bool LoadEverything() {

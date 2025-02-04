@@ -11,7 +11,7 @@
 #include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
 #include <ydb/apps/etcd_proxy/service/etcd_shared.h>
 #include <ydb/apps/etcd_proxy/service/etcd_watch.h>
-#include <ydb/apps/etcd_proxy/service/grpc_service.h>
+#include <ydb/apps/etcd_proxy/service/etcd_grpc.h>
 #include <ydb/core/grpc_services/base/base.h>
 
 #include "proxy.h"

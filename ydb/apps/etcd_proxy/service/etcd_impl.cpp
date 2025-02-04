@@ -1,6 +1,6 @@
 #include "etcd_impl.h"
 #include "etcd_shared.h"
-#include "events.h"
+#include "etcd_events.h"
 
 #include <ydb/apps/etcd_proxy/proto/rpc.grpc.pb.h>
 

@@ -1,7 +1,7 @@
 #include "../etcd_base_init.h"
 #include "../etcd_shared.h"
 #include "../etcd_watch.h"
-#include "../grpc_service.h"
+#include "../etcd_grpc.h"
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 

@@ -1,5 +1,6 @@
 #include "etcd_watch.h"
 #include "etcd_shared.h"
+#include "etcd_events.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -18,7 +19,6 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        Cerr << __func__ << Endl;
         Become(&TThis::StateFunc);
         Ctx->Attach(ctx.SelfID);
         if (!Ctx->Read())
@@ -42,36 +42,13 @@ private:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-//            HFunc(TEvents::TEvWakeup, Handle);
+            CFunc(TEvents::TEvWakeup::EventType, Wakeup);
 
             HFunc(IStreamCtx::TEvReadFinished, Handle);
             HFunc(IStreamCtx::TEvWriteFinished, Handle);
             HFunc(IStreamCtx::TEvNotifiedWhenDone, Handle);
 
             HFunc(TEvChange, Handle);
-        }
-    }
-
-    void Handle(IStreamCtx::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-        if (!ev->Get()->Success)
-            return Die(ctx);
-
-        etcdserverpb::WatchResponse response;
-        const auto header = response.mutable_header();
-        header->set_revision(TSharedStuff::Get()->Revision.load());
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
-
-        switch (const auto& req = ev->Get()->Record; req.request_union_case()) {
-            case etcdserverpb::WatchRequest::RequestUnionCase::kCreateRequest:
-                return Create(req.create_request(), response, ctx);
-            case etcdserverpb::WatchRequest::RequestUnionCase::kCancelRequest:
-                return Cancel(req.cancel_request(), response, ctx);
-            case etcdserverpb::WatchRequest::RequestUnionCase::kProgressRequest:
-                return Progress(req.progress_request(), response, ctx);
-            default:
-                break;
         }
     }
 
@@ -114,11 +91,10 @@ private:
         }
 
         if (!Ctx->Write(std::move(res)))
-            return Die(ctx);
+            return UnsubscribeAndDie(ctx);
     }
 
     void Cancel(const etcdserverpb::WatchCancelRequest& req, etcdserverpb::WatchResponse& res, const TActorContext& ctx)  {
-        Cerr << __func__  << Endl;
         const auto watchId = req.watch_id();
         const auto range = UserSubscriptionsMap.equal_range(watchId);
 
@@ -133,12 +109,15 @@ private:
             res.set_watch_id(watchId);
 
         if (!Ctx->Write(std::move(res)))
-            return Die(ctx);
+            return UnsubscribeAndDie(ctx);
     }
 
     void Progress(const etcdserverpb::WatchProgressRequest&, etcdserverpb::WatchResponse& res, const TActorContext& ctx)  {
         if (!Ctx->Write(std::move(res)))
-            return Die(ctx);
+            return UnsubscribeAndDie(ctx);
+    }
+
+    void Wakeup(const TActorContext&) {
     }
 
     void Handle(TEvChange::TPtr& ev, const TActorContext& ctx) {
@@ -181,22 +160,50 @@ private:
                         res.set_watch_id(sub->WatchId);
 
                     if (!Ctx->Write(std::move(res)))
-                        return Die(ctx);
+                        return UnsubscribeAndDie(ctx);
                 }
             }
         }
     }
 
-    void Handle(IStreamCtx::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
+    void Handle(IStreamCtx::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
         if (!ev->Get()->Success)
             return Die(ctx);
 
+        etcdserverpb::WatchResponse response;
+        const auto header = response.mutable_header();
+        header->set_revision(TSharedStuff::Get()->Revision.load());
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+
+        switch (const auto& req = ev->Get()->Record; req.request_union_case()) {
+            case etcdserverpb::WatchRequest::RequestUnionCase::kCreateRequest:
+                return Create(req.create_request(), response, ctx);
+            case etcdserverpb::WatchRequest::RequestUnionCase::kCancelRequest:
+                return Cancel(req.cancel_request(), response, ctx);
+            case etcdserverpb::WatchRequest::RequestUnionCase::kProgressRequest:
+                return Progress(req.progress_request(), response, ctx);
+            default:
+                break;
+        }
+
         if (!Ctx->Read())
-            return Die(ctx);
+            return UnsubscribeAndDie(ctx);
+    }
+
+    void Handle(IStreamCtx::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
+        if (!ev->Get()->Success)
+            return UnsubscribeAndDie(ctx);
     }
 
     void Handle(IStreamCtx::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
         Cerr << (ev->Get()->Success ? "Finished." : "Failed!") << Endl;
+        return UnsubscribeAndDie(ctx);
+    }
+
+    void UnsubscribeAndDie(const TActorContext& ctx) {
+        ctx.Send(Watchtower, new TEvSubscribe);
         return Die(ctx);
     }
 
@@ -232,7 +239,7 @@ private:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKikimr::NGRpcService::TEvWatchRequest, Handle);
+            HFunc(TEvWatchRequest, Handle);
 
             HFunc(TEvSubscribe, Handle);
 
@@ -240,7 +247,7 @@ private:
         }
     }
 
-    void Handle(NKikimr::NGRpcService::TEvWatchRequest::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvWatchRequest::TPtr& ev, const TActorContext& ctx) {
         ctx.RegisterWithSameMailbox(new TWatchman(ev->Get()->ReleaseStreamCtx(), ctx.SelfID));
     }
 

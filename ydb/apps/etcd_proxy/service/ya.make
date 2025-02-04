@@ -2,10 +2,10 @@ LIBRARY()
 
 SRCS(
     etcd_base_init.cpp
+    etcd_grpc.cpp
     etcd_impl.cpp
     etcd_shared.cpp
     etcd_watch.cpp
-    grpc_service.cpp
 )
 
 PEERDIR(

@@ -1,10 +1,9 @@
-#include "grpc_service.h"
+#include "etcd_grpc.h"
 #include "etcd_impl.h"
 #include "etcd_watch.h"
 #include "etcd_shared.h"
+#include "etcd_events.h"
 
-#include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
 
@@ -430,16 +429,14 @@ public:
     {}
 
     void Pass(const IFacilityProvider&) override {
-        Y_ABORT("unimplemented");
+        Y_ABORT("Unimplemented!");
     }
 
     TRateLimiterMode GetRlMode() const override {
         return AuxSettings.RlMode;
     }
 
-    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult& schemeData,
-        ICheckerIface* iface) override
-    {
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult& schemeData, ICheckerIface* iface) override {
         if (!AuxSettings.CustomAttributeProcessor) {
             return false;
         } else {
@@ -471,13 +468,8 @@ using TEtcdRequestOperationCall = TEtcdRequestCall<TReq, TResp, true>;
 }
 
 TEtcdKVService::TEtcdKVService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId)
-    : ActorSystem(actorSystem), Counters(std::move(counters))
+    : TEtcdServiceBase<etcdserverpb::KV>(actorSystem, std::move(counters))
 {}
-
-void TEtcdKVService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
-    CQ = cq;
-    SetupIncomingRequests(std::move(logger));
-}
 
 void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
@@ -514,13 +506,8 @@ void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TEtcdWatchService::TEtcdWatchService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId)
-    : ActorSystem(actorSystem), Counters(std::move(counters))
+    : TEtcdServiceBase<etcdserverpb::Watch>(actorSystem, std::move(counters))
 {}
-
-void TEtcdWatchService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
-    CQ = cq;
-    SetupIncomingRequests(std::move(logger));
-}
 
 void TEtcdWatchService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr ) {
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
@@ -533,7 +520,7 @@ void TEtcdWatchService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr ) {
 
     TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Watch::AsyncService::RequestWatch,
         [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-            ActorSystem->Send(NEtcd::TSharedStuff::Get()->Watchtower, new TEvWatchRequest(context.Release()));
+            ActorSystem->Send(NEtcd::TSharedStuff::Get()->Watchtower, new NEtcd::TEvWatchRequest(context.Release()));
         },
         *ActorSystem, "Watch", getCounterBlock("etcd", "Watch", true), nullptr
     );

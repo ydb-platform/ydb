@@ -1252,7 +1252,10 @@ private:
                 if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
                     AllocateTxId(importInfo, itemIdx);
                 } else {
-                    item.State = EState::CreateChangefeed;
+                    if (AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
+
+                    }
+                    item.State = AppData()->FeatureFlags.GetEnableChangefeedsImport() ? EState::CreateChangefeed : EState::Done;
                 }
             }
             break;

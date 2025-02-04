@@ -12,6 +12,9 @@ def validate_pr_description(description, is_not_for_cl_valid=True):
             print("::warning::PR description is empty. Please fill it out.")
             return False
 
+        if "### Changelog category" not in description and "### Changelog entry" not in description:
+            return True
+
         # Extract changelog category section
         category_section = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", description, re.DOTALL)
         if not category_section:

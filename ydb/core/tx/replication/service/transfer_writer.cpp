@@ -122,25 +122,6 @@ public:
             }
 
             Out.Value = value.GetElement(0);
-
-/*
-            size_t i = 0;
-
-            for (auto& c : OutputSpec.GetTableColumns()) {
-                auto e = v.GetElement(i);
-                Row[i] = e;
-                ++i;
-
-                // TODO
-                if (!e.HasValue()) {
-                    Cerr << ">>>>> " << c.Name << " IS NULL" << Endl << Flush;
-                } else if (c.TypeName() == "Uint32") {
-                    Cerr << ">>>>> " << c.Name << " = " << e.Get<ui32>() << Endl << Flush;
-                } else if (c.TypeName() == "Utf8") {
-                    Cerr << ">>>>> " << c.Name << " = '" << TString(e.AsStringRef()) << "'" << Endl << Flush;
-                }
-            }
-*/
             Out.Data.PushRow(&Out.Value, 1);
 
             return &Out;
@@ -161,17 +142,12 @@ template <>
 struct NYql::NPureCalc::TOutputSpecTraits<NKikimr::NReplication::NService::TMessageOutputSpec> {
     static const constexpr bool IsPartial = false;
 
-//    static const constexpr bool SupportPullStreamMode = false;
     static const constexpr bool SupportPullListMode = true;
-//    static const constexpr bool SupportPushStreamMode = true;
 
     using TOutputItemType = NKikimr::NReplication::NService::TOutputType*;
     using TPullStreamReturnType = THolder<IStream<TOutputItemType>>;
     using TPullListReturnType = THolder<IStream<TOutputItemType>>;
 
-//    static const constexpr TOutputItemType StreamSentinel = nullptr;
-
-    //static TPullStreamReturnType ConvertPullStreamWorkerToOutputType(const NKikimr::NReplication::NService::TMessageOutputSpec&, TWorkerHolder<IPullStreamWorker>);
     static TPullListReturnType ConvertPullListWorkerToOutputType(
         const NKikimr::NReplication::NService::TMessageOutputSpec& outputSpec,
         TWorkerHolder<IPullListWorker> worker
@@ -266,18 +242,18 @@ private:
 };
 
 
-class ITableKindStrategy {
+class ITableKindState {
 public:
-    using TPtr = std::unique_ptr<ITableKindStrategy>;
+    using TPtr = std::unique_ptr<ITableKindState>;
 
-    virtual ~ITableKindStrategy() = default;
+    virtual ~ITableKindState() = default;
 
     virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
 };
 
-class TColumnTableStrategy : public ITableKindStrategy {
+class TColumnTableState : public ITableKindState {
 public:
-    TColumnTableStrategy(
+    TColumnTableState(
         const TVector<NKikimrKqp::TKqpColumnMetadataProto>& columnsMetadata,
         const std::vector<ui32>& writeIndex
     )
@@ -294,9 +270,9 @@ private:
     const std::vector<ui32> WriteIndex;
 };
 
-class TRowTableStrategy : public ITableKindStrategy {
+class TRowTableState : public ITableKindState {
 public:
-    TRowTableStrategy(
+    TRowTableState(
         const TVector<NKikimrKqp::TKqpColumnMetadataProto>& columnsMetadata,
         const std::vector<ui32>& writeIndex
     )
@@ -474,11 +450,9 @@ private:
         }
 
         if (entry.Kind == TNavigate::KindColumnTable) {
-            Cerr << ">>>>> Kind = KindColumnTable" << Endl << Flush;
-            TableStrategy = std::make_unique<TColumnTableStrategy>(columnsMetadata, writeIndex);
+            TableState = std::make_unique<TColumnTableState>(columnsMetadata, writeIndex);
         } else {
-            Cerr << ">>>>> Kind = KindTable" << Endl << Flush;
-            TableStrategy = std::make_unique<TRowTableStrategy>(columnsMetadata, writeIndex);
+            TableState = std::make_unique<TRowTableState>(columnsMetadata, writeIndex);
         }
 
         NavigateResult.reset(ev->Get()->Request.Release());
@@ -499,7 +473,6 @@ private:
     }
 
     STFUNC(StateCompileTransferLambda) {
-        Cerr << ">>>>> RECEIVED " << ev->GetTypeRewrite() << Endl << Flush;
         switch (ev->GetTypeRewrite()) {
             hFunc(NFq::TEvRowDispatcher::TEvPurecalcCompileResponse, Handle);
 
@@ -533,7 +506,7 @@ private:
             return LogCritAndLeave(TStringBuilder() << "Compilation failed: " << result->Issues.ToOneLineString());
         }
 
-        auto r = static_cast<TProgramHolder*>(ev->Get()->ProgramHolder.Release());
+        auto r = dynamic_cast<TProgramHolder*>(ev->Get()->ProgramHolder.Release());
         Y_ENSURE(result, "Unexpected compile response");
 
         ProgramHolder = TIntrusivePtr<TProgramHolder>(r);
@@ -560,6 +533,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);
+
             sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -576,8 +550,6 @@ private:
             << ": worker# " << Worker);
 
         Send(Worker, new TEvWorker::TEvHandshake());
-
-        //S3Client = RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
     }
 
     void HoldHandle(TEvWorker::TEvData::TPtr& ev) {
@@ -746,7 +718,7 @@ private:
 
     void EnshureDataBatch() {
         if (!Batcher) {
-            Batcher = TableStrategy->CreateDataBatcher();
+            Batcher = TableState->CreateDataBatcher();
         }
     }
 
@@ -782,7 +754,7 @@ private:
     bool Resolving = false;
     bool Initialized = false;
 
-    ITableKindStrategy::TPtr TableStrategy;
+    ITableKindState::TPtr TableState;
     NKqp::IDataBatcherPtr Batcher;
 
     TProgramHolder::TPtr ProgramHolder;

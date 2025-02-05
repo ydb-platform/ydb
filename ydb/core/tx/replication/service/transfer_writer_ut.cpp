@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
     using namespace NTestHelpers;
     using TRecord = TEvWorker::TEvData::TRecord;
 
-    Y_UNIT_TEST(WriteTable) {
+    Y_UNIT_TEST(Write_ColumnTable) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
         env.GetRuntime().SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);

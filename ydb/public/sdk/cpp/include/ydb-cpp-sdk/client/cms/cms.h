@@ -22,7 +22,7 @@ namespace Ydb::Cms {
 
 namespace NYdb::inline V3::NCms {
 
-struct TListDatabasesSettings : public TSimpleRequestSettings<TListDatabasesSettings> {};
+struct TListDatabasesSettings : public TOperationRequestSettings<TListDatabasesSettings> {};
 
 class TListDatabasesResult : public TStatus {
 public:
@@ -34,7 +34,7 @@ private:
 
 using TAsyncListDatabasesResult = NThreading::TFuture<TListDatabasesResult>;
 
-struct TGetDatabaseStatusSettings : public TSimpleRequestSettings<TGetDatabaseStatusSettings> {
+struct TGetDatabaseStatusSettings : public TOperationRequestSettings<TGetDatabaseStatusSettings> {
     FLUENT_SETTING(std::string, Path);
 };
 
@@ -61,7 +61,7 @@ struct TComputationalUnits {
 
     std::string UnitKind;
     std::string AvailabilityZone;
-    ui64 Count;
+    std::uint64_t Count;
 };
 
 struct TAllocatedComputationalUnit {
@@ -69,7 +69,7 @@ struct TAllocatedComputationalUnit {
     TAllocatedComputationalUnit(const Ydb::Cms::AllocatedComputationalUnit& proto);
 
     std::string Host;
-    ui32 Port;
+    std::uint32_t Port;
     std::string UnitKind;
 };
 
@@ -98,7 +98,7 @@ struct TSchemaOperationQuotas {
         TLeakyBucket(const Ydb::Cms::SchemaOperationQuotas_LeakyBucket& proto);
 
         double BucketSize = 1;
-        ui64 BucketSeconds = 2;
+        std::uint64_t BucketSeconds = 2;
     };
 
     TSchemaOperationQuotas() = default;
@@ -113,23 +113,23 @@ struct TDatabaseQuotas {
         TStorageQuotas(const Ydb::Cms::DatabaseQuotas_StorageQuotas& proto);
 
         std::string UnitKind;
-        ui64 DataSizeHardQuota;
-        ui64 DataSizeSoftQuota;
+        std::uint64_t DataSizeHardQuota;
+        std::uint64_t DataSizeSoftQuota;
     };
 
     TDatabaseQuotas() = default;
     TDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& proto);
 
-    ui64 DataSizeHardQuota;
-    ui64 DataSizeSoftQuota;
-    ui64 DataStreamShardsQuota;
-    ui64 DataStreamReservedStorageQuota;
-    ui32 TtlMinRunInternalSeconds;
+    std::uint64_t DataSizeHardQuota;
+    std::uint64_t DataSizeSoftQuota;
+    std::uint64_t DataStreamShardsQuota;
+    std::uint64_t DataStreamReservedStorageQuota;
+    std::uint32_t TtlMinRunInternalSeconds;
     std::vector<TStorageQuotas> StorageQuotas;
 };
 
 struct TTargetTrackingPolicy {
-    using TAverageCpuUtilizationPercent = ui32;
+    using TAverageCpuUtilizationPercent = std::uint32_t;
 
     TTargetTrackingPolicy() = default;
     TTargetTrackingPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy& proto);
@@ -160,7 +160,7 @@ public:
     const std::variant<TResources, TSharedResources, TServerlessResources>& GetResourcesKind() const;
     const TResources& GetAllocatedResources() const;
     const std::vector<TAllocatedComputationalUnit>& GetRegisteredResources() const;
-    ui64 GetGeneration() const;
+    std::uint64_t GetGeneration() const;
     const TSchemaOperationQuotas& GetSchemaOperationQuotas() const;
     const TDatabaseQuotas& GetDatabaseQuotas() const;
     const TScaleRecommenderPolicies& GetScaleRecommenderPolicies() const;
@@ -171,10 +171,10 @@ private:
     std::variant<TResources, TSharedResources, TServerlessResources> ResourcesKind_;
     TResources AllocatedResources_;
     std::vector<TAllocatedComputationalUnit> RegisteredResources_;
-    ui64 Generation_;
+    std::uint64_t Generation_;
     TSchemaOperationQuotas SchemaOperationQuotas_;
     TDatabaseQuotas DatabaseQuotas_;
-    TScaleRecommenderPolicies ScaleRecommenderPolicies;
+    TScaleRecommenderPolicies ScaleRecommenderPolicies_;
 };
 
 using TAsyncGetDatabaseStatusResult = NThreading::TFuture<TGetDatabaseStatusResult>;

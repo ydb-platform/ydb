@@ -121,7 +121,7 @@ TGetDatabaseStatusResult::TGetDatabaseStatusResult(TStatus&& status, const Ydb::
     , Generation_(proto.generation())
     , SchemaOperationQuotas_(proto.schema_operation_quotas())
     , DatabaseQuotas_(proto.database_quotas())
-    , ScaleRecommenderPolicies(proto.scale_recommender_policies())
+    , ScaleRecommenderPolicies_(proto.scale_recommender_policies())
 {
     switch (proto.resources_kind_case()) {
         case Ydb::Cms::GetDatabaseStatusResult::kRequiredResources:

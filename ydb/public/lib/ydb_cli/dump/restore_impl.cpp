@@ -66,6 +66,10 @@ Ydb::Topic::CreateTopicRequest ReadTopicCreationRequest(const TFsPath& fsDirPath
     return ReadProtoFromFile<Ydb::Topic::CreateTopicRequest>(fsDirPath, log, NFiles::CreateTopic());
 }
 
+Ydb::Coordination::CreateNodeRequest ReadCoordinationNodeCreationRequest(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadProtoFromFile<Ydb::Coordination::CreateNodeRequest>(fsDirPath, log, NDump::NFiles::CreateCoordinationNode());
+}
+
 Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TFsPath& fsDirPath, const TLog* log) {
     return ReadProtoFromFile<Ydb::Scheme::ModifyPermissionsRequest>(fsDirPath, log, NFiles::Permissions());
 }
@@ -101,7 +105,7 @@ TStatus WaitForIndexBuild(TOperationClient& client, const TOperation::TOperation
                     return operation.Status();
             }
         }
-        NConsoleClient::ExponentialBackoff(retrySleep, TDuration::Minutes(1));
+        ExponentialBackoff(retrySleep, TDuration::Minutes(1));
     }
 }
 
@@ -159,8 +163,20 @@ TRestoreResult CheckExistenceAndType(TSchemeClient& client, const TString& dbPat
 
 TStatus CreateTopic(TTopicClient& client, const TString& dbPath, const Ydb::Topic::CreateTopicRequest& request) {
     const auto settings = TCreateTopicSettings(request);
-    auto result = NConsoleClient::RetryFunction([&]() {
+    auto result = RetryFunction([&]() {
         return client.CreateTopic(dbPath, settings).ExtractValueSync();
+    });
+    return result;
+}
+
+TStatus CreateCoordinationNode(
+    NCoordination::TClient& client,
+    const TString& dbPath,
+    const Ydb::Coordination::CreateNodeRequest& request)
+{
+    const auto settings = NCoordination::TCreateNodeSettings(request.config());
+    auto result = RetryFunction([&]() {
+        return client.CreateNode(dbPath, settings).ExtractValueSync();
     });
     return result;
 }
@@ -228,6 +244,7 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
     , SchemeClient(driver)
     , TableClient(driver)
     , TopicClient(driver)
+    , CoordinationNodeClient(driver)
     , QueryClient(driver)
     , Log(log)
 {
@@ -322,27 +339,29 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         TMaybe<TStatus> result;
 
         switch (entry.Type) {
-            case ESchemeEntryType::Directory: {
-                result = NConsoleClient::RemoveDirectoryRecursive(SchemeClient, TableClient, nullptr, &QueryClient,
+            case ESchemeEntryType::Directory:
+                result = RemoveDirectoryRecursive(SchemeClient, TableClient, nullptr, &QueryClient,
                     TString{fullPath}, ERecursiveRemovePrompt::Never, {}, true, false);
                 break;
-            }
-            case ESchemeEntryType::Table: {
+            case ESchemeEntryType::Table:
                 result = TableClient.RetryOperationSync([&path = fullPath](TSession session) {
                     return session.DropTable(path).GetValueSync();
                 });
                 break;
-            }
-            case ESchemeEntryType::View: {
+            case ESchemeEntryType::View:
                 result = QueryClient.RetryQuerySync([&path = fullPath](NQuery::TSession session) {
                     return session.ExecuteQuery(std::format("DROP VIEW IF EXISTS `{}`;", path),
                         NQuery::TTxControl::NoTx()).ExtractValueSync();
                 });
                 break;
-            }
             case ESchemeEntryType::Topic:
-                result = NConsoleClient::RetryFunction([&client = TopicClient, &path = fullPath]() {
+                result = RetryFunction([&client = TopicClient, &path = fullPath]() {
                     return client.DropTopic(path).ExtractValueSync();
+                });
+                break;
+            case ESchemeEntryType::CoordinationNode:
+                result = RetryFunction([&client = CoordinationNodeClient, &path = fullPath]() {
+                    return client.DropNode(path).ExtractValueSync();
                 });
                 break;
             default:
@@ -407,6 +426,10 @@ TRestoreResult TRestoreClient::RestoreFolder(
         return RestoreTopic(fsPath, objectDbPath, settings, oldEntries.contains(objectDbPath));
     }
 
+    if (IsFileExists(fsPath.Child(NFiles::CreateCoordinationNode().FileName))) {
+        return RestoreCoordinationNode(fsPath, objectDbPath, settings, oldEntries.contains(objectDbPath));
+    }
+
     if (IsFileExists(fsPath.Child(NFiles::Empty().FileName))) {
         return RestoreEmptyDir(fsPath, objectDbPath, settings, oldEntries.contains(objectDbPath));
     }
@@ -426,6 +449,8 @@ TRestoreResult TRestoreClient::RestoreFolder(
             ViewRestorationCalls.emplace_back(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries.contains(childDbPath));
         } else if (IsFileExists(child.Child(NFiles::CreateTopic().FileName))) {
             result = RestoreTopic(child, childDbPath, settings, oldEntries.contains(childDbPath));
+        } else if (IsFileExists(child.Child(NFiles::CreateCoordinationNode().FileName))) {
+            result = RestoreCoordinationNode(child, childDbPath, settings, oldEntries.contains(childDbPath));
         } else if (child.IsDirectory()) {
             result = RestoreFolder(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries);
         }
@@ -521,6 +546,34 @@ TRestoreResult TRestoreClient::RestoreTopic(
         return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
     }
 
+    LOG_E("Failed to create " << dbPath.Quote());
+    return Result<TRestoreResult>(dbPath, std::move(result));
+}
+
+TRestoreResult TRestoreClient::RestoreCoordinationNode(
+    const TFsPath& fsPath,
+    const TString& dbPath,
+    const TRestoreSettings& settings,
+    bool isAlreadyExisting)
+{
+    LOG_D("Process " << fsPath.GetPath().Quote());
+
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
+    }
+
+    LOG_I("Restore coordination node " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
+
+    if (settings.DryRun_) {
+        return CheckExistenceAndType(SchemeClient, dbPath, NScheme::ESchemeEntryType::CoordinationNode);
+    }
+
+    const auto creationRequest = ReadCoordinationNodeCreationRequest(fsPath, Log.get());
+    auto result = CreateCoordinationNode(CoordinationNodeClient, dbPath, creationRequest);
+    if (result.IsSuccess()) {
+        LOG_D("Created " << dbPath.Quote());
+        return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
+    }
     LOG_E("Failed to create " << dbPath.Quote());
     return Result<TRestoreResult>(dbPath, std::move(result));
 }
@@ -862,7 +915,7 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
             return Result<TRestoreResult>(dbPath, std::move(waitForIndexBuildStatus));
         }
 
-        auto forgetStatus = NConsoleClient::RetryFunction([&]() {
+        auto forgetStatus = RetryFunction([&]() {
             return OperationClient.Forget(buildIndexId).GetValueSync();
         });
         if (!forgetStatus.IsSuccess()) {

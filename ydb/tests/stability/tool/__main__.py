@@ -199,7 +199,6 @@ class StabilityCluster:
         return traces
 
     def get_all_errors(self):
-        #logging.getLogger().setLevel(logging.WARNING)
         all_results = []
         for node in self.kikimr_cluster.nodes.values():
             result = node.ssh_command("""
@@ -421,14 +420,14 @@ def parse_args():
 def main():
     args = parse_args()
     ssh_username = args.ssh_user
-    print('Start init')
+    print('Initing cluster info')
     stability_cluster = StabilityCluster(
         ssh_username=ssh_username,
         cluster_path=args.cluster_path,
         ydbd_path=args.ydbd_path,
         ydbd_next_path=args.next_ydbd_path,
     )
-    
+
     for action in args.actions:
         print(f'Start action {action}')
         if action == "get_errors":

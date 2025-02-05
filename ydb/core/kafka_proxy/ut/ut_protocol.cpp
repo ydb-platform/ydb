@@ -1483,7 +1483,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // clientB join group, and get 0 partitions, becouse it's all at clientA
             UNIT_ASSERT_VALUES_EQUAL(clientB.SaslHandshake()->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(clientB.SaslAuthenticate("ouruser@/Root", "ourUserPassword")->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            auto readInfoB = clientB.JoinAndSyncGroup(topics, group);
+            auto readInfoB = clientB.JoinAndSyncGroup(topics, group, protocolName, 1000000, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(readInfoB.Partitions.size(), 0);
 
             // clientA gets RABALANCE status, because of new reader. We need to release some partitions for new client
@@ -1503,7 +1503,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // clientC join group, and get 0 partitions, becouse it's all at clientA and clientB
             UNIT_ASSERT_VALUES_EQUAL(clientC.SaslHandshake()->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(clientC.SaslAuthenticate("ouruser@/Root", "ourUserPassword")->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            auto readInfoC = clientC.JoinAndSyncGroup(topics, group);
+            auto readInfoC = clientC.JoinAndSyncGroup(topics, group, protocolName, 1000000, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(readInfoC.Partitions.size(), 0);
 
             // all clients gets RABALANCE status, because of new reader. We need to release some partitions for new client
@@ -1525,7 +1525,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // clientD join group, and get 0 partitions, becouse it's all at clientA, clientB and clientC
             UNIT_ASSERT_VALUES_EQUAL(clientD.SaslHandshake()->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(clientD.SaslAuthenticate("ouruser@/Root", "ourUserPassword")->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            auto readInfoD = clientD.JoinAndSyncGroup(topics, group);
+            auto readInfoD = clientD.JoinAndSyncGroup(topics, group, protocolName, 1000000, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(readInfoD.Partitions.size(), 0);
 
             // all clients gets RABALANCE status, because of new reader. We need to release some partitions
@@ -1581,9 +1581,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::vector<TString> topics;
             topics.push_back(topicName);
 
-            auto readInfoA = clientA.JoinGroup(topics, group);
+            auto readInfoA = clientA.JoinGroup(topics, group, protocolName);
             Sleep(TDuration::MilliSeconds(200));
-            auto readInfoB = clientB.JoinGroup(topics, group);
+            auto readInfoB = clientB.JoinGroup(topics, group, protocolName);
             Sleep(TDuration::MilliSeconds(200));
 
             UNIT_ASSERT_VALUES_EQUAL(clientA.LeaveGroup(readInfoA->MemberId.value(), group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
@@ -1595,7 +1595,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::vector<TString> topics;
             topics.push_back(shortTopicName);
 
-            auto joinResponse = clientA.JoinGroup(topics, group);
+            auto joinResponse = clientA.JoinGroup(topics, group, protocolName);
             UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(clientA.LeaveGroup(joinResponse->MemberId.value(), group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
@@ -1605,7 +1605,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::vector<TString> topics;
             topics.push_back(topicName);
 
-            auto joinResponse = clientA.JoinGroup(topics, notExistsGroup);
+            auto joinResponse = clientA.JoinGroup(topics, notExistsGroup, protocolName);
             UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
         }
 
@@ -1614,7 +1614,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::vector<TString> topics;
             topics.push_back(notExistsTopicName);
 
-            auto joinResponse = clientA.JoinGroup(topics, group);
+            auto joinResponse = clientA.JoinGroup(topics, group, protocolName);
             UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
         }
 
@@ -1635,7 +1635,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             // Check change topics list
             topics.pop_back();
-            auto joinResponse = clientA.JoinGroup(topics, group);
+            auto joinResponse = clientA.JoinGroup(topics, group, protocolName);
             UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS)); // tell client to rejoin
         }
 

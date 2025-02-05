@@ -29,6 +29,7 @@ target_link_libraries(ydbd PUBLIC
   run
   ydb-core-protos
   ydb-core-security
+  core-tx-schemeshard
   core-ymq-actor
   core-ymq-base
   library-folder_service-mock

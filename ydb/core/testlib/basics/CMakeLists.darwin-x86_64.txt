@@ -43,6 +43,7 @@ target_link_libraries(core-testlib-basics PUBLIC
   core-testlib-actors
   core-tx-columnshard
   core-tx-scheme_board
+  core-tx-schemeshard
   ydb-core-util
   minikql-invoke_builtins-llvm14
   udf-service-exception_policy

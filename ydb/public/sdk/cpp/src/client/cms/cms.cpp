@@ -171,7 +171,7 @@ const TDatabaseQuotas& TGetDatabaseStatusResult::GetDatabaseQuotas() const {
 }
 
 const TScaleRecommenderPolicies& TGetDatabaseStatusResult::GetScaleRecommenderPolicies() const {
-    return ScaleRecommenderPolicies;
+    return ScaleRecommenderPolicies_;
 }
 
 class TCmsClient::TImpl : public TClientImplCommon<TCmsClient::TImpl> {

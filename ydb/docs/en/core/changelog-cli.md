@@ -12,14 +12,9 @@ Released on February 5, 2025. To update to version **2.19.0**, select the [Downl
 * Added query text to the error message if a query fails in the `ydb workload run` [command](./reference/ydb-cli/commands/workload/).
 * Added a message if the global timeout expired in the `ydb workload run` [command](./reference/ydb-cli/commands/workload/).
 * Added some temporary changes to the experimental `ydb admin storage` command.
-
-{% note info "Following changes require YDB server of version 25.1+" %}
-
-* Added [views](./concepts/datamodel/view.md) support in `ydb export s3` and `ydb import s3`. Views are exported as `CREATE VIEW` YQL statements, which are executed on import.
-* Added the `--skip-checksum-validation` option to the `ydb import s3` [command](./reference/ydb-cli/export-import/import-s3.md) to skip server-side checksum validation.
-* Added new experimental options for the `ydb debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
-
-{% endnote %}
+* **_(Requires server v25.1+)_** Added [views](./concepts/datamodel/view.md) support in `ydb export s3` and `ydb import s3`. Views are exported as `CREATE VIEW` YQL statements, which are executed on import.
+* **_(Requires server v25.1+)_** Added the `--skip-checksum-validation` option to the `ydb import s3` [command](./reference/ydb-cli/export-import/import-s3.md) to skip server-side checksum validation.
+* **_(Requires server v25.1+)_** Added new experimental options for the `ydb debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
 
 ### Bug fixes
 
@@ -57,11 +52,7 @@ Released on December 4, 2024. To update to version **2.17.0**, select the [Downl
 
 ### Features
 
-{% note info "Following changes require YDB server of version 25.1+" %}
-
-* Added `ydb debug ping` command for performance and connectivity debugging
-
-{% endnote %}
+* **_(Requires server v25.1+)_** Added `ydb debug ping` command for performance and connectivity debugging
 
 ### Performance
 

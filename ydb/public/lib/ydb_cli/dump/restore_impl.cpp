@@ -340,6 +340,11 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
                 });
                 break;
             }
+            case ESchemeEntryType::Topic:
+                result = NConsoleClient::RetryFunction([&client = TopicClient, &path = fullPath]() {
+                    return client.DropTopic(path).ExtractValueSync();
+                });
+                break;
             default:
                 break;
         }

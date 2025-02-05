@@ -27,4 +27,6 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+INCLUDE(${ARCADIA_ROOT}/devtools/large_on_multi_slots.inc)
+
 END()

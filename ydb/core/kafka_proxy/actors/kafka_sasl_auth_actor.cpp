@@ -175,6 +175,12 @@ void TKafkaSaslAuthActor::SendLoginRequest(TKafkaSaslAuthActor::TAuthData authDa
 
 void TKafkaSaslAuthActor::SendApiKeyRequest() {
     auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId, true);
+    TString ticket;
+    if (Context->Config.GetAuthViaApiKey()) {
+        ticket = "ApiKey " + ClientAuthData.Password;
+    } else {
+        ticket = ClientAuthData.Password;
+    }
 
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Database = DatabasePath,

@@ -37,11 +37,6 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
         for (auto&& i : rIt->second) {
             if (columnAccessorsCount < Settings.GetColumnsLimit()) {
                 columnElements.emplace_back(i);
-                if (Settings.IsSparsed(i->GetRecordIndexes().size(), CurrentRecordIndex)) {
-                    i->BuildSparsedAccessor(CurrentRecordIndex);
-                } else {
-                    i->BuildPlainAccessor(CurrentRecordIndex);
-                }
                 ++columnAccessorsCount;
             } else {
                 otherElements.emplace_back(i);
@@ -53,10 +48,29 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     };
     std::sort(columnElements.begin(), columnElements.end(), predSortElements);
     std::sort(otherElements.begin(), otherElements.end(), predSortElements);
+    TDictStats columnStats = BuildStats(columnElements, Settings, CurrentRecordIndex);
+    {
+        ui32 columnIdx = 0;
+        for (auto&& i : columnElements) {
+            switch (columnStats.GetAccessorType(columnIdx)) {
+                case IChunkedArray::EType::Array:
+                    i->BuildPlainAccessor(CurrentRecordIndex);
+                    break;
+                case IChunkedArray::EType::SparsedArray:
+                    i->BuildSparsedAccessor(CurrentRecordIndex);
+                    break;
+                case IChunkedArray::EType::Undefined:
+                case IChunkedArray::EType::SerializedChunkedArray:
+                case IChunkedArray::EType::SubColumnsArray:
+                case IChunkedArray::EType::ChunkedArray:
+                    AFL_VERIFY(false);
+            }
+            ++columnIdx;
+        }
+    }
 
-    TOthersData rbOthers = MergeOthers(otherElements);
+    TOthersData rbOthers = MergeOthers(otherElements, CurrentRecordIndex);
 
-    TDictStats columnStats = BuildStats(columnElements);
     auto records = std::make_shared<TGeneralContainer>(CurrentRecordIndex);
     for (auto&& i : columnElements) {
         records->AddField(std::make_shared<arrow::Field>(std::string(i->GetKeyName()), arrow::utf8()), i->GetAccessorVerified()).Validate();
@@ -65,7 +79,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     return std::make_shared<TSubColumnsArray>(std::move(cData), std::move(rbOthers), Type, CurrentRecordIndex, Settings);
 }
 
-TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& otherKeys) const {
+TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& otherKeys, const ui32 recordsCount) const {
     std::vector<THeapElements> heap;
     ui32 idx = 0;
     for (auto&& i : otherKeys) {
@@ -84,7 +98,7 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
             std::push_heap(heap.begin(), heap.end());
         }
     }
-    return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys)));
+    return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, recordsCount)));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

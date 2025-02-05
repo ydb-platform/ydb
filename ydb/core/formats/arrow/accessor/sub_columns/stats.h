@@ -21,6 +21,7 @@ private:
     std::shared_ptr<arrow::StringArray> DataNames;
     std::shared_ptr<arrow::UInt32Array> DataRecordsCount;
     std::shared_ptr<arrow::UInt32Array> DataSize;
+    std::shared_ptr<arrow::UInt8Array> AccessorType;
 
 public:
     static TDictStats BuildEmpty();
@@ -68,6 +69,10 @@ public:
             RecordsCount += stats.GetColumnRecordsCount(idx);
             DataSize += stats.GetColumnSize(idx);
         }
+
+        IChunkedArray::EType GetAccessorType(const TSettings& settings, const ui32 recordsCount) const {
+            return settings.IsSparsed(RecordsCount, recordsCount) ? IChunkedArray::EType::SparsedArray : IChunkedArray::EType::Array;
+        }
     };
 
     class TRTStats: public TRTStatsValue {
@@ -97,9 +102,9 @@ public:
         }
     };
 
-    static TDictStats Merge(const std::vector<const TDictStats*>& stats);
+    static TDictStats Merge(const std::vector<const TDictStats*>& stats, const TSettings& settings, const ui32 recordsCount);
 
-    TSplittedColumns SplitByVolume(const ui32 columnsLimit) const;
+    TSplittedColumns SplitByVolume(const TSettings& settings, const ui32 recordsCount) const;
 
     class TBuilder: TNonCopyable {
     private:
@@ -107,13 +112,15 @@ public:
         arrow::StringBuilder* Names;
         arrow::UInt32Builder* Records;
         arrow::UInt32Builder* DataSize;
+        arrow::UInt8Builder* AccessorType;
+
         std::optional<TString> LastKeyName;
         ui32 RecordsCount = 0;
 
     public:
         TBuilder();
-        void Add(const TString& name, const ui32 recordsCount, const ui32 dataSize);
-        void Add(const std::string_view name, const ui32 recordsCount, const ui32 dataSize);
+        void Add(const TString& name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType);
+        void Add(const std::string_view name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType);
         TDictStats Finish();
     };
 
@@ -139,6 +146,9 @@ public:
         return Original->num_rows();
     }
 
+    TConstructorContainer GetAccessorConstructor(const ui32 columnIndex) const;
+    IChunkedArray::EType GetAccessorType(const ui32 columnIndex) const;
+
     std::string_view GetColumnName(const ui32 index) const;
     TString GetColumnNameString(const ui32 index) const {
         auto view = GetColumnName(index);
@@ -149,12 +159,12 @@ public:
 
     static std::shared_ptr<arrow::Schema> GetStatsSchema() {
         static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::utf8()),
-            std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()) };
+            std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()),
+            std::make_shared<arrow::Field>("accessor_type", arrow::uint8()) };
         static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(fields);
         return result;
     }
 
-    TConstructorContainer GetAccessorConstructor(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const;
     bool IsSparsed(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const;
     TDictStats(const std::shared_ptr<arrow::RecordBatch>& original);
 };

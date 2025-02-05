@@ -24,7 +24,6 @@ private:
     using TSettings = NArrow::NAccessor::NSubColumns::TSettings;
     using TRemapColumns = NKikimr::NOlap::NCompaction::NSubColumns::TRemapColumns;
     std::vector<std::shared_ptr<TSubColumnsArray>> Sources;
-    ui32 OutputRecordsCount = 0;
     std::optional<TDictStats> ResultColumnStats;
     TRemapColumns RemapKeyIndex;
 

@@ -15,6 +15,7 @@ class TRemapColumns {
 private:
     using TDictStats = NArrow::NAccessor::NSubColumns::TDictStats;
     using TOthersData = NArrow::NAccessor::NSubColumns::TOthersData;
+    using TSettings = NArrow::NAccessor::NSubColumns::TSettings;
 
     class TRemapInfo {
     private:
@@ -66,7 +67,7 @@ public:
     TRemapColumns() {
     }
 
-    TOthersData::TFinishContext BuildRemapInfo(const std::vector<TDictStats::TRTStatsValue>& statsByKeyIndex) const;
+    TOthersData::TFinishContext BuildRemapInfo(const std::vector<TDictStats::TRTStatsValue>& statsByKeyIndex, const TSettings& settings, const ui32 recordsCount) const;
 
     void RegisterColumnStats(const TDictStats& resultColumnStats) {
         ResultColumnStats = &resultColumnStats;

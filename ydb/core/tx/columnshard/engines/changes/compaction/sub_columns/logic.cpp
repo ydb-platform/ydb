@@ -9,12 +9,11 @@ const TSubColumnsMerger::TSettings& TSubColumnsMerger::GetSettings() const {
     return Context.GetLoader()->GetAccessorConstructor().GetObjectPtrVerifiedAs<NArrow::NAccessor::NSubColumns::TConstructor>()->GetSettings();
 }
 
-void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext) {
-    for (auto&& i : mergeContext.GetChunks()) {
-        OutputRecordsCount += i.GetRecordsCount();
-    }
+void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& /*mergeContext*/) {
+    ui32 inputRecordsCount = 0;
     for (auto&& i : input) {
         OrderedIterators.emplace_back(NSubColumns::TChunksIterator(i, Context.GetLoader(), RemapKeyIndex, OrderedIterators.size()));
+        inputRecordsCount += i ? i->GetRecordsCount() : 0;
     }
     std::vector<const TDictStats*> stats;
     for (auto&& i : OrderedIterators) {
@@ -23,8 +22,8 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
             stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetOthersData().GetStats());
         }
     }
-    auto commonStats = TDictStats::Merge(stats);
-    auto splitted = commonStats.SplitByVolume(GetSettings().GetColumnsLimit());
+    auto commonStats = TDictStats::Merge(stats, GetSettings(), inputRecordsCount);
+    auto splitted = commonStats.SplitByVolume(GetSettings(), inputRecordsCount);
     ResultColumnStats = splitted.ExtractColumns();
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);
     for (auto&& i : OrderedIterators) {
@@ -35,7 +34,7 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
 std::vector<TColumnPortionResult> TSubColumnsMerger::DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) {
     AFL_VERIFY(ResultColumnStats);
     auto& mergeChunkContext = mergeContext.GetChunk(context.GetBatchIdx());
-    NSubColumns::TMergedBuilder builder(*ResultColumnStats, OutputRecordsCount, context, GetSettings(), RemapKeyIndex);
+    NSubColumns::TMergedBuilder builder(*ResultColumnStats, context, GetSettings(), RemapKeyIndex);
     for (ui32 i = 0; i < context.GetRecordsCount(); ++i) {
         const ui32 sourceIdx = mergeChunkContext.GetIdxArray().Value(i);
         const ui32 recordIdx = mergeChunkContext.GetRecordIdxArray().Value(i);

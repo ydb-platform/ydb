@@ -50,18 +50,27 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     TString blobData;
     NKikimrArrowAccessorProto::TSubColumnsAccessor proto;
     std::vector<TString> blobRanges;
-    blobRanges.emplace_back(ColumnsData.GetStats().SerializeAsString(externalInfo.GetDefaultSerializer()));
-    proto.SetColumnStatsSize(blobRanges.back().size());
+    if (ColumnsData.GetStats().GetColumnsCount()) {
+        blobRanges.emplace_back(ColumnsData.GetStats().SerializeAsString(externalInfo.GetDefaultSerializer()));
+        proto.SetColumnStatsSize(blobRanges.back().size());
+    } else {
+        proto.SetColumnStatsSize(0);
+    }
 
-    blobRanges.emplace_back(OthersData.GetStats().SerializeAsString(externalInfo.GetDefaultSerializer()));
-    proto.SetOtherStatsSize(blobRanges.back().size());
+    if (OthersData.GetStats().GetColumnsCount()) {
+        blobRanges.emplace_back(OthersData.GetStats().SerializeAsString(externalInfo.GetDefaultSerializer()));
+        proto.SetOtherStatsSize(blobRanges.back().size());
+    } else {
+        proto.SetOtherStatsSize(0);
+    }
     ui32 columnIdx = 0;
     for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
         TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
         blobRanges.emplace_back(
-            ColumnsData.GetStats().GetAccessorConstructor(columnIdx++, GetRecordsCount(), Settings).SerializeToString(i, cData));
+            ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
         auto* cInfo = proto.AddKeyColumns();
         cInfo->SetSize(blobRanges.back().size());
+        ++columnIdx;
     }
 
     if (OthersData.GetRecords()->GetRecordsCount()) {

@@ -8,7 +8,7 @@
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
-TSplittedColumns TDictStats::SplitByVolume(const ui32 columnsLimit) const {
+TSplittedColumns TDictStats::SplitByVolume(const TSettings& settings, const ui32 recordsCount) const {
     std::map<ui64, std::vector<TRTStats>> bySize;
     for (ui32 i = 0; i < GetColumnsCount(); ++i) {
         bySize[GetColumnSize(i)].emplace_back(GetRTStats(i));
@@ -17,7 +17,7 @@ TSplittedColumns TDictStats::SplitByVolume(const ui32 columnsLimit) const {
     std::vector<TRTStats> otherStats;
     for (auto it = bySize.rbegin(); it != bySize.rend(); ++it) {
         for (auto&& i : it->second) {
-            if (columnStats.size() < columnsLimit) {
+            if (columnStats.size() < settings.GetColumnsLimit()) {
                 columnStats.emplace_back(std::move(i));
             } else {
                 otherStats.emplace_back(std::move(i));
@@ -29,15 +29,15 @@ TSplittedColumns TDictStats::SplitByVolume(const ui32 columnsLimit) const {
     auto columnsBuilder = MakeBuilder();
     auto othersBuilder = MakeBuilder();
     for (auto&& i : columnStats) {
-        columnsBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize());
+        columnsBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount));
     }
     for (auto&& i : otherStats) {
-        othersBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize());
+        othersBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount));
     }
     return TSplittedColumns(columnsBuilder.Finish(), othersBuilder.Finish());
 }
 
-TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& stats) {
+TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& stats, const TSettings& settings, const ui32 recordsCount) {
     std::map<std::string_view, TRTStats> resultMap;
     for (auto&& i : stats) {
         for (ui32 idx = 0; idx < i->GetColumnsCount(); ++idx) {
@@ -50,7 +50,7 @@ TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& stats) {
     }
     auto builder = MakeBuilder();
     for (auto&& i : resultMap) {
-        builder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize());
+        builder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(), i.second.GetAccessorType(settings, recordsCount));
     }
     return builder.Finish();
 }
@@ -73,24 +73,29 @@ std::string_view TDictStats::GetColumnName(const ui32 index) const {
 
 TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     : Original(original) {
-    AFL_VERIFY(Original->num_columns() == 3)("count", Original->num_columns());
+    AFL_VERIFY(Original->num_columns() == 4)("count", Original->num_columns());
     AFL_VERIFY(Original->column(0)->type()->id() == arrow::utf8()->id());
     AFL_VERIFY(Original->column(1)->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Original->column(2)->type()->id() == arrow::uint32()->id());
+    AFL_VERIFY(Original->column(3)->type()->id() == arrow::uint8()->id());
     DataNames = std::static_pointer_cast<arrow::StringArray>(Original->column(0));
     DataRecordsCount = std::static_pointer_cast<arrow::UInt32Array>(Original->column(1));
     DataSize = std::static_pointer_cast<arrow::UInt32Array>(Original->column(2));
+    AccessorType = std::static_pointer_cast<arrow::UInt8Array>(Original->column(3));
 }
 
-bool TDictStats::IsSparsed(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const {
-    return settings.IsSparsed(GetColumnRecordsCount(columnIndex), recordsCount);
-}
-
-TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const {
-    if (IsSparsed(columnIndex, recordsCount, settings)) {
-        return std::make_shared<NAccessor::NSparsed::TConstructor>();
-    } else {
-        return std::make_shared<NAccessor::NPlain::TConstructor>();
+TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex) const {
+    switch (GetAccessorType(columnIndex)) {
+        case IChunkedArray::EType::Array:
+            return std::make_shared<NAccessor::NPlain::TConstructor>();
+        case IChunkedArray::EType::SparsedArray:
+            return std::make_shared<NAccessor::NSparsed::TConstructor>();
+        case IChunkedArray::EType::Undefined:
+        case IChunkedArray::EType::SerializedChunkedArray:
+        case IChunkedArray::EType::SubColumnsArray:
+        case IChunkedArray::EType::ChunkedArray:
+            AFL_VERIFY(false);
+            return TConstructorContainer();
     }
 }
 
@@ -103,34 +108,43 @@ TString TDictStats::SerializeAsString(const std::shared_ptr<NSerialization::ISer
     return serializer->SerializePayload(Original);
 }
 
+IChunkedArray::EType TDictStats::GetAccessorType(const ui32 columnIndex) const {
+    AFL_VERIFY(columnIndex < AccessorType->length());
+    return (IChunkedArray::EType)AccessorType->Value(columnIndex);
+}
+
 TDictStats::TBuilder::TBuilder() {
     Builders = NArrow::MakeBuilders(GetStatsSchema());
-    AFL_VERIFY(Builders.size() == 3);
+    AFL_VERIFY(Builders.size() == 4);
     AFL_VERIFY(Builders[0]->type()->id() == arrow::utf8()->id());
     AFL_VERIFY(Builders[1]->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Builders[2]->type()->id() == arrow::uint32()->id());
+    AFL_VERIFY(Builders[3]->type()->id() == arrow::uint8()->id());
     Names = static_cast<arrow::StringBuilder*>(Builders[0].get());
     Records = static_cast<arrow::UInt32Builder*>(Builders[1].get());
     DataSize = static_cast<arrow::UInt32Builder*>(Builders[2].get());
+    AccessorType = static_cast<arrow::UInt8Builder*>(Builders[3].get());
 }
 
-void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, const ui32 dataSize) {
+void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType) {
     AFL_VERIFY(Builders.size());
     if (!LastKeyName) {
         LastKeyName = name;
     } else {
-        AFL_VERIFY(*LastKeyName < name);
+        AFL_VERIFY(*LastKeyName < name)("last", LastKeyName)("name", name);
     }
     AFL_VERIFY(recordsCount);
     AFL_VERIFY(dataSize);
     TStatusValidator::Validate(Names->Append(name.data(), name.size()));
     TStatusValidator::Validate(Records->Append(recordsCount));
     TStatusValidator::Validate(DataSize->Append(dataSize));
+    TStatusValidator::Validate(AccessorType->Append((ui8)accessorType));
     ++RecordsCount;
 }
 
-void TDictStats::TBuilder::Add(const std::string_view name, const ui32 recordsCount, const ui32 dataSize) {
-    Add(TString(name.data(), name.size()), recordsCount, dataSize);
+void TDictStats::TBuilder::Add(
+    const std::string_view name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType) {
+    Add(TString(name.data(), name.size()), recordsCount, dataSize, accessorType);
 }
 
 TDictStats TDictStats::TBuilder::Finish() {

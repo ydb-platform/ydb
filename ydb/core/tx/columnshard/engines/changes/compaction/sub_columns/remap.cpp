@@ -2,7 +2,8 @@
 
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
-TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(const std::vector<TDictStats::TRTStatsValue>& statsByKeyIndex) const {
+TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(
+    const std::vector<TDictStats::TRTStatsValue>& statsByKeyIndex, const TSettings& settings, const ui32 recordsCount) const {
     TDictStats::TBuilder builder;
     std::vector<ui32> remap;
     remap.resize(statsByKeyIndex.size(), Max<ui32>());
@@ -14,7 +15,9 @@ TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(const s
         if (!statsByKeyIndex[i.second].GetRecordsCount()) {
             continue;
         }
-        builder.Add(i.first, statsByKeyIndex[i.second].GetRecordsCount(), statsByKeyIndex[i.second].GetDataSize());
+        builder.Add(i.first, statsByKeyIndex[i.second].GetRecordsCount(), statsByKeyIndex[i.second].GetDataSize(),
+            settings.IsSparsed(statsByKeyIndex[i.second].GetRecordsCount(), recordsCount) ? NArrow::NAccessor::IChunkedArray::EType::SparsedArray
+                                                                                          : NArrow::NAccessor::IChunkedArray::EType::Array);
         remap[i.second] = idx++;
     }
     return TOthersData::TFinishContext(builder.Finish(), remap);

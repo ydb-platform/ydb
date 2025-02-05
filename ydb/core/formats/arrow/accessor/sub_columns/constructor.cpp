@@ -23,23 +23,36 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
         return TConclusionStatus::Fail("cannot parse proto");
     }
     currentIndex += protoSize;
-    std::shared_ptr<arrow::RecordBatch> rbColumnStats = TStatusValidator::GetValid(externalInfo.GetDefaultSerializer()->Deserialize(
-        TString(originalData.data() + currentIndex, proto.GetColumnStatsSize()), TDictStats::GetStatsSchema()));
-    TDictStats columnStats(rbColumnStats);
+    TDictStats columnStats = [&]() {
+        if (proto.GetColumnStatsSize()) {
+            std::shared_ptr<arrow::RecordBatch> rbColumnStats = TStatusValidator::GetValid(externalInfo.GetDefaultSerializer()->Deserialize(
+                TString(originalData.data() + currentIndex, proto.GetColumnStatsSize()), TDictStats::GetStatsSchema()));
+            return TDictStats(rbColumnStats);
+        } else {
+            return TDictStats::BuildEmpty();
+        }
+    }();
     currentIndex += proto.GetColumnStatsSize();
-    std::shared_ptr<arrow::RecordBatch> rbOtherStats = TStatusValidator::GetValid(externalInfo.GetDefaultSerializer()->Deserialize(
-        TString(originalData.data() + currentIndex, proto.GetOtherStatsSize()), TDictStats::GetStatsSchema()));
-    TDictStats otherStats(rbOtherStats);
+    TDictStats otherStats = [&]() {
+        if (proto.GetOtherStatsSize()) {
+            std::shared_ptr<arrow::RecordBatch> rbOtherStats = TStatusValidator::GetValid(externalInfo.GetDefaultSerializer()->Deserialize(
+                TString(originalData.data() + currentIndex, proto.GetOtherStatsSize()), TDictStats::GetStatsSchema()));
+            return TDictStats(rbOtherStats);
+        } else {
+            return TDictStats::BuildEmpty();
+        }
+    }();
     currentIndex += proto.GetOtherStatsSize();
 
     std::shared_ptr<TGeneralContainer> columnKeysContainer;
     {
         std::vector<std::shared_ptr<IChunkedArray>> columns;
         auto schema = columnStats.BuildColumnsSchema();
-        AFL_VERIFY(rbColumnStats->num_rows() == proto.GetKeyColumns().size());
+        AFL_VERIFY(columnStats.GetColumnsCount() == (ui32)proto.GetKeyColumns().size())("schema", columnStats.GetColumnsCount())(
+                                                  "proto", proto.GetKeyColumns().size());
         for (ui32 i = 0; i < (ui32)proto.GetKeyColumns().size(); ++i) {
-            std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(externalInfo.GetDefaultSerializer(),
-                columnStats.GetAccessorConstructor(i, externalInfo.GetRecordsCount(), Settings), schema->field(i), nullptr, 0);
+            std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(
+                externalInfo.GetDefaultSerializer(), columnStats.GetAccessorConstructor(i), schema->field(i), nullptr, 0);
             std::vector<TDeserializeChunkedArray::TChunk> chunks = { TDeserializeChunkedArray::TChunk(
                 externalInfo.GetRecordsCount(), originalData.substr(currentIndex, proto.GetKeyColumns(i).GetSize())) };
             columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(externalInfo.GetRecordsCount(), columnLoader, std::move(chunks)));
@@ -51,7 +64,8 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     if (proto.GetOtherColumns().size() && proto.GetOtherRecordsCount()) {
         std::shared_ptr<TGeneralContainer> otherKeysContainer;
         std::vector<std::shared_ptr<IChunkedArray>> columns;
-        AFL_VERIFY(rbOtherStats->schema()->num_fields() == proto.GetOtherColumns().size());
+        AFL_VERIFY(TOthersData::GetSchema()->num_fields() == proto.GetOtherColumns().size())("proto", proto.GetOtherColumns().size())(
+                                                               "schema", TOthersData::GetSchema()->num_fields());
         auto schema = TOthersData::GetSchema();
         for (ui32 i = 0; i < (ui32)proto.GetOtherColumns().size(); ++i) {
             std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(

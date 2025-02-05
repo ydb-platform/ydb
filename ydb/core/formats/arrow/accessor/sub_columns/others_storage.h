@@ -18,7 +18,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
-    TOthersData Slice(const ui32 offset, const ui32 count) const;
+    TOthersData Slice(const ui32 offset, const ui32 count, const TSettings& settings) const;
 
     static TOthersData BuildEmpty();
 

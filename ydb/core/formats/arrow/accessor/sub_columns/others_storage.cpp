@@ -74,7 +74,7 @@ TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishC
     return TOthersData(*resultStats, std::make_shared<TGeneralContainer>(arrow::RecordBatch::Make(GetSchema(), RecordsCount, arrays)));
 }
 
-TOthersData TOthersData::Slice(const ui32 offset, const ui32 count) const {
+TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSettings& settings) const {
     AFL_VERIFY(Records->GetColumnsCount() == 3);
     TOthersData::TIterator itOthersData = BuildIterator();
     std::optional<ui32> startPosition = itOthersData.FindPosition(offset);
@@ -101,10 +101,9 @@ TOthersData TOthersData::Slice(const ui32 offset, const ui32 count) const {
             keyIndexDecoder[i.first] = idx++;
         }
     }
-    std::vector<TDictStats::TRTStats> statKeys;
     TDictStats::TBuilder statBuilder;
     for (auto&& i : usedKeys) {
-        statBuilder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize());
+        statBuilder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(), i.second.GetAccessorType(settings, count));
     }
     TDictStats sliceStats = statBuilder.Finish();
 

@@ -30,8 +30,8 @@ public:
 
 class IChunkedArray {
 public:
-    enum class EType {
-        Undefined,
+    enum class EType: ui8 {
+        Undefined = 0,
         Array,
         ChunkedArray,
         SerializedChunkedArray,

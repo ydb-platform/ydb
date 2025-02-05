@@ -23,7 +23,6 @@ private:
     using TDictStats = NArrow::NAccessor::NSubColumns::TDictStats;
     using TSubColumnsArray = NArrow::NAccessor::TSubColumnsArray;
 
-    const ui32 OutputRecordsCount = 0;
     const TDictStats ResultColumnStats;
     const TChunkMergeContext& Context;
     std::shared_ptr<TOthersData::TBuilderWithStats> OthersBuilder;
@@ -91,7 +90,7 @@ private:
 
     void FlushData() {
         AFL_VERIFY(RecordIndex);
-        auto portionOthersData = OthersBuilder->Finish(Remapper.BuildRemapInfo(OthersBuilder->GetStatsByKeyIndex()));
+        auto portionOthersData = OthersBuilder->Finish(Remapper.BuildRemapInfo(OthersBuilder->GetStatsByKeyIndex(), Settings, RecordIndex));
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrays;
         for (auto&& i : ColumnBuilders) {
             arrays.emplace_back(i.Finish(RecordIndex));
@@ -106,10 +105,18 @@ private:
     void Initialize() {
         ColumnBuilders.clear();
         for (ui32 i = 0; i < ResultColumnStats.GetColumnsCount(); ++i) {
-            if (ResultColumnStats.IsSparsed(i, OutputRecordsCount, Settings)) {
-                ColumnBuilders.emplace_back(TSparsedBuilder(nullptr, 0, 0));
-            } else {
-                ColumnBuilders.emplace_back(TPlainBuilder(0, 0));
+            switch (ResultColumnStats.GetAccessorType(i)) {
+                case NArrow::NAccessor::IChunkedArray::EType::Array:
+                    ColumnBuilders.emplace_back(TPlainBuilder(0, 0));
+                    break;
+                case NArrow::NAccessor::IChunkedArray::EType::SparsedArray:
+                    ColumnBuilders.emplace_back(TSparsedBuilder(nullptr, 0, 0));
+                    break;
+                case NArrow::NAccessor::IChunkedArray::EType::Undefined:
+                case NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray:
+                case NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray:
+                case NArrow::NAccessor::IChunkedArray::EType::ChunkedArray:
+                    AFL_VERIFY(false);
             }
         }
         OthersBuilder = TOthersData::MakeMergedBuilder();
@@ -118,10 +125,9 @@ private:
     }
 
 public:
-    TMergedBuilder(const NArrow::NAccessor::NSubColumns::TDictStats& columnStats, const ui32 outputRecordsCount,
-        const TChunkMergeContext& context, const TSettings& settings, const TRemapColumns& remapper)
-        : OutputRecordsCount(outputRecordsCount)
-        , ResultColumnStats(columnStats)
+    TMergedBuilder(const NArrow::NAccessor::NSubColumns::TDictStats& columnStats, const TChunkMergeContext& context, const TSettings& settings,
+        const TRemapColumns& remapper)
+        : ResultColumnStats(columnStats)
         , Context(context)
         , OthersBuilder(TOthersData::MakeMergedBuilder())
         , Settings(settings)
@@ -171,7 +177,6 @@ public:
         } else if (SumValuesSize >= Settings.GetChunkMemoryLimit()) {
             FlushData();
         }
-
     }
     void AddColumnKV(const ui32 commonKeyIndex, const std::string_view value) {
         AFL_VERIFY(commonKeyIndex < ColumnBuilders.size());

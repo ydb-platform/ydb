@@ -132,15 +132,17 @@ public:
         }
     };
 
-    TDictStats BuildStats(const std::vector<TColumnElements*>& keys) const {
+    TDictStats BuildStats(const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount) const {
         auto builder = TDictStats::MakeBuilder();
         for (auto&& i : keys) {
-            builder.Add(i->GetKeyName(), i->GetRecordIndexes().size(), i->GetDataSize());
+            builder.Add(i->GetKeyName(), i->GetRecordIndexes().size(), i->GetDataSize(), 
+                settings.IsSparsed(i->GetRecordIndexes().size(), recordsCount) ? IChunkedArray::EType::SparsedArray
+                                                                               : IChunkedArray::EType::Array);
         }
         return builder.Finish();
     }
 
-    TOthersData MergeOthers(const std::vector<TColumnElements*>& otherKeys) const;
+    TOthersData MergeOthers(const std::vector<TColumnElements*>& otherKeys, const ui32 recordsCount) const;
 
     std::shared_ptr<TSubColumnsArray> Finish();
 };

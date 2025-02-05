@@ -44,7 +44,8 @@ protected:
         return ColumnsData.GetRawSize() + OthersData.GetRawSize();
     }
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
-        return std::make_shared<TSubColumnsArray>(ColumnsData.Slice(offset, count), OthersData.Slice(offset, count), GetDataType(), count, Settings);
+        return std::make_shared<TSubColumnsArray>(
+            ColumnsData.Slice(offset, count), OthersData.Slice(offset, count, Settings), GetDataType(), count, Settings);
     }
 
 public:

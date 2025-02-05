@@ -385,9 +385,6 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
     if (!CompactedKeys.empty()) {
-        for (auto& k : HeadKeys) {
-            DefferedKeysForDeletion.push_back(std::move(k.BlobKeyToken));
-        }
         HeadKeys.clear();
     }
 

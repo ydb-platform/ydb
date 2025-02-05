@@ -134,7 +134,6 @@ void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, con
         AFL_VERIFY(*LastKeyName < name)("last", LastKeyName)("name", name);
     }
     AFL_VERIFY(recordsCount);
-    AFL_VERIFY(dataSize);
     TStatusValidator::Validate(Names->Append(name.data(), name.size()));
     TStatusValidator::Validate(Records->Append(recordsCount));
     TStatusValidator::Validate(DataSize->Append(dataSize));

@@ -88,6 +88,47 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         }
     };
 
+    class TStopCompactionCommand: public ICommand {
+    private:
+        virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override {
+            auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+            AFL_VERIFY(controller);
+            controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+            return TConclusionStatus::Success();
+        }
+
+    public:
+        TStopCompactionCommand() {
+        }
+    };
+
+    class TOneCompactionCommand: public ICommand {
+    private:
+        virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override {
+            auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+            AFL_VERIFY(controller);
+            AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Compaction));
+            const i64 compactions = controller->GetCompactionFinishedCounter().Val();
+            controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+            const TInstant start = TInstant::Now();
+            while (TInstant::Now() - start < TDuration::Seconds(5)) {
+                if (compactions < controller->GetCompactionFinishedCounter().Val()) {
+                    Cerr << "COMPACTION_HAPPENED: " << compactions << " -> " << controller->GetCompactionFinishedCounter().Val() << Endl;
+                    break;
+                }
+                Cerr << "WAIT_COMPACTION: " << controller->GetCompactionFinishedCounter().Val() << Endl;
+                Sleep(TDuration::MilliSeconds(300));
+            }
+            AFL_VERIFY(compactions < controller->GetCompactionFinishedCounter().Val());
+            controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+            return TConclusionStatus::Success();
+        }
+
+    public:
+        TOneCompactionCommand() {
+        }
+    };
+
     class TWaitCompactionCommand: public ICommand {
     private:
         virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override {
@@ -158,6 +199,10 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 return std::make_shared<TSelectCommand>(request, expectation);
             } else if (command.StartsWith("WAIT_COMPACTION")) {
                 return std::make_shared<TWaitCompactionCommand>();
+            } else if (command.StartsWith("STOP_COMPACTION")) {
+                return std::make_shared<TStopCompactionCommand>();
+            } else if (command.StartsWith("ONE_COMPACTION")) {
+                return std::make_shared<TOneCompactionCommand>();
             } else {
                 AFL_VERIFY(false)("command", command);
                 return nullptr;
@@ -282,6 +327,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     Y_UNIT_TEST(CompactionVariants) {
         TString script = R"(
+            STOP_COMPACTION
+            ------
             SCHEMA:            
             CREATE TABLE `/Root/ColumnTable` (
                 Col1 Uint64 NOT NULL,
@@ -306,7 +353,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1) VALUES(10u)
             ------
-            WAIT_COMPACTION
+            ONE_COMPACTION
             ------
             READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
             EXPECTED: [[1u;["{\"a\":\"a1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4\"}"]];[10u;#];
@@ -318,6 +365,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     Y_UNIT_TEST(DuplicationCompactionVariants) {
         TString script = R"(
+            STOP_COMPACTION
+            ------
             SCHEMA:            
             CREATE TABLE `/Root/ColumnTable` (
                 Col1 Uint64 NOT NULL,
@@ -342,7 +391,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1) VALUES(2u)
             ------
-            WAIT_COMPACTION
+            ONE_COMPACTION
             ------
             READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
             EXPECTED: [[1u;["{\"a\":\"1a1\"}"]];[2u;#];[3u;["{\"b\":\"1b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4\"}"]]]

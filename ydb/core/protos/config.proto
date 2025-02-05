@@ -2113,7 +2113,7 @@ message TKafkaProxyConfig {
     }
 
     optional TProxy Proxy = 7;
-    optional bool MeteringV2Enabled = 10 [default = false];
+    optional bool MeteringV2Enabled = 10 [default = true];
     optional bool AuthViaApiKey = 11 [default = true];
 }
 

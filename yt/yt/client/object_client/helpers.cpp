@@ -46,6 +46,7 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::ChunkMap ||
         type == EObjectType::LostChunkMap ||
         type == EObjectType::LostVitalChunkMap ||
+        type == EObjectType::LostVitalChunksSampleMap ||
         type == EObjectType::PrecariousChunkMap ||
         type == EObjectType::PrecariousVitalChunkMap ||
         type == EObjectType::OverreplicatedChunkMap ||

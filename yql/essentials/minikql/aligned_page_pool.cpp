@@ -473,9 +473,11 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
     }
 #endif
 
-    Y_DEBUG_ABORT_UNLESS(AllPages.find(addr) != AllPages.end());
+    auto page = AllPages.find(addr);
+    Y_DEBUG_ABORT_UNLESS(page != AllPages.end());
 
 #if __has_feature(address_sanitizer)
+    AllPages.erase(page);
     Free(addr, POOL_PAGE_SIZE);
 #else
     ASAN_POISON_MEMORY_REGION(addr, POOL_PAGE_SIZE);

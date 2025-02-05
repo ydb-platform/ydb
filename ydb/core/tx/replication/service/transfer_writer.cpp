@@ -63,6 +63,13 @@ struct TSchemaColumn {
     }
 };
 
+struct TScheme {
+    TVector<TSchemaColumn> TopicColumns;
+    TVector<TSchemaColumn> TableColumns;
+    TVector<NKikimrKqp::TKqpColumnMetadataProto> ColumnsMetadata;
+    std::vector<ui32> WriteIndex;
+};
+
 
 struct TOutputType {
     TOutputType(ui32 width)
@@ -233,7 +240,6 @@ public:
     }
 
 private:
-    //const TLightweightSchema::TCPtr Columns;
     const TVector<TSchemaColumn> TopicColumns;
     const TVector<TSchemaColumn> TableColumns;
     const TString Sql;
@@ -241,47 +247,137 @@ private:
     THolder<NYql::NPureCalc::TPullListProgram<NYdb::NTopic::NPurecalc::TMessageInputSpec, TMessageOutputSpec>> Program;
 };
 
+TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
+    const auto& entry = nav->ResultSet.at(0);
+
+    TScheme result;
+
+    result.TableColumns.reserve(entry.Columns.size());
+    result.ColumnsMetadata.reserve(entry.Columns.size());
+    result.WriteIndex.reserve(entry.Columns.size());
+
+    for (const auto& [_, column] : entry.Columns) {
+        result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn);
+        result.WriteIndex.push_back(result.ColumnsMetadata.size()); // TODO ???
+        result.ColumnsMetadata.emplace_back();
+
+        auto& c = result.ColumnsMetadata.back();
+        c.SetName(column.Name);
+        c.SetId(column.Id);
+        c.SetTypeId(column.PType.GetTypeId());
+
+        if (NScheme::NTypeIds::IsParametrizedType(column.PType.GetTypeId())) {
+            NScheme::ProtoFromTypeInfo(column.PType, "", *c.MutableTypeInfo());
+        }
+    }
+
+    return result;
+}
+
 
 class ITableKindState {
 public:
     using TPtr = std::unique_ptr<ITableKindState>;
 
+    ITableKindState(const TActorId& selfId, const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result)
+        : SelfId(selfId)
+        , Scheme(BuildScheme(result))
+    {}
+    
     virtual ~ITableKindState() = default;
 
+    void EnshureDataBatch() {
+        if (!Batcher) {
+            Batcher = CreateDataBatcher();
+        }
+    }
+
+    void AddData(const NMiniKQL::TUnboxedValueBatch &data) {
+        Batcher->AddData(data);
+    }
+
     virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
+    virtual bool Flush() = 0;
+
+    virtual TString Handle(TEvents::TEvCompleted::TPtr& ev) = 0;
+
+    const TVector<TSchemaColumn>& GetTableColumns() const {
+        return Scheme.TableColumns;
+    }
+
+protected:
+    const TActorId SelfId;
+    const TScheme Scheme;
+
+    NKqp::IDataBatcherPtr Batcher;
 };
 
 class TColumnTableState : public ITableKindState {
 public:
     TColumnTableState(
-        const TVector<NKikimrKqp::TKqpColumnMetadataProto>& columnsMetadata,
-        const std::vector<ui32>& writeIndex
+        const TActorId& selfId,
+        TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result
     )
-        : ColumnsMetadata(columnsMetadata)
-        , WriteIndex(writeIndex)
-    {}
+        : ITableKindState(selfId, result)
+    {
+        NavigateResult.reset(result.Release());
+        Path = JoinPath(NavigateResult->ResultSet.front().Path);
+    }
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
-        return NKqp::CreateColumnDataBatcher(ColumnsMetadata, WriteIndex);
+        return NKqp::CreateColumnDataBatcher(Scheme.ColumnsMetadata, Scheme.WriteIndex);
+    }
+
+    bool Flush() override {
+        NKqp::IDataBatchPtr batch = Batcher->Build();
+        auto data = batch->ExtractBatch();
+
+        auto* internalData = reinterpret_cast<arrow::RecordBatch*>(data.get());
+        Y_VERIFY(internalData);
+
+        std::shared_ptr<arrow::RecordBatch> arrowBatch = std::shared_ptr<arrow::RecordBatch>{data, internalData};
+
+        Issues = std::make_shared<NYql::TIssues>();
+
+        NTxProxy::DoLongTxWriteSameMailbox(TActivationContext::AsActorContext(), SelfId /* replyTo */, { /* longTxId */ }, { /* dedupId */ },
+            NavigateResult->DatabaseName, Path, NavigateResult, arrowBatch, Issues, true /* noTxWrite */);
+        
+        return true;
+    }
+
+    TString Handle(TEvents::TEvCompleted::TPtr& ev) override {
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            return "";
+        }
+        return Issues->ToOneLineString();
     }
 
 private:
-    const TVector<NKikimrKqp::TKqpColumnMetadataProto> ColumnsMetadata;
-    const std::vector<ui32> WriteIndex;
+
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
+    TString Path;
+    std::shared_ptr<NYql::TIssues> Issues;
 };
 
 class TRowTableState : public ITableKindState {
 public:
     TRowTableState(
-        const TVector<NKikimrKqp::TKqpColumnMetadataProto>& columnsMetadata,
-        const std::vector<ui32>& writeIndex
+        const TActorId& selfId,
+        TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result
     )
-        : ColumnsMetadata(columnsMetadata)
-        , WriteIndex(writeIndex)
+        : ITableKindState(selfId, result)
     {}
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
         return NKqp::CreateRowDataBatcher(ColumnsMetadata, WriteIndex);
+    }
+
+    bool Flush() override {
+        Y_ABORT("Unsupported");
+    }
+
+    TString Handle(TEvents::TEvCompleted::TPtr&) override {
+        return "Unsupported";
     }
 
 private:
@@ -363,7 +459,7 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const auto& result = ev->Get()->Request;
+        auto& result = ev->Get()->Request;
 
         LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
             << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
@@ -392,6 +488,7 @@ private:
         }
 
         if (TableVersion && TableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
+            // TODO ????
             Y_ABORT_UNLESS(Initialized);
             Resolving = false;
             return CompileTransferLambda();
@@ -399,63 +496,15 @@ private:
 
         auto schema = MakeIntrusive<TLightweightSchema>();
         if (entry.Self && entry.Self->Info.HasVersion()) {
+            // TODO ???
             schema->Version = entry.Self->Info.GetVersion().GetTableSchemaVersion();
         }
 
-        TableColumns.reserve(entry.Columns.size());
-        for (const auto& [_, column] : entry.Columns) {
-            TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn);
-
-            if (column.KeyOrder >= 0) {
-                if (schema->KeyColumns.size() <= static_cast<ui32>(column.KeyOrder)) {
-                    schema->KeyColumns.resize(column.KeyOrder + 1);
-                }
-
-                schema->KeyColumns[column.KeyOrder] = column.PType;
-            } else {
-                auto res = schema->ValueColumns.emplace(column.Name, TLightweightSchema::TColumn{
-                    .Tag = column.Id,
-                    .Type = column.PType,
-                });
-                Y_ABORT_UNLESS(res.second);
-            }
-        }
-
-        Schema = schema;
-
-        TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata;
-        columnsMetadata.reserve(TableColumns.size());
-
-        std::vector<ui32> writeIndex;
-        writeIndex.reserve(TableColumns.size());
-
-        for (const auto& column : TableColumns) {
-                writeIndex.push_back(columnsMetadata.size());
-                columnsMetadata.emplace_back();
-                auto& c = columnsMetadata.back();
-
-                c.SetName(column.Name);
-                c.SetId(column.Id);
-                c.SetTypeId(column.PType.GetTypeId());
-                // TODO
-                //if (column.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                //    c.MutableTypeInfo()->SetPgTypeId(column.PType.GetPgTypeDesc());
-                //    c.MutableTypeInfo()->SetPgTypeMod(::arc_ui32 value);
-                //}
-                if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
-                    const auto& decimal = column.PType.GetDecimalType();
-                    c.MutableTypeInfo()->SetDecimalPrecision(decimal.GetPrecision());
-                    c.MutableTypeInfo()->SetDecimalScale(decimal.GetScale());
-                }
-        }
-
         if (entry.Kind == TNavigate::KindColumnTable) {
-            TableState = std::make_unique<TColumnTableState>(columnsMetadata, writeIndex);
+            TableState = std::make_unique<TColumnTableState>(SelfId(), result);
         } else {
-            TableState = std::make_unique<TRowTableState>(columnsMetadata, writeIndex);
+            TableState = std::make_unique<TRowTableState>(SelfId(), result);
         }
-
-        NavigateResult.reset(ev->Get()->Request.Release());
 
         CompileTransferLambda();
     }
@@ -465,7 +514,7 @@ private:
         LOG_D("CompileTransferLambda: worker# " << Worker);
 
         NFq::TPurecalcCompileSettings settings = {};
-        auto programHolder = MakeIntrusive<TProgramHolder>(TableColumns, GenerateSql());
+        auto programHolder = MakeIntrusive<TProgramHolder>(TableState->GetTableColumns(), GenerateSql());
         auto result = std::make_unique<NFq::TEvRowDispatcher::TEvPurecalcCompileRequest>(std::move(programHolder), settings);
 
         Send(CompileServiceId, result.release(), 0, ++InFlightCompilationId);
@@ -566,7 +615,7 @@ private:
             return;
         }
 
-        EnshureDataBatch();
+        TableState->EnshureDataBatch();
 
         for (auto& message : ev->Get()->Records) {
             NYdb::NTopic::NPurecalc::TMessage input(message.Data);
@@ -574,35 +623,13 @@ private:
 
             auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
             while (auto* m = result->Fetch()) {
-                Batcher->AddData(m->Data);
+                TableState->AddData(m->Data);
             }
         }
 
-        NKqp::IDataBatchPtr batch = Batcher->Build();
-
-        Cerr << ">>>>> Batch size = " << batch->GetMemory() << Endl << Flush;
-
-        //if (batch->GetMemory() > (i64) 1_KB) {
-            Cerr << ">>>>> Flush " << Endl << Flush;
-            // const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
-            // const TString& dedupId, const TString& databaseName, const TString& path,
-            // std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-            // std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite
-
-
-            auto b = batch->ExtractBatch();
-            auto columnshardBatch = reinterpret_cast<arrow::RecordBatch*>(b.get());
-            Y_VERIFY(columnshardBatch);
-            std::shared_ptr<arrow::RecordBatch> arrowBatch = std::shared_ptr<arrow::RecordBatch>{b, columnshardBatch};
-
-            Issues = std::make_shared<NYql::TIssues>();
-            Cerr << ">>>>> NUM_ROWS = " << arrowBatch->num_rows() << Endl << Flush;
-
-            NTxProxy::DoLongTxWriteSameMailbox(TActivationContext::AsActorContext(), SelfId() /* replyTo */, { /* longTxId */ }, { /* dedupId */ },
-                DatabaseName, Path, NavigateResult,  arrowBatch, Issues, true /* noTxWrite */);
-            return Become(&TThis::StateWrite);
-        //}
-
+        if (TableState->Flush()) {
+            Become(&TThis::StateWrite);
+        }
     }
 
 private:
@@ -618,14 +645,16 @@ private:
 
     void Handle(TEvents::TEvCompleted::TPtr& ev) {
         LOG_D("Handle TEvents::TEvCompleted"
-            << ": worker# " << Worker);
+            << ": worker# " << Worker 
+            << " status# " << ev->Get()->Status);
 
-        if (ev->Get()->Status) {
-            Send(Worker, new TEvWorker::TEvPoll());
-            return StartWork();
+        auto error = TableState->Handle(ev);
+        if (error) {
+            return LogCritAndLeave(error);
         }
 
-        LogCritAndLeave(Issues->ToOneLineString());
+        Send(Worker, new TEvWorker::TEvPoll());
+        return StartWork();
     }
 
 private:
@@ -691,37 +720,6 @@ private:
     }
 
 
-/*
-    void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
-        const auto& result = ev->Get()->Result;
-
-        LOG_D("Handle " << ev->Get()->ToString());
-
-        if (!CheckResult(result, TStringBuf("PutObject"))) {
-            return;
-        } else {
-            RequestInFlight = nullptr;
-        }
-
-        if (!IdentityWritten) {
-            IdentityWritten = true;
-            Send(Worker, new TEvWorker::TEvHandshake());
-        } else if (!Finished) {
-            Send(Worker, new TEvWorker::TEvPoll());
-        } else {
-            Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
-        }
-    }
-*/
-
-private:
-
-    void EnshureDataBatch() {
-        if (!Batcher) {
-            Batcher = TableState->CreateDataBatcher();
-        }
-    }
-
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::REPLICATION_S3_WRITER;
@@ -749,13 +747,11 @@ private:
 
     ui64 TableVersion = 0;
     THolder<TKeyDesc> KeyDesc;
-    TLightweightSchema::TCPtr Schema;
-    TVector<TSchemaColumn> TableColumns;
     bool Resolving = false;
     bool Initialized = false;
 
     ITableKindState::TPtr TableState;
-    NKqp::IDataBatcherPtr Batcher;
+    
 
     TProgramHolder::TPtr ProgramHolder;
 
@@ -764,14 +760,7 @@ private:
     const TString TableName;
     const TString WriterName;
 
-    const TString DatabaseName;
-    const TString Path;
-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
-    std::shared_ptr<NYql::TIssues> Issues;
-
     TActorId Worker;
-    TActorId S3Client;
-    //bool IdentityWritten = false;
     bool Finished = false;
 
     //const ui32 Retries = 3;
@@ -782,7 +771,8 @@ private:
 
     TDuration Delay = TDuration::Minutes(1);
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
-}; // TS3Writer
+
+}; // TTransferWriter
 
 IActor* CreateTransferWriter(const NKikimrReplication::TReplicationConfig& config,
     const TPathId& tablePathId, const TString& tableName, const TString& writerName,

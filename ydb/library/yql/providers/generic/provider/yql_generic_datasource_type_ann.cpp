@@ -145,7 +145,7 @@ namespace NYql {
                 return TStatus::Error;
             }
 
-            if (!EnsureAtom(*input->Child(TGenReadTable::idx_Table), ctx)) {
+            if (!EnsureCallable(*input->Child(TGenReadTable::idx_Table), ctx)) {
                 return TStatus::Error;
             }
 

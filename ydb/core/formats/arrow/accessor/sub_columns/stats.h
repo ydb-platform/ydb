@@ -24,6 +24,14 @@ private:
     std::shared_ptr<arrow::UInt8Array> AccessorType;
 
 public:
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("key_names", NArrow::DebugJson(DataNames, 1000000, 1000000)["data"]);
+        result.InsertValue("records", NArrow::DebugJson(DataRecordsCount, 1000000, 1000000)["data"]);
+        result.InsertValue("size", NArrow::DebugJson(DataSize, 1000000, 1000000)["data"]);
+        result.InsertValue("accessor", NArrow::DebugJson(AccessorType, 1000000, 1000000)["data"]);
+        return result;
+    }
     static TDictStats BuildEmpty();
     TString SerializeAsString(const std::shared_ptr<NSerialization::ISerializer>& serializer) const;
 

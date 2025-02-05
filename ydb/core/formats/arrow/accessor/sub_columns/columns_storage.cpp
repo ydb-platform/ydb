@@ -5,8 +5,8 @@ TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
     auto sliceRecords = Records->Slice(offset, count);
     TDictStats::TBuilder builder;
     ui32 idx = 0;
-    for (auto&& i : Records->GetColumns()) {
-        AFL_VERIFY(Stats.GetColumnName(idx) == Records->GetSchema()->field(idx)->name());
+    for (auto&& i : sliceRecords.GetColumns()) {
+        AFL_VERIFY(Stats.GetColumnName(idx) == sliceRecords.GetSchema()->field(idx)->name());
         builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType());
         ++idx;
     }

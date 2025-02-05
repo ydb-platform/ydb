@@ -24,6 +24,14 @@ public:
     {
     }
 
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("sparsed_detector_kff", SparsedDetectorKff);
+        result.InsertValue("columns_limit", ColumnsLimit);
+        result.InsertValue("memory_limit", ChunkMemoryLimit);
+        return result;
+    }
+
     bool IsSparsed(const ui32 keyUsageCount, const ui32 recordsCount) const {
         AFL_VERIFY(recordsCount);
         return keyUsageCount * SparsedDetectorKff < recordsCount;

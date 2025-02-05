@@ -40,7 +40,7 @@ std::optional<ui32> FindUpperOrEqualPosition(const TArray& arr, const TValue val
         } else if (val < middle) {
             idxRight = idxMiddle;
         } else {
-            return idxMiddle;
+            idxRight = idxMiddle;
         }
     }
     return idxRight;

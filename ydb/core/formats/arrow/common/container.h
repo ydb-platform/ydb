@@ -51,7 +51,11 @@ public:
         return *RecordsCount;
     }
 
-    TString DebugString() const;
+    NJson::TJsonValue DebugJson(const bool withData = false) const;
+
+    TString DebugString(const bool withData = false) const {
+        return DebugJson(withData).GetStringRobust();
+    }
 
     [[nodiscard]] TConclusionStatus SyncSchemaTo(const std::shared_ptr<arrow::Schema>& schema,
         const IFieldsConstructor* defaultFieldsConstructor, const bool forceDefaults);

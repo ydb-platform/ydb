@@ -18,6 +18,13 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("stats", Stats.DebugJson());
+        result.InsertValue("records", Records->DebugJson(true));
+        return result;
+    }
+
     TOthersData Slice(const ui32 offset, const ui32 count, const TSettings& settings) const;
 
     static TOthersData BuildEmpty();

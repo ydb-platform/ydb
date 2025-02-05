@@ -225,12 +225,18 @@ TConclusionStatus TGeneralContainer::SyncSchemaTo(
     return TConclusionStatus::Success();
 }
 
-TString TGeneralContainer::DebugString() const {
-    TStringBuilder result;
+NJson::TJsonValue TGeneralContainer::DebugJson(const bool withData) const {
+    NJson::TJsonValue result;
     if (RecordsCount) {
-        result << "records_count=" << *RecordsCount << ";";
+        result.InsertValue("records_count", *RecordsCount);
     }
-    result << "schema=" << Schema->ToString() << ";";
+    result.InsertValue("schema", Schema->ToString());
+    if (withData) {
+        auto& arrData = result.InsertValue("data", NJson::JSON_ARRAY);
+        for (auto&& i : Columns) {
+            arrData.AppendValue(i->DebugJson());
+        }
+    }
     return result;
 }
 

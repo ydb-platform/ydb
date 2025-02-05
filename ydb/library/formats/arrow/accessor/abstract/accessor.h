@@ -8,6 +8,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <library/cpp/json/writer/json_value.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NArrow::NSerialization {
@@ -30,7 +31,7 @@ public:
 
 class IChunkedArray {
 public:
-    enum class EType: ui8 {
+    enum class EType : ui8 {
         Undefined = 0,
         Array,
         ChunkedArray,
@@ -228,6 +229,11 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::DataType>, DataType);
     YDB_READONLY(ui64, RecordsCount, 0);
     YDB_READONLY(EType, Type, EType::Undefined);
+    virtual NJson::TJsonValue DoDebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("data", GetChunkedArray()->ToString());
+        return result;
+    }
     virtual std::optional<ui64> DoGetRawSize() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const = 0;
 
@@ -307,6 +313,14 @@ protected:
     }
 
 public:
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("type", ::ToString(Type));
+        result.InsertValue("records_count", RecordsCount);
+        result.InsertValue("internal", DoDebugJson());
+        return result;
+    }
+
     ui32 GetNullsCount() const {
         return DoGetNullsCount();
     }
@@ -318,10 +332,6 @@ public:
     TLocalDataAddress GetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
         AFL_VERIFY(position < GetRecordsCount())("position", position)("records_count", GetRecordsCount());
         return DoGetLocalData(chunkCurrent, position);
-    }
-
-    virtual EType GetTypeDeep() const {
-        return Type;
     }
 
     class TReader {

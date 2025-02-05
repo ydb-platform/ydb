@@ -26,6 +26,13 @@ private:
     const NSubColumns::TSettings Settings;
 
 protected:
+    virtual NJson::TJsonValue DoDebugJson() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("columns_data", ColumnsData.DebugJson());
+        result.InsertValue("others_data", OthersData.DebugJson());
+        result.InsertValue("settings", Settings.DebugJson());
+        return result;
+    }
     virtual ui32 DoGetNullsCount() const override {
         AFL_VERIFY(false);
         return 0;

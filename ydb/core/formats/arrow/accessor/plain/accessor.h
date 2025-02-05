@@ -39,6 +39,7 @@ public:
         , Array(data) {
     }
 
+    template <class TArrowDataType = arrow::StringType>
     class TPlainBuilder {
     private:
         std::unique_ptr<arrow::ArrayBuilder> Builder;
@@ -46,7 +47,7 @@ public:
 
     public:
         TPlainBuilder(const ui32 reserveItems = 0, const ui32 reserveSize = 0) {
-            Builder = NArrow::MakeBuilder(arrow::utf8(), reserveItems, reserveSize);
+            Builder = NArrow::MakeBuilder(arrow::TypeTraits<TArrowDataType>::type_singleton(), reserveItems, reserveSize);
         }
 
         void AddRecord(const ui32 recordIndex, const std::string_view value) {
@@ -57,7 +58,7 @@ public:
                 TStatusValidator::Validate(Builder->AppendNulls(recordIndex));
             }
             LastRecordIndex = recordIndex;
-            AFL_VERIFY(NArrow::Append<arrow::StringType>(*Builder, arrow::util::string_view(value.data(), value.size())));
+            AFL_VERIFY(NArrow::Append<TArrowDataType>(*Builder, arrow::util::string_view(value.data(), value.size())));
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
@@ -71,8 +72,8 @@ public:
         }
     };
 
-    static TPlainBuilder MakeBuilderUtf8(const ui32 reserveItems = 0, const ui32 reserveSize = 0) {
-        return TPlainBuilder(reserveItems, reserveSize);
+    static TPlainBuilder<arrow::StringType> MakeBuilderUtf8(const ui32 reserveItems = 0, const ui32 reserveSize = 0) {
+        return TPlainBuilder<arrow::StringType>(reserveItems, reserveSize);
     }
 };
 

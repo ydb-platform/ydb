@@ -39,10 +39,6 @@ private:
     std::shared_ptr<TColumnLoader> Loader;
     std::vector<TChunk> Chunks;
 
-    virtual EType GetTypeDeep() const override {
-        return Loader->GetAccessorConstructor()->GetType();
-    }
-
 protected:
     virtual ui32 DoGetNullsCount() const override {
         AFL_VERIFY(false);

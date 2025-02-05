@@ -2,6 +2,11 @@ LIBRARY()
 
 PEERDIR(
     ydb/core/formats/arrow/accessor/abstract
+    ydb/core/formats/arrow/accessor/plain
+    ydb/core/formats/arrow/accessor/sparsed
+    ydb/core/formats/arrow/accessor/composite_serial
+    ydb/core/formats/arrow/save_load
+    ydb/core/formats/arrow/common
     ydb/library/formats/arrow
     ydb/library/formats/arrow/protos
     yql/essentials/types/binary_json

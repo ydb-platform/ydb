@@ -464,8 +464,6 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
-    // DON'T POISON!
-
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_UNLIKELY(IsDefaultAllocator)) {
         ReturnBlock(addr, POOL_PAGE_SIZE);
@@ -474,6 +472,7 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
 #endif
 
     Y_DEBUG_ABORT_UNLESS(AllPages.find(addr) != AllPages.end());
+    ASAN_POISON_MEMORY_REGION(addr, POOL_PAGE_SIZE);
     FreePages.emplace(addr);
 }
 
@@ -515,8 +514,6 @@ void TAlignedPagePoolImpl<T>::ReturnBlock(void* ptr, size_t size) noexcept {
         return;
     }
 #endif
-
-    ASAN_POISON_MEMORY_REGION(ptr, size);
 
     if (size == POOL_PAGE_SIZE) {
         ReturnPage(ptr);
@@ -625,11 +622,13 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::Free(void* ptr, size_t size) noexcept {
-    // DON'T POISON!
-
     size = AlignUp(size, SYS_PAGE_SIZE);
-    if (size <= MaxMidSize)
+    if (size <= MaxMidSize) {
         size = FastClp2(size);
+    }
+
+    ASAN_POISON_MEMORY_REGION(ptr, size);
+
     if (size <= MaxMidSize) {
         auto level = LeastSignificantBit(size) - LeastSignificantBit(POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level >= 1 && level <= MidLevels);
@@ -711,9 +710,10 @@ template class TAlignedPagePoolImpl<>;
 template class TAlignedPagePoolImpl<TFakeAlignedMmap>;
 template class TAlignedPagePoolImpl<TFakeUnalignedMmap>;
 
-// poisoned
 template<typename TMmap>
 void* GetAlignedPage(ui64 size) {
+    const auto origSize = size;
+
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size < TAlignedPagePool::POOL_PAGE_SIZE) {
         size = TAlignedPagePool::POOL_PAGE_SIZE;
@@ -726,6 +726,7 @@ void* GetAlignedPage(ui64 size) {
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level <= MidLevels);
         if (auto res = pool.Get(level).GetPage()) {
+            ASAN_UNPOISON_MEMORY_REGION(res, origSize);
             return res;
         }
     }
@@ -754,13 +755,12 @@ void* GetAlignedPage(ui64 size) {
         }
     }
 
+    ASAN_UNPOISON_MEMORY_REGION(mem, origSize);
     return mem;
 }
 
 template<typename TMmap>
 void ReleaseAlignedPage(void* mem, ui64 size) {
-    ASAN_POISON_MEMORY_REGION(mem, size);
-
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size < TAlignedPagePool::POOL_PAGE_SIZE) {
         size = TAlignedPagePool::POOL_PAGE_SIZE;
@@ -770,10 +770,12 @@ void ReleaseAlignedPage(void* mem, ui64 size) {
         size = FastClp2(size);
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level <= MidLevels);
+        ASAN_POISON_MEMORY_REGION(mem, size);
         TGlobalPools<TMmap, true>::Instance().PushPage(level, mem);
         return;
     }
 
+    ASAN_POISON_MEMORY_REGION(mem, size);
     TGlobalPools<TMmap, true>::Instance().DoMunmap(mem, size);
 }
 

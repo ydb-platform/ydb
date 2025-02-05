@@ -115,7 +115,7 @@ public:
 
     void* GetPage(); // unpoisoned: [0, +POOL_PAGE_SIZE)
 
-    void ReturnPage(void* addr) noexcept;
+    void ReturnPage(void* addr) noexcept; // poisoned
 
     void Swap(TAlignedPagePoolImpl& other) {
         DoSwap(FreePages, other.FreePages);
@@ -146,8 +146,7 @@ public:
     }
 
     void* GetBlock(size_t size); // unpoisoned: [0, +size)
-
-    void ReturnBlock(void* ptr, size_t size) noexcept;
+    void ReturnBlock(void* ptr, size_t size) noexcept; // poisoned
 
     size_t GetPeakAllocated() const noexcept {
         return PeakAllocated;
@@ -244,7 +243,7 @@ public:
 
 protected:
     void* Alloc(size_t size); // poisoned
-    void Free(void* ptr, size_t size) noexcept;
+    void Free(void* ptr, size_t size) noexcept; // poisoned
 
     void UpdatePeaks() {
         PeakAllocated = Max(PeakAllocated, GetAllocated());
@@ -306,10 +305,10 @@ protected:
 using TAlignedPagePool = TAlignedPagePoolImpl<>;
 
 template<typename TMmap = TSystemMmap>
-void* GetAlignedPage(ui64 size);
+void* GetAlignedPage(ui64 size); // unpoisoned: [0, +size)
 
 template<typename TMmap = TSystemMmap>
-void ReleaseAlignedPage(void* mem, ui64 size);
+void ReleaseAlignedPage(void* mem, ui64 size); // poisoned
 
 template<typename TMmap = TSystemMmap>
 i64 GetTotalMmapedBytes();

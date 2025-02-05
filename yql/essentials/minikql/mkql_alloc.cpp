@@ -47,7 +47,6 @@ void TAllocState::CleanupArrowList(TListEntry* root) {
         auto* next = curr->Right;
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
         if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
-            antidote.Poison();
             free(curr);
         } else {
 #endif
@@ -217,14 +216,10 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
 }
 
 void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept {
-    // Header should be unpoisoned.
-
     Y_DEBUG_ABORT_UNLESS(state);
     Y_DEBUG_ABORT_UNLESS(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << header->MyAlloc->GetDebugInfo() << " freed with: " << TlsAllocState->GetDebugInfo()).data());
     state->ReturnBlock(header, header->Capacity);
-
-    // Now header is poisoned.
 
     if (header == state->CurrentPages[(TMemorySubPoolIdx)mPool]) {
         state->CurrentPages[(TMemorySubPoolIdx)mPool] = &TAllocState::EmptyPageHeader;
@@ -281,7 +276,6 @@ void* MKQLArrowAllocate(const ui64 size) {
     } else {
 #endif
         ptr = GetAlignedPage(fullSize);
-        ASAN_UNPOISON_MEMORY_REGION(ptr, fullSize);
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     }
 #endif

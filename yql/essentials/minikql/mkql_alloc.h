@@ -78,8 +78,6 @@ struct TAllocState : public TAlignedPagePool
             return;
         }
 #endif
-
-        ASAN_POISON_MEMORY_REGION(ptr, size);
         Free(ptr, size);
     }
 
@@ -605,7 +603,6 @@ public:
             for (ui32 objIndex = 0; objIndex < OBJECTS_PER_PAGE; ++objIndex) {
                 auto* ptr = ObjectAt(Pages[i], objIndex);
                 ptr->~T();
-                ASAN_POISON_MEMORY_REGION(ptr, sizeof(T));
             }
 
             Pool.ReturnPage(Pages[i]);
@@ -615,7 +612,6 @@ public:
             for (ui32 objIndex = 0; objIndex < IndexInLastPage; ++objIndex) {
                 auto* ptr = ObjectAt(Pages.back(), objIndex);
                 ptr->~T();
-                ASAN_POISON_MEMORY_REGION(ptr, sizeof(T));
             }
 
             Pool.ReturnPage(Pages.back());

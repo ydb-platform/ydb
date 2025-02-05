@@ -388,6 +388,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         HeadKeys.clear();
     }
 
+    // New blocks have been recorded. You can now delete the keys of the repackaged blocks.
     DefferedKeysForDeletion.clear();
 
     if (NewHeadKey.Size > 0) {

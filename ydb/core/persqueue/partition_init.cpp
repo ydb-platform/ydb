@@ -575,6 +575,9 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     auto& gapSize = Partition()->GapSize;
     auto& bodySize = Partition()->BodySize;
 
+    // If there are multiple keys for a message, then only the key that contains more messages remains.
+    //
+    // Extra keys will be added to the queue for deletion.
     const auto actualKeys = FilterBlobsMetaData(range,
                                                 PartitionId());
 

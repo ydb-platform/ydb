@@ -2,11 +2,12 @@
 
 ## Включение аутентификации
 
-Аутентификация всегда включена при использовании [Kafka API в Yandex Cloud](https://yandex.cloud/ru/docs/data-streams/kafkaapi/auth)
-
 При [самостоятельном развертывании YDB](../../quickstart.md) по умолчанию используется [анонимная аутентификация](../../security/authentication.md#anonymous)
 , не требующая логина-пароля.
+
 Чтобы включить обязательную аутентификацию, следуйте инструкции в статье [Аутентификация](../../security/authentication.md#static-credentials).
+
+Аутентификация всегда включена при использовании [Kafka API в Yandex Cloud](https://yandex.cloud/ru/docs/data-streams/kafkaapi/auth)
 
 ## Механизм аутентификации
 

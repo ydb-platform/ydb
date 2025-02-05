@@ -2,11 +2,11 @@
 
 ## Enabling authentication
 
-Authentication is always enabled when using the [Kafka API in Yandex Cloud](https://yandex.cloud/en/docs/data-streams/kafkaapi/auth).
+When you run [a single-node local {{ ydb-short-name }} cluster](../../quickstart.md), [anonymous authentication](../../security/authentication.md#anonymous) is used by default. It doesn't require a username and password.
 
-When you run [a single-node local {{ ydb-short-name }} cluster](../../quickstart.md), [anonymous authentication](../../security/authentication.md#anonymous) is used by default.
-It doesn't require a username and password.
 To require authentication see [Authentication](../../security/authentication.md#static-credentials).
+
+Authentication is always enabled when using the [Kafka API in Yandex Cloud](https://yandex.cloud/en/docs/data-streams/kafkaapi/auth).
 
 ## How does authentication work in the Kafka API?
 

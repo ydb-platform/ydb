@@ -1221,7 +1221,7 @@ public:
 
     };
 
-    static constexpr ui64 NumberOfSpillingBuckets_ = 10;
+    static constexpr ui64 NumberOfSpillingBuckets_ = 12;
     static constexpr ui64 BucketSizeLimit_ = 1_MB;
     std::deque<TSpillingBucket> SpillingBuckets_;
 
@@ -1332,7 +1332,23 @@ public:
 
         SpillingBuckets_[bucketId].Rows += SpillingBuckets_[bucketId].TmpRows;
         SpillingBuckets_[bucketId].TmpRows = 0;
+        DumpState();
     }   
+
+    void DumpState() {
+        return;
+        std::cout << "# " << TlsAllocState->GetUsed() << " " << TlsAllocState->GetLimit() << " ";
+
+        // if constexpr (!InlineAggState) {
+        //     SpillingHashFixedMapIt_ = HashFixedMap_->Begin();
+        // } else {
+        //     SpillingHashMapIt_ = HashMap_->Begin();
+        // }
+        for (const auto& bucket : SpillingBuckets_) {
+            std::cout << bucket.GetSize() << " ";
+        }
+        std::cout << std::endl;
+    }
 
     bool HasFullSpillingBuckets() {
         for (const auto& bucket : SpillingBuckets_) {
@@ -1395,12 +1411,14 @@ public:
             }
 
             if (HasFullSpillingBuckets()) {
+                DumpState();
                 iterateBatch();
                 return false;
                 
             }
 
             if (itersLen == iters.size()) {
+                DumpState();
                 iterateBatch();
                 itersLen = 0;
             }
@@ -1487,6 +1505,7 @@ public:
 
             std::cerr << "ProcessingLoaded" << std::endl;
             SpillingProcessInput(data, LoadingBucket);
+            DumpState();
         }
         while (SpillingBuckets_[LoadingBucket].SpillingKeys_.empty()) {
             LoadingBucket++;

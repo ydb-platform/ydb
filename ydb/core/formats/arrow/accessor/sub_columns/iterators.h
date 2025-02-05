@@ -245,9 +245,6 @@ public:
     void ReadRecord(const ui32 recordIndex, const TStartRecordActor& startRecordActor, const TKVActor& kvActor,
         const TFinishRecordActor& finishRecordActor) {
         while (SortedIterators.size()) {
-            if (SortedIterators.front()->GetRecordIndex() > recordIndex) {
-                return;
-            }
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() < recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();

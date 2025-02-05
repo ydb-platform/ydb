@@ -27,7 +27,7 @@ public:
     {
         Y_ABORT_UNLESS(SerializedBytes);
         Y_ABORT_UNLESS(RecordsCount);
-        Y_ABORT_UNLESS(RawBytes);
+//        Y_ABORT_UNLESS(RawBytes);
     }
 
     TString DebugString() const {

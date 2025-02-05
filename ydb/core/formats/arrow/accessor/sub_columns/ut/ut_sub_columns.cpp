@@ -68,6 +68,24 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         AFL_VERIFY(PrintBinaryJsons(arrData->GetChunkedArray()) == R"([[{"a":"1","b":"1","c":"111"},null,{"a1":"2","b":"2","c":"222"},{"a":"3","b":"3","c":"333"},null,{"a":"5","b1":"5"}]])")(
                 "string", PrintBinaryJsons(arrData->GetChunkedArray()));
         {
+            auto arrSlice = arrData->ISlice(0, 6);
+            AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[{"a":"1","b":"1","c":"111"},null,{"a1":"2","b":"2","c":"222"},{"a":"3","b":"3","c":"333"},null,{"a":"5","b1":"5"}]])")(
+                    "string", PrintBinaryJsons(arrSlice->GetChunkedArray()));
+        }
+        {
+            auto arrSlice = arrData->ISlice(0, 5);
+            AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[{"a":"1","b":"1","c":"111"},null,{"a1":"2","b":"2","c":"222"},{"a":"3","b":"3","c":"333"},null]])")(
+                "string", PrintBinaryJsons(arrSlice->GetChunkedArray()));
+        }
+        {
+            auto arrSlice = arrData->ISlice(0, 0);
+            AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([])")("string", PrintBinaryJsons(arrSlice->GetChunkedArray()));
+            AFL_VERIFY(arrSlice->DebugJson()["internal"]["columns_data"]["stats"].GetStringRobust() == R"({"accessor":[],"size":[],"key_names":[],"records":[]})")
+            ("string", arrSlice->DebugJson().GetStringRobust());
+            AFL_VERIFY(arrSlice->DebugJson()["internal"]["others_data"]["stats"].GetStringRobust() == R"({"accessor":[],"size":[],"key_names":[],"records":[]})")
+            ("string", arrSlice->DebugJson().GetStringRobust());
+        }
+        {
             auto arrSlice = arrData->ISlice(0, 2);
             AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[{"a":"1","b":"1","c":"111"},null]])")(
                 "string", PrintBinaryJsons(arrSlice->GetChunkedArray()));

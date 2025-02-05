@@ -25,8 +25,6 @@ std::optional<ui32> FindUpperOrEqualPosition(const TArray& arr, const TValue val
         return std::nullopt;
     } else if (val == left) {
         return 0;
-    } else if (val == right) {
-        return arr.length() - 1;
     }
     ui32 idxLeft = 0;
     ui32 idxRight = arr.length() - 1;

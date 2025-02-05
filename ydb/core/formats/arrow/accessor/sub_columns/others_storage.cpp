@@ -76,6 +76,9 @@ TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishC
 
 TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSettings& settings) const {
     AFL_VERIFY(Records->GetColumnsCount() == 3);
+    if (!count) {
+        return TOthersData::BuildEmpty();
+    }
     TOthersData::TIterator itOthersData = BuildIterator();
     std::optional<ui32> startPosition = itOthersData.FindPosition(offset);
     std::optional<ui32> finishPosition = itOthersData.FindPosition(offset + count);
@@ -121,7 +124,8 @@ TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSetti
         auto recordIndexes = NArrow::FinishBuilder(std::move(recordIndexBuilder));
         auto keyIndexes = NArrow::FinishBuilder(std::move(keyIndexBuilder));
         std::vector<std::shared_ptr<IChunkedArray>> arrays = { std::make_shared<TTrivialArray>(recordIndexes),
-            std::make_shared<TTrivialArray>(keyIndexes), GetValuesArray()->ISlice(*startPosition, *finishPosition - *startPosition) };
+            std::make_shared<TTrivialArray>(keyIndexes),
+            GetValuesArray()->ISlice(*startPosition, finishPosition.value_or(GetValuesArray()->GetRecordsCount()) - *startPosition) };
         auto sliceRecords = std::make_shared<TGeneralContainer>(GetSchema(), std::move(arrays));
         return TOthersData(sliceStats, sliceRecords);
     }

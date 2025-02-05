@@ -281,6 +281,7 @@ public:
                 if (domainRowset.HaveValue<Schema::SubDomain::ScaleRecommenderPolicies>()) {
                     domain.SetScaleRecommenderPolicies(domainRowset.GetValue<Schema::SubDomain::ScaleRecommenderPolicies>());
                 }
+                domain.Stopped = domainRowset.GetValueOrDefault<Schema::SubDomain::Stopped>();
 
                 if (!domainRowset.Next())
                     return false;

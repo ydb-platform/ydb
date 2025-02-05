@@ -17,7 +17,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 ) {
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
-    
+
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
 

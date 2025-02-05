@@ -1,3 +1,4 @@
+#include "flat_executor.h"
 #include "flat_executor_bootlogic.h"
 #include "flat_executor_txloglogic.h"
 #include "flat_executor_borrowlogic.h"
@@ -3545,7 +3546,6 @@ void TExecutor::UpdateUsedTabletMemory() {
 void TExecutor::UpdateCounters(const TActorContext &ctx) {
     TAutoPtr<TTabletCountersBase> executorCounters;
     TAutoPtr<TTabletCountersBase> externalTabletCounters;
-    TAutoPtr<TTabletCountersBase> externalTabletSysCounters;
 
     if (CounterEventsInFlight.RefCount() == 1) {
         UpdateUsedTabletMemory();
@@ -3667,11 +3667,6 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
             AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
         }
 
-        if (SysCounters) {
-            externalTabletSysCounters = SysCounters->MakeDiffForAggr(*SysCountersBaseline);
-            SysCounters->RememberCurrentStateAsBaseline(*SysCountersBaseline);
-        }
-
         // tablet id + tablet type
         ui64 tabletId = Owner->TabletID();
         auto tabletType = Owner->TabletType();
@@ -3679,7 +3674,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters, externalTabletSysCounters));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
 
         if (ResourceMetrics) {
             ResourceMetrics->TryUpdate(ctx);
@@ -4033,11 +4028,6 @@ void TExecutor::RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                 AppCounters->OutputHtml(str);
             }
 
-            if (SysCounters) {
-                TAG(TH3) {str << "Sys counters";}
-                SysCounters->OutputHtml(str);
-            }
-
             if (ResourceMetrics) {
                 str << NMetrics::AsHTML(*ResourceMetrics);
             }
@@ -4208,12 +4198,6 @@ void TExecutor::RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> app
     }
 }
 
-void TExecutor::RegisterExternalTabletSysCounters(THolder<TTabletCountersBase> sysCounters) {
-    SysCounters = std::move(sysCounters);
-    SysCountersBaseline = MakeHolder<TTabletCountersBase>();
-    SysCounters->RememberCurrentStateAsBaseline(*SysCountersBaseline);
-}
-
 void TExecutor::GetTabletCounters(TEvTablet::TEvGetCounters::TPtr &ev) {
     TAutoPtr<TEvTablet::TEvGetCountersResponse> response = new TEvTablet::TEvGetCountersResponse();
     Counters->OutputProto(*response->Record.MutableTabletCounters()->MutableExecutorCounters());
@@ -4239,6 +4223,10 @@ void TExecutor::SendUserAuxUpdateToFollowers(TString upd, const TActorContext &c
 
 NMetrics::TResourceMetrics* TExecutor::GetResourceMetrics() const {
     return ResourceMetrics.Get();
+}
+
+TExecutorCounters* TExecutor::GetCounters() {
+    return Counters.Get();
 }
 
 void TExecutor::ReadResourceProfile() {

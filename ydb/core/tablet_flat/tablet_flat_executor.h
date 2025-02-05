@@ -27,6 +27,7 @@ class TTransactionContext;
 class TExecutor;
 struct TPageCollectionTxEnv;
 struct TSeat;
+class TExecutorCounters;
 
 class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend class TExecutor;
@@ -604,7 +605,6 @@ namespace NFlatExecutorSetup {
         virtual void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr&) const = 0;
         virtual void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const = 0;
         virtual void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) = 0;
-        virtual void RegisterExternalTabletSysCounters(THolder<TTabletCountersBase> sysCounters) = 0;
         virtual void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr&) = 0;
 
         virtual void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) = 0;
@@ -622,6 +622,7 @@ namespace NFlatExecutorSetup {
 
         virtual const TExecutorStats& GetStats() const = 0;
         virtual NMetrics::TResourceMetrics* GetResourceMetrics() const = 0;
+        virtual TExecutorCounters* GetCounters() = 0;
 
         /* This stange looking functionallity probably should be dropped */
 

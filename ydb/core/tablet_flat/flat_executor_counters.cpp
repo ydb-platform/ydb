@@ -108,11 +108,4 @@ TExecutorCounters::TExecutorCounters()
     Percentile()[TX_PERCENTILE_COMMIT_REDO_BYTES].Initialize(txCommitSize, false);
 }
 
-const char* TTabletSysCounters::SimpleCounterNames[TTabletSysCounters::SIMPLE_COUNTER_SIZE] = 
-    {TABLET_SYS_SIMPLE_COUNTERS_MAP(COUNTER_TEXT_ARRAY)};
-
-TTabletSysCounters::TTabletSysCounters()
-    : TTabletCountersBase(SIMPLE_COUNTER_SIZE, 0, 0, SimpleCounterNames, nullptr, nullptr)
-{
-}
 }}

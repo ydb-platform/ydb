@@ -70,6 +70,7 @@ namespace NTabletFlatExecutor {
     XX(DB_COMMITTED_TX_COUNT, "DbCommittedTxCount") \
     XX(DB_REMOVED_TX_COUNT, "DbRemovedTxCount") \
     XX(DB_REMOVED_COMMITTED_TXS, "DbRemovedCommittedTxs") \
+    XX(TABLET_START_TIME_US, "StartTimeUs") \
 
 // don't change order!
 #define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \
@@ -140,7 +141,7 @@ namespace NTabletFlatExecutor {
     XX(TX_PERCENTILE_TABLET_BYTES_READ, "HIST(TabletBytesRead)") \
     XX(TX_PERCENTILE_CONSUMED_CPU, "HIST(ConsumedCPU)") \
     XX(TX_PERCENTILE_FOLLOWERSYNC_LATENCY, "FollowerSyncLatency") \
-    XX(TX_PERCENTILE_COMMIT_REDO_BYTES, "TxCommitRedoBytes")
+    XX(TX_PERCENTILE_COMMIT_REDO_BYTES, "TxCommitRedoBytes") \
 
 class TExecutorCounters : public TTabletCountersBase {
 public:
@@ -163,20 +164,6 @@ public:
     static const char* PercentileCounterNames[PERCENTILE_COUNTER_SIZE];
 
     TExecutorCounters();
-};
-
-#define TABLET_SYS_SIMPLE_COUNTERS_MAP(XX) \
-    XX(START_TIME_US, "StartTimeUs") \
-
-class TTabletSysCounters : public TTabletCountersBase {
-public:
-    enum ESimpleCounter {
-        TABLET_SYS_SIMPLE_COUNTERS_MAP(ENUM_VALUE_GEN_NO_VALUE)
-        SIMPLE_COUNTER_SIZE
-    };
-    static const char* SimpleCounterNames[SIMPLE_COUNTER_SIZE];
-
-    TTabletSysCounters();
 };
 
 }}

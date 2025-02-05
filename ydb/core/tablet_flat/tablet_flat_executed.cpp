@@ -164,8 +164,9 @@ void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx, TString &
 
 void TTabletExecutedFlat::ReportStartTime() {
     TDuration startTime = TAppData::TimeProvider->Now() - StartTime0;
-    if (Counters) {
-        Counters->Simple()[TTabletSysCounters::START_TIME_US].Set(startTime.MicroSeconds());
+    auto* counters = Executor()->GetCounters();
+    if (counters) {
+        counters->Simple()[TExecutorCounters::TABLET_START_TIME_US].Set(startTime.MicroSeconds());
     }
 }
 
@@ -175,9 +176,6 @@ void TTabletExecutedFlat::Enqueue(STFUNC_SIG) {
 }
 
 void TTabletExecutedFlat::ActivateExecutor(const TActorContext &ctx) {
-    THolder<TTabletCountersBase> countersPtr = MakeHolder<TTabletSysCounters>();
-    Counters = countersPtr.get();
-    Executor()->RegisterExternalTabletSysCounters(std::move(countersPtr));
     OnActivateExecutor(ctx);
 }
 

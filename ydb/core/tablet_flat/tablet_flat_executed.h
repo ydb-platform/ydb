@@ -116,7 +116,6 @@ private:
     IExecutor *Executor0;
     TInstant StartTime0;
     TSharedQuotaPtr TxCacheQuota;
-    TTabletCountersBase* Counters = nullptr;
 };
 
 }}

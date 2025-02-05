@@ -50,17 +50,15 @@ struct TEvTabletCounters {
         const TPathId TenantPathId;
         TAutoPtr<TTabletCountersBase> ExecutorCounters;
         TAutoPtr<TTabletCountersBase> AppCounters;
-        TAutoPtr<TTabletCountersBase> SysCounters;
         TIntrusivePtr<TInFlightCookie> InFlightCounter;     // Used to detect when previous event has been consumed by the aggregator
 
         TEvTabletAddCounters(TIntrusivePtr<TInFlightCookie> inFlightCounter, ui64 tabletID, TTabletTypes::EType tabletType, TPathId tenantPathId,
-            TAutoPtr<TTabletCountersBase> executorCounters, TAutoPtr<TTabletCountersBase> appCounters, TAutoPtr<TTabletCountersBase> sysCounters)
+            TAutoPtr<TTabletCountersBase> executorCounters, TAutoPtr<TTabletCountersBase> appCounters)
             : TabletID(tabletID)
             , TabletType(tabletType)
             , TenantPathId(tenantPathId)
             , ExecutorCounters(executorCounters)
             , AppCounters(appCounters)
-            , SysCounters(sysCounters)
             , InFlightCounter(inFlightCounter)
         {}
     };

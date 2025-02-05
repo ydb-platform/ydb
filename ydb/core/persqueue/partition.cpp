@@ -475,15 +475,10 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     }
 
     const auto& lastKey = DataKeysBody.front().Key;
-    PQ_LOG_D("lastKey=" << lastKey.ToString());
 
     StartOffset = lastKey.GetOffset();
     if (lastKey.GetPartNo() > 0) {
         ++StartOffset;
-
-        if (StartOffset == EndOffset) {
-            DataKeysBody.pop_front();
-        }
     }
 
     Y_UNUSED(request);
@@ -2103,6 +2098,8 @@ void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& requ
 
 TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
 {
+    // The number of links counts is `std::shared_ptr'. It is possible to set its own destructor,
+    // which adds the key to the queue for deletion before freeing the memory.
     auto ptr = std::make_unique<TBlobKeyToken>(key);
 
     auto deleter = [this](TBlobKeyToken* token) {

@@ -319,6 +319,13 @@ TFuture<void> TClient::UnfreezeTable(
     return req->Invoke().As<void>();
 }
 
+TFuture<void> TClient::CancelTabletTransition(
+    NTabletClient::TTabletId /*tabletId*/,
+    const TCancelTabletTransitionOptions& /*options*/)
+{
+    ThrowUnimplemented("CancelTabletTransition");
+}
+
 TFuture<void> TClient::ReshardTable(
     const TYPath& path,
     const std::vector<TLegacyOwningKey>& pivotKeys,
@@ -1515,6 +1522,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     }
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
+    }
+    if (options.OperationIncarnation) {
+        req->set_operation_incarnation(*options.OperationIncarnation);
     }
     if (options.FromTime) {
         req->set_from_time(NYT::ToProto(*options.FromTime));

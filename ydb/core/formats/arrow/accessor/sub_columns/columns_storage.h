@@ -48,12 +48,12 @@ public:
                 AFL_VERIFY(CurrentAddress.GetPosition() == 0);
                 AFL_VERIFY(CurrentAddress.GetArray()->type()->id() == arrow::utf8()->id());
                 CurrentArray = std::static_pointer_cast<arrow::StringArray>(CurrentAddress.GetArray());
-                if (ChunkedArray->GetType() == IChunkedArray::EType::Array) {
+                if (ChunkedArray->GetTypeDeep() == IChunkedArray::EType::Array) {
                     if (CurrentArray->IsNull(0)) {
                         Next();
                     }
                     break;
-                } else if (ChunkedArray->GetType() == IChunkedArray::EType::SparsedArray) {
+                } else if (ChunkedArray->GetTypeDeep() == IChunkedArray::EType::SparsedArray) {
                     if (CurrentArray->IsNull(0)) {
                         CurrentIndex += CurrentAddress.GetArray()->length();
                     } else {

@@ -451,6 +451,10 @@ public:
         return GetArray(std::optional<TAddressChain>(), position, selfPtr);
     }
 
+    virtual EType GetTypeDeep() const {
+        return GetType();
+    }
+
     TFullDataAddress GetChunk(const std::optional<TAddressChain>& chunkCurrent, const ui64 position) const;
 
     IChunkedArray(const ui64 recordsCount, const EType type, const std::shared_ptr<arrow::DataType>& dataType)

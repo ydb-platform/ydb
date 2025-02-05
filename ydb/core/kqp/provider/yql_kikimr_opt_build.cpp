@@ -683,13 +683,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         return true;
     }
 
-    if (auto maybeCommit = node.Maybe<TCoCommit>()) {
-        auto commit = maybeCommit.Cast();
-
-        if (commit.DataSink().Maybe<TKiDataSink>() && checkDataSink(commit.DataSink().Cast<TKiDataSink>())) {
-            txRes.Sync.push_back(commit);
-        }
-
+    if (node.Maybe<TCoCommit>()) {
         return true;
     }
 
@@ -707,7 +701,6 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
     }
 
     if (node.Ref().IsCallable(ConfigureName)) {
-        txRes.Sync.push_back(node);
         return true;
     }
 
@@ -740,19 +733,39 @@ bool IsKikimrPureNode(const TExprNode::TPtr& node) {
 bool ExploreTx(TExprBase root, TExprContext& ctx, const TKiDataSink& dataSink, TKiExploreTxResults& txRes,
     TIntrusivePtr<TKikimrTablesData> tablesData, TTypeAnnotationContext& types)
 {
+    const auto preFunc = [&dataSink, &txRes](const TExprNode::TPtr& node) {
+        if (const auto maybeCommit = TExprBase(node).Maybe<TCoCommit>()) {
+            const auto commit = maybeCommit.Cast();
+            if (commit.DataSink().Maybe<TKiDataSink>() && commit.DataSink().Cast<TKiDataSink>().Raw() == dataSink.Raw()) {
+                txRes.Sync.push_back(commit);
+                return false;
+            }
+            return true;
+        }
+
+        if (node->IsCallable(ConfigureName)) {
+            txRes.Sync.push_back(TExprBase(node));
+            return false;
+        }
+
+        return true;
+    };
+
     bool hasErrors = false;
-    VisitExpr(root.Ptr(), {}, [&hasErrors, &ctx, &dataSink, &txRes, tablesData, &types](const TExprNode::TPtr& node) {
+    const auto postFunc = [&hasErrors, &ctx, &dataSink, &txRes, tablesData, &types](const TExprNode::TPtr& node) {
         if (hasErrors) {
             return false;
         }
 
-        if (!IsKikimrPureNode(node) && !ExploreNode(TExprBase(node), ctx, dataSink, txRes, tablesData, types)) {
+        if (!ExploreNode(TExprBase(node), ctx, dataSink, txRes, tablesData, types) && !IsKikimrPureNode(node)) {
             hasErrors = true;
             return false;
         }
 
         return true;
-    });
+    };
+
+    VisitExpr(root.Ptr(), preFunc, postFunc);
 
     return !hasErrors;
 }

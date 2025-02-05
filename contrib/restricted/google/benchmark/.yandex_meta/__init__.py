@@ -77,7 +77,6 @@ benchmark = CMakeNinjaNixProject(
     nixattr="gbenchmark",
     addincl_global={".": {"./include"}},
     disable_includes=[
-        "emscripten.h",
         "kstat.h",
         "qurt.h",
         "perfmon/",

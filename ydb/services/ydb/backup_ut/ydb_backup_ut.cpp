@@ -6,13 +6,14 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb-cpp-sdk/client/export/export.h>
 #include <ydb-cpp-sdk/client/import/import.h>
 #include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/value/value.h>
-#include <ydb-cpp-sdk/client/query/client.h>
 
 #include <ydb/library/backup/backup.h>
 
@@ -745,6 +746,56 @@ void TestTopicSettingsArePreserved(
     checkDescription(DescribeTopic(topicClient, topic), DEBUG_HINT);
 }
 
+void CreateCoordinationNode(
+    NCoordination::TClient& client, const std::string& path, const NCoordination::TCreateNodeSettings& settings)
+{
+    const auto result = client.CreateNode(path, settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+NCoordination::TNodeDescription DescribeCoordinationNode(NCoordination::TClient& client, const std::string& path) {
+    const auto result = client.DescribeNode(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return result.GetResult();
+}
+
+void DropCoordinationNode(NCoordination::TClient& client, const std::string& path) {
+    const auto result = client.DropNode(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void TestCoordinationNodeSettingsArePreserved(
+    const std::string& path,
+    NCoordination::TClient& nodeClient,
+    TBackupFunction&& backup,
+    TRestoreFunction&& restore
+) {
+    const auto settings = NCoordination::TCreateNodeSettings()
+        .SelfCheckPeriod(TDuration::Seconds(2))
+        .SessionGracePeriod(TDuration::Seconds(30))
+        .ReadConsistencyMode(NCoordination::EConsistencyMode::STRICT_MODE)
+        .AttachConsistencyMode(NCoordination::EConsistencyMode::STRICT_MODE)
+        .RateLimiterCountersMode(NCoordination::ERateLimiterCountersMode::DETAILED);
+
+    CreateCoordinationNode(nodeClient, path, settings);
+
+    const auto checkDescription = [&](const NCoordination::TNodeDescription& description, const TString& debugHint) {
+        UNIT_ASSERT_VALUES_EQUAL_C(*description.GetSelfCheckPeriod(), *settings.SelfCheckPeriod_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(*description.GetSessionGracePeriod(), *settings.SessionGracePeriod_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetReadConsistencyMode(), settings.ReadConsistencyMode_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetAttachConsistencyMode(), settings.AttachConsistencyMode_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetRateLimiterCountersMode(), settings.RateLimiterCountersMode_, debugHint);
+    };
+    checkDescription(DescribeCoordinationNode(nodeClient, path), DEBUG_HINT);
+
+    backup();
+
+    DropCoordinationNode(nodeClient, path);
+
+    restore();
+    checkDescription(DescribeCoordinationNode(nodeClient, path), DEBUG_HINT);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -1016,6 +1067,23 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    void TestKesusBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NCoordination::TClient nodeClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        const std::string kesus = "/Root/kesus";
+
+        TestCoordinationNodeSettingsArePreserved(
+            kesus,
+            nodeClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
@@ -1053,7 +1121,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeResourcePool:
                 break; // https://github.com/ydb-platform/ydb/issues/10440
             case EPathTypeKesus:
-                break; // https://github.com/ydb-platform/ydb/issues/10444
+                TestKesusBackupRestore();
+                break;
             case EPathTypeColumnStore:
             case EPathTypeColumnTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10459

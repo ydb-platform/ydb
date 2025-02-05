@@ -413,7 +413,7 @@ private:
 
             hFunc(TEvWorker::TEvHandshake, HoldHandle);
             hFunc(TEvWorker::TEvData, HoldHandle);
-            sFunc(TEvents::TEvWakeup, SendS3Request);
+            //sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -489,8 +489,6 @@ private:
 
         if (TableVersion && TableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
             // TODO ????
-            Y_ABORT_UNLESS(Initialized);
-            Resolving = false;
             return CompileTransferLambda();
         }
 
@@ -527,7 +525,7 @@ private:
 
             hFunc(TEvWorker::TEvHandshake, HoldHandle);
             hFunc(TEvWorker::TEvData, HoldHandle);
-            sFunc(TEvents::TEvWakeup, SendS3Request);
+            //sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -583,7 +581,7 @@ private:
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);
 
-            sFunc(TEvents::TEvWakeup, SendS3Request);
+            //sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -638,7 +636,7 @@ private:
             hFunc(TEvents::TEvCompleted, Handle);
             hFunc(TEvWorker::TEvHandshake, HoldHandle);
             hFunc(TEvWorker::TEvData, HoldHandle);
-            sFunc(TEvents::TEvWakeup, SendS3Request);
+            //sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -709,16 +707,9 @@ private:
         PassAway();
     }
 
-    void SendS3Request() {
-        //Y_VERIFY(RequestInFlight);
-        //Send(S3Client, new TEvExternalStorage::TEvPutObjectRequest(RequestInFlight->Request, TString(RequestInFlight->Buffer)));
-    }
-
-
     void PassAway() override {
         TActor::PassAway();
     }
-
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -729,13 +720,11 @@ public:
         const NKikimrReplication::TReplicationConfig& config,
         const TPathId& tablePathId,
         const TString& tableName,
-        const TString& writerName,
         const TActorId& compileServiceId)
         : Config(config)
         , TablePathId(tablePathId)
         , CompileServiceId(compileServiceId)
         , TableName(tableName)
-        , WriterName(writerName)
     {}
 
 private:
@@ -746,19 +735,13 @@ private:
     size_t InFlightCompilationId = 0;
 
     ui64 TableVersion = 0;
-    THolder<TKeyDesc> KeyDesc;
-    bool Resolving = false;
-    bool Initialized = false;
 
     ITableKindState::TPtr TableState;
-    
-
     TProgramHolder::TPtr ProgramHolder;
 
-
     mutable TMaybe<TString> LogPrefix;
+
     const TString TableName;
-    const TString WriterName;
 
     TActorId Worker;
     bool Finished = false;
@@ -775,9 +758,9 @@ private:
 }; // TTransferWriter
 
 IActor* CreateTransferWriter(const NKikimrReplication::TReplicationConfig& config,
-    const TPathId& tablePathId, const TString& tableName, const TString& writerName,
+    const TPathId& tablePathId, const TString& tableName,
     const TActorId& compileServiceId) {
-    return new TTransferWriter(config, tablePathId, tableName, writerName, compileServiceId);
+    return new TTransferWriter(config, tablePathId, tableName, compileServiceId);
 }
 
 }

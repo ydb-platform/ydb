@@ -47,11 +47,10 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
 
         const TPathId tablePathId = env.GetPathId("/Root/Table");
         const TString tableName = "/Root/Table";
-        const TString writerName = "writerName";
 
         auto compiler = env.GetRuntime().Register(NFq::NRowDispatcher::CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>()));
 
-        auto writer = env.GetRuntime().Register(CreateTransferWriter(config, tablePathId, tableName, writerName, compiler));
+        auto writer = env.GetRuntime().Register(CreateTransferWriter(config, tablePathId, tableName, compiler));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData("TestSource", {

@@ -1,5 +1,8 @@
 #include "kqp_balance_transaction.h"
 #include "ydb/core/kqp/common/simple/services.h"
+#include "kafka_consumer_groups_metadata_initializers.h"
+#include "kafka_consumer_members_metadata_initializers.h"
+
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -60,22 +63,20 @@ void TKqpTxHelper::SendRequest(THolder<NKqp::TEvKqp::TEvQueryRequest> request, u
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), request.Release(), 0, cookie);
 }
 
-void TKqpTxHelper::SendYqlRequest(TString yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const NActors::TActorContext& ctx) {
+void TKqpTxHelper::SendYqlRequest(TString yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const NActors::TActorContext& ctx, bool commit) {
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
     ev->Record.MutableRequest()->SetQuery(yqlRequest);
-
     ev->Record.MutableRequest()->SetDatabase(DataBase);
     ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
-    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(false);
-    ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(commit);
+    ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
     ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
 
     ev->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(sqlParams)));
-
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, cookie);
 }
 
@@ -89,6 +90,18 @@ void TKqpTxHelper::CommitTx(ui64 cookie, const NActors::TActorContext& ctx) {
     commit->Record.MutableRequest()->SetDatabase(DataBase);
 
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), commit.Release(), 0, cookie);
+}
+
+void TKqpTxHelper::SendInitTablesRequest(const TActorContext& ctx) {
+    ctx.Send(
+        NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()),
+        new NMetadata::NProvider::TEvPrepareManager(NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant())
+    );
+
+    ctx.Send(
+        NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()),
+        new NMetadata::NProvider::TEvPrepareManager(NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant())
+    );
 }
 
 }  // namespace NKikimr::NGRpcProxy::V1

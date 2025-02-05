@@ -3,8 +3,6 @@
 namespace NKafka {
 static constexpr TDuration WAKEUP_INTERVAL = TDuration::Seconds(1);
 static constexpr TDuration LOCK_PARTITION_DELAY = TDuration::Seconds(3);
-static const TString SUPPORTED_ASSIGN_STRATEGY = "roundrobin";
-static const TString SUPPORTED_JOIN_GROUP_PROTOCOL = "consumer";
 
 NActors::IActor* CreateKafkaReadSessionActor(const TContext::TPtr context, ui64 cookie) {
     return new TKafkaReadSessionActor(context, cookie);
@@ -58,8 +56,8 @@ void TKafkaReadSessionActor::CloseReadSession(const TActorContext& /*ctx*/) {
 void TKafkaReadSessionActor::HandleJoinGroup(TEvKafka::TEvJoinGroupRequest::TPtr ev, const TActorContext& ctx) {
     auto joinGroupRequest = ev->Get()->Request;
 
-    if (JoinGroupCorellationId != 0) {
-        JoinGroupCorellationId = 0;
+    if (CorellationId != 0) {
+        CorellationId = 0;
         SendJoinGroupResponseFail(ctx, ev->Get()->CorrelationId, NextRequestError.Code, "JOIN_GROUP request already inflight");
         CloseReadSession(ctx);
         return;
@@ -112,7 +110,7 @@ void TKafkaReadSessionActor::HandleJoinGroup(TEvKafka::TEvJoinGroupRequest::TPtr
                 return;
             }
 
-            JoinGroupCorellationId = ev->Get()->CorrelationId;
+            CorellationId = ev->Get()->CorrelationId;
             AuthAndFindBalancers(ctx);
             break;
         }
@@ -442,7 +440,7 @@ void TKafkaReadSessionActor::AuthAndFindBalancers(const TActorContext& ctx) {
 
     TopicsToConverter = topicHandler->GetReadTopicsList(TopicsToReadNames, false, Context->DatabasePath);
     if (!TopicsToConverter.IsValid) {
-        SendJoinGroupResponseFail(ctx, JoinGroupCorellationId, INVALID_REQUEST, TStringBuilder() << "topicsToConverter is not valid");
+        SendJoinGroupResponseFail(ctx, CorellationId, INVALID_REQUEST, TStringBuilder() << "topicsToConverter is not valid");
         return;
     }
 
@@ -452,10 +450,10 @@ void TKafkaReadSessionActor::AuthAndFindBalancers(const TActorContext& ctx) {
 }
 
 void TKafkaReadSessionActor::HandleBalancerError(TEvPersQueue::TEvError::TPtr& ev, const TActorContext& ctx) {
-    if (JoinGroupCorellationId != 0) {
-        SendJoinGroupResponseFail(ctx, JoinGroupCorellationId, ConvertErrorCode(ev->Get()->Record.GetCode()), ev->Get()->Record.GetDescription());
+    if (CorellationId != 0) {
+        SendJoinGroupResponseFail(ctx, CorellationId, ConvertErrorCode(ev->Get()->Record.GetCode()), ev->Get()->Record.GetDescription());
         CloseReadSession(ctx);
-        JoinGroupCorellationId = 0;
+        CorellationId = 0;
     } else {
         NextRequestError.Code = ConvertErrorCode(ev->Get()->Record.GetCode());
         NextRequestError.Message = ev->Get()->Record.GetDescription();
@@ -479,17 +477,17 @@ void TKafkaReadSessionActor::HandleAuthOk(NGRpcProxy::V1::TEvPQProxy::TEvAuthRes
         RegisterBalancerSession(topicInfo.FullConverter->GetInternalName(), topicInfo.PipeClient, topicInfo.Groups, ctx);
     }
 
-    if (JoinGroupCorellationId != 0) {
-        SendJoinGroupResponseOk(ctx, JoinGroupCorellationId);
-        JoinGroupCorellationId = 0;
+    if (CorellationId != 0) {
+        SendJoinGroupResponseOk(ctx, CorellationId);
+        CorellationId = 0;
         ReadStep = WAIT_SYNC_GROUP;
     }
 }
 
 void TKafkaReadSessionActor::HandleAuthCloseSession(NGRpcProxy::V1::TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx) {
-    if (JoinGroupCorellationId != 0) {
-        SendJoinGroupResponseFail(ctx, JoinGroupCorellationId, ConvertErrorCode(ev->Get()->ErrorCode), TStringBuilder() << "auth failed. " << ev->Get()->Reason);
-        JoinGroupCorellationId = 0;
+    if (CorellationId != 0) {
+        SendJoinGroupResponseFail(ctx, CorellationId, ConvertErrorCode(ev->Get()->ErrorCode), TStringBuilder() << "auth failed. " << ev->Get()->Reason);
+        CorellationId = 0;
     }
 
     CloseReadSession(ctx);

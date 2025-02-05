@@ -1920,6 +1920,158 @@ TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ct
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpRead(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData, bool withSystemColumns)
+{
+
+    auto table = ResolveTable(node->Child(TKqpOpRead::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    YQL_ENSURE(table.second->Metadata, "Expected loaded metadata");
+
+    auto meta = table.second->Metadata;
+
+    auto alias = node->Child(TKqpOpRead::idx_Alias);
+
+    const auto& columns = node->ChildPtr(TKqpOpRead::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, TCoAtomList(columns), withSystemColumns);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
+    TVector<const TItemExprType*> newItemTypes;
+    for (auto t : structItemTypes ) {
+        newItemTypes.push_back(ctx.MakeType<TItemExprType>("_alias_" + TString(alias->Content()) + "." + t->GetName(), t->GetItemType()));
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "Row type:" << *rowType;
+
+    auto newStructType = ctx.MakeType<TStructExprType>(newItemTypes);
+    node->SetTypeAnn(ctx.MakeType<TListExprType>(newStructType));
+
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpEmptySource(const TExprNode::TPtr& input, TExprContext& ctx) {
+
+    TVector<const TItemExprType*> resultItems;
+    auto resultType = ctx.MakeType<TStructExprType>(resultItems);
+
+    input->SetTypeAnn(ctx.MakeType<TListExprType>(resultType));
+
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpMapElement(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMapElement::idx_Input)->GetTypeAnn();
+    const TTypeAnnotationNode* itemType = inputType->Cast<TListExprType>()->GetItemType();
+
+    auto& lambda = input->ChildRef(TKqpOpMapElement::idx_Lambda);
+    if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto lambdaType = lambda->GetTypeAnn();
+    if (!lambdaType) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    input->SetTypeAnn(lambdaType);
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpMap(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
+
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMap::idx_Input)->GetTypeAnn();
+    //YQL_CLOG(TRACE, CoreDq) << "Annotating OpMap, input type:" << *inputType;
+
+    const TTypeAnnotationNode* itemType = inputType->Cast<TListExprType>()->GetItemType();
+    //YQL_CLOG(TRACE, CoreDq) << "item type:" << *itemType;
+
+    TVector<const TItemExprType*> structItemTypes;
+
+    for (size_t idx = 0; idx < input->ChildPtr(TKqpOpMap::idx_MapElements)->ChildrenSize(); idx++) {
+        auto& element = input->ChildPtr(TKqpOpMap::idx_MapElements)->ChildRef(idx);
+        auto variable = element->ChildPtr(TKqpOpMapElement::idx_Variable);
+        auto& lambda = element->ChildRef(TKqpOpMapElement::idx_Lambda);
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto lambdaType = lambda->GetTypeAnn();
+        if (!lambdaType) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        structItemTypes.push_back(ctx.MakeType<TItemExprType>(variable->Content(),lambdaType));
+    }
+
+    auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);
+    const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultItemType);
+
+    input->SetTypeAnn(resultAnn);
+    typesCtx.ExpectedTypes[input->UniqueId()] = resultAnn;
+
+    YQL_CLOG(TRACE, CoreDq) << "Type annotation for OpMap done: " << *resultAnn;
+
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
+
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpFilter::idx_Input)->GetTypeAnn();
+    YQL_CLOG(TRACE, CoreDq) << "Type annotation for OpFilter, inputType: " << *inputType;
+
+    auto itemType = inputType->Cast<TListExprType>()->GetItemType();
+
+    auto& lambda = input->ChildRef(TKqpOpFilter::idx_Lambda);
+
+    if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto lambdaType = lambda->GetTypeAnn();
+    if (!lambdaType) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    //if(!EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx, false)) {
+    //    return IGraphTransformer::TStatus::Error;
+    //}
+
+    input->SetTypeAnn(inputType);
+
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
+    auto rightInputType = input->ChildPtr(TKqpOpJoin::idx_RightInput)->GetTypeAnn();
+
+    auto leftItemType = leftInputType->Cast<TListExprType>()->GetItemType();
+    auto rightItemType = rightInputType->Cast<TListExprType>()->GetItemType();
+
+    TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
+
+    for (auto item : rightItemType->Cast<TStructExprType>()->GetItems()){
+        structItemTypes.push_back(item);
+    }
+
+    auto resultStructType = ctx.MakeType<TStructExprType>(structItemTypes);
+    const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultStructType);
+    input->SetTypeAnn(resultAnn);
+
+    return TStatus::Ok;
+}
+
 } // namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cluster,
@@ -1928,7 +2080,7 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
     TAutoPtr<IGraphTransformer> dqTransformer = CreateDqTypeAnnotationTransformer(typesCtx);
 
     return CreateFunctorTransformer(
-        [cluster, tablesData, dqTransformer, config](const TExprNode::TPtr& input, TExprNode::TPtr& output,
+        [cluster, tablesData, dqTransformer, config, &typesCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output,
             TExprContext& ctx) -> TStatus
         {
             output = input;
@@ -2080,6 +2232,30 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpTableSinkSettings::Match(input.Get())) {
                 return AnnotateTableSinkSettings(input, ctx);
+            }
+
+            if (TKqpOpRead::Match(input.Get())) {
+                return AnnotateOpRead(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
+            }
+
+            if (TKqpOpEmptySource::Match(input.Get())) {
+                return AnnotateOpEmptySource(input, ctx);
+            }
+
+            if (TKqpOpMapElement::Match(input.Get())) {
+                return AnnotateOpMapElement(input, ctx);
+            }
+
+            if (TKqpOpMap::Match(input.Get())) {
+                return AnnotateOpMap(input, ctx, typesCtx);
+            }
+
+            if (TKqpOpFilter::Match(input.Get())) {
+                return AnnotateOpFilter(input, ctx);
+            }
+
+            if (TKqpOpJoin::Match(input.Get())) {
+                return AnnotateOpJoin(input, ctx);
             }
 
             return dqTransformer->Transform(input, output, ctx);

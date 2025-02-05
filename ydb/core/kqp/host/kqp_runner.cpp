@@ -337,9 +337,9 @@ private:
 
         auto newRBOPhysicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
-            .Add(Log("PhysicalOptimize"), "LogPhysicalOptimize")
+            .Add(Log("NewRBOPhysicalOptimize"), "LogNewRBOPhysicalOptimize")
             .AddPreTypeAnnotation()
-            .AddExpressionEvaluation(funcRegistry)
+            //.AddExpressionEvaluation(funcRegistry)
             .AddIOAnnotation()
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(),
                 *typesCtx, Config))

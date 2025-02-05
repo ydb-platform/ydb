@@ -1208,7 +1208,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         auto result = session2.ExecuteDataQuery(R"(
             --!syntax_pg
             SET TablePathPrefix = "/Root/";
-            SELECT foo.id as "id2" FROM foo, bar WHERE foo.id = bar.id and name = 'some_name';
+            SELECT f.id as "id2" FROM foo AS f, bar WHERE f.id = bar.id and name = 'some_name';
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

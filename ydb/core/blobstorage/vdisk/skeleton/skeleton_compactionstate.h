@@ -17,7 +17,7 @@ namespace NKikimr {
             TEvCompactVDisk::EMode Mode;
             TActorId ClientId;
             ui64 ClientCookie = 0;
-            std::unique_ptr<TEvCompactVDiskResult> Reply;
+            std::unique_ptr<IEventBase> Reply;
 
             bool AllDone() const { return !(CompactLogoBlobs || CompactBlocks || CompactBarriers); }
         };

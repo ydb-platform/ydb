@@ -41,9 +41,8 @@
 
 #include <yt/cpp/mapreduce/library/table_schema/protobuf.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-#include <yt/cpp/mapreduce/raw_client/rpc_parameters_serialization.h>
+#include <yt/cpp/mapreduce/http_client/raw_client.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -276,7 +275,7 @@ void TClientBase::Concatenate(
 
 TRichYPath TClientBase::CanonizeYPath(const TRichYPath& path)
 {
-    return NRawClient::CanonizeYPath(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, path);
+    return NRawClient::CanonizeYPath(RawClient_, path);
 }
 
 TVector<TTableColumnarStatistics> TClientBase::GetTableColumnarStatistics(
@@ -1233,7 +1232,7 @@ TAuthorizationInfo TClient::WhoAmI()
     return RequestWithRetry<TAuthorizationInfo>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this] (TMutationId /*mutationId*/) {
-            return RawClient_->WhoAmI();
+            return NRawClient::WhoAmI(Context_);
         });
 }
 
@@ -1360,7 +1359,7 @@ TNode::TListType TClient::SkyShareTable(
         response = RequestWithRetry<NHttpClient::IHttpResponsePtr>(
             ClientRetryPolicy_->CreatePolicyForGenericRequest(),
             [this, &tablePaths, &options] (TMutationId /*mutationId*/) {
-                return RawClient_->SkyShareTable(tablePaths, options);
+                return NRawClient::SkyShareTable(Context_, tablePaths, options);
             });
         TWaitProxy::Get()->Sleep(TDuration::Seconds(5));
     } while (response->GetStatusCode() != 200);

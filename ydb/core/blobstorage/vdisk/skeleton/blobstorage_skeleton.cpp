@@ -107,7 +107,9 @@ namespace NKikimr {
                          OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0,
                          state,
                          replicated,
-                         outOfSpaceFlags));
+                         outOfSpaceFlags,
+                         OverloadHandler ? OverloadHandler->IsThrottling() : false,
+                         OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0));
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }
@@ -243,6 +245,13 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVMovedPatch: receive request;"
                     << " Event# " << ev->Get()->ToString());
+
+            TLogoBlobID patchedBlobId = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetPatchedBlobId());
+            if (patchedBlobId.BlobSize() == 0) {
+                ReplyError(NKikimrProto::ERROR, "Blob size must be non-zero", ev, ctx, TAppData::TimeProvider->Now());
+                return;
+            }
+
             if (!CheckIfWriteAllowed(ev, ctx)) {
                 LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVMovedPatch: is not allowed;"
                         << " Event# " << ev->Get()->ToString());
@@ -512,6 +521,13 @@ namespace NKikimr {
                         << " id# " << id
                         << " Marker# BSVS01");
                 return {NKikimrProto::ERROR, "buffer size mismatch"};
+            }
+
+            if (id.BlobSize() == 0) {
+                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": blob size cannot be 0;"
+                        << " id# " << id
+                        << " Marker# BSVS44");
+                return {NKikimrProto::ERROR, "part size is 0"};
             }
 
             if (bufSize > Config->MaxLogoBlobDataSize) {
@@ -1069,7 +1085,7 @@ namespace NKikimr {
 
             LOG_DEBUG_S(ctx, BS_VDISK_BLOCK, VCtx->VDiskLogPrefix
                     << "TEvVBlock: tabletId# " << tabletId << " gen# " << gen
-                    << " Marker# BSVS14");
+                    << " Marker# BSVS00");
 
             TLsnSeg seg;
             ui32 actGen = 0;
@@ -1689,6 +1705,10 @@ namespace NKikimr {
             if (VDiskCompactionState && !results.empty()) {
                 VDiskCompactionState->Logged(ctx, results.back().Lsn);
             }
+            if (ev->Get()->StatusFlags & ui32(NKikimrBlobStorage::StatusIsValid)) {
+                i64 count = ev->Get()->LogChunkCount;
+                OverloadHandler->SetLogChunkCount(count >= 0 ? (ui32)count : 0);
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -1806,6 +1826,7 @@ namespace NKikimr {
             }
             UpdateReplState();
             RunBalancing(ctx);
+            ProcessShredQ();
         }
 
         void SkeletonErrorState(const TActorContext &ctx,
@@ -2619,6 +2640,61 @@ namespace NKikimr {
             }
         }
 
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Shredding support
+
+        std::deque<std::unique_ptr<IEventHandle>> ShredQ;
+
+        template<typename TEvent>
+        void HandleShredEnqueue(TAutoPtr<TEventHandle<TEvent>> ev) {
+            STLOG(PRI_DEBUG, BS_SHRED, BSSV00, VCtx->VDiskLogPrefix << "enqueued shred event", (Type, ev->GetTypeRewrite()));
+            ShredQ.emplace_back(ev.Release());
+        }
+
+        void ProcessShredQ() {
+            for (auto& ev : std::exchange(ShredQ, {})) {
+                TAutoPtr<IEventHandle> temp(ev.release());
+                Receive(temp);
+            }
+        }
+
+        void HandleShred(NPDisk::TEvPreShredCompactVDisk::TPtr ev) {
+            STLOG(PRI_DEBUG, BS_SHRED, BSSV01, VCtx->VDiskLogPrefix << "processing TEvPreShredCompactVDisk",
+                (ShredGeneration, ev->Get()->ShredGeneration));
+
+            VDiskCompactionState->Setup(TActivationContext::AsActorContext(), LoggedRecsVault.GetLastLsnInFlight(), {
+                .CompactLogoBlobs = true,
+                .CompactBlocks = false,
+                .CompactBarriers = false,
+                .Mode = TEvCompactVDisk::EMode::FULL,
+                .ClientId = ev->Sender,
+                .ClientCookie = ev->Cookie,
+                .Reply = std::make_unique<NPDisk::TEvPreShredCompactVDiskResult>(PDiskCtx->Dsk->Owner,
+                    PDiskCtx->Dsk->OwnerRound, ev->Get()->ShredGeneration, NKikimrProto::OK, TString()),
+            });
+        }
+
+        void HandleShred(NPDisk::TEvShredVDisk::TPtr ev) {
+            STLOG(PRI_DEBUG, BS_SHRED, BSSV02, VCtx->VDiskLogPrefix << "processing TEvShredVDisk",
+                (ShredGeneration, ev->Get()->ShredGeneration));
+            Send(ev->Sender, new NPDisk::TEvShredVDiskResult(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
+                ev->Get()->ShredGeneration, NKikimrProto::OK, TString()), 0, ev->Cookie);
+        }
+
+        void HandleShredError(NPDisk::TEvPreShredCompactVDisk::TPtr ev) {
+            STLOG(PRI_DEBUG, BS_SHRED, BSSV03, VCtx->VDiskLogPrefix << "processing TEvPreShredCompactVDisk in error state",
+                (ShredGeneration, ev->Get()->ShredGeneration));
+            Send(ev->Sender, new NPDisk::TEvPreShredCompactVDiskResult(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
+                ev->Get()->ShredGeneration, NKikimrProto::ERROR, "VDisk is in error state"), 0, ev->Cookie);
+        }
+
+        void HandleShredError(NPDisk::TEvShredVDisk::TPtr ev) {
+            STLOG(PRI_DEBUG, BS_SHRED, BSSV04, VCtx->VDiskLogPrefix << "processing TEvShredVDisk in error state",
+                (ShredGeneration, ev->Get()->ShredGeneration));
+            Send(ev->Sender, new NPDisk::TEvShredVDiskResult(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
+                ev->Get()->ShredGeneration, NKikimrProto::ERROR, "VDisk is in error state"), 0, ev->Cookie);
+        }
+
         // NOTES: we have 4 state functions, one of which is an error state (StateDatabaseError) and
         // others are good: StateLocalRecovery, StateSyncGuidRecovery, StateNormal
         // We switch between states in the following manner:
@@ -2678,6 +2754,8 @@ namespace NKikimr {
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
             hFunc(TEvReplInvoke, HandleReplNotInProgress)
+            hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShredEnqueue)
+            hFunc(NPDisk::TEvShredVDisk, HandleShredEnqueue)
         )
 
         COUNTED_STRICT_STFUNC(StateSyncGuidRecovery,
@@ -2731,6 +2809,8 @@ namespace NKikimr {
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
             hFunc(TEvReplInvoke, HandleReplNotInProgress)
+            hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShredEnqueue)
+            hFunc(NPDisk::TEvShredVDisk, HandleShredEnqueue)
         )
 
         COUNTED_STRICT_STFUNC(StateNormal,
@@ -2801,6 +2881,8 @@ namespace NKikimr {
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
             hFunc(TEvReplInvoke, Handle)
             CFunc(TEvStartBalancing::EventType, RunBalancing)
+            hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShred)
+            hFunc(NPDisk::TEvShredVDisk, HandleShred)
         )
 
         COUNTED_STRICT_STFUNC(StateDatabaseError,
@@ -2828,6 +2910,8 @@ namespace NKikimr {
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
             hFunc(TEvReplInvoke, HandleReplNotInProgress)
+            hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShredError)
+            hFunc(NPDisk::TEvShredVDisk, HandleShredError)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;

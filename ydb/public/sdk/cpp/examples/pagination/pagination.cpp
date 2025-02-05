@@ -1,45 +1,29 @@
 #include "pagination.h"
 
-#include <util/folder/pathsplit.h>
-#include <util/string/printf.h>
+#include <util/string/cast.h>
+
+#include <filesystem>
+#include <format>
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NStatusHelpers;
 
-const ui32 MaxPages = 10;
+const uint32_t MaxPages = 10;
 
-class TYdbErrorException : public yexception {
-public:
-    TYdbErrorException(const TStatus& status)
-        : Status(status) {}
-
-    TStatus Status;
-};
-
-static void ThrowOnError(const TStatus& status) {
-    if (!status.IsSuccess()) {
-        throw TYdbErrorException(status) << status;
-    }
-}
-
-static void PrintStatus(const TStatus& status) {
-    Cerr << "Status: " << status.GetStatus() << Endl;
-    status.GetIssues().PrintTo(Cerr);
-}
-
-static TString JoinPath(const TString& basePath, const TString& path) {
+static std::string JoinPath(const std::string& basePath, const std::string& path) {
     if (basePath.empty()) {
         return path;
     }
 
-    TPathSplitUnix prefixPathSplit(basePath);
-    prefixPathSplit.AppendComponent(path);
+    std::filesystem::path prefixPathSplit(basePath);
+    prefixPathSplit /= path;
 
-    return prefixPathSplit.Reconstruct();
+    return prefixPathSplit;
 }
 
 //! Creates sample table with CrateTable API.
-static void CreateTable(TTableClient client, const TString& path) {
+static void CreateTable(TTableClient client, const std::string& path) {
     ThrowOnError(client.RetryOperationSync([path](TSession session) {
         auto schoolsDesc = TTableBuilder()
             .AddNullableColumn("city", EPrimitiveType::Utf8)
@@ -53,10 +37,10 @@ static void CreateTable(TTableClient client, const TString& path) {
 }
 
 //! Fills sample tables with data in single parameterized data query.
-static TStatus FillTableDataTransaction(TSession& session, const TString& path) {
-    auto query = Sprintf(R"(
+static TStatus FillTableDataTransaction(TSession& session, const std::string& path) {
+    auto query = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $schoolsData AS List<Struct<
             city: Utf8,
@@ -69,7 +53,7 @@ static TStatus FillTableDataTransaction(TSession& session, const TString& path) 
             number,
             address
         FROM AS_TABLE($schoolsData);
-    )", path.c_str());
+    )", path);
 
     auto params = GetTablesDataParams();
 
@@ -80,12 +64,12 @@ static TStatus FillTableDataTransaction(TSession& session, const TString& path) 
 }
 
 //! Shows usage of query paging.
-static TStatus SelectPagingTransaction(TSession& session, const TString& path,
-    ui64 pageLimit, const TString& lastCity, ui32 lastNumber, TMaybe<TResultSet>& resultSet)
+static TStatus SelectPagingTransaction(TSession& session, const std::string& path,
+    uint64_t pageLimit, const std::string& lastCity, uint32_t lastNumber, std::optional<TResultSet>& resultSet)
 {
-    auto query = Sprintf(R"(
+    auto query = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $limit AS Uint64;
         DECLARE $lastCity AS Utf8;
@@ -111,7 +95,7 @@ static TStatus SelectPagingTransaction(TSession& session, const TString& path,
 
         SELECT * FROM $union
         ORDER BY city, number LIMIT $limit;
-    )", path.c_str());
+    )", path);
 
     auto params = session.GetParamsBuilder()
         .AddParam("$limit")
@@ -137,8 +121,8 @@ static TStatus SelectPagingTransaction(TSession& session, const TString& path,
     return result;
 }
 
-bool SelectPaging(TTableClient client, const TString& path, ui64 pageLimit, TString& lastCity, ui32& lastNumber) {
-    TMaybe<TResultSet> resultSet;
+bool SelectPaging(TTableClient client, const std::string& path, uint64_t pageLimit, std::string& lastCity, uint32_t& lastNumber) {
+    std::optional<TResultSet> resultSet;
     ThrowOnError(client.RetryOperationSync([path, pageLimit, &lastCity, lastNumber, &resultSet](TSession session) {
         return SelectPagingTransaction(session, path, pageLimit, lastCity, lastNumber, resultSet);
     }));
@@ -149,14 +133,14 @@ bool SelectPaging(TTableClient client, const TString& path, ui64 pageLimit, TStr
         return false;
     }
     do {
-        lastCity = parser.ColumnParser("city").GetOptionalUtf8().GetRef();
-        lastNumber = parser.ColumnParser("number").GetOptionalUint32().GetRef();
-        Cout << lastCity << ", Школа №" << lastNumber << ", Адрес: " << parser.ColumnParser("address").GetOptionalUtf8() << Endl;
+        lastCity = parser.ColumnParser("city").GetOptionalUtf8().value();
+        lastNumber = parser.ColumnParser("number").GetOptionalUint32().value();
+        std::cout << lastCity << ", Школа №" << lastNumber << ", Адрес: " << parser.ColumnParser("address").GetOptionalUtf8().value_or("(NULL)") << std::endl;
     } while (parser.TryNextRow());
     return true;
 }
 
-bool Run(const TDriver& driver, const TString& path) {
+bool Run(const TDriver& driver, const std::string& path) {
     TTableClient client(driver);
 
     try {
@@ -166,24 +150,23 @@ bool Run(const TDriver& driver, const TString& path) {
             return FillTableDataTransaction(session, path);
         }));
 
-        ui64 limit = 3;
-        TString lastCity;
-        ui32 lastNumber = 0;
-        ui32 page = 0;
+        uint64_t limit = 3;
+        std::string lastCity;
+        uint32_t lastNumber = 0;
+        uint32_t page = 0;
         bool pageNotEmpty = true;
 
-        Cout << "> Pagination, Limit=" << limit << Endl;
+        std::cout << "> Pagination, Limit=" << limit << std::endl;
 
         // show first MaxPages=10 pages:
         while (pageNotEmpty && page <= MaxPages) {
             ++page;
-            Cout << "> Page " << page << ":" << Endl;
+            std::cout << "> Page " << page << ":" << std::endl;
             pageNotEmpty = SelectPaging(client, path, limit, lastCity, lastNumber);
         }
     }
     catch (const TYdbErrorException& e) {
-        Cerr << "Execution failed due to fatal error:" << Endl;
-        PrintStatus(e.Status);
+        std::cerr << "Execution failed due to fatal error: " << e.what() << std::endl;
         return false;
     }
 

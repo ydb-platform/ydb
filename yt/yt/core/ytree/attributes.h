@@ -13,25 +13,26 @@ namespace NYT::NYTree {
 struct IAttributeDictionary
     : public TRefCounted
 {
-    using TKey = TString;
+    using TKey = std::string;
+    using TKeyView = TStringBuf;
     using TValue = NYson::TYsonString;
     using TKeyValuePair = std::pair<TKey, TValue>;
 
     //! Returns the list of all keys in the dictionary.
-    virtual std::vector<TString> ListKeys() const = 0;
+    virtual std::vector<TKey> ListKeys() const = 0;
 
     //! Returns the list of all key-value pairs in the dictionary.
     virtual std::vector<TKeyValuePair> ListPairs() const = 0;
 
     //! Returns the value of the attribute (null indicates that the attribute is not found).
-    virtual NYson::TYsonString FindYson(TStringBuf key) const = 0;
+    virtual TValue FindYson(TKeyView key) const = 0;
 
     //! Sets the value of the attribute.
-    virtual void SetYson(const TString& key, const NYson::TYsonString& value) = 0;
+    virtual void SetYson(TKeyView key, const TValue& value) = 0;
 
     //! Removes the attribute.
     //! Returns |true| if the attribute was removed or |false| if there is no attribute with this key.
-    virtual bool Remove(const TString& key) = 0;
+    virtual bool Remove(TKeyView key) = 0;
 
     // Extension methods
 
@@ -39,44 +40,44 @@ struct IAttributeDictionary
     void Clear();
 
     //! Returns the value of the attribute (throws an exception if the attribute is not found).
-    NYson::TYsonString GetYson(TStringBuf key) const;
+    TValue GetYson(TKeyView key) const;
 
     //! Same as #GetYson but removes the value.
-    NYson::TYsonString GetYsonAndRemove(const TString& key);
+    TValue GetYsonAndRemove(TKeyView key);
 
     //! Finds the attribute and deserializes its value.
     //! Throws if no such value is found.
     template <class T>
-    T Get(TStringBuf key) const;
+    T Get(TKeyView key) const;
 
     //! Same as #Get but removes the value.
     template <class T>
-    T GetAndRemove(const TString& key);
+    T GetAndRemove(TKeyView key);
 
     //! Finds the attribute and deserializes its value.
     //! Uses default value if no such attribute is found.
     template <class T>
-    T Get(TStringBuf key, const T& defaultValue) const;
+    T Get(TKeyView key, const T& defaultValue) const;
 
     //! Same as #Get but removes the value if it exists.
     template <class T>
-    T GetAndRemove(const TString& key, const T& defaultValue);
+    T GetAndRemove(TKeyView key, const T& defaultValue);
 
     //! Finds the attribute and deserializes its value.
     //! Returns null if no such attribute is found.
     template <class T>
-    typename TOptionalTraits<T>::TOptional Find(TStringBuf key) const;
+    typename TOptionalTraits<T>::TOptional Find(TKeyView key) const;
 
     //! Same as #Find but removes the value if it exists.
     template <class T>
-    typename TOptionalTraits<T>::TOptional FindAndRemove(const TString& key);
+    typename TOptionalTraits<T>::TOptional FindAndRemove(TKeyView key);
 
     //! Returns |true| iff the given key is present.
-    bool Contains(TStringBuf key) const;
+    bool Contains(TKeyView key) const;
 
     //! Sets the attribute with a serialized value.
     template <class T>
-    void Set(const TString& key, const T& value);
+    void Set(TKeyView key, const T& value);
 
     //! Constructs an instance from a map node (by serializing the values).
     static IAttributeDictionaryPtr FromMap(const IMapNodePtr& node);

@@ -89,6 +89,9 @@ struct TIssueTemporaryTokenOptions
 struct TIssueTokenResult
 {
     TString Token;
+    //! Cypress node corresponding to issued token.
+    //! Deleting this node will revoke the token.
+    NCypressClient::TNodeId NodeId;
 };
 
 struct TRefreshTemporaryTokenOptions

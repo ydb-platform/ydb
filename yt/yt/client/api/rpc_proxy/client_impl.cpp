@@ -15,6 +15,7 @@
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
+#include <yt/yt/client/scheduler/spec_patch.h>
 
 #include <yt/yt/client/signature/signature.h>
 
@@ -101,7 +102,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool
 {
     const auto& config = Connection_->GetConfig();
     bool retrySequoiaErrorsOnly = !config->EnableRetries;
-    // NB: even if client's retries are disabled Sequoia transient failures are
+    // NB: Even if client's retries are disabled Sequoia transient failures are
     // still retriable. See IsRetriableError().
     return CreateRetryingChannel(
         config->RetryingChannel,
@@ -316,6 +317,13 @@ TFuture<void> TClient::UnfreezeTable(
     ToProto(req->mutable_tablet_range_options(), options);
 
     return req->Invoke().As<void>();
+}
+
+TFuture<void> TClient::CancelTabletTransition(
+    NTabletClient::TTabletId /*tabletId*/,
+    const TCancelTabletTransitionOptions& /*options*/)
+{
+    ThrowUnimplemented("CancelTabletTransition");
 }
 
 TFuture<void> TClient::ReshardTable(
@@ -1207,6 +1215,25 @@ TFuture<void> TClient::UpdateOperationParameters(
     return req->Invoke().As<void>();
 }
 
+TFuture<void> TClient::PatchOperationSpec(
+    const TOperationIdOrAlias& operationIdOrAlias,
+    const NScheduler::TSpecPatchList& patches,
+    const TPatchOperationSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PatchOperationSpec();
+    SetTimeoutOptions(*req, options);
+
+    NScheduler::ToProto(req, operationIdOrAlias);
+
+    for (const auto& patch : patches) {
+        NScheduler::ToProto(req->add_patches(), patch);
+    }
+
+    return req->Invoke().As<void>();
+}
+
 TFuture<TOperation> TClient::GetOperation(
     const TOperationIdOrAlias& operationIdOrAlias,
     const TGetOperationOptions& options)
@@ -1496,6 +1523,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
     }
+    if (options.OperationIncarnation) {
+        req->set_operation_incarnation(*options.OperationIncarnation);
+    }
     if (options.FromTime) {
         req->set_from_time(NYT::ToProto(*options.FromTime));
     }
@@ -1709,15 +1739,19 @@ TFuture<std::vector<TColumnarStatistics>> TClient::GetColumnarStatistics(
     auto req = proxy.GetColumnarStatistics();
     SetTimeoutOptions(*req, options);
 
-    for (const auto& subPath: path) {
+    for (const auto& subPath : path) {
         req->add_paths(ConvertToYsonString(subPath).ToString());
     }
 
     req->set_fetcher_mode(static_cast<NProto::EColumnarStatisticsFetcherMode>(options.FetcherMode));
 
-    ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    if (options.FetchChunkSpecConfig) {
+        ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    }
 
-    ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    if (options.FetcherConfig) {
+        ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    }
 
     req->set_enable_early_finish(options.EnableEarlyFinish);
 
@@ -1745,12 +1779,18 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
         req->add_paths(ToString(path));
     }
 
-    ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    if (options.FetchChunkSpecConfig) {
+        ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    }
 
-    ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    if (options.FetcherConfig) {
+        ToProto(req->mutable_fetcher_config(), options.FetcherConfig);
+    }
 
-    req->mutable_chunk_slice_fetcher_config()->set_max_slices_per_fetch(
-        options.ChunkSliceFetcherConfig->MaxSlicesPerFetch);
+    if (options.ChunkSliceFetcherConfig) {
+        req->mutable_chunk_slice_fetcher_config()->set_max_slices_per_fetch(
+            options.ChunkSliceFetcherConfig->MaxSlicesPerFetch);
+    }
 
     req->set_partition_mode(static_cast<NProto::EPartitionTablesMode>(options.PartitionMode));
 
@@ -2224,6 +2264,13 @@ TFuture<TRequestRestartResult> TClient::RequestRestart(
     }));
 }
 
+TFuture<TCollectCoverageResult> TClient::CollectCoverage(
+    const std::string& /*address*/,
+    const NApi::TCollectCoverageOptions& /*options*/)
+{
+    ThrowUnimplemented("CollectCoverage");
+}
+
 TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
     NQueryTrackerClient::EQueryEngine engine,
     const TString& query,
@@ -2308,6 +2355,7 @@ TFuture<TQueryResult> TClient::GetQueryResult(
             .Schema = rsp->has_schema() ? FromProto<NTableClient::TTableSchemaPtr>(rsp->schema()) : nullptr,
             .DataStatistics = FromProto<NChunkClient::NProto::TDataStatistics>(rsp->data_statistics()),
             .IsTruncated = rsp->is_truncated(),
+            .FullResult = rsp->has_full_result() ? std::make_optional(TYsonString(rsp->full_result())) : std::nullopt,
         };
     }));
 }
@@ -2699,8 +2747,8 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
     req->set_account(account);
     req->set_partition_count(partitionCount);
     ToProto(req->mutable_parent_transaction_id(), parentTransactionId);
-    if (options.MediumName) {
-        req->set_medium_name(*options.MediumName);
+    if (options.Medium) {
+        req->set_medium(*options.Medium);
     }
     if (options.ReplicationFactor) {
         req->set_replication_factor(*options.ReplicationFactor);

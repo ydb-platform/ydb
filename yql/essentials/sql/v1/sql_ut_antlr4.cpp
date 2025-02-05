@@ -287,6 +287,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("USE plato; SELECT REPLICATION FROM REPLICATION").IsOk());
     }
 
+    Y_UNIT_TEST(TransferKeywordNotReservedForNames) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE TRANSFER (TRANSFER Uint32, PRIMARY KEY (TRANSFER));").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; SELECT TRANSFER FROM TRANSFER").IsOk());
+    }
+
     Y_UNIT_TEST(SecondsKeywordNotReservedForNames) {
         UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE SECONDS (SECONDS Uint32, PRIMARY KEY (SECONDS));").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; SELECT SECONDS FROM SECONDS").IsOk());
@@ -478,7 +483,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         )");
 
         UNIT_ASSERT(reqCreateUser.IsOk());
-        UNIT_ASSERT(reqCreateUser.Root);
 
         auto reqAlterUser = SqlToYql(R"(
             USE plato;
@@ -486,7 +490,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         )");
 
         UNIT_ASSERT(!reqAlterUser.IsOk());
-        UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: mismatched input ';' expecting {ENCRYPTED, LOGIN, NOLOGIN, PASSWORD, RENAME, WITH}");
+        UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: mismatched input ';' expecting {ENCRYPTED, HASH, LOGIN, NOLOGIN, PASSWORD, RENAME, WITH}");
 
         auto reqPasswordAndLogin = SqlToYql(R"(
             USE plato;
@@ -494,7 +498,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         )");
 
         UNIT_ASSERT(reqPasswordAndLogin.IsOk());
-        UNIT_ASSERT(reqPasswordAndLogin.Root);
 
         auto reqPasswordAndNoLogin = SqlToYql(R"(
             USE plato;
@@ -502,7 +505,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         )");
 
         UNIT_ASSERT(reqPasswordAndNoLogin.IsOk());
-        UNIT_ASSERT(reqPasswordAndNoLogin.Root);
 
         auto reqLogin = SqlToYql(R"(
             USE plato;
@@ -510,7 +512,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         )");
 
         UNIT_ASSERT(reqLogin.IsOk());
-        UNIT_ASSERT(reqLogin.Root);
 
         auto reqNoLogin = SqlToYql(R"(
             USE plato;
@@ -518,7 +519,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         )");
 
         UNIT_ASSERT(reqNoLogin.IsOk());
-        UNIT_ASSERT(reqNoLogin.Root);
 
         auto reqLoginNoLogin = SqlToYql(R"(
             USE plato;
@@ -535,7 +535,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         )");
 
         UNIT_ASSERT(reqAlterLoginNoLogin.IsOk());
-        UNIT_ASSERT(reqAlterLoginNoLogin.Root);
 
         auto reqAlterLoginNoLoginWithPassword = SqlToYql(R"(
             USE plato;
@@ -544,7 +543,56 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         )");
 
         UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.IsOk());
-        UNIT_ASSERT(reqAlterLoginNoLoginWithPassword.Root);
+    }
+
+    Y_UNIT_TEST(CreateUserWithHash) {
+        auto reqCreateUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }';
+        )");
+
+        UNIT_ASSERT(reqCreateUser.IsOk());
+
+        auto reqCreateUserWithNoLogin = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }'
+            NOLOGIN;
+        )");
+
+        UNIT_ASSERT(reqCreateUserWithNoLogin.IsOk());
+
+        auto reqCreateUserWithPassword = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }'
+            PASSWORD '123';
+        )");
+
+        UNIT_ASSERT(!reqCreateUserWithPassword.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(reqCreateUserWithPassword.Issues.ToString(), "Error: Conflicting or redundant options");
+
+        auto reqAlterUser = SqlToYql(R"(
+            USE plato;
+            CREATE USER user1;
+            ALTER USER user1 HASH '{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }';
+        )");
+
+        UNIT_ASSERT(reqAlterUser.IsOk());
     }
 
     Y_UNIT_TEST(JoinWithoutConcreteColumns) {
@@ -1290,6 +1338,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DeleteFromTableBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch delete from plato.Input;", 10, "kikimr");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'delete)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('is_batch 'true)"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(DeleteFromTableOnValues) {
         NYql::TAstParseResult res = SqlToYql("delete from plato.Input on (key) values (1);",
             10, "kikimr");
@@ -1324,6 +1389,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DeleteFromTableOnBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch delete from plato.Input on (key) values (1);",
+            10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH DELETE is unsupported with ON\n");
+    }
+
     Y_UNIT_TEST(UpdateByValues) {
         NYql::TAstParseResult res = SqlToYql("update plato.Input set key = 777, value = 'cool' where key = 200;", 10, "kikimr");
         UNIT_ASSERT(res.Root);
@@ -1348,6 +1420,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
+    }
+
+    Y_UNIT_TEST(UpdateByValuesBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch update plato.Input set key = 777, value = 'cool' where key = 200;", 10, "kikimr");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('is_batch 'true)"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
     Y_UNIT_TEST(UpdateByMultiValues) {
@@ -1458,6 +1547,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(UpdateOnBatch) {
+        NYql::TAstParseResult res = SqlToYql("batch update plato.Input on (key, value) values (5, 'cool')", 10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH UPDATE is unsupported with ON\n");
     }
 
     Y_UNIT_TEST(UnionAllTest) {
@@ -5860,7 +5955,7 @@ Y_UNIT_TEST_SUITE(AnsiIdentsNegative) {
               "*/ select 1;";
         res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {';', '(', '$', ALTER, ANALYZE, BACKUP, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, UPDATE, UPSERT, USE, VALUES}\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, UPDATE, UPSERT, USE, VALUES}\n");
         res = SqlToYqlWithAnsiLexer(req);
         UNIT_ASSERT(res.Root);
     }
@@ -7979,5 +8074,89 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         UNIT_ASSERT(!res.IsOk());
         UNIT_ASSERT(res.Issues.Size() == 1);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
+    }
+}
+
+Y_UNIT_TEST_SUITE(Transfer) {
+    Y_UNIT_TEST(Lambda) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            -- Русский коммент, empty statement
+            ;
+
+            -- befor comment
+            $a = "А";
+
+            SELECT * FROM Input;
+
+            $b = ($x) -> { return $a || $x; };
+
+            CREATE TRANSFER `TransferName`
+              FROM `TopicName` TO `TableName`
+              USING ($x) -> {
+                -- internal comment
+                return $b($x);
+              }
+              WITH (
+                CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
+              );
+        )");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Issues.Size(), 0, res.Issues.ToString());
+
+        const auto programm = GetPrettyPrint(res);
+
+        Cerr << ">>>>> Root " << programm << Endl;
+        auto expected = R"('transformLambda 'use plato;
+-- befor comment
+            $a = "А";
+$b = ($x) -> { return $a || $x; };
+$__ydb_transfer_lambda = ($x) -> {
+                -- internal comment
+                return $b($x);
+              };
+))";
+
+        UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, programm.find(expected));
+
+    }
+}
+
+Y_UNIT_TEST_SUITE(MatchRecognizeMeasuresAggregation) {
+    Y_UNIT_TEST(InsideSelect) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(0), LAST(1);
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:30: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(OutsideSelect) {
+        ExpectFailWithError(R"sql(
+            $lambda = ($x) -> (FIRST($x) + LAST($x));
+            SELECT $lambda(x) FROM plato.Input;
+            )sql",
+            "<main>:2:32: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:44: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(AsAggregateFunction) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(x), LAST(x) FROM plato.Input;
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:30: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(AsWindowFunction) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(x) OVER(), LAST(x) OVER() FROM plato.Input;
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:37: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
     }
 }

@@ -4,7 +4,25 @@
 
 The full list of changes can be found in the compare view for the respective release at <https://github.com/open-telemetry/opentelemetry-proto/releases>.
 
-## 1.3.3. - 2024-11-19
+### Added
+
+### Changed
+
+### Removed
+
+## 1.5.0 - 2024-12-12
+
+### Added
+
+- all: Add note about `schema_url` format (including version). [#605](https://github.com/open-telemetry/opentelemetry-proto/pull/605)
+- logs: Add top-level `event_name` field to log records instead of `event.name` attribute. [#600](https://github.com/open-telemetry/opentelemetry-proto/pull/600)
+
+### Removed
+
+- profiles: Remove unused `Label` definition. [#602](https://github.com/open-telemetry/opentelemetry-proto/pull/602)
+- profiles: drop duplicate `attributes` field in message Profile. [#606](https://github.com/open-telemetry/opentelemetry-proto/pull/606)
+
+## 1.4.0 - 2024-11-20
 
 ### Added
 

@@ -10,8 +10,10 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/composite.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/engines/changes/counters/changes.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
@@ -183,6 +185,53 @@ public:
         , Counters(counters)
         , LastCommittedTx(lastCommittedTx) {
     }
+
+    std::shared_ptr<TFilteredSnapshotSchema> BuildResultFiltered(
+        const std::vector<TPortionDataAccessor>& portionAccessors, std::set<ui32>& seqDataColumnIds) const {
+        auto resultSchema = SchemaVersions.GetLastSchema();
+        std::set<ui32> pkColumnIds;
+        {
+            auto pkColumnIdsVector = IIndexInfo::AddSnapshotFieldIds(resultSchema->GetIndexInfo().GetPKColumnIds());
+            pkColumnIds = std::set<ui32>(pkColumnIdsVector.begin(), pkColumnIdsVector.end());
+        }
+        std::set<ui32> dataColumnIds;
+        {
+            {
+                THashMap<ui64, ISnapshotSchema::TPtr> schemas;
+                for (auto& portion : portionAccessors) {
+                    auto dataSchema = portion.GetPortionInfo().GetSchema(SchemaVersions);
+                    schemas.emplace(dataSchema->GetVersion(), dataSchema);
+                }
+                dataColumnIds = ISnapshotSchema::GetColumnsWithDifferentDefaults(schemas, resultSchema);
+            }
+            for (auto&& accessor : portionAccessors) {
+                if (accessor.GetPortionInfo().GetMeta().GetDeletionsCount()) {
+                    dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
+                }
+                if (dataColumnIds.size() != resultSchema->GetColumnsCount()) {
+                    for (auto id : accessor.GetColumnIds()) {
+                        if (resultSchema->HasColumnId(id)) {
+                            dataColumnIds.emplace(id);
+                        }
+                    }
+                }
+            }
+            AFL_VERIFY(dataColumnIds.size() <= resultSchema->GetColumnsCount());
+            if (dataColumnIds.contains((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
+                pkColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
+            }
+            dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::WRITE_ID);
+        }
+        dataColumnIds.insert(IIndexInfo::GetSnapshotColumnIds().begin(), IIndexInfo::GetSnapshotColumnIds().end());
+        auto resultFiltered = std::make_shared<TFilteredSnapshotSchema>(resultSchema, dataColumnIds);
+        {
+            seqDataColumnIds = dataColumnIds;
+            for (auto&& i : pkColumnIds) {
+                AFL_VERIFY(seqDataColumnIds.erase(i))("id", i);
+            }
+        }
+        return resultFiltered;
+    }
 };
 
 class TGranuleMeta;
@@ -198,24 +247,16 @@ public:
     }
 };
 
-class TColumnEngineChanges {
-public:
-    enum class EStage : ui32 {
-        Created = 0,
-        Started,
-        Constructed,
-        Compiled,
-        Written,
-        Finished,
-        Aborted
-    };
-
+class TColumnEngineChanges: public TMoveOnly {
 private:
-    EStage Stage = EStage::Created;
+    NChanges::EStage Stage = NChanges::EStage::Created;
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
     std::shared_ptr<const TAtomicCounter> ActivityFlag;
+    std::shared_ptr<NChanges::TChangesCounters::TStageCounters> Counters;
+
+    void SetStage(const NChanges::EStage stage);
 
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
@@ -312,14 +353,16 @@ public:
     }
 
     TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
-        : BlobsAction(storagesManager, consumerId) {
+        : Counters(NChanges::TChangesCounters::GetStageCounters(consumerId))
+        , BlobsAction(storagesManager, consumerId) {
+        Counters->OnStageChanged(Stage, 0);
     }
 
     TConclusionStatus ConstructBlobs(TConstructionContext& context) noexcept;
     virtual ~TColumnEngineChanges();
 
     bool IsAborted() const {
-        return Stage == EStage::Aborted;
+        return Stage == NChanges::EStage::Aborted;
     }
 
     void StartEmergency();

@@ -12,7 +12,7 @@ ENDIF()
 
 PEERDIR(
     yql/essentials/minikql/invoke_builtins
-    yql/essentials/minikql/invoke_builtins/llvm14
+    yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/public/udf/service/terminate_policy
     yql/essentials/public/udf
     yql/essentials/parser/pg_wrapper

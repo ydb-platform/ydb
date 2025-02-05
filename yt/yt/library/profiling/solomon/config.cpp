@@ -142,7 +142,7 @@ TShardConfigPtr TSolomonExporterConfig::MatchShard(const std::string& sensorName
                 continue;
             }
 
-            if (static_cast<int>(prefix.size()) > matchSize) {
+            if (std::ssize(prefix) > matchSize) {
                 matchSize = prefix.size();
                 matchedShard = config;
             }

@@ -94,7 +94,7 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
-    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder() 
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
             << "Sets bucket URL style. Value "
             << colors.BoldColor() << "true" << colors.OldColor()
             << " means use Virtual-Hosted-Style URL, "
@@ -104,6 +104,9 @@ void TCommandImportFromS3::Config(TConfig& config) {
 
     config.Opts->AddLongOption("no-acl", "Prevent importing of ACL and owner")
         .RequiredArgument("BOOL").StoreTrue(&NoACL).DefaultValue("false");
+
+    config.Opts->AddLongOption("skip-checksum-validation", "Skip checksum validation during import")
+        .RequiredArgument("BOOL").StoreTrue(&SkipChecksumValidation).DefaultValue("false");
 
     AddDeprecatedJsonOption(config);
     AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
@@ -128,6 +131,11 @@ void TCommandImportFromS3::Parse(TConfig& config) {
     }
 }
 
+bool IsSupportedObject(TStringBuf& key) {
+    return key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
+        || key.ChopSuffix(NDump::NFiles::CreateView().FileName);
+}
+
 int TCommandImportFromS3::Run(TConfig& config) {
     using namespace NImport;
 
@@ -146,6 +154,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
 
     settings.NumberOfRetries(NumberOfRetries);
     settings.NoACL(NoACL);
+    settings.SkipChecksumValidation(SkipChecksumValidation);
 #if defined(_win32_)
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});
@@ -169,8 +178,14 @@ int TCommandImportFromS3::Run(TConfig& config) {
                 auto listResult = s3Client->ListObjectKeys(item.Source, token);
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
-                    if (key.ChopSuffix(NDump::NFiles::TableScheme().FileName)) {
-                        TString destination = item.Destination + key.substr(item.Source.size());
+                    if (IsSupportedObject(key)) {
+                        key.ChopSuffix("/");
+                        TString destination;
+                        if (const auto suffix = key.substr(item.Source.size())) {
+                            destination = item.Destination + suffix;
+                        } else {
+                            destination = NormalizePath(item.Destination);
+                        }
                         settings.AppendItem({TString(key), std::move(destination)});
                     }
                 }
@@ -309,7 +324,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     }
 
     TImportFileClient client(CreateDriver(config), config, settings);
-    ThrowOnError(client.Import(FilePaths, Path));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }
@@ -339,7 +354,7 @@ int TCommandImportFromJson::Run(TConfig& config) {
     settings.Threads(Threads);
 
     TImportFileClient client(CreateDriver(config), config, settings);
-    ThrowOnError(client.Import(FilePaths, Path));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }
@@ -358,7 +373,7 @@ int TCommandImportFromParquet::Run(TConfig& config) {
     settings.Threads(Threads);
 
     TImportFileClient client(CreateDriver(config), config, settings);
-    ThrowOnError(client.Import(FilePaths, Path));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }

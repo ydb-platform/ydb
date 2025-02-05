@@ -6,7 +6,7 @@
 #include <yt/yql/providers/yt/codec/yt_codec.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/errors.h>
@@ -138,7 +138,7 @@ public:
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(static_cast<const TDqYtReadWrapperBase<T, IS>*>(this))), structPtrType, "self", block);
@@ -160,10 +160,10 @@ public:
         const auto fetch = CallInst::Create(funcType, funcPtr, { stateArg }, "fetch", block);
 
         const auto result = PHINode::Create(statusType, 2U, "result", done);
-        const auto special = SelectInst::Create(IsYield(fetch, block), ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), "special", block);
+        const auto special = SelectInst::Create(IsYield(fetch, block, context), ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), "special", block);
         result->addIncoming(special, block);
 
-        BranchInst::Create(done, good, IsSpecial(fetch, block), block);
+        BranchInst::Create(done, good, IsSpecial(fetch, block, context), block);
 
         block = good;
 

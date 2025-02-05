@@ -7,8 +7,6 @@
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/requests.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////

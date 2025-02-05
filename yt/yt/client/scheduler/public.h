@@ -8,6 +8,14 @@ namespace NYT::NScheduler {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NProto {
+
+class TSpecPatch;
+
+} // namespace NProto
+
+////////////////////////////////////////////////////////////////////////////////
+
 YT_DEFINE_STRONG_TYPEDEF(TJobTraceId, TGuid);
 
 extern const TJobTraceId NullJobTraceId;
@@ -69,6 +77,7 @@ YT_DEFINE_ERROR_ENUM(
     ((JobResourceLimitsRestrictionsViolated)  (220))
     ((CannotUseBothAclAndAco)                 (221))
     ((GangOperationsAllowedOnlyInFifoPools)   (222))
+    ((OperationLaunchedInNonexistentPool)     (223))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,
@@ -176,6 +185,9 @@ DEFINE_ENUM(EAutoMergeMode,
 );
 
 DECLARE_REFCOUNTED_CLASS(TOperationCache)
+
+DECLARE_REFCOUNTED_CLASS(TSpecPatch);
+using TSpecPatchList = std::vector<TSpecPatchPtr>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

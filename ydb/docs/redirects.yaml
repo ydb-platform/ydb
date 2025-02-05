@@ -184,11 +184,15 @@ common:
 
 # Security-related redirects
   - from: /cluster/access.md
-    to: /security/acess-management.md
+    to: /security/authorization.md
   - from: /cluster/audit-log.md
     to: /security/audit-log.md
   - from: /cluster/short-access-control-notation.md
     to: /security/short-access-control-notation.md
+  - from: /concepts/auth.md
+    to: /security/authentication.md
+  - from: /security/access-management.md
+    to: /security/authorization.md
 
 # Contributors-related redirects
   - from: /development/build-ya.md
@@ -345,6 +349,45 @@ common:
     to: /integrations/orm/hibernate.md
   - from: /integrations/liquibase.md
     to: /integrations/migration/liquibase.md
+
+# Redirects for troubleshooting
+
+  - from: /dev/troubleshooting/index.md
+    to: /troubleshooting/index.md
+  - from: /dev/troubleshooting/performance/hardware/io-bandwidth.md
+    to: /troubleshooting/performance/hardware/io-bandwidth.md
+  - from: /dev/troubleshooting/performance/hardware/disk-space.md
+    to: /troubleshooting/performance/hardware/disk-space.md
+  - from: /dev/troubleshooting/performance/hardware/insufficient-memory.md
+    to: /troubleshooting/performance/hardware/insufficient-memory.md
+  - from: /dev/troubleshooting/performance/hardware/cpu-bottleneck.md
+    to: /troubleshooting/performance/hardware/cpu-bottleneck.md
+  - from: /dev/troubleshooting/performance/queries/transaction-lock-invalidation.md
+    to: /troubleshooting/performance/queries/transaction-lock-invalidation.md
+  - from: /dev/troubleshooting/performance/queries/uncached-queries.md
+    to: /troubleshooting/performance/queries/uncached-queries.md
+  - from: /dev/troubleshooting/performance/queries/overloaded-errors.md
+    to: /troubleshooting/performance/queries/overloaded-errors.md
+  - from: /dev/troubleshooting/performance/schemas/splits-merges.md
+    to: /troubleshooting/performance/schemas/splits-merges.md
+  - from: /dev/troubleshooting/performance/schemas/overloaded-shards.md
+    to: /troubleshooting/performance/schemas/overloaded-shards.md
+  - from: /dev/troubleshooting/performance/system/system-clock-drift.md
+    to: /troubleshooting/performance/system/system-clock-drift.md
+  - from: /dev/troubleshooting/performance/index.md
+    to: /troubleshooting/performance/index.md
+  - from: /dev/troubleshooting/performance/ydb/tablets-moved.md
+    to: /troubleshooting/performance/ydb/tablets-moved.md
+  - from: /dev/troubleshooting/performance/ydb/ydb-updates.md
+    to: /troubleshooting/performance/ydb/ydb-updates.md
+  - from: /dev/troubleshooting/performance/infrastructure/hardware.md
+    to: /troubleshooting/performance/infrastructure/hardware.md
+  - from: /dev/troubleshooting/performance/infrastructure/network.md
+    to: /troubleshooting/performance/infrastructure/network.md
+  - from: /dev/troubleshooting/performance/infrastructure/dc-drills.md
+    to: /troubleshooting/performance/infrastructure/dc-drills.md
+  - from: /dev/troubleshooting/performance/infrastructure/dc-outage.md
+    to: /troubleshooting/performance/infrastructure/dc-outage.md
 
 ru:
   - from: /postgresql/index.md

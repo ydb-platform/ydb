@@ -442,18 +442,6 @@ size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
     return GetSparseBitmapPopCount(src, len);
 }
 
-TArrayRef<TType *const> GetWideComponents(TType* type) {
-    if (type->IsFlow()) {
-        const auto outputFlowType = AS_TYPE(TFlowType, type);
-        return GetWideComponents(outputFlowType);
-    }
-    if (type->IsStream()) {
-        const auto outputStreamType = AS_TYPE(TStreamType, type);
-        return GetWideComponents(outputStreamType);
-    }
-    MKQL_ENSURE(false, "Expect either flow or stream");
-}
-
 size_t CalcMaxBlockLenForOutput(TType* out) {
     const auto wideComponents = GetWideComponents(out);
     MKQL_ENSURE(wideComponents.size() > 0, "Expecting at least one output column");
@@ -532,7 +520,7 @@ protected:
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -562,7 +550,7 @@ protected:
 
         const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
         const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
-        SafeUnRefUnboxed(values, ctx, block);
+        SafeUnRefUnboxedArray(values, arrayType, ctx, block);
 
         const auto getres = GetNodeValues(flow, ctx, block);
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
@@ -813,12 +801,12 @@ public:
         const auto state = ctx.HolderFactory.Create<TState>(Width_, FilterColumn_, AggsParams_, ctx);
         return ctx.HolderFactory.Create<TStreamValue>(std::move(state), std::move(Stream_->GetValue(ctx)));
     }
-        
+
 private:
     class TStreamValue : public TComputationValue<TStreamValue> {
     using TBase = TComputationValue<TStreamValue>;
     public:
-        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& state, NUdf::TUnboxedValue&& stream) 
+        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& state, NUdf::TUnboxedValue&& stream)
             : TBase(memInfo)
             , State_(state)
             , Stream_(stream)
@@ -833,7 +821,7 @@ private:
 
             if (state.IsFinished_)
                 return NUdf::EFetchStatus::Finish;
-            
+
             while (true) {
                 switch (Stream_.WideFetch(inputFields, inputWidth)) {
                     case NUdf::EFetchStatus::Yield:
@@ -856,7 +844,7 @@ private:
     private:
         NUdf::TUnboxedValue State_;
         NUdf::TUnboxedValue Stream_;
-    };    
+    };
 
 private:
     void RegisterDependencies() const final {
@@ -1026,7 +1014,7 @@ protected:
         const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -1071,7 +1059,7 @@ protected:
 
         const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
         const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
-        SafeUnRefUnboxed(values, ctx, block);
+        SafeUnRefUnboxedArray(values, arrayType, ctx, block);
 
         const auto getres = GetNodeValues(flow, ctx, block);
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
@@ -1823,7 +1811,7 @@ private:
     using TBase = TComputationValue<TStreamValue>;
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
-                     NUdf::TUnboxedValue&& state, NUdf::TUnboxedValue&& stream) 
+                     NUdf::TUnboxedValue&& state, NUdf::TUnboxedValue&& stream)
             : TBase(memInfo)
             , State_(state)
             , Stream_(stream)
@@ -1916,7 +1904,7 @@ public:
 };
 
 template <typename TKey, typename TFixedAggState, bool UseSet, bool UseFilter>
-class TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter, IComputationNode> 
+class TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter, IComputationNode>
     : public THashedWrapperBaseFromStream<TKey, IBlockAggregatorCombineKeys, TFixedAggState, UseSet, UseFilter, false, false, TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter, IComputationNode>> {
 public:
     using TSelf = TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter, IComputationNode>;
@@ -1938,7 +1926,7 @@ template <typename TKey, typename TFixedAggState, bool UseSet, typename TInputNo
 class TBlockMergeFinalizeHashedWrapper {};
 
 template <typename TKey, typename TFixedAggState, bool UseSet>
-class TBlockMergeFinalizeHashedWrapper<TKey, TFixedAggState, UseSet, IComputationWideFlowNode> 
+class TBlockMergeFinalizeHashedWrapper<TKey, TFixedAggState, UseSet, IComputationWideFlowNode>
     : public THashedWrapperBaseFromFlow<TKey, IBlockAggregatorFinalizeKeys, TFixedAggState, UseSet, false, true, false, TBlockMergeFinalizeHashedWrapper<TKey, TFixedAggState, UseSet, IComputationWideFlowNode>> {
 public:
     using TSelf = TBlockMergeFinalizeHashedWrapper<TKey, TFixedAggState, UseSet, IComputationWideFlowNode>;
@@ -1956,7 +1944,7 @@ public:
 };
 
 template <typename TKey, typename TFixedAggState, bool UseSet>
-class TBlockMergeFinalizeHashedWrapper<TKey, TFixedAggState, UseSet, IComputationNode> 
+class TBlockMergeFinalizeHashedWrapper<TKey, TFixedAggState, UseSet, IComputationNode>
     : public THashedWrapperBaseFromStream<TKey, IBlockAggregatorFinalizeKeys, TFixedAggState, UseSet, false, true, false, TBlockMergeFinalizeHashedWrapper<TKey, TFixedAggState, UseSet, IComputationNode>> {
 public:
     using TSelf = TBlockMergeFinalizeHashedWrapper<TKey, TFixedAggState, UseSet, IComputationNode>;
@@ -1977,7 +1965,7 @@ template <typename TKey, typename TFixedAggState, typename TInputNode>
 class TBlockMergeManyFinalizeHashedWrapper {};
 
 template <typename TKey, typename TFixedAggState>
-class TBlockMergeManyFinalizeHashedWrapper<TKey, TFixedAggState, IComputationWideFlowNode> 
+class TBlockMergeManyFinalizeHashedWrapper<TKey, TFixedAggState, IComputationWideFlowNode>
     : public THashedWrapperBaseFromFlow<TKey, IBlockAggregatorFinalizeKeys, TFixedAggState, false, false, true, true, TBlockMergeManyFinalizeHashedWrapper<TKey, TFixedAggState, IComputationWideFlowNode>> {
 public:
     using TSelf = TBlockMergeManyFinalizeHashedWrapper<TKey, TFixedAggState, IComputationWideFlowNode>;
@@ -1996,7 +1984,7 @@ public:
 };
 
 template <typename TKey, typename TFixedAggState>
-class TBlockMergeManyFinalizeHashedWrapper<TKey, TFixedAggState, IComputationNode> 
+class TBlockMergeManyFinalizeHashedWrapper<TKey, TFixedAggState, IComputationNode>
     : public THashedWrapperBaseFromStream<TKey, IBlockAggregatorFinalizeKeys, TFixedAggState, false, false, true, true, TBlockMergeManyFinalizeHashedWrapper<TKey, TFixedAggState, IComputationNode>> {
 public:
     using TSelf = TBlockMergeManyFinalizeHashedWrapper<TKey, TFixedAggState, IComputationNode>;
@@ -2409,7 +2397,7 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
 
 IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
-    
+
     const bool isStream = callable.GetInput(0).GetStaticType()->IsStream();
     MKQL_ENSURE(isStream == callable.GetType()->GetReturnType()->IsStream(), "input and output must be both either flow or stream");
 

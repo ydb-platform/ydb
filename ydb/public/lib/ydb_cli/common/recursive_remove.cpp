@@ -70,9 +70,9 @@ TStatus RemoveTopic(TTopicClient& client, const TString& path, const TDropTopicS
     });
 }
 
-NYql::TIssues MakeIssues(const TString& error) {
-    NYql::TIssues issues;
-    issues.AddIssue(NYql::TIssue(error));
+NYdb::NIssue::TIssues MakeIssues(const TString& error) {
+    NYdb::NIssue::TIssues issues;
+    issues.AddIssue(NYdb::NIssue::TIssue(error));
     return issues;
 }
 
@@ -179,7 +179,7 @@ TStatus RemoveDirectoryRecursive(
     // output order is: Root, Recursive(children)...
     // we need to reverse it to delete recursively
     for (auto it = recursiveListResult.Entries.rbegin(); it != recursiveListResult.Entries.rend(); ++it) {
-        if (auto result = Remove(schemeClient, tableClient, topicClient, queryClient, it->Type, it->Name, prompt, settings); !result.IsSuccess()) {
+        if (auto result = Remove(schemeClient, tableClient, topicClient, queryClient, it->Type, TString{it->Name}, prompt, settings); !result.IsSuccess()) {
             return result;
         }
         if (createProgressBar) {

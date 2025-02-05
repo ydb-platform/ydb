@@ -1,0 +1,1 @@
+select CurrentOperationId(),CurrentOperationSharedId(),CurrentAuthenticatedUser();

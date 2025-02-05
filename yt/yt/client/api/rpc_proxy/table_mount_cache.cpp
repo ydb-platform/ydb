@@ -123,7 +123,7 @@ private:
 
                     auto tabletCount = tableInfo->IsChaosReplicated()
                         ? rsp->tablet_count()
-                        : static_cast<int>(tableInfo->Tablets.size());
+                        : std::ssize(tableInfo->Tablets);
                     tableInfo->UpperCapBound = MakeUnversionedOwningRow(tabletCount);
                 }
 

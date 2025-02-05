@@ -68,8 +68,8 @@ int ngtcp2_rob_init(ngtcp2_rob *rob, size_t chunk, const ngtcp2_mem *mem) {
   int rv;
   ngtcp2_rob_gap *g;
 
-  ngtcp2_ksl_init(&rob->gapksl, ngtcp2_ksl_range_compar, sizeof(ngtcp2_range),
-                  mem);
+  ngtcp2_ksl_init(&rob->gapksl, ngtcp2_ksl_range_compar,
+                  ngtcp2_ksl_range_search, sizeof(ngtcp2_range), mem);
 
   rv = ngtcp2_rob_gap_new(&g, 0, UINT64_MAX, mem);
   if (rv != 0) {
@@ -81,8 +81,8 @@ int ngtcp2_rob_init(ngtcp2_rob *rob, size_t chunk, const ngtcp2_mem *mem) {
     goto fail_gapksl_ksl_insert;
   }
 
-  ngtcp2_ksl_init(&rob->dataksl, ngtcp2_ksl_range_compar, sizeof(ngtcp2_range),
-                  mem);
+  ngtcp2_ksl_init(&rob->dataksl, ngtcp2_ksl_range_compar,
+                  ngtcp2_ksl_range_search, sizeof(ngtcp2_range), mem);
 
   rob->chunk = chunk;
   rob->mem = mem;
@@ -125,8 +125,8 @@ static int rob_write_data(ngtcp2_rob *rob, uint64_t offset, const uint8_t *data,
   ngtcp2_range range = {offset, offset + len};
   ngtcp2_ksl_it it;
 
-  for (it = ngtcp2_ksl_lower_bound_compar(&rob->dataksl, &range,
-                                          ngtcp2_ksl_range_exclusive_compar);
+  for (it = ngtcp2_ksl_lower_bound_search(&rob->dataksl, &range,
+                                          ngtcp2_ksl_range_exclusive_search);
        len; ngtcp2_ksl_it_next(&it)) {
     if (ngtcp2_ksl_it_end(&it)) {
       d = NULL;
@@ -166,8 +166,8 @@ int ngtcp2_rob_push(ngtcp2_rob *rob, uint64_t offset, const uint8_t *data,
   ngtcp2_range m, l, r, q = {offset, offset + datalen};
   ngtcp2_ksl_it it;
 
-  it = ngtcp2_ksl_lower_bound_compar(&rob->gapksl, &q,
-                                     ngtcp2_ksl_range_exclusive_compar);
+  it = ngtcp2_ksl_lower_bound_search(&rob->gapksl, &q,
+                                     ngtcp2_ksl_range_exclusive_search);
 
   for (; !ngtcp2_ksl_it_end(&it);) {
     g = ngtcp2_ksl_it_get(&it);

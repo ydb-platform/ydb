@@ -52,6 +52,9 @@ void TTcpDispatcherConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("bus_certs_directory_path", &TThis::BusCertsDirectoryPath)
         .Default();
+
+    registrar.Parameter("enable_local_bypass", &TThis::EnableLocalBypass)
+        .Default(false);
 }
 
 TTcpDispatcherConfigPtr TTcpDispatcherConfig::ApplyDynamic(
@@ -63,6 +66,7 @@ TTcpDispatcherConfigPtr TTcpDispatcherConfig::ApplyDynamic(
     UpdateYsonStructField(mergedConfig->Networks, dynamicConfig->Networks);
     UpdateYsonStructField(mergedConfig->MultiplexingBands, dynamicConfig->MultiplexingBands);
     UpdateYsonStructField(mergedConfig->BusCertsDirectoryPath, dynamicConfig->BusCertsDirectoryPath);
+    UpdateYsonStructField(mergedConfig->EnableLocalBypass, dynamicConfig->EnableLocalBypass);
     mergedConfig->Postprocess();
     return mergedConfig;
 }
@@ -88,6 +92,9 @@ void TTcpDispatcherDynamicConfig::Register(TRegistrar registrar)
         .Optional();
 
     registrar.Parameter("bus_certs_directory_path", &TThis::BusCertsDirectoryPath)
+        .Default();
+
+    registrar.Parameter("enable_local_bypass", &TThis::EnableLocalBypass)
         .Default();
 }
 
@@ -140,6 +147,8 @@ void TBusConfig::Register(TRegistrar registrar)
     registrar.Parameter("verify_checksums", &TThis::VerifyChecksums)
         .Default(true);
     registrar.Parameter("generate_checksums", &TThis::GenerateChecksums)
+        .Default(true);
+    registrar.Parameter("enable_local_bypass", &TThis::EnableLocalBypass)
         .Default(true);
     registrar.Parameter("encryption_mode", &TThis::EncryptionMode)
         .Default(EEncryptionMode::Optional);

@@ -276,4 +276,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_GROUP = 27 [(TxTypeOpts) = {Name: "TTxUpdateGroup"}];
     TXTYPE_DELETE_BLOB_DEPOT = 28 [(TxTypeOpts) = {Name: "TTxDeleteBlobDepot"}];
     TXTYPE_COMMIT_CONFIG = 29 [(TxTypeOpts) = {Name: "TTxCommitConfig"}];
+    TXTYPE_UPDATE_SHRED = 30 [(TxTypeOpts) = {Name: "TTxUpdateShred"}];
 }

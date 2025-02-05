@@ -9,9 +9,9 @@
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/logger/backend.h>
@@ -110,6 +110,8 @@ public:
         }
         annoyingClient.InitRootScheme("Root");
         GRpcPort_ = grpc;
+
+        Channel_ = grpc::CreateChannel(TStringBuilder() << "localhost:" << GetPort(), grpc::InsecureChannelCredentials());
     }
 
     ui16 GetPort() {
@@ -118,6 +120,10 @@ public:
 
     TPortManager& GetPortManager() {
         return PortManager;
+    }
+
+    std::shared_ptr<grpc::Channel>& GetChannel() {
+        return Channel_;
     }
 
     void ResetSchemeCache(TString path, ui32 nodeIndex = 0) {
@@ -137,6 +143,7 @@ public:
     NKikimr::Tests::TServerSettings::TPtr ServerSettings;
     NKikimr::Tests::TServer::TPtr Server_;
     THolder<NKikimr::Tests::TTenants> Tenants_;
+    std::shared_ptr<grpc::Channel> Channel_;
 private:
     TPortManager PortManager;
     ui16 GRpcPort_;
@@ -158,11 +165,22 @@ Y_UNIT_TEST_SUITE(BSConfigGRPCService) {
         ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
     }
 
-    void ReplaceStorageConfig(auto &channel, const TString &yamlConfig) {
+    void ReplaceStorageConfig(auto &channel, std::optional<TString> yamlConfig, std::optional<TString> storageYamlConfig,
+            std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode) {
         std::unique_ptr<Ydb::BSConfig::V1::BSConfigService::Stub> stub;
         stub = Ydb::BSConfig::V1::BSConfigService::NewStub(channel);
+
         Ydb::BSConfig::ReplaceStorageConfigRequest request;
-        request.set_yaml_config(yamlConfig);
+        if (yamlConfig) {
+            request.set_yaml_config(*yamlConfig);
+        }
+        if (storageYamlConfig) {
+            request.set_storage_yaml_config(*storageYamlConfig);
+        }
+        if (switchDedicatedStorageSection) {
+            request.set_switch_dedicated_storage_section(*switchDedicatedStorageSection);
+        }
+        request.set_dedicated_config_mode(dedicatedConfigMode);
 
         Ydb::BSConfig::ReplaceStorageConfigResponse response;
         Ydb::BSConfig::ReplaceStorageConfigResult result;
@@ -175,61 +193,90 @@ Y_UNIT_TEST_SUITE(BSConfigGRPCService) {
         response.operation().result().UnpackTo(&result);
     }
 
-    TString FetchStorageConfig(auto &channel) {
+    void FetchStorageConfig(auto& channel, bool dedicatedStorageSection, bool dedicatedClusterSection,
+            std::optional<TString>& yamlConfig, std::optional<TString>& storageYamlConfig) {
         std::unique_ptr<Ydb::BSConfig::V1::BSConfigService::Stub> stub;
         stub = Ydb::BSConfig::V1::BSConfigService::NewStub(channel);
+
         Ydb::BSConfig::FetchStorageConfigRequest request;
+        request.set_dedicated_storage_section(dedicatedStorageSection);
+        request.set_dedicated_cluster_section(dedicatedClusterSection);
+
         Ydb::BSConfig::FetchStorageConfigResponse response;
         Ydb::BSConfig::FetchStorageConfigResult result;
+
         grpc::ClientContext fetchStorageConfigCtx;
         AdjustCtxForDB(fetchStorageConfigCtx);
         stub->FetchStorageConfig(&fetchStorageConfigCtx, request, &response);
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
         response.operation().result().UnpackTo(&result);
-        auto yamlConfig = NormalizeYaml(result.yaml_config());
-        Cerr << "Fetched yaml config: " << Endl;
-        Cerr << yamlConfig << Endl;
-        return yamlConfig;
+
+        if (result.has_yaml_config()) {
+            yamlConfig.emplace(result.yaml_config());
+        } else {
+            yamlConfig.reset();
+        }
+
+        if (result.has_storage_yaml_config()) {
+            storageYamlConfig.emplace(result.storage_yaml_config());
+        } else {
+            storageYamlConfig.reset();
+        }
     }   
 
     Y_UNIT_TEST(ReplaceStorageConfig) {
         TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
-        std::shared_ptr<grpc::Channel> channel;
-        channel = grpc::CreateChannel(location, grpc::InsecureChannelCredentials());
-        TString yamlConfig =
-        R"(
-        host_configs:
-        - host_config_id: 1
-          drive:
-          - path: SectorMap:1:64
-            type: SSD
-            expected_slot_count: 9
-          - path: SectorMap:2:64
-            type: SSD
-            expected_slot_count: 9
-        - host_config_id: 2
-          drive:
-          - path: SectorMap:3:64
-            type: SSD
-            expected_slot_count: 9
-        hosts:
-        - host: ::1
-          port: 12001
-          host_config_id: 2
-        )";
-        ReplaceStorageConfig(channel, yamlConfig);
-        TString yamlConfigFetched = FetchStorageConfig(channel);
-        UNIT_ASSERT_EQUAL(NormalizeYaml(yamlConfig), NormalizeYaml(yamlConfigFetched));
+        TString yamlConfig = R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+
+allowed_labels:
+  node_id:
+    type: string
+  host:
+    type: string
+  tenant:
+    type: string
+
+selector_config: []
+
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: SectorMap:1:64
+      type: SSD
+      expected_slot_count: 9
+    - path: SectorMap:2:64
+      type: SSD
+      expected_slot_count: 9
+  - host_config_id: 2
+    drive:
+    - path: SectorMap:3:64
+      type: SSD
+      expected_slot_count: 9
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 2
+)";
+        TString yamlConfigExpected = SubstGlobalCopy(yamlConfig, "version: 0", "version: 1");
+        ReplaceStorageConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false);
+        std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
+        FetchStorageConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
+        UNIT_ASSERT(yamlConfigFetched);
+        UNIT_ASSERT(!storageYamlConfigFetched);
+        UNIT_ASSERT_VALUES_EQUAL(yamlConfigExpected, *yamlConfigFetched);
     }
+
     Y_UNIT_TEST(FetchStorageConfig) {
         TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
-        std::shared_ptr<grpc::Channel> channel;
-        channel = grpc::CreateChannel(location, grpc::InsecureChannelCredentials());
-        FetchStorageConfig(channel);
+        std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
+        FetchStorageConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
+        UNIT_ASSERT(!yamlConfigFetched);
+        UNIT_ASSERT(!storageYamlConfigFetched);
     }
 }
 

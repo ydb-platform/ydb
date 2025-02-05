@@ -490,6 +490,11 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.WithMonitoringDescriptor; })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "operation_incarnation",
+        [] (TThis* command) -> auto& { return command->Options.OperationIncarnation; })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
         "from_time",
         [] (TThis* command) -> auto& { return command->Options.FromTime; })
@@ -893,6 +898,24 @@ void TUpdateOperationParametersCommand::DoExecute(ICommandContextPtr context)
     auto asyncResult = context->GetClient()->UpdateOperationParameters(
         OperationIdOrAlias,
         ConvertToYsonString(Parameters),
+        Options);
+
+    WaitFor(asyncResult)
+        .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPatchOperationSpecCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("patches", &TThis::Patches);
+}
+
+void TPatchOperationSpecCommand::DoExecute(ICommandContextPtr context)
+{
+    auto asyncResult = context->GetClient()->PatchOperationSpec(
+        OperationIdOrAlias,
+        Patches,
         Options);
 
     WaitFor(asyncResult)

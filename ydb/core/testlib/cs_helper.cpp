@@ -121,7 +121,7 @@ std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
-std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs) const {
+std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui64 tsStepUs) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 
     arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
@@ -370,7 +370,7 @@ std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() const {
     });
 }
 
-std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui32 tsStepUs) const {
+std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui64 tsStepUs) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
     UNIT_ASSERT(schema);
     UNIT_ASSERT(schema->num_fields());
@@ -443,7 +443,7 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch() cons
     return TestArrowBatch(0, 0, 10, 1);
 }
 
-std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount, const ui32 /*tsStepUs*/) const {
+std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount, const ui64 /*tsStepUs*/) const {
     rowCount = 10;
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 

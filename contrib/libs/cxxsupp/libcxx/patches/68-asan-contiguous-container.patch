@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index e9c86c8..de02565 100644
+index 1bb99ee..465d784 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -1039,10 +1039,12 @@ typedef __char32_t char32_t;
+@@ -1081,10 +1081,12 @@ typedef __char32_t char32_t;
  #  ifndef _LIBCPP_HAS_NO_ASAN
  extern "C" _LIBCPP_EXPORTED_FROM_ABI void
  __sanitizer_annotate_contiguous_container(const void*, const void*, const void*, const void*);
@@ -16,10 +16,10 @@ index e9c86c8..de02565 100644
  
  // Try to find out if RTTI is disabled.
 diff --git a/include/deque b/include/deque
-index 6389627..314d5bd 100644
+index 154926d..9559235 100644
 --- a/include/deque
 +++ b/include/deque
-@@ -888,7 +888,7 @@ private:
+@@ -886,7 +886,7 @@ private:
      (void)__old_con_end;
      (void)__new_con_beg;
      (void)__new_con_end;
@@ -28,9 +28,9 @@ index 6389627..314d5bd 100644
      if (__beg != nullptr && __asan_annotate_container_with_allocator<_Allocator>::value)
        __sanitizer_annotate_double_ended_contiguous_container(
            __beg, __end, __old_con_beg, __old_con_end, __new_con_beg, __new_con_end);
-@@ -1052,7 +1052,7 @@ private:
-           __block_start, __block_end, __block_start, __block_start, __block_start, __block_end);
+@@ -1077,7 +1077,7 @@ private:
      }
+ #endif
    }
 -#if !defined(_LIBCPP_HAS_NO_ASAN)
 +#if !defined(_LIBCPP_HAS_NO_ASAN) && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
@@ -38,15 +38,15 @@ index 6389627..314d5bd 100644
  public:
    _LIBCPP_HIDE_FROM_ABI bool __verify_asan_annotations() const _NOEXCEPT {
 diff --git a/include/vector b/include/vector
-index fb92f68..9e512b3 100644
+index b989a3c..61e3263 100644
 --- a/include/vector
 +++ b/include/vector
-@@ -849,7 +849,7 @@ private:
-     (void)__end;
+@@ -848,7 +848,7 @@ private:
+   __annotate_contiguous_container(const void* __old_mid, const void* __new_mid) const {
      (void)__old_mid;
      (void)__new_mid;
 -#ifndef _LIBCPP_HAS_NO_ASAN
 +#if !defined(_LIBCPP_HAS_NO_ASAN) && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
+     const void* __beg = data();
+     const void* __end = data() + capacity();
      if (!__libcpp_is_constant_evaluated() && __beg != nullptr &&
-         __asan_annotate_container_with_allocator<_Allocator>::value)
-       __sanitizer_annotate_contiguous_container(__beg, __end, __old_mid, __new_mid);

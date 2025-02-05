@@ -2,6 +2,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
+#include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -181,10 +182,15 @@ namespace NKikimr {
     private:
         NMonGroup::TSkeletonOverloadGroup& Mon;
         TIntrusivePtr<TVDiskConfig> VCfg;
+        TPDiskCtxPtr PDiskCtx;
+
+        TControlWrapper ThrottlingMinInplacedSize;
+        TControlWrapper ThrottlingMaxInplacedSize;
 
         ui64 CurrentSstCount = 0;
         ui64 CurrentInplacedSize = 0;
         ui64 CurrentOccupancy = 0;
+        ui64 CurrentLogChunkCount = 0;
 
         TInstant CurrentTime;
         ui64 CurrentSpeedLimit = 0;
@@ -214,8 +220,8 @@ namespace NKikimr {
 
         ui64 CalcInplacedSizeSpeedLimit() const {
             ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
-            ui64 maxInplacedSize = (ui64)VCfg->ThrottlingMaxInplacedSize;
+            ui64 minInplacedSize = (ui64)ThrottlingMinInplacedSize;
+            ui64 maxInplacedSize = (ui64)ThrottlingMaxInplacedSize;
 
             return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, deviceSpeed);
         }
@@ -228,30 +234,79 @@ namespace NKikimr {
             return LinearInterpolation(CurrentOccupancy, minOccupancy, maxOccupancy, deviceSpeed);
         }
 
-        ui64 CalcCurrentSpeedLimit() const {
+        ui64 CalcLogChunkCountSpeedLimit() const {
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
+            ui64 maxLogChunkCount = (ui64)VCfg->ThrottlingMaxLogChunkCount;
+
+            return LinearInterpolation(CurrentLogChunkCount, minLogChunkCount, maxLogChunkCount, deviceSpeed);
+        }
+
+        ui64 CalcSpeedLimit() const {
             ui64 sstCountSpeedLimit = CalcSstCountSpeedLimit();
             ui64 inplacedSizeSpeedLimit = CalcInplacedSizeSpeedLimit();
             ui64 occupancySpeedLimit = CalcOccupancySpeedLimit();
+            ui64 logChunkCountSpeedLimit = CalcLogChunkCountSpeedLimit();
 
-            return std::min(occupancySpeedLimit, std::min(sstCountSpeedLimit, inplacedSizeSpeedLimit));
+            return std::min({
+                sstCountSpeedLimit,
+                inplacedSizeSpeedLimit,
+                occupancySpeedLimit,
+                logChunkCountSpeedLimit});
         }
 
     public:
         explicit TThrottlingController(
-            const TIntrusivePtr<TVDiskConfig> &vcfg,
-            NMonGroup::TSkeletonOverloadGroup& mon)
+            const TIntrusivePtr<TVDiskConfig>& vcfg,
+            NMonGroup::TSkeletonOverloadGroup& mon,
+            const TPDiskCtxPtr& pdiskCtx)
             : Mon(mon)
             , VCfg(vcfg)
-        {}
+            , PDiskCtx(pdiskCtx)
+        {
+            NPDisk::EDeviceType mediaType = NPDisk::DEVICE_TYPE_UNKNOWN;
+            if (PDiskCtx && PDiskCtx->Dsk) {
+                mediaType = PDiskCtx->Dsk->TrueMediaType;
+            }
+            if (mediaType == NPDisk::DEVICE_TYPE_UNKNOWN) {
+                mediaType = VCfg->BaseInfo.DeviceType;
+            }
+            switch (mediaType) {
+                case NPDisk::DEVICE_TYPE_SSD:
+                case NPDisk::DEVICE_TYPE_NVME:
+                    ThrottlingMinInplacedSize = VCfg->ThrottlingMinInplacedSizeSSD;
+                    ThrottlingMaxInplacedSize = VCfg->ThrottlingMaxInplacedSizeSSD;
+                    break;
+                default:
+                    ThrottlingMinInplacedSize = VCfg->ThrottlingMinInplacedSizeHDD;
+                    ThrottlingMaxInplacedSize = VCfg->ThrottlingMaxInplacedSizeHDD;
+                    break;
+            }
+        }
 
         bool IsActive() const {
             ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
-            ui64 minInplacedSize = (ui64)VCfg->ThrottlingMinInplacedSize;
+            ui64 minInplacedSize = (ui64)ThrottlingMinInplacedSize;
             ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
+            ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
 
             return CurrentSstCount > minSstCount ||
                 CurrentInplacedSize > minInplacedSize ||
-                CurrentOccupancy > minOccupancy;
+                CurrentOccupancy > minOccupancy ||
+                CurrentLogChunkCount > minLogChunkCount;
+        }
+
+        bool IsThrottling() const {
+            return IsActive() && !VCfg->ThrottlingDryRun;
+        }
+
+        ui32 GetThrottlingRate() const {
+            if (!IsActive()) {
+                return 1000;
+            }
+            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
+            double rate = (double)CurrentSpeedLimit / deviceSpeed;
+            return rate * 1000;
         }
 
         TDuration BytesToDuration(ui64 bytes) const {
@@ -271,7 +326,9 @@ namespace NKikimr {
             return AvailableBytes;
         }
 
-        void UpdateState(TInstant now, ui64 sstCount, ui64 inplacedSize, float occupancy) {
+        void UpdateState(TInstant now, ui64 sstCount, ui64 inplacedSize,
+            float occupancy, ui32 logChunkCount)
+        {
             bool prevActive = IsActive();
 
             CurrentSstCount = sstCount;
@@ -282,6 +339,9 @@ namespace NKikimr {
 
             CurrentOccupancy = occupancy * 1'000'000;
             Mon.ThrottlingOccupancyPerMille() = occupancy * 1000;
+
+            CurrentLogChunkCount = logChunkCount;
+            Mon.ThrottlingLogChunkCount() = logChunkCount;
 
             Mon.ThrottlingIsActive() = (ui64)IsActive();
 
@@ -294,7 +354,7 @@ namespace NKikimr {
                     CurrentTime = now;
                     AvailableBytes = 0;
                 }
-                CurrentSpeedLimit = CalcCurrentSpeedLimit();
+                CurrentSpeedLimit = CalcSpeedLimit();
             }
 
             Mon.ThrottlingCurrentSpeedLimit() = CurrentSpeedLimit;
@@ -333,7 +393,7 @@ namespace NKikimr {
         , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
                 std::move(vMultiPut), std::move(loc), std::move(aoput)))
         , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx))
-        , ThrottlingController(new TThrottlingController(vcfg, Mon))
+        , ThrottlingController(new TThrottlingController(vcfg, Mon, pdiskCtx))
     {}
 
     TOverloadHandler::~TOverloadHandler() {}
@@ -380,9 +440,9 @@ namespace NKikimr {
             float occupancy = 1.f - VCtx->GetOutOfSpaceState().GetFreeSpaceShare();
 
             auto now = ctx.Now();
-            ThrottlingController->UpdateState(now, sstCount, dataInplacedSize, occupancy);
+            ThrottlingController->UpdateState(now, sstCount, dataInplacedSize, occupancy, LogChunkCount);
 
-            if (ThrottlingController->IsActive()) {
+            if (ThrottlingController->IsThrottling()) {
                 ThrottlingController->UpdateTime(now);
 
                 int count = batchSize;
@@ -456,10 +516,22 @@ namespace NKikimr {
         KickInFlight = false;
     }
 
+    void TOverloadHandler::SetLogChunkCount(ui32 logChunkCount) {
+        LogChunkCount = logChunkCount;
+    }
+
+    bool TOverloadHandler::IsThrottling() const {
+        return ThrottlingController->IsThrottling();
+    }
+
+    ui32 TOverloadHandler::GetThrottlingRate() const {
+        return ThrottlingController->GetThrottlingRate();
+    }
+
     template <class TEv>
     inline bool TOverloadHandler::PostponeEvent(TAutoPtr<TEventHandle<TEv>> &ev) {
         if (DynamicPDiskWeightsManager->StopPuts() ||
-            ThrottlingController->IsActive() ||
+            ThrottlingController->IsThrottling() ||
             !EmergencyQueue->Empty())
         {
             EmergencyQueue->Push(ev);

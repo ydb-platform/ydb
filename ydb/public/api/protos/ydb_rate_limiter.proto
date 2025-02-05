@@ -63,6 +63,9 @@ message MeteringConfig {
         // Default value is inherited from parent or equals 60 seconds for root.
         uint64 billing_period_sec = 2;
 
+        // User-defined labels.
+        map<string, string> labels = 3 [(map_key).length.le = 256, (length).le = 10240, (size).le = 100];
+
         // Billing metric JSON fields (inherited from parent if not set)
         google.protobuf.Struct metric_fields = 10;
     }

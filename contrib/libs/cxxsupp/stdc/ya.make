@@ -9,7 +9,6 @@ LICENSE(Service-Sourceless-Library)
 SUBSCRIBER(
     g:contrib
     g:cpp-contrib
-    pg
 )
 
 NO_PLATFORM()

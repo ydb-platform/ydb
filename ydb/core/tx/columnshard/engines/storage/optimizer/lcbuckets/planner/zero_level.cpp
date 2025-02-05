@@ -61,4 +61,11 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
     return 1000.0 * PortionsInfo.GetCount() * PortionsInfo.GetCount() / mb;
 }
 
+TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
+    if (!PredOptimization) {
+        return TInstant::Max();
+    }
+    return *PredOptimization + DurationToDrop;
+}
+
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

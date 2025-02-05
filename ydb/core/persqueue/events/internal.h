@@ -21,7 +21,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <util/generic/maybe.h>
 
-namespace NYdb {
+namespace NYdb::inline V3 {
     class ICredentialsProviderFactory;
 }
 
@@ -186,7 +186,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
-	EvTxBatchComplete,
+	    EvTxBatchComplete,
         EvReadingPartitionStatusRequest,
         EvProcessChangeOwnerRequests,
         EvWakeupReleasePartition,
@@ -196,6 +196,7 @@ struct TEvPQ {
         EvDeletePartition,
         EvDeletePartitionDone,
         EvTransactionCompleted,
+        EvListAllTopicsResponse,
         EvEnd
     };
 
@@ -1176,6 +1177,16 @@ struct TEvPQ {
         }
 
         TMaybe<NPQ::TWriteId> WriteId;
+    };
+
+    struct TEvListAllTopicsResponse : TEventLocal<TEvListAllTopicsResponse, EvListAllTopicsResponse> {
+        explicit TEvListAllTopicsResponse() = default;
+        explicit TEvListAllTopicsResponse(Ydb::StatusIds status, const TString& error);
+
+        TVector<TString> Topics;
+        bool HaveMoreTopics = false;
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        TString Error;
     };
 };
 

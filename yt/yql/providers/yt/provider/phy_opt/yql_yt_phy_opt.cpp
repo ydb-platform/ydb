@@ -62,6 +62,9 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS)) {
         AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
         AddHandler(1, &TYtMap::Match, HNDL(FuseOuterMap));
+        if (State_->Configuration->EnableFuseMapToMapReduce.Get().GetOrElse(DEFAULT_ENABLE_FUSE_MAP_TO_MAPREDUCE)) {
+            AddHandler(1, &TYtMapReduce::Match, HNDL(FuseMapToMapReduce));
+        }
     }
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(MapFieldsSubset));
     AddHandler(1, Names({TYtMapReduce::CallableName(), TYtReduce::CallableName()}), HNDL(ReduceFieldsSubset));
@@ -81,6 +84,11 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
         AddHandler(1, &TYtReduce::Match, HNDL(FuseReduceWithTrivialMap));
     }
 
+    if (State_->Configuration->UseQLFilter.Get().GetOrElse(DEFAULT_USE_QL_FILTER)) {
+        // best to run after Fuse*Map and before MapToMerge
+        AddHandler(2, Names({TYtMap::CallableName()}), HNDL(ExtractQLFilters));
+        AddHandler(2, Names({TYtQLFilter::CallableName()}), HNDL(OptimizeQLFilterType));
+    }
     AddHandler(2, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
     AddHandler(2, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));
     AddHandler(2, &TYtMap::Match, HNDL(MapToMerge));

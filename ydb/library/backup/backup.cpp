@@ -10,13 +10,13 @@
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_view.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/draft/ydb_view.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -39,7 +39,8 @@
 #include <util/system/file.h>
 #include <util/system/fs.h>
 
-#include <format>
+#include <google/protobuf/text_format.h>
+
 
 namespace NYdb::NBackup {
 
@@ -103,7 +104,7 @@ case EPrimitiveType::type:                          \
 
 #define CASE_PRINT_PRIMITIVE_STRING_TYPE(out, type) \
 case EPrimitiveType::type: {                        \
-        TString str = parser.Get##type();           \
+        auto str = TString{parser.Get##type()};           \
         CGIEscape(str);                             \
         out << '"' << str << '"';                   \
     }                                               \
@@ -348,7 +349,7 @@ void ReadTable(TDriver driver, const NTable::TTableDescription& desc, const TStr
     do {
         lastWrittenPK = TryReadTable(driver, desc, fullTablePath, folderPath, lastWrittenPK, &fileCounter, ordered);
         if (lastWrittenPK && retries) {
-            LOG_D("Retry read table from key: " << FormatValueYson(*lastWrittenPK).Quote());
+            LOG_D("Retry read table from key: " << TString{FormatValueYson(*lastWrittenPK)}.Quote());
         }
     } while (lastWrittenPK && retries--);
 
@@ -478,11 +479,21 @@ void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& fol
     outFile.Write(protoStr.data(), protoStr.size());
 }
 
-void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
-    auto entry = DescribePath(driver, JoinDatabasePath(dbPrefix, path));
+void WriteCreationQueryToFile(const TString& creationQuery, const TFsPath& folderPath, const NDump::NFiles::TFileInfo& fileInfo) {
+    LOG_D("Write " << fileInfo.LogObjectType << " into " << folderPath.Child(fileInfo.FileName).GetPath().Quote());
+    TFile outFile(folderPath.Child(fileInfo.FileName), CreateAlways | WrOnly);
+    outFile.Write(creationQuery.data(), creationQuery.size());
+}
+
+void BackupPermissions(TDriver driver, const TString& dbPath, const TFsPath& folderPath) {
+    auto entry = DescribePath(driver, dbPath);
     Ydb::Scheme::ModifyPermissionsRequest proto;
     entry.SerializeTo(proto);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::Permissions());
+}
+
+void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
+    BackupPermissions(driver, JoinDatabasePath(dbPrefix, path), folderPath);
 }
 
 Ydb::Table::ChangefeedDescription ProtoFromChangefeedDesc(const NTable::TChangefeedDescription& changefeedDesc) {
@@ -491,27 +502,30 @@ Ydb::Table::ChangefeedDescription ProtoFromChangefeedDesc(const NTable::TChangef
     return protoChangeFeedDesc;
 }
 
-NTopic::TDescribeTopicResult DescribeTopic(TDriver driver, const TString& path) {
-    NYdb::NTopic::TTopicClient client(driver);
-    return NConsoleClient::RetryFunction([&]() {
-        return client.DescribeTopic(path).GetValueSync();
+NTopic::TTopicDescription DescribeTopic(TDriver driver, const TString& path) {
+    NTopic::TTopicClient client(driver);
+    const auto result = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeTopic(path).ExtractValueSync();
     });
+    VerifyStatus(result, "describe topic to build a backup");
+    return result.GetTopicDescription();
 }
 
 void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& folderPath) {
     auto desc = DescribeTable(driver, tablePath);
 
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
-        TFsPath changefeedDirPath = CreateDirectory(folderPath, changefeedDesc.GetName());
+        TFsPath changefeedDirPath = CreateDirectory(folderPath, TString{changefeedDesc.GetName()});
 
         auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
-        const auto descTopicResult = DescribeTopic(driver, JoinDatabasePath(tablePath, changefeedDesc.GetName()));
-        VerifyStatus(descTopicResult);
-        const auto& topicDescription = descTopicResult.GetTopicDescription();
-        const auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
+        const auto topicDescription = DescribeTopic(driver, JoinDatabasePath(tablePath, TString{changefeedDesc.GetName()}));
+        auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
+        // Unnecessary fields
+        protoTopicDescription.clear_self();
+        protoTopicDescription.clear_topic_stats();
 
         WriteProtoToFile(protoChangeFeedDesc, changefeedDirPath, NDump::NFiles::Changefeed());
-        WriteProtoToFile(protoTopicDescription, changefeedDirPath, NDump::NFiles::Topic());
+        WriteProtoToFile(protoTopicDescription, changefeedDirPath, NDump::NFiles::TopicDescription());
     }
 }
 
@@ -538,73 +552,13 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
 
 namespace {
 
-NView::TViewDescription DescribeView(NView::TViewClient& client, const TString& path) {
+NView::TViewDescription DescribeView(TDriver driver, const TString& path) {
+    NView::TViewClient client(driver);
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeView(path).ExtractValueSync();
     });
-    VerifyStatus(status);
+    VerifyStatus(status, "describe view to build a backup");
     return status.GetViewDescription();
-}
-
-struct TViewQuerySplit {
-    TString ContextRecreation;
-    TString Select;
-};
-
-TViewQuerySplit SplitViewQuery(TStringInput query) {
-    // to do: make the implementation more versatile
-    TViewQuerySplit split;
-
-    TString line;
-    while (query.ReadLine(line)) {
-        (line.StartsWith("--") || line.StartsWith("PRAGMA ")
-            ? split.ContextRecreation
-            : split.Select
-        ) += line;
-    }
-
-    return split;
-}
-
-void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssues& accumulatedIssues) {
-    NYql::TIssues subIssues;
-    if (!NDump::ValidateViewQuery(query, subIssues)) {
-        NYql::TIssue restorabilityIssue(
-            TStringBuilder() << "Restorability of the view: " << dbPath.Quote()
-            << " storing the following query:\n"
-            << query
-            << "\ncannot be guaranteed. For more information, please consult the 'ydb tools dump' documentation."
-        );
-        restorabilityIssue.Severity = NYql::TSeverityIds::S_WARNING;
-        for (const auto& subIssue : subIssues) {
-            restorabilityIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
-        }
-        accumulatedIssues.AddIssue(std::move(restorabilityIssue));
-    }
-}
-
-TString BuildCreateViewQuery(TStringBuf name, const NView::TViewDescription& description, TStringBuf backupRoot) {
-    auto [contextRecreation, select] = SplitViewQuery(description.GetQueryText());
-
-    const TString query = std::format(
-        "-- backup root: \"{}\"\n"
-        "{}\n"
-        "CREATE VIEW IF NOT EXISTS `{}` WITH (security_invoker = TRUE) AS\n"
-        "    {};\n",
-        backupRoot.data(),
-        contextRecreation.data(),
-        name.data(),
-        select.data()
-    );
-
-    TString formattedQuery;
-    TString errors;
-    Y_ENSURE(NSQLFormat::SqlFormatSimple(
-        query,
-        formattedQuery,
-        errors
-    ), errors);
-    return formattedQuery;
 }
 
 }
@@ -616,33 +570,70 @@ and writes it to the backup folder designated for this view.
 
 \param dbBackupRoot the root of the backup in the database
 \param dbPathRelativeToBackupRoot the path to the view in the database relative to the backup root
-\param fsBackupDir the path on the file system to write the file with the CREATE VIEW statement to
+\param fsBackupFolder the path on the file system to write the file with the CREATE VIEW statement to
 \param issues the accumulated backup issues container
 */
 void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPathRelativeToBackupRoot,
-    const TFsPath& fsBackupDir, NYql::TIssues& issues
+    const TFsPath& fsBackupFolder, NYql::TIssues& issues
 ) {
     Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
     const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
 
-    LOG_I("Backup view " << dbPath.Quote() << " to " << fsBackupDir.GetPath().Quote());
+    LOG_I("Backup view " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    NView::TViewClient client(driver);
-    auto viewDescription = DescribeView(client, dbPath);
+    const auto viewDescription = DescribeView(driver, dbPath);
 
-    ValidateViewQuery(viewDescription.GetQueryText(), dbPath, issues);
-
-    const auto fsPath = fsBackupDir.Child(NDump::NFiles::CreateView().FileName);
-    LOG_D("Write view creation query to " << fsPath.GetPath().Quote());
-
-    TFileOutput output(fsPath);
-    output << BuildCreateViewQuery(
+    const auto creationQuery = NDump::BuildCreateViewQuery(
         TFsPath(dbPathRelativeToBackupRoot).GetName(),
-        viewDescription,
-        dbBackupRoot
+        dbPath,
+        TString(viewDescription.GetQueryText()),
+        dbBackupRoot,
+        issues
     );
+    Y_ENSURE(creationQuery, issues.ToString());
 
-    BackupPermissions(driver, dbBackupRoot, dbPathRelativeToBackupRoot, fsBackupDir);
+    WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateView());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
+void BackupTopic(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup topic " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto topicDescription = DescribeTopic(driver, dbPath);
+
+    Ydb::Topic::CreateTopicRequest creationRequest;
+    topicDescription.SerializeTo(creationRequest);
+    creationRequest.clear_attributes();
+
+    WriteProtoToFile(creationRequest, fsBackupFolder, NDump::NFiles::CreateTopic());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
+namespace {
+
+NCoordination::TNodeDescription DescribeCoordinationNode(TDriver driver, const TString& path) {
+    NCoordination::TClient client(driver);
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeNode(path).ExtractValueSync();
+    });
+    VerifyStatus(status, "describe coordination node to build a backup");
+    return status.ExtractResult();
+}
+
+}
+
+void BackupCoordinationNode(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup coordination node " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto nodeDescription = DescribeCoordinationNode(driver, dbPath);
+
+    Ydb::Coordination::CreateNodeRequest creationRequest;
+    nodeDescription.SerializeTo(creationRequest);
+
+    WriteProtoToFile(creationRequest, fsBackupFolder, NDump::NFiles::CreateCoordinationNode());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
 void CreateClusterDirectory(const TDriver& driver, const TString& path, bool rootBackupDir = false) {
@@ -731,6 +722,12 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
             }
             if (dbIt.IsView()) {
                 BackupView(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
+            }
+            if (dbIt.IsTopic()) {
+                BackupTopic(driver, dbIt.GetFullPath(), childFolderPath);
+            }
+            if (dbIt.IsCoordinationNode()) {
+                BackupCoordinationNode(driver, dbIt.GetFullPath(), childFolderPath);
             }
             dbIt.Next();
         }

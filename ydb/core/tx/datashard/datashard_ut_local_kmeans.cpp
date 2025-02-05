@@ -69,7 +69,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             rec.SetDoneRounds(0);
             rec.SetNeedsRounds(3);
 
-            rec.SetParent(0);
+            rec.SetParentFrom(0);
+            rec.SetParentTo(0);
             rec.SetChild(1);
 
             if (rec.HasEmbeddingColumn()) {
@@ -133,7 +134,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                 rec.SetDoneRounds(0);
                 rec.SetNeedsRounds(300);
 
-                rec.SetParent(parent);
+                rec.SetParentFrom(parent);
+                rec.SetParentTo(parent);
                 rec.SetChild(parent + 1);
 
                 rec.SetEmbeddingColumn("embedding");

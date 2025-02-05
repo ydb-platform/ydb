@@ -113,7 +113,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -259,7 +259,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -379,7 +379,7 @@ public:
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
         const auto load = new LoadInst(valueType, statePtr, "load", block);
-        const auto start = SelectInst::Create(IsInvalid(load, block), ConstantInt::get(indexType, 0ULL), GetterFor<ui64>(load, context, block), "start", block);
+        const auto start = SelectInst::Create(IsInvalid(load, block, context), ConstantInt::get(indexType, 0ULL), GetterFor<ui64>(load, context, block), "start", block);
         const auto index = PHINode::Create(indexType, 2U, "index", main);
         index->addIncoming(start, block);
 
@@ -479,7 +479,7 @@ public:
         const auto indexType = Type::getInt64Ty(context);
 
         const auto load = new LoadInst(valueType, statePtr, "load", block);
-        const auto state = SelectInst::Create(IsInvalid(load, block), ConstantInt::get(indexType, 0ULL), GetterFor<ui64>(load, context, block), "index", block);
+        const auto state = SelectInst::Create(IsInvalid(load, block, context), ConstantInt::get(indexType, 0ULL), GetterFor<ui64>(load, context, block), "index", block);
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
@@ -503,7 +503,7 @@ public:
             block = flow;
             const auto item = GetNodeValue(Flows_[i], ctx, block);
             result->addIncoming(item, block);
-            BranchInst::Create(next, done, IsFinish(item, block), block);
+            BranchInst::Create(next, done, IsFinish(item, block, context), block);
         }
 
         block = next;
@@ -566,19 +566,10 @@ public:
         const auto factory = ctx.GetFactory();
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(IsStream ? &THolderFactory::ExtendStream : &THolderFactory::ExtendList<false>));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto funType = FunctionType::get(valueType, {factory->getType(), array->getType(), size->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto res = CallInst::Create(funType, funcPtr, {factory, array, size}, "res", block);
-            return res;
-        } else {
-            const auto retPtr = new AllocaInst(valueType, 0U, "ret_ptr", block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {factory->getType(), retPtr->getType(), array->getType(), size->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funType, funcPtr, {factory, retPtr, array, size}, "", block);
-            const auto res = new LoadInst(valueType, retPtr, "res", block);
-            return res;
-        }
+        const auto funType = FunctionType::get(valueType, {factory->getType(), array->getType(), size->getType()}, false);
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+        const auto res = CallInst::Create(funType, funcPtr, {factory, array, size}, "res", block);
+        return res;
     }
 #endif
 private:

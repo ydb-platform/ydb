@@ -7,7 +7,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <util/generic/guid.h>
@@ -70,7 +70,7 @@ void TTopicOperationsScenario::InitDriver(const TConfig& config)
 {
     Driver =
         std::make_unique<NYdb::TDriver>(TYdbCommand::CreateDriver(config,
-                                                                  MakeLogBackend(config.VerbosityLevel)));
+                                                                  std::unique_ptr<TLogBackend>(MakeLogBackend(config.VerbosityLevel).Release())));
 }
 
 void TTopicOperationsScenario::InitStatsCollector()
@@ -115,7 +115,7 @@ void TTopicOperationsScenario::DropTopic(const TString& database,
         TCommandWorkloadTopicDescribe::GenerateFullTopicName(database, topic);
 
     auto result = client.DropTopic(topicPath).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 }
 
 void TTopicOperationsScenario::DropTable(const TString& database, const TString& table)
@@ -123,7 +123,7 @@ void TTopicOperationsScenario::DropTable(const TString& database, const TString&
     NTable::TTableClient client(*Driver);
     auto session = GetSession(client);
     auto result = session.DropTable(database + "/" + table).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 }
 
 void TTopicOperationsScenario::ExecSchemeQuery(const TString& query)
@@ -131,7 +131,7 @@ void TTopicOperationsScenario::ExecSchemeQuery(const TString& query)
     NTable::TTableClient client(*Driver);
     auto session = GetSession(client);
     auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 }
 
 void TTopicOperationsScenario::ExecDataQuery(const TString& query,
@@ -142,7 +142,7 @@ void TTopicOperationsScenario::ExecDataQuery(const TString& query,
     auto result = session.ExecuteDataQuery(query,
                                            NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
                                            params).ExtractValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 }
 
 void TTopicOperationsScenario::EnsureTopicNotExist(const TString& topic)
@@ -194,13 +194,13 @@ void TTopicOperationsScenario::CreateTopic(const TString& topic,
     }
 
     auto result = client.CreateTopic(topic, settings).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 }
 
 NTable::TSession TTopicOperationsScenario::GetSession(NTable::TTableClient& client)
 {
     auto result = client.GetSession({}).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return result.GetSession();
 }
 

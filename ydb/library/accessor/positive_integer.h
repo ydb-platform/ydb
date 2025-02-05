@@ -1,14 +1,17 @@
 #pragma once
 #include <util/system/types.h>
+#include <util/stream/output.h>
+#include <util/generic/typetraits.h>
 
 namespace NKikimr {
 
 class TPositiveControlInteger {
 private:
-    ui64 Value = 0;
+    TAtomicCounter Value = 0;
 public:
     TPositiveControlInteger() = default;
-    TPositiveControlInteger(const ui64 value)
+    TPositiveControlInteger(const ui64 value);
+    TPositiveControlInteger(const ui32 value)
         : Value(value) {
 
     }
@@ -24,10 +27,10 @@ public:
     ui64 GetDec() const;
     ui64 Val() const;
     bool operator!() const {
-        return !Value;
+        return !Value.Val();
     }
     operator ui64() const {
-        return Value;
+        return Value.Val();
     }
     ui64 operator++() {
         return Inc();

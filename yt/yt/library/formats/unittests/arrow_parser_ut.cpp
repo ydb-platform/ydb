@@ -16,11 +16,9 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/writer.h>
 
-namespace NYT {
-
+namespace NYT::NFormats {
 namespace {
 
-using namespace NFormats;
 using namespace NTableClient;
 using namespace NYTree;
 using namespace NYson;
@@ -186,7 +184,7 @@ std::string MakeMapArrow(const std::vector<std::vector<int32_t>>& key, const std
     auto* pool = arrow::default_memory_pool();
 
     auto keyBuilder = std::make_shared<arrow::Int32Builder>(pool);
-    auto valueBuilder = std::make_shared<arrow::Int32Builder>(pool);
+    auto valueBuilder = std::make_shared<arrow::UInt32Builder>(pool);
     auto mapBuilder = std::make_unique<arrow::MapBuilder>(pool, keyBuilder, valueBuilder);
 
     for (ssize_t mapIndex = 0; mapIndex < std::ssize(key); mapIndex++) {
@@ -350,7 +348,7 @@ void TestArrowParserWithDictionary(bool addExtraValues = false)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "integer")), 1);
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(1, "integer")), 2);
@@ -373,7 +371,7 @@ TEST(TArrowParserTest, Simple)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "integer")), 1);
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(1, "integer")), 2);
@@ -394,7 +392,7 @@ TEST(TArrowParserTest, Optional)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "opt")), 1);
     ASSERT_TRUE(IsNull(collectedRows.GetRowValue(1, "opt")));
@@ -421,7 +419,7 @@ TEST(TArrowParserTest, Bool)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetBoolean(collectedRows.GetRowValue(0, "bool")), true);
     ASSERT_EQ(GetBoolean(collectedRows.GetRowValue(1, "bool")), false);
@@ -443,7 +441,7 @@ TEST(TArrowParserTest, String)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "integer")), 1);
     ASSERT_EQ(GetString(collectedRows.GetRowValue(0, "string")), "foo");
@@ -528,10 +526,10 @@ TEST(TArrowParserTest, Map)
     parser->Finish();
 
     auto firstNode = GetComposite(collectedRows.GetRowValue(0, "map"));
-    ASSERT_EQ(ConvertToYsonTextStringStable(firstNode), "[[1;2;];[3;2;];]");
+    ASSERT_EQ(ConvertToYsonTextStringStable(firstNode), "[[1;2u;];[3;2u;];]");
 
     auto secondNode = GetComposite(collectedRows.GetRowValue(1, "map"));
-    ASSERT_EQ(ConvertToYsonTextStringStable(secondNode), "[[3;2;];]");
+    ASSERT_EQ(ConvertToYsonTextStringStable(secondNode), "[[3;2u;];]");
 }
 
 TEST(TArrowParserTest, SeveralIntArrays)
@@ -548,7 +546,7 @@ TEST(TArrowParserTest, SeveralIntArrays)
     parser->Read(data);
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 5u);
+    ASSERT_EQ(collectedRows.Size(), 5);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "integer")), 1);
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(1, "integer")), 2);
@@ -561,8 +559,8 @@ TEST(TArrowParserTest, Struct)
 {
     auto tableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
         TColumnSchema("struct", StructLogicalType({
-            {"bar",   SimpleLogicalType(ESimpleLogicalValueType::String)},
-            {"foo",   SimpleLogicalType(ESimpleLogicalValueType::Int64)},
+            {"bar", SimpleLogicalType(ESimpleLogicalValueType::String)},
+            {"foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
         })),
     });
 
@@ -578,6 +576,23 @@ TEST(TArrowParserTest, Struct)
 
     auto secondNode = GetComposite(collectedRows.GetRowValue(1, "struct"));
     ASSERT_EQ(ConvertToYsonTextStringStable(secondNode), "[\"two\";2;]");
+}
+
+TEST(TArrowParserTest, StructError)
+{
+    auto tableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
+        TColumnSchema("struct", StructLogicalType({
+            {"bar", SimpleLogicalType(ESimpleLogicalValueType::String)},
+        })),
+    });
+
+    TCollectingValueConsumer collectedRows(tableSchema);
+
+    auto parser = CreateParserForArrow(&collectedRows);
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        parser->Read(MakeStructArrow({"one", "two"}, {1, 2})),
+        std::exception,
+        "The number of fields in the Arrow \"struct\" type does not match the number of fields in the YT \"struct\" type");
 }
 
 TEST(TArrowParserTest, DecimalVariousPrecisions)
@@ -677,7 +692,7 @@ TEST(TArrowParserTest, BlockingInput)
     }
     parser->Finish();
 
-    ASSERT_EQ(collectedRows.Size(), 3u);
+    ASSERT_EQ(collectedRows.Size(), 3);
 
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "integer")), 1);
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(1, "integer")), 2);
@@ -687,4 +702,4 @@ TEST(TArrowParserTest, BlockingInput)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT
+} // namespace NYT::NFormats

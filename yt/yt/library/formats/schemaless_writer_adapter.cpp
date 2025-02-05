@@ -382,7 +382,7 @@ void TSchemalessWriterAdapter::Init(const std::vector<NTableClient::TTableSchema
 
 void TSchemalessWriterAdapter::DoWrite(TRange<TUnversionedRow> rows)
 {
-    int count = static_cast<int>(rows.Size());
+    int count = std::ssize(rows);
     for (int index = 0; index < count; ++index) {
         if (CheckKeySwitch(rows[index], index + 1 == count /* isLastRow */)) {
             WriteControlAttribute(EControlAttribute::KeySwitch, true);

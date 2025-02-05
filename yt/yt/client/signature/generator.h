@@ -8,7 +8,7 @@ namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class ISignatureGenerator
+class TSignatureGeneratorBase
     : public TRefCounted
 {
 public:
@@ -16,7 +16,7 @@ public:
     //! based on its payload.
     virtual void Sign(const TSignaturePtr& signature) = 0;
 
-    virtual ~ISignatureGenerator() = default;
+    [[nodiscard]] TSignaturePtr Sign(NYson::TYsonString data);
 
 protected:
     NYson::TYsonString& GetHeader(const TSignaturePtr& signature);
@@ -24,7 +24,13 @@ protected:
     std::vector<std::byte>& GetSignature(const TSignaturePtr& signature);
 };
 
-DEFINE_REFCOUNTED_TYPE(ISignatureGenerator)
+DEFINE_REFCOUNTED_TYPE(TSignatureGeneratorBase)
+
+////////////////////////////////////////////////////////////////////////////////
+
+TSignatureGeneratorBasePtr CreateDummySignatureGenerator();
+
+TSignatureGeneratorBasePtr CreateAlwaysThrowingSignatureGenerator();
 
 ////////////////////////////////////////////////////////////////////////////////
 

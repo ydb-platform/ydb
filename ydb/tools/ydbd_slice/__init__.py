@@ -549,6 +549,7 @@ def cluster_type_args():
         "block-4-2-2-nodes",
         "mirror-3-dc-3-nodes",
         "mirror-3-dc-9-nodes",
+        "none-1-node",
     ]
     args.add_argument(
         "--cluster-type",
@@ -613,7 +614,12 @@ def add_explain_mode(modes, walle_provider):
     mode.set_defaults(handler=_run)
 
 
-def dispatch_run(func, args, walle_provider):
+def dispatch_run(func, args, walle_provider, need_confirmation=False):
+    if need_confirmation and not __confirm(args):
+        print("Aborting slice installation/formatting")
+        # TODO(shmel1k@): add confirmation message.
+        return
+
     logger.debug("run func '%s' with cmd args is '%s'", func.__name__, args)
 
     cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
@@ -653,9 +659,33 @@ def dispatch_run(func, args, walle_provider):
         # shutil.rmtree(temp_dir)
 
 
+def __confirm(args) -> bool:
+    if hasattr(args, "confirm") and args.confirm:
+        return True
+
+    confirm = input(
+        "You are trying to setup or format slice. Note, that during setup or format all previous data will be erased.\n"
+        + "Press [y] to continue or [n] to abort installation/formatting: "
+    )
+    for i in range(0, 3):
+        lw = confirm.strip().lower()
+        if lw == "n":
+            return False
+        if lw == "y":
+            return True
+        confirm = input("Enter [y] or [n]")
+    lw = confirm.strip().lower()
+    if lw == "n":
+        return False
+    if lw == "y":
+        return True
+
+    return False
+
+
 def add_install_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_install, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_install, args, walle_provider, True)
 
     mode = modes.add_parser(
         "install",
@@ -700,7 +730,6 @@ def add_update_mode(modes, walle_provider):
 
 def add_update_raw_configs(modes, walle_provider):
     def _run(args):
-
         dispatch_run(lambda self: handlers.Slice.slice_update_raw_configs(self, args.raw_cfg), args, walle_provider)
 
     mode = modes.add_parser(
@@ -749,7 +778,7 @@ def add_start_mode(modes, walle_provider):
 
 def add_clear_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_clear, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_clear, args, walle_provider, True)
 
     mode = modes.add_parser(
         "clear",
@@ -770,7 +799,7 @@ def add_clear_mode(modes, walle_provider):
 
 def add_format_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_format, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_format, args, walle_provider, True)
 
     mode = modes.add_parser(
         "format",
@@ -801,8 +830,8 @@ def add_sample_config_mode(modes):
             template_path = "/ydbd_slice/baremetal/templates/block-4-2-4-nodes.yaml"
         elif cluster_type == "block-4-2-2-nodes":
             template_path = "/ydbd_slice/baremetal/templates/block-4-2-2-nodes.yaml"
-        elif cluster_type == "mirror-3-dc-3-nodes-in-memory":
-            pass
+        elif cluster_type == "none-1-node":
+            template_path = "/ydbd_slice/baremetal/templates/none-1-node.yaml"
         elif cluster_type == "mirror-3-dc-3-nodes":
             template_path = "/ydbd_slice/baremetal/templates/mirror-3-dc-3-nodes.yaml"
         elif cluster_type == "mirror-3-dc-9-nodes":

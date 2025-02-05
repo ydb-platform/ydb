@@ -8,6 +8,7 @@
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
@@ -18,9 +19,6 @@
 #include <yt/cpp/mapreduce/http/http.h>
 #include <yt/cpp/mapreduce/http/http_client.h>
 #include <yt/cpp/mapreduce/http/retry_request.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 namespace NYT {
 namespace NDetail {

@@ -5,7 +5,6 @@
 #include <yt/yt/core/concurrency/async_stream.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
 
-#include <yt/yt/core/misc/range.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/sliding_window.h>
 
@@ -14,6 +13,7 @@
 
 #include <yt/yt/core/compression/public.h>
 
+#include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/ref.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>

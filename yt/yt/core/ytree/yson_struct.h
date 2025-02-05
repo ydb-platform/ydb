@@ -116,6 +116,8 @@ public:
     // a member method.
     bool IsEqual(const TYsonStructBase& rhs) const;
 
+    const IYsonStructMeta* GetMeta() const;
+
 private:
     template <class TValue>
     friend class TYsonStructParameter;

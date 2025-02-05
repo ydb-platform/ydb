@@ -4,6 +4,7 @@
 #include "kikimr_services_initializers.h"
 
 #include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/event_local.h>

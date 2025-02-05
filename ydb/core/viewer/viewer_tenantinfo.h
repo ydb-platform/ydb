@@ -127,9 +127,11 @@ public:
         if (Database.empty()) {
             ListTenantsResponse = MakeRequestConsoleListTenants();
         } else {
-            NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
             if (Database != DomainPath) {
+                NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
                 TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
+            } else if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
+                NavigateKeySetResult[Database] = std::move(DatabaseNavigateResponse.value());
             }
         }
 
@@ -140,7 +142,9 @@ public:
             tenant.SetType(NKikimrViewer::Domain);
             tenant.SetName(DomainPath);
             RequestMetadataCacheHealthCheck(DomainPath);
-            NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
+            if (Database.empty() || !DatabaseNavigateResponse || !DatabaseNavigateResponse->IsOk()) {
+                NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
+            }
         }
 
         HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);
@@ -272,16 +276,21 @@ public:
         }
     }
 
+    void InitSystemStateRequest(NKikimrWhiteboard::TEvSystemStateRequest& request) {
+        request.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
+        if (MemoryStats) {
+            request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
+        }
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkUtilizationFieldNumber);
+    }
+
     void SendWhiteboardSystemStateRequest(const TNodeId nodeId) {
         Subscribers.insert(nodeId);
         if (SystemStateResponse.count(nodeId) == 0) {
             auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
-            request->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
-            request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
-            request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
-            if (MemoryStats) {
-                request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
-            }
+            InitSystemStateRequest(request->Record);
             SystemStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request.release()));
         }
     }
@@ -313,7 +322,7 @@ public:
             TNodeId nodeId = *itPos;
             Subscribers.insert(nodeId);
             THolder<TEvViewer::TEvViewerRequest> sysRequest = MakeHolder<TEvViewer::TEvViewerRequest>();
-            sysRequest->Record.MutableSystemRequest();
+            InitSystemStateRequest(*sysRequest->Record.MutableSystemRequest());
             sysRequest->Record.SetTimeout(Timeout / 3);
             for (auto nodeId : nodesIds) {
                 sysRequest->Record.MutableLocation()->AddNodeId(nodeId);
@@ -790,6 +799,7 @@ public:
 
                 THashSet<TNodeId> tenantNodes;
                 NMemory::TMemoryStatsAggregator tenantMemoryStats;
+                int nodesWithNetworkUtilization = 0;
 
                 for (TNodeId nodeId : tenant.GetNodeIds()) {
                     auto itNodeInfo = nodeSystemStateInfo.find(nodeId);
@@ -840,9 +850,16 @@ public:
                         if (nodeInfo.HasMemoryStats()) {
                             tenantMemoryStats.Add(nodeInfo.GetMemoryStats(), nodeInfo.GetHost());
                         }
+                        if (nodeInfo.HasNetworkUtilization()) {
+                            tenant.SetNetworkUtilization(tenant.GetNetworkUtilization() + nodeInfo.GetNetworkUtilization());
+                            ++nodesWithNetworkUtilization;
+                        }
                         overall = Max(overall, GetViewerFlag(nodeInfo.GetSystemState()));
                     }
                     tenantNodes.emplace(nodeId);
+                }
+                if (nodesWithNetworkUtilization != 0) {
+                    tenant.SetNetworkUtilization(tenant.GetNetworkUtilization() / nodesWithNetworkUtilization);
                 }
                 tenant.MutableMemoryStats()->CopyFrom(tenantMemoryStats.Aggregate());
                 if (tenant.GetType() == NKikimrViewer::Serverless) {

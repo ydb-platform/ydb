@@ -332,6 +332,7 @@ public:
                         node.LocationAcquired = true;
                     }
                 }
+                node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
                 if (!node.ServicedDomains) {
                     node.ServicedDomains = { Self->RootDomainKey };
                 }
@@ -865,7 +866,7 @@ public:
         }
 
         for (auto it = Self->Nodes.begin(); it != Self->Nodes.end(); ++it) {
-            Self->ScheduleUnlockTabletExecution(it->second);
+            Self->ScheduleUnlockTabletExecution(it->second, NKikimrHive::LOCK_LOST_REASON_HIVE_RESTART);
         }
     }
 };

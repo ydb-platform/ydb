@@ -2735,7 +2735,7 @@ void TServiceBase::BeforeInvoke(NRpc::IServiceContext* /*context*/)
 
 bool TServiceBase::IsUp(const TCtxDiscoverPtr& /*context*/)
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     return true;
 }
@@ -2745,7 +2745,7 @@ void TServiceBase::EnrichDiscoverResponse(TRspDiscover* /*response*/)
 
 std::vector<TString> TServiceBase::SuggestAddresses()
 {
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     return std::vector<TString>();
 }

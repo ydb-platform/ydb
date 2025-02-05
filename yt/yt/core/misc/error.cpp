@@ -40,7 +40,7 @@ namespace {
 struct TExtensionData
 {
     NConcurrency::TFiberId Fid = NConcurrency::InvalidFiberId;
-    const char* HostName = nullptr;
+    TStringBuf HostName;
     TTraceId TraceId = InvalidTraceId;
     TSpanId SpanId = InvalidSpanId;
 };
@@ -141,9 +141,9 @@ TOriginAttributes::TErasedExtensionData GetExtensionDataOverride()
 {
     TExtensionData result;
     result.Fid = NConcurrency::GetCurrentFiberId();
-    result.HostName = NNet::ReadLocalHostName();
+    result.HostName = NNet::GetLocalHostNameRaw();
 
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         result.TraceId = traceContext->GetTraceId();
         result.SpanId = traceContext->GetSpanId();
     }
@@ -367,7 +367,7 @@ void Serialize(
             })
             .DoIf(valueProducer != nullptr, [&] (auto fluent) {
                 auto* consumer = fluent.GetConsumer();
-                // NB: we are forced to deal with a bare consumer here because
+                // NB: We are forced to deal with a bare consumer here because
                 // we can't use void(TFluentMap) in a function signature as it
                 // will lead to the inclusion of fluent.h in error.h and a cyclic
                 // inclusion error.h -> fluent.h -> callback.h -> error.h

@@ -228,6 +228,10 @@ private:
             DUMP_PREFIXED(prefix, asyncStats, Rows);
             DUMP_PREFIXED(prefix, asyncStats, Chunks);
             DUMP_PREFIXED(prefix, asyncStats, Splits);
+            DUMP_PREFIXED(prefix, asyncStats, FilteredBytes);
+            DUMP_PREFIXED(prefix, asyncStats, FilteredRows);
+            DUMP_PREFIXED(prefix, asyncStats, QueuedBytes);
+            DUMP_PREFIXED(prefix, asyncStats, QueuedRows);
             DUMP_PREFIXED(prefix, asyncStats, FirstMessageTs, .ToString());
             DUMP_PREFIXED(prefix, asyncStats, PauseMessageTs, .ToString());
             DUMP_PREFIXED(prefix, asyncStats, ResumeMessageTs, .ToString());
@@ -480,6 +484,7 @@ private:
         if (ev->Get()->Stats) {
             CA_LOG_T("update task runner stats");
             TaskRunnerStats = std::move(ev->Get()->Stats);
+            TaskRunnerActorElapsedTicks = TaskRunnerStats.GetActorElapsedTicks();
         }
         ComputeActorState = NDqProto::TEvComputeActorState();
         ComputeActorState.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
@@ -794,10 +799,17 @@ private:
         }
 
         if (UseCpuQuota()) {
-            CpuTimeSpent += ev->Get()->ComputeTime;
+            CpuTimeSpent += TakeCpuTimeDelta();
             AskCpuQuota();
             ProcessContinueRun();
         }
+    }
+
+    TDuration TakeCpuTimeDelta() {
+        auto newTicks = ComputeActorElapsedTicks + TaskRunnerActorElapsedTicks;
+        auto result = newTicks - LastQuotaElapsedTicks;
+        LastQuotaElapsedTicks = newTicks;
+        return TDuration::MicroSeconds(NHPTimer::GetSeconds(result) * 1'000'000ull);
     }
 
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TComputeActorState& state) const override {
@@ -1213,6 +1225,7 @@ private:
     // Cpu quota
     TActorId QuoterServiceActorId;
     TInstant CpuTimeQuotaAsked;
+    ui64 LastQuotaElapsedTicks = 0;
     std::unique_ptr<NTaskRunnerActor::TEvContinueRun> ContinueRunEvent;
     TInstant ContinueRunStartWaitTime;
     bool ContinueRunInflight = false;

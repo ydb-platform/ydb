@@ -66,7 +66,7 @@ namespace NYql::NConnector {
         } else {
             // FIXME: more appropriate error code for network error
             result.set_status(Ydb::StatusIds_StatusCode::StatusIds_StatusCode_INTERNAL_ERROR);
-            result.set_message(status.Msg);
+            result.set_message(TString{status.Msg});
         }
 
         return result;

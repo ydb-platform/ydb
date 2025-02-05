@@ -1,0 +1,20 @@
+LIBRARY()
+
+SRCS(
+    GLOBAL registrar.cpp
+    log.cpp
+)
+
+PEERDIR(
+    ydb/library/workload/abstract
+    library/cpp/json
+    library/cpp/resource
+)
+
+RESOURCE(
+    select_queries.sql workload_logs_select_queries.sql
+)
+
+GENERATE_ENUM_SERIALIZATION(log.h)
+
+END()

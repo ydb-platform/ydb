@@ -43,7 +43,7 @@ public:
         void Output(IOutputStream& str, const char* typeName, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
                 const TLogoBlobID* blobId) const {
             str << typeName         << "{"
-                << " TimestampMs# " << Timestamp.MilliSeconds();
+                << " TimestampMs# " << Timestamp.MillisecondsFloat();
             if (blobId && PartIdx != InvalidPartId) {
                 str << " sample PartId# " << TLogoBlobID(*blobId, PartIdx).ToString();
             }
@@ -68,7 +68,7 @@ public:
 
         void Output(IOutputStream& str, const char* typeName, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
             str << typeName         << "{"
-                << " TimestampMs# " << Timestamp.MilliSeconds()
+                << " TimestampMs# " << Timestamp.MillisecondsFloat()
                 << " VDiskId# "     << info->GetVDiskId(OrderNumber).ToString()
                 << " NodeId# "      << info->GetActorId(OrderNumber).NodeId()
                 << " Status# "      << NKikimrProto::EReplyStatus_Name(Status);
@@ -134,7 +134,7 @@ public:
         void Output(IOutputStream& str, const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TLogoBlobID* blobId) const {
             Y_UNUSED(info);
             Y_UNUSED(blobId);
-            str << AccelerationTypeName(Type) << "{ TimestampMs# " << Timestamp.MilliSeconds() << " }";
+            str << AccelerationTypeName(Type) << "{ TimestampMs# " << Timestamp.MillisecondsFloat() << " }";
         }
 
         AccelerationType Type;

@@ -52,15 +52,11 @@ def onjava_module(unit, *args):
         'MANAGED_PEERS': '${MANAGED_PEERS}',
         'MANAGED_PEERS_CLOSURE': '${MANAGED_PEERS_CLOSURE}',
         'NON_NAMAGEABLE_PEERS': '${NON_NAMAGEABLE_PEERS}',
-        'EXCLUDE': extract_macro_calls(unit, 'EXCLUDE_VALUE', args_delim),
         'JAVA_SRCS': extract_macro_calls(unit, 'JAVA_SRCS_VALUE', args_delim),
         'JAVAC_FLAGS': extract_macro_calls(unit, 'JAVAC_FLAGS_VALUE', args_delim),
         'ANNOTATION_PROCESSOR': extract_macro_calls(unit, 'ANNOTATION_PROCESSOR_VALUE', args_delim),
-        'JAR_INCLUDE_FILTER': extract_macro_calls(unit, 'JAR_INCLUDE_FILTER_VALUE', args_delim),
-        'JAR_EXCLUDE_FILTER': extract_macro_calls(unit, 'JAR_EXCLUDE_FILTER_VALUE', args_delim),
         # TODO remove when java test dart is in prod
         'UNITTEST_DIR': unit.get('UNITTEST_DIR'),
-        'SYSTEM_PROPERTIES': extract_macro_calls(unit, 'SYSTEM_PROPERTIES_VALUE', args_delim),
         'JVM_ARGS': extract_macro_calls(unit, 'JVM_ARGS_VALUE', args_delim),
         'TEST_CWD': extract_macro_calls(unit, 'TEST_CWD_VALUE', args_delim),
         'TEST_FORK_MODE': extract_macro_calls(unit, 'TEST_FORK_MODE', args_delim),
@@ -72,9 +68,7 @@ def onjava_module(unit, *args):
         'IDEA_EXCLUDE': extract_macro_calls(unit, 'IDEA_EXCLUDE_DIRS_VALUE', args_delim),
         'IDEA_RESOURCE': extract_macro_calls(unit, 'IDEA_RESOURCE_DIRS_VALUE', args_delim),
         'IDEA_MODULE_NAME': extract_macro_calls(unit, 'IDEA_MODULE_NAME_VALUE', args_delim),
-        'FAKEID': extract_macro_calls(unit, 'FAKEID', args_delim),
         'TEST_DATA': extract_macro_calls(unit, 'TEST_DATA_VALUE', args_delim),
-        'JAVA_FORBIDDEN_LIBRARIES': extract_macro_calls(unit, 'JAVA_FORBIDDEN_LIBRARIES_VALUE', args_delim),
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT'),
     }
     if unit.get('ENABLE_PREVIEW_VALUE') == 'yes' and (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION')) in (
@@ -252,22 +246,23 @@ def on_fill_jar_copy_resources_cmd(unit, *args):
 
 
 def on_fill_jar_gen_srcs(unit, *args):
-    varname, jar_type, srcdir, base_classes_dir, java_list, kt_list, groovy_list, res_list = tuple(args[0:8])
+    varname, jar_type, srcdir, base_classes_dir, java_list, kt_list, res_list = tuple(args[0:7])
     resolved_srcdir = unit.resolve_arc_path(srcdir)
     if not resolved_srcdir.startswith('$') or resolved_srcdir.startswith('$S'):
         return
+    if jar_type == 'SRC_JAR' and unit.get('SOURCES_JAR') != 'yes':
+        return
 
+    args_delim = unit.get('JAR_BUILD_SCRIPT_FLAGS_DELIM')
     exclude_pos = args.index('EXCLUDE')
-    globs = args[7:exclude_pos]
-    excludes = args[exclude_pos + 1 :]
+    globs = ' '.join(args[7:exclude_pos])
+    excludes = ' '.join(args[exclude_pos + 1 :])
     var = unit.get(varname)
-    var += ' && ${{cwd:BINDIR}} $YMAKE_PYTHON ${{input:"build/scripts/resolve_java_srcs.py"}} --append -d {} -s {} -k {} -g {} -r {} --include-patterns {}'.format(
-        srcdir, java_list, kt_list, groovy_list, res_list, ' '.join(globs)
-    )
+    var += f' {args_delim} --append -d {srcdir} -s {java_list} -k {kt_list} -r {res_list} --include-patterns {globs}'
     if jar_type == 'SRC_JAR':
         var += ' --all-resources'
     if len(excludes) > 0:
-        var += ' --exclude-patterns {}'.format(' '.join(excludes))
+        var += f' --exclude-patterns {excludes}'
     if unit.get('WITH_KOTLIN_VALUE') == 'yes':
         var += ' --resolve-kotlin'
     unit.set([varname, var])

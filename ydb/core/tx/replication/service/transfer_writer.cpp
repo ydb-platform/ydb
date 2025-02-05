@@ -413,7 +413,7 @@ private:
 
             hFunc(TEvWorker::TEvHandshake, HoldHandle);
             hFunc(TEvWorker::TEvData, HoldHandle);
-            //sFunc(TEvents::TEvWakeup, SendS3Request);
+            sFunc(TEvents::TEvWakeup, GetTableScheme);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -608,8 +608,7 @@ private:
         LOG_D("Handle TEvData " << ev->Get()->ToString());
 
         if (!ev->Get()->Records) {
-            Finished = true;
-            //WriteIdentity();
+            Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
             return;
         }
 
@@ -681,23 +680,11 @@ private:
         return false;
     }
 
-    //bool CanRetry(const Aws::S3::S3Error& error) const {
-    //    return Attempt < Retries && ShouldRetry(error);
-    //}
-
     void Retry() {
         Delay = Min(Delay * ++Attempt, MaxDelay);
         const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
         this->Schedule(Delay + random, new TEvents::TEvWakeup());
     }
-
-    //void RetryOrLeave(const Aws::S3::S3Error& error) {
-    //    if (CanRetry(error)) {
-    //        Retry();
-    //    } else {
-    //        Leave(TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
-    //    }
-    //}
 
     template <typename... Args>
     void Leave(Args&&... args) {
@@ -723,35 +710,30 @@ public:
         const TActorId& compileServiceId)
         : Config(config)
         , TablePathId(tablePathId)
-        , CompileServiceId(compileServiceId)
         , TableName(tableName)
+        , CompileServiceId(compileServiceId)
+        
     {}
 
 private:
     const NKikimrReplication::TReplicationConfig Config;
     const TPathId TablePathId;
-
+    const TString TableName;
     const TActorId CompileServiceId;
-    size_t InFlightCompilationId = 0;
+    TActorId Worker;
 
     ui64 TableVersion = 0;
-
     ITableKindState::TPtr TableState;
+
+    size_t InFlightCompilationId = 0;
     TProgramHolder::TPtr ProgramHolder;
 
     mutable TMaybe<TString> LogPrefix;
 
-    const TString TableName;
-
-    TActorId Worker;
-    bool Finished = false;
-
-    //const ui32 Retries = 3;
-    ui32 Attempt = 0;
-
     TEvWorker::TEvHandshake::TPtr HandshakeEv;
     TEvWorker::TEvData::TPtr DataEv;
 
+    ui32 Attempt = 0;
     TDuration Delay = TDuration::Minutes(1);
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 

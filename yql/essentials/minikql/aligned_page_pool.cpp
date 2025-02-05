@@ -741,11 +741,12 @@ void* GetAlignedPage(ui64 size) {
     }
 
 #if __has_feature(address_sanitizer)
-    void* mem = pool.DoMmap(size);
+    auto allocSize = size;
 #else
     auto allocSize = Max<ui64>(MaxMidSize, size);
-    void* mem = pool.DoMmap(allocSize);
 #endif
+    void* mem = pool.DoMmap(allocSize);
+
     if (Y_UNLIKELY(MAP_FAILED == mem)) {
         TStringStream mmaps;
         const auto lastError = LastSystemError();

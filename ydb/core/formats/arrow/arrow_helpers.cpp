@@ -137,7 +137,7 @@ std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const 
         return *result;
     } else {
         AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse")("message", result.status().ToString())
-            ("schema_columns_count", schema->num_fields())("schema_columns", JoinSeq(",", schema->field_names()));
+            ("schema_columns_count", schema->num_fields())("schema", schema->ToString());
         return nullptr;
     }
 }

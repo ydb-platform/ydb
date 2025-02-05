@@ -39,7 +39,9 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
             //portionMeta->SetInactive(true);
             break;
     }
-
+    AFL_VERIFY(ReplaceKeyEdges.GetBatch());
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("special_keys_serialization")("schema", ReplaceKeyEdges.GetBatch()->schema()->ToString())(
+        "batch", ReplaceKeyEdges.GetBatch()->ToString());
     portionMeta.SetPrimaryKeyBorders(ReplaceKeyEdges.SerializePayloadToString());
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());

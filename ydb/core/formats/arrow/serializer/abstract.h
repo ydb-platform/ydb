@@ -90,6 +90,7 @@ public:
         if (!data) {
             return nullptr;
         }
+        AFL_VERIFY(schema);
         return DoDeserialize(data, schema);
     }
 

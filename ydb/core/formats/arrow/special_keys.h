@@ -27,7 +27,7 @@ public:
 
     TSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema) {
         Data = NArrow::DeserializeBatch(data, schema);
-        Y_ABORT_UNLESS(Data);
+        AFL_VERIFY(Data)("data", Base64Encode(data))("schema", schema->ToString());
         Y_DEBUG_ABORT_UNLESS(Data->ValidateFull().ok());
     }
 

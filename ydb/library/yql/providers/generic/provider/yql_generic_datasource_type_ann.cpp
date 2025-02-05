@@ -27,6 +27,7 @@ namespace NYql {
         {
             using TSelf = TGenericDataSourceTypeAnnotationTransformer;
             AddHandler({TCoConfigure::CallableName()}, Hndl(&TSelf::HandleConfig));
+            AddHandler({TGenTable::CallableName()}, Hndl(&TSelf::HandleTable));
             AddHandler({TGenReadTable::CallableName()}, Hndl(&TSelf::HandleReadTable));
             AddHandler({TGenSourceSettings::CallableName()}, Hndl(&TSelf::HandleSourceSettings));
         }
@@ -45,6 +46,19 @@ namespace NYql {
             }
 
             input->SetTypeAnn(input->Child(TCoConfigure::idx_World)->GetTypeAnn());
+            return TStatus::Ok;
+        }
+
+        TStatus HandleTable(const TExprNode::TPtr& input, TExprContext& ctx) {
+            if (!EnsureArgsCount(*input, 2, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureAtom(*input->Child(TGenTable::idx_Name), ctx)) {
+                return TStatus::Error;
+            }
+
+            input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
             return TStatus::Ok;
         }
 

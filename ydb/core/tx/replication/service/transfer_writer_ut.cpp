@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
-        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+        env.CreateColumnTable("/Root", *MakeColumnTableDescription(TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {

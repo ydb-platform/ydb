@@ -609,6 +609,11 @@ private:
             Cerr << ">>>>> Flush " << Endl << Flush;
         }
 
+/* auto shardsSplitter = NEvWrite::IShardsSplitter::BuildSplitter(entry);
+        if (!shardsSplitter) {
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Shard splitter not implemented for table kind");
+        }
+*/
         // TODO Send to table
     }
 

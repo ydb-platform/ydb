@@ -5,8 +5,8 @@
 using namespace NSQLComplete;
 
 Y_UNIT_TEST_SUITE(SqlCompleteTests) {
-    TCompletionContext Complete(TSqlCompletionEngine& engine, TCompletionInput input) {
-        auto context = engine.Complete(input);
+    TCompletionContext Complete(ISqlCompletionEngine::TPtr& engine, TCompletionInput input) {
+        auto context = engine->Complete(input);
         Sort(context.Keywords);
         return context;
     }
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "VALUES",
         };
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {""}).Keywords, expected);
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {" "}).Keywords, expected);
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"  "}).Keywords, expected);
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "USER",
         };
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"ALTER "}).Keywords, expected);
     }
 
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "VIEW",
         };
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"CREATE "}).Keywords, expected);
     }
 
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "FROM",
         };
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"DELETE "}).Keywords, expected);
     }
 
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "VIEW",
         };
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"DROP "}).Keywords, expected);
     }
 
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "VALUES",
         };
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"EXPLAIN "}).Keywords, expected);
     }
 
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "USE",
         };
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"GRANT "}).Keywords, expected);
     }
 
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "OR",
         };
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"INSERT "}).Keywords, expected);
     }
 
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "VARIANT",
         };
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"PRAGMA "}).Keywords, expected);
     }
 
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "VARIANT",
         };
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT "}).Keywords, expected);
     }
 
@@ -272,18 +272,18 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "OBJECT",
         };
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"UPSERT "}).Keywords, expected);
     }
 
     Y_UNIT_TEST(UTF8Wide) {
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"\xF0\x9F\x98\x8A"}).Keywords.size(), 34);
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"编码"}).Keywords.size(), 34);
     }
 
     Y_UNIT_TEST(WordBreak) {
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT ("}).Keywords.size(), 28);
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT (1)"}).Keywords.size(), 30);
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT 1;"}).Keywords.size(), 34);
@@ -297,11 +297,11 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             "  Bool(field), Math::Sin(var) \n"
             "FROM `local/test/space/table` JOIN test;");
 
-        TSqlCompletionEngine engine;
+        auto engine = MakeSqlCompletionEngine();
 
         for (std::size_t size = 0; size <= queryUtf16.size(); ++size) {
             const TWtringBuf prefixUtf16(queryUtf16, 0, size);
-            auto completion = engine.Complete({TString::FromUtf16(prefixUtf16)});
+            auto completion = engine->Complete({TString::FromUtf16(prefixUtf16)});
             Y_DO_NOT_OPTIMIZE_AWAY(completion);
         }
     }

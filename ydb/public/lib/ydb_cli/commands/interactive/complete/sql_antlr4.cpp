@@ -1,8 +1,18 @@
 #include "sql_antlr4.h"
 
 #include <yql/essentials/sql/v1/format/sql_format.h>
+
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
+
+#define RULE_(mode, name) NALP##mode##Antlr4::SQLv1Antlr4Parser::Rule##name
+
+#define RULE(name) RULE_(Default, name)
+
+#define STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(name) \
+    static_assert(RULE_(Default, name) == RULE_(Ansi, name))
 
 namespace NSQLComplete {
 
@@ -39,6 +49,36 @@ namespace NSQLComplete {
         keywordTokens.erase(TOKEN_EOF);
 
         return keywordTokens;
+    }
+
+    const TVector<TRuleId>& GetKeywordRules(ESqlSyntaxMode mode) {
+        static const TVector<TRuleId> KeywordRules = {
+            RULE(Keyword),
+            RULE(Keyword_expr_uncompat),
+            RULE(Keyword_table_uncompat),
+            RULE(Keyword_select_uncompat),
+            RULE(Keyword_alter_uncompat),
+            RULE(Keyword_in_uncompat),
+            RULE(Keyword_window_uncompat),
+            RULE(Keyword_hint_uncompat),
+            RULE(Keyword_as_compat),
+            RULE(Keyword_compat),
+        };
+
+        Y_UNUSED(mode);
+
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_expr_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_table_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_select_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_alter_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_in_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_window_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_hint_uncompat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_as_compat);
+        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_compat);
+
+        return KeywordRules;
     }
 
 } // namespace NSQLComplete

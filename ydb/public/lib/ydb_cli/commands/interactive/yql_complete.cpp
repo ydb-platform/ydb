@@ -3,12 +3,14 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/string_util.h>
 
 #include <util/generic/algorithm.h>
+#include <util/charset/utf8.h>
 
 namespace NYdb {
     namespace NConsoleClient {
 
         using NSQLComplete::LastWord;
         using NSQLComplete::LastWordIndex;
+        using NSQLComplete::MakeSqlCompletionEngine;
 
         TCompletedToken GetCompletedToken(TStringBuf prefix);
 
@@ -18,14 +20,15 @@ namespace NYdb {
 
         void RankingSort(TVector<TCandidate>& candidates);
 
-        TYqlCompletionEngine::TYqlCompletionEngine() {
+        TYqlCompletionEngine::TYqlCompletionEngine()
+            : Engine(MakeSqlCompletionEngine()) {
         }
 
         TCompletion TYqlCompletionEngine::Complete(TCompletionInput input) {
             auto prefix = input.Text.Head(input.CursorPosition);
             auto completedToken = GetCompletedToken(prefix);
 
-            auto context = Engine.Complete(input);
+            auto context = Engine->Complete(input);
 
             TVector<TCandidate> candidates;
             EnrichWithKeywords(candidates, context.Keywords);

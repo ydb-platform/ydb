@@ -11,7 +11,7 @@ namespace NYdb {
     namespace NConsoleClient {
 
         using NSQLComplete::TCompletionInput;
-        using NSQLComplete::TSqlCompletionEngine;
+        using NSQLComplete::ISqlCompletionEngine;
 
         struct TCompletedToken final {
             TStringBuf Content;
@@ -42,7 +42,7 @@ namespace NYdb {
             TCompletion Complete(TCompletionInput input);
 
         private:
-            TSqlCompletionEngine Engine;
+            ISqlCompletionEngine::TPtr Engine;
         };
 
     } // namespace NConsoleClient

@@ -3,6 +3,8 @@
 #include "yql_complete.h"
 #include "yql_highlight.h"
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/string_util.h>
+
 #include <util/generic/string.h>
 #include <util/system/file.h>
 

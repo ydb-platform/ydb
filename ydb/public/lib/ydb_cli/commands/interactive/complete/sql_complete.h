@@ -1,13 +1,5 @@
 #pragma once
 
-#include "c3_engine.h"
-#include "sql_syntax.h"
-
-#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
-
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -23,31 +15,14 @@ namespace NSQLComplete {
         TVector<std::string> Keywords;
     };
 
-    class TSqlCompletionEngine {
-        using TDefaultYQLGrammar = TAntlrGrammar<
-            NALPDefaultAntlr4::SQLv1Antlr4Lexer,
-            NALPDefaultAntlr4::SQLv1Antlr4Parser>;
-
-        using TAnsiYQLGrammar = TAntlrGrammar<
-            NALPAnsiAntlr4::SQLv1Antlr4Lexer,
-            NALPAnsiAntlr4::SQLv1Antlr4Parser>;
-
+    class ISqlCompletionEngine {
     public:
-        TSqlCompletionEngine();
+        using TPtr = THolder<ISqlCompletionEngine>;
 
-        TCompletionContext Complete(TCompletionInput input);
-
-    private:
-        IC3Engine& GetEngine(ESqlSyntaxMode mode);
-
-        TVector<std::string> SiftedKeywords(const TVector<TSuggestedToken>& tokens, ESqlSyntaxMode mode);
-        const std::unordered_set<TTokenId>& GetKeywordTokens(ESqlSyntaxMode mode);
-
-        TC3Engine<TDefaultYQLGrammar> DefaultEngine;
-        TC3Engine<TAnsiYQLGrammar> AnsiEngine;
-
-        std::unordered_set<TTokenId> DefaultKeywordTokens;
-        std::unordered_set<TTokenId> AnsiKeywordTokens;
+        virtual TCompletionContext Complete(TCompletionInput input) = 0;
+        virtual ~ISqlCompletionEngine() = default;
     };
+
+    ISqlCompletionEngine::TPtr MakeSqlCompletionEngine();
 
 } // namespace NSQLComplete

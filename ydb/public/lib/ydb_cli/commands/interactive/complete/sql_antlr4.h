@@ -20,4 +20,6 @@ namespace NSQLComplete {
 
     std::unordered_set<TTokenId> GetKeywordTokens(ESqlSyntaxMode mode);
 
+    const TVector<TRuleId>& GetKeywordRules(ESqlSyntaxMode mode);
+
 } // namespace NSQLComplete

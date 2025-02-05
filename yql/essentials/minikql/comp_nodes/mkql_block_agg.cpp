@@ -1221,7 +1221,7 @@ public:
 
     };
 
-    static constexpr ui64 NumberOfSpillingBuckets_ = 12;
+    static constexpr ui64 NumberOfSpillingBuckets_ = 10;
     static constexpr ui64 BucketSizeLimit_ = 1_MB;
     std::deque<TSpillingBucket> SpillingBuckets_;
 
@@ -1233,6 +1233,7 @@ public:
     ISpillerFactory::TPtr SpillerFactory_;
 
     std::hash<TKey> Hasher_;
+    TComputationContext& Ctx_;
 
     THashedWrapperBaseState(TMemoryUsageInfo* memInfo, ui32 keyLength, ui32 streamIndex, size_t width, size_t outputWidth, std::optional<ui32> filterColumn, const std::vector<TAggParams<TAggregator>>& params,
         const std::vector<std::vector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
@@ -1252,6 +1253,7 @@ public:
         , Builders_(keys.size())
         , Arena_(TlsAllocState)
         , Hasher_(MakeHash<TKey>(KeyLength_))
+        , Ctx_(ctx)
     {
         std::cerr << "Keys.size(): " << Keys_.size() << std::endl;
         std::cerr << "UseArens: " << UseArena << std::endl;
@@ -1299,6 +1301,17 @@ public:
     }
 
     void Clear() {
+        TotalStateSize_ = 0;
+
+        Aggs_.resize(0);
+        AggStateOffsets_.resize(0);
+        for (const auto& p : AggsParams_) {
+            Aggs_.emplace_back(p.Prepared_->Make(Ctx_));
+            MKQL_ENSURE(Aggs_.back()->StateSize == p.Prepared_->StateSize, "State size mismatch");
+            AggStateOffsets_.emplace_back(TotalStateSize_);
+            TotalStateSize_ += Aggs_.back()->StateSize;
+        }
+
         auto equal = MakeEqual<TKey>(KeyLength_);
         if constexpr (UseSet) {
             HashSet_ = std::make_unique<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(Hasher_, equal);
@@ -1310,12 +1323,19 @@ public:
             }
         }
         BatchNum_ = 0;
+
+        for (size_t i = 0; i < Keys_.size(); ++i) {
+            auto itemType = AS_TYPE(TBlockType, Keys_[i].Type)->GetItemType();
+            Readers_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
+            Builders_[i] = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, Ctx_.ArrowMemoryPool, MaxBlockLen_, &Ctx_.Builder->GetPgBuilder());
+        }
         std::cerr << "State cleared" << std::endl;
 
     }
 
     void UniteKeysAndStates(ui64 bucketId) {
         auto kb = SpillingBuckets_[bucketId].KeysBuffer.Finish();
+        if (!kb.size()) return;
         MKQL_ENSURE(kb.size(), "NON ZERO SIZE");
         TString k = TString(kb.begin(), kb.size());
 
@@ -1493,6 +1513,10 @@ public:
         return UpdateSpillingAndWait(true);
     }
 
+    bool HasAnythingToLoad() const {
+        return LoadingBucket >= NumberOfSpillingBuckets_;
+    }
+
     ui64 LoadingBucket = 0;
 
     bool LoadEverything() {
@@ -1507,9 +1531,10 @@ public:
             SpillingProcessInput(data, LoadingBucket);
             DumpState();
         }
-        while (SpillingBuckets_[LoadingBucket].SpillingKeys_.empty()) {
+        if (SpillingBuckets_[LoadingBucket].SpillingKeys_.empty()) {
             LoadingBucket++;
-            if (LoadingBucket == NumberOfSpillingBuckets_) return true;
+            return true;
+            // if (LoadingBucket == NumberOfSpillingBuckets_) return true;
 
         }
         SpillingBuckets_[LoadingBucket].LoadingOperation_ = SpillingBuckets_[LoadingBucket].Spiller_->Get(SpillingBuckets_[LoadingBucket].SpillingKeys_.back());
@@ -2311,8 +2336,20 @@ private:
             // std::cerr << "MISHA HERE. Final? " << Finalize << std::endl;
 
             if (!state.Count) {
-                if (state.IsFinished_)
-                    return NUdf::EFetchStatus::Finish;
+                if (state.IsFinished_) {
+                    if constexpr (Finalize) {
+                        if (state.HasAnythingToLoad()) {
+                            state.Clear();
+                            state.IsFinished_ = false;
+                            spillingState = TSpillingState::Restoring;
+
+                        } else {
+                            return NUdf::EFetchStatus::Finish;
+                        }
+                    } else {
+                        return NUdf::EFetchStatus::Finish;
+                    }
+                }
 
                 while (!state.WritingOutput_) {
                     switch (Stream_.WideFetch(inputFields, inputWidth)) {
@@ -2342,22 +2379,34 @@ private:
                                     spillingState = TSpillingState::Restoring;
                                 }
 
-                                if (spillingState == TSpillingState::Restoring) {
-                                    if (!state.LoadEverything()) return NUdf::EFetchStatus::Yield;
-                                    spillingState = TSpillingState::Done;
-                                }
                             }
                             break;
                     }
 
+                    if constexpr (Finalize) {
+                        if (spillingState == TSpillingState::Restoring) {
+                            if (!state.LoadEverything()) return NUdf::EFetchStatus::Yield;
+                            spillingState = TSpillingState::Done;
+                        }
+                    }
+
                     if (state.Finish())
                         break;
-                    else
+                    else {
+
+                        if constexpr(Finalize) {
+                            MKQL_ENSURE(false, "HERE");
+                        }
                         return NUdf::EFetchStatus::Finish;
+                    }
                 }
 
-                if (!state.FillOutput(HolderFactory_))
+                if (!state.FillOutput(HolderFactory_)) {
+                    if constexpr(Finalize) {
+                        MKQL_ENSURE(false, "HERE");
+                    }
                     return NUdf::EFetchStatus::Finish;
+                }
             }
 
             const auto sliceSize = state.Slice();

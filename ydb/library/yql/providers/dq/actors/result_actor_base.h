@@ -98,11 +98,8 @@ struct TWriteQueue {
             , GraphExecutionEventsId(graphExecutionEventsId)
             , Discard(discard)
             , WriteQueue()
-            , SizeLimit(
-                (Settings && Settings->_AllResultsBytesLimit.Get().Defined())
-                ? Settings->_AllResultsBytesLimit.Get().GetRef()
-                : 64000000) // GRPC limit
-            , RowsLimit(100000)
+            , SizeLimit(64000000) // GRPC limit
+            , RowsLimit(Nothing())
             , Rows(0)
             , Truncated(false)
             , FullResultWriterID()

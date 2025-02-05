@@ -948,7 +948,7 @@ The limit on the number of concurrent in-flight requests.
 `kqp.workload_manager.GlobalInFly`
 `GAUGE`, pieces
 |
-The number of requests that a database is handling at the moment. This metric works only for the pools with the enabled `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` option.
+The number of requests that a database is handling concurrently. This metric works only for the pools with the enabled `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` option.
 ||
 
 ||

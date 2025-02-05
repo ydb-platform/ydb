@@ -68,6 +68,7 @@ target_sources(ydb-core-persqueue PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/heartbeat.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/key.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/metering_sink.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/list_all_topics_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/mirrorer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ownerinfo.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/offload_actor.cpp

@@ -292,7 +292,7 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& columnsMetadata,
         std::vector<ui32>&& writeIndexes,
         i64 priority,
-        bool allowStreamWrite) {
+        bool EnableStreamWrite) {
         YQL_ENSURE(!Closed);
         auto token = ShardedWriteController->Open(
             TableId,
@@ -301,7 +301,7 @@ public:
             std::move(columnsMetadata),
             std::move(writeIndexes),
             priority,
-            allowStreamWrite);
+            EnableStreamWrite);
         CA_LOG_D("Open: token=" << token);
         return token;
     }
@@ -1221,7 +1221,7 @@ public:
                 std::move(columnsMetadata),
                 std::move(writeIndex),
                 Settings.GetPriority(),
-                Settings.GetAllowStreamWrite());
+                Settings.GetEnableStreamWrite());
             WaitingForTableActor = true;
         } catch (...) {
             RuntimeError(
@@ -1295,13 +1295,23 @@ private:
     }
 
     void Process() {
-        if (GetFreeSpace() <= 0) {
+        const bool outOfMemory = GetFreeSpace() <= 0;
+        if (outOfMemory) {
             WaitingForTableActor = true;
         } else if (WaitingForTableActor) {
             ResumeExecution();
         }
 
-        if (Closed || GetFreeSpace() <= 0) {
+        if (outOfMemory && !Settings.GetEnableStreamWrite()) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                TStringBuilder() << "Stream write can't be used for this query.",
+                {});
+            return;
+        }
+
+        if (Closed || outOfMemory) {
             WriteTableActor->Flush();
         }
 
@@ -1424,7 +1434,7 @@ struct TWriteSettings {
     std::vector<ui32> WriteIndex;
     TTransactionSettings TransactionSettings;
     i64 Priority;
-    bool AllowStreamWrite;
+    bool EnableStreamWrite;
     bool IsOlap;
 };
 
@@ -1564,14 +1574,14 @@ public:
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
 
-            AllowStreamWrite &= settings.AllowStreamWrite;
+            EnableStreamWrite &= settings.EnableStreamWrite;
             auto cookie = writeInfo.WriteTableActor->Open(
                 settings.OperationType,
                 std::move(settings.KeyColumns),
                 std::move(settings.Columns),
                 std::move(settings.WriteIndex),
                 settings.Priority,
-                settings.AllowStreamWrite);
+                settings.EnableStreamWrite);
             token = TWriteToken{settings.TableId, cookie};
         } else {
             token = *ev->Get()->Token;
@@ -1661,7 +1671,7 @@ public:
             || State == EState::COMMITTING
             || State == EState::ROLLINGBACK;
 
-        if (AllowStreamWrite && outOfMemory) {
+        if (EnableStreamWrite && outOfMemory) {
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
@@ -2554,7 +2564,7 @@ private:
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;
-    bool AllowStreamWrite = true;
+    bool EnableStreamWrite = true;
 
     bool IsImmediateCommit = false;
     bool TxPlanned = false;
@@ -2698,7 +2708,7 @@ private:
                     .LockMode = Settings.GetLockMode(),
                 },
                 .Priority = Settings.GetPriority(),
-                .AllowStreamWrite = Settings.GetAllowStreamWrite(),
+                .EnableStreamWrite = Settings.GetEnableStreamWrite(),
                 .IsOlap = Settings.GetIsOlap(),
             };
         }

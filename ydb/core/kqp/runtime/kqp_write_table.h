@@ -57,7 +57,7 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         std::vector<ui32>&& writeIndexes,
         const i64 priority,
-        const bool allowStreamWrite) = 0;
+        const bool EnableStreamWrite) = 0;
     virtual void Write(TWriteToken token, IDataBatchPtr&& data) = 0;
     virtual void Close(TWriteToken token) = 0;
 

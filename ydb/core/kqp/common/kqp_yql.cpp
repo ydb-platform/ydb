@@ -285,9 +285,9 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
         } else if (name == TKqpUpsertRowsSettings::AllowInconsistentWritesSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.AllowInconsistentWrites = true;
-        } else if (name == TKqpUpsertRowsSettings::AllowStreamWriteSettingName) {
+        } else if (name == TKqpUpsertRowsSettings::EnableStreamWriteSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.AllowStreamWrite = true;
+            settings.EnableStreamWrite = true;
         } else if (name == TKqpUpsertRowsSettings::ModeSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.Mode = tuple.Value().template Cast<TCoAtom>().Value();
@@ -325,10 +325,10 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
                 .Name().Build(AllowInconsistentWritesSettingName)
                 .Done());
     }
-    if (AllowStreamWrite) {
+    if (EnableStreamWrite) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
-                .Name().Build(AllowStreamWriteSettingName)
+                .Name().Build(EnableStreamWriteSettingName)
                 .Done());
     }
 
@@ -337,6 +337,43 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(ModeSettingName)
                 .Value<TCoAtom>().Build(Mode)
+                .Done());
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
+TKqpDeleteRowsSettings TKqpDeleteRowsSettings::Parse(const NNodes::TCoNameValueTupleList& settingsList) {
+    TKqpDeleteRowsSettings settings;
+
+    for (const auto& tuple : settingsList) {
+        TStringBuf name = tuple.Name().Value();
+        
+        if (name == TKqpDeleteRowsSettings::EnableStreamWriteSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.EnableStreamWrite = true;
+        } else {
+            YQL_ENSURE(false, "Unknown KqpDeleteRows setting name '" << name << "'");
+        }
+    }
+
+    return settings;
+}
+
+TKqpDeleteRowsSettings TKqpDeleteRowsSettings::Parse(const NNodes::TKqpDeleteRows& node) {
+    return TKqpDeleteRowsSettings::Parse(node.Settings());
+}
+
+NNodes::TCoNameValueTupleList TKqpDeleteRowsSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+    settings.reserve(1);
+
+    if (EnableStreamWrite) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(EnableStreamWriteSettingName)
                 .Done());
     }
 

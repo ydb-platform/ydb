@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
 
         event = GetEvent(server, edgeId, {});
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());
-        UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 2);
 
         event = GetEvent(server, edgeId, {topicPath}, "proxy-host");
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());

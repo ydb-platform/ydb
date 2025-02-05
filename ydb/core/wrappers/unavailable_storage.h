@@ -1,7 +1,5 @@
 #pragma once
 
-#ifndef KIKIMR_DISABLE_S3_OPS
-
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/wrappers/abstract.h>
 
@@ -79,5 +77,4 @@ public:
     }
 };
 
-#endif   // KIKIMR_DISABLE_S3_OPS
-}
+}   // namespace NKikimr::NWrappers::NExternalStorage

@@ -4074,6 +4074,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         runtime.SendToConsole(new TEvConsole::TEvGetAllConfigsRequest());
         TAutoPtr<IEventHandle> handle;
         auto configs = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().identity_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().config_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().identity(0).cluster(), "");
         UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().identity(0).version(), 1);
         UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().config(0), YAML_CONFIG_1_UPDATED);

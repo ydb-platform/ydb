@@ -24,6 +24,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
+#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 
 #include <ydb/core/kqp/runtime/kqp_write_table.h>
 
@@ -409,7 +410,8 @@ private:
             return;
         }
 
-        if (!CheckEntryKind(entry, TNavigate::KindTable) && !CheckEntryKind(entry, TNavigate::KindColumnTable)) {
+        if (entry.Kind != TNavigate::KindTable && entry.Kind != TNavigate::KindColumnTable) {
+            CheckEntryKind(entry, TNavigate::KindTable);
             return;
         }
 
@@ -479,6 +481,8 @@ private:
             TableStrategy = std::make_unique<TRowTableStrategy>(columnsMetadata, writeIndex);
         }
 
+        NavigateResult.reset(ev->Get()->Request.Release());
+
         CompileTransferLambda();
     }
 
@@ -495,6 +499,7 @@ private:
     }
 
     STFUNC(StateCompileTransferLambda) {
+        Cerr << ">>>>> RECEIVED " << ev->GetTypeRewrite() << Endl << Flush;
         switch (ev->GetTypeRewrite()) {
             hFunc(NFq::TEvRowDispatcher::TEvPurecalcCompileResponse, Handle);
 
@@ -605,18 +610,53 @@ private:
 
         Cerr << ">>>>> Batch size = " << batch->GetMemory() << Endl << Flush;
 
-        if (batch->GetMemory() > (i64) 1_KB) {
+        //if (batch->GetMemory() > (i64) 1_KB) {
             Cerr << ">>>>> Flush " << Endl << Flush;
-        }
+            // const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
+            // const TString& dedupId, const TString& databaseName, const TString& path,
+            // std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
+            // std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite
 
-/* auto shardsSplitter = NEvWrite::IShardsSplitter::BuildSplitter(entry);
-        if (!shardsSplitter) {
-            return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Shard splitter not implemented for table kind");
-        }
-*/
-        // TODO Send to table
+
+            auto b = batch->ExtractBatch();
+            auto columnshardBatch = reinterpret_cast<arrow::RecordBatch*>(b.get());
+            Y_VERIFY(columnshardBatch);
+            std::shared_ptr<arrow::RecordBatch> arrowBatch = std::shared_ptr<arrow::RecordBatch>{b, columnshardBatch};
+
+            Issues = std::make_shared<NYql::TIssues>();
+            Cerr << ">>>>> NUM_ROWS = " << arrowBatch->num_rows() << Endl << Flush;
+
+            NTxProxy::DoLongTxWriteSameMailbox(TActivationContext::AsActorContext(), SelfId() /* replyTo */, { /* longTxId */ }, { /* dedupId */ },
+                DatabaseName, Path, NavigateResult,  arrowBatch, Issues, true /* noTxWrite */);
+            return Become(&TThis::StateWrite);
+        //}
+
     }
 
+private:
+    STFUNC(StateWrite) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvCompleted, Handle);
+            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvData, HoldHandle);
+            sFunc(TEvents::TEvWakeup, SendS3Request);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+    void Handle(TEvents::TEvCompleted::TPtr& ev) {
+        LOG_D("Handle TEvents::TEvCompleted"
+            << ": worker# " << Worker);
+
+        if (ev->Get()->Status) {
+            Send(Worker, new TEvWorker::TEvPoll());
+            return StartWork();
+        }
+
+        LogCritAndLeave(Issues->ToOneLineString());
+    }
+
+private:
 
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
@@ -751,6 +791,12 @@ private:
     mutable TMaybe<TString> LogPrefix;
     const TString TableName;
     const TString WriterName;
+
+    const TString DatabaseName;
+    const TString Path;
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
+    std::shared_ptr<NYql::TIssues> Issues;
+
     TActorId Worker;
     TActorId S3Client;
     //bool IdentityWritten = false;

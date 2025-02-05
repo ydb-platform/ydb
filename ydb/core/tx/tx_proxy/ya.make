@@ -1,5 +1,7 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 ADDINCL(
     ydb/public/sdk/cpp
 )
@@ -53,6 +55,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/mkql_proto/protos
     ydb/public/lib/base
+    ydb/public/sdk/cpp/src/client/common_client/impl
 )
 
 YQL_LAST_ABI_VERSION()

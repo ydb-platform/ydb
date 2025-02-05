@@ -29,6 +29,7 @@ public:
 
 public:
     const TVector<NYT::TNode>& GetSchemas() const override;
+    bool ProvidesBlocks() const override { return false; }
 };
 
 }

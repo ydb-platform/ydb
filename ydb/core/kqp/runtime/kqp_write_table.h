@@ -15,6 +15,8 @@ public:
     virtual TString SerializeToString() const = 0;
     virtual i64 GetMemory() const = 0;
     virtual bool IsEmpty() const = 0;
+
+    virtual std::shared_ptr<void> ExtractBatch() = 0;
 };
 
 using IDataBatchPtr = TIntrusivePtr<IDataBatch>;

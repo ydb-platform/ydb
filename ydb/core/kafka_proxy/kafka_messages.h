@@ -4098,6 +4098,7 @@ public:
             static constexpr TKafkaVersions FlexibleVersions = {6, Max<TKafkaVersion>()};
         };
         MetadataMeta::Type Metadata;
+        TString MetaStr;
         
         i32 Size(TKafkaVersion version) const override;
         void Read(TKafkaReadable& readable, TKafkaVersion version) override;
@@ -4691,6 +4692,7 @@ public:
             static constexpr TKafkaVersions FlexibleVersions = {4, Max<TKafkaVersion>()};
         };
         AssignmentMeta::Type Assignment;
+        TString AssignmentStr;
         
         i32 Size(TKafkaVersion version) const override;
         void Read(TKafkaReadable& readable, TKafkaVersion version) override;

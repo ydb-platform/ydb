@@ -276,6 +276,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     Y_UNIT_TEST(EmptyVariants) {
         TString script = R"(
+            STOP_COMPACTION
+            ------
             SCHEMA:            
             CREATE TABLE `/Root/ColumnTable` (
                 Col1 Uint64 NOT NULL,
@@ -292,8 +294,13 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1) VALUES (1u), (2u), (3u), (4u)
             ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1) VALUES (11u), (12u), (13u), (14u)
+            ------
+            ONE_COMPACTION
+            ------
             READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
-            EXPECTED: [[1u;#];[2u;#];[3u;#];[4u;#]]
+            EXPECTED: [[1u;#];[2u;#];[3u;#];[4u;#];[11u;#];[12u;#];[13u;#];[14u;#]]
             
         )";
         TScriptVariator(script).Execute();

@@ -52,7 +52,7 @@ struct TStorageUnits {
     TStorageUnits(const Ydb::Cms::StorageUnits& proto);
 
     std::string UnitKind;
-    ui64 Count;
+    std::uint64_t Count;
 };
 
 struct TComputationalUnits {

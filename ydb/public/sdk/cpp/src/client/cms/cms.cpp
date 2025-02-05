@@ -158,7 +158,7 @@ const std::vector<TAllocatedComputationalUnit>& TGetDatabaseStatusResult::GetReg
     return RegisteredResources_;
 }
 
-ui64 TGetDatabaseStatusResult::GetGeneration() const {
+std::uint64_t TGetDatabaseStatusResult::GetGeneration() const {
     return Generation_;
 }
 

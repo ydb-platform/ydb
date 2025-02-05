@@ -18,7 +18,12 @@ public:
     void CloseKqpSession(const TActorContext& ctx);
     void SendRequest(THolder<NKqp::TEvKqp::TEvQueryRequest> request, ui64 cookie, const NActors::TActorContext& ctx);
     void CommitTx(ui64 cookie, const NActors::TActorContext& ctx);
-    void SendYqlRequest(TString yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const NActors::TActorContext& ctx);
+    void SendYqlRequest(TString yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const NActors::TActorContext& ctx, bool commit = false);
+    void SendInitTablesRequest(const TActorContext& ctx);
+
+public:
+    TString DataBase;
+    TString TxId;
 
 private:
     THolder<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest();
@@ -26,11 +31,9 @@ private:
 
 
 private:
-    TString DataBase;
     TString Consumer;
     TString Path;
 
-    TString TxId;
     TString KqpSessionId;
 };
 

@@ -115,29 +115,47 @@ i32 TConsumerProtocolSubscription::TopicPartition::Size(TKafkaVersion _version) 
 //
 // TConsumerProtocolAssignment
 //
-TConsumerProtocolAssignment::TConsumerProtocolAssignment() 
+TConsumerProtocolAssignment::TConsumerProtocolAssignment()
 {}
 
-void TConsumerProtocolAssignment::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    auto size = _readable.readUnsignedVarint<ui32>();
+void TConsumerProtocolAssignment::Read(TKafkaReadable& r, TKafkaVersion v) {
+    bool useVarintSize = (v > 3);
+
+    ui32 size;
+    if (useVarintSize) {
+        size = r.readUnsignedVarint<ui32>();
+    } else {
+        TKafkaInt32 s;
+        r >> s;
+        size = static_cast<ui32>(s);
+    }
     Y_UNUSED(size);
-    _readable >> _version;
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TConsumerProtocolAssignment";
+
+    TKafkaVersion assignmentVersion;
+    r >> assignmentVersion;
+
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min,
+                                MessageMeta::PresentVersions.Max>(assignmentVersion))
+    {
+        ythrow yexception() << "Can't read version " << assignmentVersion
+                            << " of TConsumerProtocolAssignment";
     }
 
-    NPrivate::Read<AssignedPartitionsMeta>(_readable, _version, AssignedPartitions);
-    NPrivate::Read<UserDataMeta>(_readable, _version, UserData); 
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
-        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
-            ui32 _tag = _readable.readUnsignedVarint<ui32>();
-            ui32 _size = _readable.readUnsignedVarint<ui32>();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
-            }
+    NPrivate::Read<AssignedPartitionsMeta>(r, assignmentVersion, AssignedPartitions);
+    NPrivate::Read<UserDataMeta>(r, assignmentVersion, UserData);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min,
+                               MessageMeta::FlexibleVersions.Max>(assignmentVersion))
+    {
+        ui32 numTaggedFields = r.readUnsignedVarint<ui32>();
+        for (ui32 i = 0; i < numTaggedFields; ++i) {
+        ui32 tag = r.readUnsignedVarint<ui32>();
+        Y_UNUSED(tag);
+
+        ui32 tagSize = r.readUnsignedVarint<ui32>();
+        r.skip(tagSize);
+
+            r.skip(tagSize);
         }
     }
 }
@@ -149,19 +167,19 @@ void TConsumerProtocolAssignment::Write(TKafkaWritable& _writable, TKafkaVersion
     if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
         ythrow yexception() << "Can't write version " << _version << " of TConsumerProtocolAssignment";
     }
-    
+
     if (useVarintSize) {
         _writable.writeUnsignedVarint(Size(_version) + 1);
     } else {
         TKafkaInt32 size = Size(_version);
         _writable << size;
     }
-    
+
     _writable << _version;
     NPrivate::TWriteCollector _collector;
     NPrivate::Write<AssignedPartitionsMeta>(_collector, _writable, _version, AssignedPartitions);
     NPrivate::Write<UserDataMeta>(_collector, _writable, _version, UserData);
-    
+
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
     }
@@ -172,7 +190,7 @@ i32 TConsumerProtocolAssignment::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
     NPrivate::Size<AssignedPartitionsMeta>(_collector, _version, AssignedPartitions);
     NPrivate::Size<UserDataMeta>(_collector, _version, UserData);
-    
+
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
@@ -184,7 +202,7 @@ i32 TConsumerProtocolAssignment::Size(TKafkaVersion _version) const {
 //
 // TConsumerProtocolAssignment::TopicPartition
 //
-TConsumerProtocolAssignment::TopicPartition::TopicPartition() 
+TConsumerProtocolAssignment::TopicPartition::TopicPartition()
 {}
 
 const TConsumerProtocolAssignment::TopicPartition::TopicPartition::TopicMeta::Type TConsumerProtocolAssignment::TopicPartition::TopicPartition::TopicMeta::Default = {""};
@@ -195,7 +213,7 @@ void TConsumerProtocolAssignment::TopicPartition::Read(TKafkaReadable& _readable
     }
     NPrivate::Read<TopicMeta>(_readable, _version, Topic);
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
-    
+
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
@@ -217,7 +235,7 @@ void TConsumerProtocolAssignment::TopicPartition::Write(TKafkaWritable& _writabl
     NPrivate::TWriteCollector _collector;
     NPrivate::Write<TopicMeta>(_collector, _writable, _version, Topic);
     NPrivate::Write<PartitionsMeta>(_collector, _writable, _version, Partitions);
-    
+
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
     }
@@ -227,7 +245,7 @@ i32 TConsumerProtocolAssignment::TopicPartition::Size(TKafkaVersion _version) co
     NPrivate::TSizeCollector _collector;
     NPrivate::Size<TopicMeta>(_collector, _version, Topic);
     NPrivate::Size<PartitionsMeta>(_collector, _version, Partitions);
-    
+
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }

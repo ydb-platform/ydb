@@ -216,7 +216,6 @@
   - sys/dir.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/sys/dir.h
   - sys/epoll.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/epoll.h
   - sys/errno.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/errno.h
-  - sys/eventfd.h:          contrib/restricted/emscripten/system/lib/libc/musl/include/sys/eventfd.h
   - sysexits.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sysexits.h
   - sys/fcntl.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/fcntl.h
   - sys/file.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/file.h

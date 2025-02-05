@@ -257,3 +257,4 @@ ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_p
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
 ydb/tests/stress/kv/tests test_workload.py.TestYdbKvWorkload.test[column]
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
+ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard

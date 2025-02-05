@@ -52,7 +52,10 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) override {
+        TActivationContext::Schedule(TDuration::Seconds(15), new IEventHandle(TEvPrivate::EvCommitMetrics, 0,
+            Self->SelfId(), TActorId(), nullptr, 0));
+    }
 };
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr &ev) {
@@ -116,12 +119,10 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
 
     // process VDisk status
     ProcessVDiskStatus(record.GetVDiskStatus());
+}
 
-    // commit into database if enough time has passed
-    if (now - LastMetricsCommit >= TDuration::Seconds(15)) {
-        Execute(new TTxUpdateDiskMetrics(this));
-        LastMetricsCommit = now;
-    }
+void TBlobStorageController::CommitMetrics() {
+    Execute(new TTxUpdateDiskMetrics(this));
 }
 
 } // NKikimr::NBsController

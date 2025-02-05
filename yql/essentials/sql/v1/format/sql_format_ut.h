@@ -1632,6 +1632,14 @@ Y_UNIT_TEST(OperatorNewlines) {
             "$x = 1\n\t>>|\n\t2;\n"},
         {"$x = 1\n?? 2 ??\n3\n??\n4 +\n5\n*\n6 +\n7 ??\n8;",
             "$x = 1 ??\n\t2 ??\n\t3\n\t??\n\t4\n\t+ 5\n\t*\n\t6\n\t+ 7 ??\n\t8;\n"},
+        {"select 1 ??\n2 ?? 3,\n4;",
+            "SELECT\n\t1 ??\n\t\t2 ?? 3,\n\t4\n;\n"},
+        {"select 1\n?? 2 ?? 3,\n4;",
+            "SELECT\n\t1 ??\n\t\t2 ?? 3,\n\t4\n;\n"},
+        {"select 1\n?? 2 ??\n3 ?? 4,\n5;",
+            "SELECT\n\t1 ??\n\t\t2 ??\n\t\t3 ?? 4,\n\t5\n;\n"},
+        {"select 1\n?? 2 ?? 3 ??\n4 ?? 5,\n6;",
+            "SELECT\n\t1 ??\n\t\t2 ?? 3 ??\n\t\t4 ?? 5,\n\t6\n;\n"},
     };
 
     TSetup setup;

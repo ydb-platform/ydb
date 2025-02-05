@@ -34,8 +34,10 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingDeviceSpeed(50 << 20, 1 << 20, 10ull << 30)
     , ThrottlingMinSstCount(100, 1, 1000)
     , ThrottlingMaxSstCount(250, 1, 1000)
-    , ThrottlingMinInplacedSize(20ull << 30, 1 << 20, 500ull < 30)
-    , ThrottlingMaxInplacedSize(60ull << 30, 1 << 20, 500ull < 30)
+    , ThrottlingMinInplacedSizeHDD(20ull << 30, 1 << 20, 500ull << 30)
+    , ThrottlingMaxInplacedSizeHDD(60ull << 30, 1 << 20, 500ull << 30)
+    , ThrottlingMinInplacedSizeSSD(20ull << 30, 1 << 20, 500ull << 30)
+    , ThrottlingMaxInplacedSizeSSD(60ull << 30, 1 << 20, 500ull << 30)
     , ThrottlingMinOccupancyPerMille(900, 1, 1000)
     , ThrottlingMaxOccupancyPerMille(950, 1, 1000)
     , ThrottlingMinLogChunkCount(100, 1, 1000)
@@ -355,8 +357,10 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ThrottlingDeviceSpeed, "VDiskControls.ThrottlingDeviceSpeed");
         icb->RegisterSharedControl(ThrottlingMinSstCount, "VDiskControls.ThrottlingMinSstCount");
         icb->RegisterSharedControl(ThrottlingMaxSstCount, "VDiskControls.ThrottlingMaxSstCount");
-        icb->RegisterSharedControl(ThrottlingMinInplacedSize, "VDiskControls.ThrottlingMinInplacedSize");
-        icb->RegisterSharedControl(ThrottlingMaxInplacedSize, "VDiskControls.ThrottlingMaxInplacedSize");
+        icb->RegisterSharedControl(ThrottlingMinInplacedSizeHDD, "VDiskControls.ThrottlingMinInplacedSizeHDD");
+        icb->RegisterSharedControl(ThrottlingMaxInplacedSizeHDD, "VDiskControls.ThrottlingMaxInplacedSizeHDD");
+        icb->RegisterSharedControl(ThrottlingMinInplacedSizeSSD, "VDiskControls.ThrottlingMinInplacedSizeSSD");
+        icb->RegisterSharedControl(ThrottlingMaxInplacedSizeSSD, "VDiskControls.ThrottlingMaxInplacedSizeSSD");
         icb->RegisterSharedControl(ThrottlingMinOccupancyPerMille, "VDiskControls.ThrottlingMinOccupancyPerMille");
         icb->RegisterSharedControl(ThrottlingMaxOccupancyPerMille, "VDiskControls.ThrottlingMaxOccupancyPerMille");
         icb->RegisterSharedControl(ThrottlingMinLogChunkCount, "VDiskControls.ThrottlingMinLogChunkCount");

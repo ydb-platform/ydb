@@ -113,7 +113,7 @@ public:
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) & PAGE_ADDR_MASK);
     }
 
-    void* GetPage(); // poisoned
+    void* GetPage(); // unpoisoned: [0, +POOL_PAGE_SIZE)
 
     void ReturnPage(void* addr) noexcept;
 

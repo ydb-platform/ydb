@@ -412,8 +412,9 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
     ++PageAllocCount;
     if (!FreePages.empty()) {
         ++PageHitCount;
-        const auto res = FreePages.top();
+        auto* res = FreePages.top();
         FreePages.pop();
+        ASAN_UNPOISON_MEMORY_REGION(res, POOL_PAGE_SIZE);
         return res;
     }
 
@@ -424,7 +425,7 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_LIKELY(!IsDefaultAllocator)) {
 #endif
-        if (const auto ptr = TGlobalPools<T, false>::Instance().Get(0).GetPage()) {
+        if (auto* ptr = TGlobalPools<T, false>::Instance().Get(0).GetPage()) {
             TotalAllocated += POOL_PAGE_SIZE;
             if (AllocNotifyCallback) {
                 AllocNotifyCurrentBytes += POOL_PAGE_SIZE;
@@ -436,6 +437,7 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
             AllPages.emplace(ptr);
 
             UpdatePeaks();
+            ASAN_UNPOISON_MEMORY_REGION(ptr, POOL_PAGE_SIZE);
             return ptr;
         }
 
@@ -451,6 +453,7 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
     } else {
 #endif
         res = Alloc(POOL_PAGE_SIZE);
+        ASAN_UNPOISON_MEMORY_REGION(res, POOL_PAGE_SIZE);
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     }
 #endif
@@ -491,9 +494,7 @@ void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
 #endif
 
     if (size == POOL_PAGE_SIZE) {
-        auto* page = GetPage();
-        ASAN_UNPOISON_MEMORY_REGION(page, size);
-        return page;
+        return GetPage();
     } else {
         auto* ptr = Alloc(size);
         ASAN_UNPOISON_MEMORY_REGION(ptr, size);

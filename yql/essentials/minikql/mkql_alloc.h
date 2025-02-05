@@ -594,7 +594,7 @@ public:
         }
 
         auto* ptr = Pool.GetPage();
-        ASAN_UNPOISON_MEMORY_REGION(ptr, sizeof(T));
+        ASAN_POISON_MEMORY_REGION((char*)ptr + sizeof(T), TAllocState::POOL_PAGE_SIZE - sizeof(T));
         IndexInLastPage = 1;
         Pages.push_back(ptr);
         new(ptr) T(std::move(value));

@@ -32,6 +32,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
     , MaxChunksToDefragInflight(10, 1, 50)
     , ThrottlingDeviceSpeed(50 << 20, 1 << 20, 10ull << 30)
+    , ThrottlingDryRun(1, 0, 1)
     , ThrottlingMinSstCount(100, 1, 1000)
     , ThrottlingMaxSstCount(250, 1, 1000)
     , ThrottlingMinInplacedSizeHDD(20ull << 30, 1 << 20, 500ull << 30)
@@ -355,6 +356,7 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(MaxChunksToDefragInflight, "VDiskControls.MaxChunksToDefragInflight");
 
         icb->RegisterSharedControl(ThrottlingDeviceSpeed, "VDiskControls.ThrottlingDeviceSpeed");
+        icb->RegisterSharedControl(ThrottlingDryRun, "VDiskControls.ThrottlingDryRun");
         icb->RegisterSharedControl(ThrottlingMinSstCount, "VDiskControls.ThrottlingMinSstCount");
         icb->RegisterSharedControl(ThrottlingMaxSstCount, "VDiskControls.ThrottlingMaxSstCount");
         icb->RegisterSharedControl(ThrottlingMinInplacedSizeHDD, "VDiskControls.ThrottlingMinInplacedSizeHDD");

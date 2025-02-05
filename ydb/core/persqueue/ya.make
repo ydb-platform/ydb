@@ -11,6 +11,7 @@ SRCS(
     heartbeat.cpp
     key.cpp
     metering_sink.cpp
+    list_all_topics_actor.cpp
     mirrorer.cpp
     mirrorer.h
     ownerinfo.cpp

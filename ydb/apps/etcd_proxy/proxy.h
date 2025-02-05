@@ -3,8 +3,9 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/grpc/server/grpc_server.h>
 
+#include <library/cpp/monlib/metrics/metric_registry.h>
+
 #include "signals.h"
-#include "appdata.h"
 
 #include <atomic>
 
@@ -31,12 +32,12 @@ private:
 
     static THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
     static TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
-    static const TString& GetEServiceName(NActors::NLog::EComponent component);
 
-    TAppData AppData;
+    const std::shared_ptr<NMonitoring::TMetricRegistry> MetricRegistry;
+    const NMonitoring::TDynamicCounterPtr Counters;
+
     std::unique_ptr<NActors::TActorSystem> ActorSystem;
     std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
-    const ::NMonitoring::TDynamicCounterPtr Counters;
 
     // arguments
     bool Initialize_ = false;

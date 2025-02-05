@@ -559,7 +559,7 @@ public:
         WakeupTagGetConfig = 21,
         WakeupTagClientLost = 22,
     };
-public:
+
     TEtcdRequestWithOperationParamsActor(TRequestBase* request)
         : Request_(request)
     {
@@ -687,17 +687,9 @@ protected:
             HFunc(TEvents::TEvWakeup, HandleWakeup);
             HFunc(TRpcServices::TEvForgetOperation, HandleForget);
             hFunc(TEvSubscribeGrpcCancel, HandleSubscribeiGrpcCancel);
-            default: {
-                NYql::TIssues issues;
-                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                    TStringBuilder() << "Unexpected event received in TEtcdOperationRequestActor::StateWork: "
-                        << ev->GetTypeRewrite()));
-                return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, TActivationContext::AsActorContext());
-            }
         }
     }
 
-protected:
     using TBase::Request_;
 
     void Reply(Ydb::StatusIds::StatusCode status,
@@ -716,12 +708,6 @@ protected:
         Request_->ReplyWithYdbStatus(status);
         NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
-    }
-
-    void Reply(Ydb::StatusIds::StatusCode status, const TString& message, NKikimrIssues::TIssuesIds::EIssueCode issueCode, const TActorContext& ctx) {
-        NYql::TIssues issues;
-        issues.AddIssue(MakeIssue(issueCode, message));
-        Reply(status, issues, ctx);
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
@@ -762,14 +748,6 @@ protected:
         NWilson::EndSpanWithStatus(Span_, operation.status());
         this->PassAway();
     }
-
-    void SetCost(ui64 ru) {
-        Request_->SetRuHeader(ru);
-        if (TBase::ReportCostInfo_) {
-            Request_->SetCostInfo(ru);
-        }
-    }
-
 protected:
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->Tag) {
@@ -1061,14 +1039,14 @@ private:
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
         const auto& revisionParamName = AddParam("Revision", params, Revision);
-        const auto where = TString("where `lease` = ") += AddParam("Lease", params, Lease);
+        const auto where = std::string("where `lease` = ") += AddParam("Lease", params, Lease);
 
         sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` " << where << ';' << Endl;
         sql << "insert into `verhaal`" << Endl;
         sql << "select `key`, `created`, " << revisionParamName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << Endl;
 
         if (NotifyWatchtower) {
-            sql << "select `key`,`value`, `created`, `modified`, `version`, `lease` from $Victims;" << Endl;
+            sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from $Victims;" << Endl;
         }
 
         sql << "delete from `huidig` " << where << ';' << Endl;

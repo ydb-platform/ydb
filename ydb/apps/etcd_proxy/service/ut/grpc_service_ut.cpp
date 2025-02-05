@@ -25,31 +25,11 @@
 
 namespace NKikimr::NGRpcService {
 
-struct TKikimrTestSettings {
-    static constexpr bool SSL = false;
-    static constexpr bool AUTH = false;
-    static constexpr bool PrecreatePools = true;
-    static constexpr bool EnableSystemViews = true;
-};
+namespace {
 
-struct TKikimrTestWithAuth : TKikimrTestSettings {
-    static constexpr bool AUTH = true;
-};
-
-struct TKikimrTestWithAuthAndSsl : TKikimrTestWithAuth {
-    static constexpr bool SSL = true;
-};
-
-struct TKikimrTestNoSystemViews : TKikimrTestSettings {
-    static constexpr bool EnableSystemViews = false;
-};
-
-template <typename TestSettings = TKikimrTestSettings>
 class TBasicKikimrWithGrpcAndRootSchema {
 public:
-    TBasicKikimrWithGrpcAndRootSchema(
-            NKikimrConfig::TAppConfig appConfig = {},
-            TAutoPtr<TLogBackend> logBackend = {})
+    TBasicKikimrWithGrpcAndRootSchema(NKikimrConfig::TAppConfig appConfig = {}, TAutoPtr<TLogBackend> logBackend = {})
     {
         const auto port = PortManager.GetPort(2134);
         const auto grpc = PortManager.GetPort(2135);
@@ -61,6 +41,7 @@ public:
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
         ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdKVService>("kv");
         ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdWatchService>("watch");
+        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdLeaseService>("lease");
         ServerSettings->Verbose = true;
 
         Server_.Reset(new Tests::TServer(*ServerSettings));
@@ -86,9 +67,6 @@ public:
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
         NYdbGrpc::TServerOptions grpcOption;
-        if (TestSettings::AUTH) {
-            grpcOption.SetUseAuth(true);
-        }
         grpcOption.SetPort(grpc);
         Server_->EnableGRpc(grpcOption);
 
@@ -137,48 +115,65 @@ private:
     ui16 GRpcPort_;
 };
 
-using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings>;
+using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema;
+
+void MakeTables(auto &channel) {
+    const auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
+    Ydb::Query::ExecuteQueryRequest request;
+    request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
+    TStringBuilder sql;
+    sql << "PRAGMA TablePathPrefix='/Root';" << Endl << NEtcd::GetCreateTablesSQL();
+    request.mutable_query_content()->set_text(sql);
+
+    grpc::ClientContext executeCtx;
+    Ydb::Query::ExecuteQueryResponsePart response;
+    auto reader = stub->ExecuteQuery(&executeCtx, request);
+    while (reader->Read(&response)) {
+        UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
+    }
+}
+
+void MakeSimpleTest(std::function<void(const std::unique_ptr<etcdserverpb::KV::Stub>&)> etcd)
+{
+    TKikimrWithGrpcAndRootSchema server;
+    const auto grpc = server.GetPort();
+    const auto channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
+
+    MakeTables(channel);
+
+    const std::unique_ptr<etcdserverpb::KV::Stub> stub = etcdserverpb::KV::NewStub(channel);
+    etcd(stub);
+}
+
+void MakeSimpleTest(std::function<void(const std::unique_ptr<etcdserverpb::KV::Stub>&, const std::unique_ptr<etcdserverpb::Lease::Stub>&)> etcd)
+{
+    TKikimrWithGrpcAndRootSchema server;
+    const auto grpc = server.GetPort();
+    const auto channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
+
+    MakeTables(channel);
+
+    const std::unique_ptr<etcdserverpb::KV::Stub> kv = etcdserverpb::KV::NewStub(channel);
+    const std::unique_ptr<etcdserverpb::Lease::Stub> lease = etcdserverpb::Lease::NewStub(channel);
+    etcd(kv, lease);
+}
+
+void Write(const TString &key, const TString &value, const std::unique_ptr<etcdserverpb::KV::Stub> &stub, const i64 lease = 0LL)
+{
+    grpc::ClientContext writeCtx;
+    etcdserverpb::PutRequest putRequest;
+    putRequest.set_key(key);
+    putRequest.set_value(value);
+    if (lease)
+        putRequest.set_lease(lease);
+
+    etcdserverpb::PutResponse putResponse;
+    stub->Put(&writeCtx, putRequest, &putResponse);
+}
+
+}
 
 Y_UNIT_TEST_SUITE(EtcdKV) {
-    void MakeTables(auto &channel) {
-        const auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
-        Ydb::Query::ExecuteQueryRequest request;
-        request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
-        TStringBuilder sql;
-        sql << "PRAGMA TablePathPrefix='/Root';" << Endl << NEtcd::GetCreateTablesSQL();
-        request.mutable_query_content()->set_text(sql);
-
-        grpc::ClientContext executeCtx;
-        Ydb::Query::ExecuteQueryResponsePart response;
-        auto reader = stub->ExecuteQuery(&executeCtx, request);
-        while (reader->Read(&response)) {
-            UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
-        }
-    }
-
-    void MakeSimpleTest(std::function<void(const std::unique_ptr<etcdserverpb::KV::Stub>&)> etcd)
-    {
-        TKikimrWithGrpcAndRootSchema server;
-        const auto grpc = server.GetPort();
-        const auto channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
-
-        MakeTables(channel);
-
-        const std::unique_ptr<etcdserverpb::KV::Stub> stub = etcdserverpb::KV::NewStub(channel);
-        etcd(stub);
-    }
-
-    void Write(const TString &key, const TString &value, const std::unique_ptr<etcdserverpb::KV::Stub> &stub)
-    {
-        grpc::ClientContext writeCtx;
-        etcdserverpb::PutRequest putRequest;
-        putRequest.set_key(key);
-        putRequest.set_value(value);
-
-        etcdserverpb::PutResponse putResponse;
-        stub->Put(&writeCtx, putRequest, &putResponse);
-    }
-
     Y_UNIT_TEST(SimpleWriteReadDelete) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
             Write("key0", "value0", etcd);
@@ -235,6 +230,84 @@ Y_UNIT_TEST_SUITE(EtcdKV) {
     }
 
 } // Y_UNIT_TEST_SUITE(EtcdKV)
+
+Y_UNIT_TEST_SUITE(EtcdLease) {
+    Y_UNIT_TEST(SimpleGrantAndRevoke) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd, const std::unique_ptr<etcdserverpb::Lease::Stub> &lease) {
+            grpc::ClientContext leaseGrantCtx;
+            etcdserverpb::LeaseGrantRequest leaseGrantRequest;
+            leaseGrantRequest.set_ttl(101LL);
+
+            etcdserverpb::LeaseGrantResponse leaseGrantResponse;
+            lease->LeaseGrant(&leaseGrantCtx, leaseGrantRequest, &leaseGrantResponse);
+
+            const auto leaseId = leaseGrantResponse.id();
+            UNIT_ASSERT(leaseId != 0LL);
+
+            Write("key0", "value0", etcd);
+            Write("key1", "value1", etcd, leaseId);
+            Write("key2", "value2", etcd, leaseId);
+            Write("key3", "value3", etcd);
+            Write("key4", "value4", etcd);
+            Write("key5", "value5", etcd, leaseId);
+            Write("key6", "value6", etcd, leaseId);
+            Write("key7", "value7", etcd);
+
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("key");
+                rangeRequest.set_range_end("kez");
+
+                etcdserverpb::RangeResponse rangeResponse;
+                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 8U);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key0");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).key(), "key1");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).key(), "key2");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(3).key(), "key3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(4).key(), "key4");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(5).key(), "key5");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(6).key(), "key6");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(7).key(), "key7");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).value(), "value0");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).value(), "value1");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).value(), "value2");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(3).value(), "value3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(4).value(), "value4");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(5).value(), "value5");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(6).value(), "value6");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(7).value(), "value7");
+            }
+            {
+                grpc::ClientContext leaseRevokeCtx;
+                etcdserverpb::LeaseRevokeRequest leaseRevokeRequest;
+                leaseRevokeRequest.set_id(leaseId);
+
+                etcdserverpb::LeaseRevokeResponse leaseRevokeResponse;
+                lease->LeaseRevoke(&leaseRevokeCtx, leaseRevokeRequest, &leaseRevokeResponse);
+            }
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("key");
+                rangeRequest.set_range_end("kez");
+                rangeRequest.set_keys_only(true);
+
+                etcdserverpb::RangeResponse rangeResponse;
+                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 4U);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key0");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).key(), "key3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).key(), "key4");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(3).key(), "key7");
+            }
+        });
+    }
+
+} // Y_UNIT_TEST_SUITE(EtcdLease)
 
 } // NKikimr::NGRpcService
 

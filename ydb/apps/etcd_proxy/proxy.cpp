@@ -15,7 +15,6 @@
 #include <ydb/core/grpc_services/base/base.h>
 
 #include "proxy.h"
-#include "blog.h"
 
 namespace NKikimrConfig {
     class TAppConfig {};
@@ -31,7 +30,7 @@ void TProxy::OnTerminate(int) {
 
 int TProxy::Init() {
     ActorSystem->Start();
-    ActorSystem->Register(NActors::CreateProcStatCollector(TDuration::Seconds(7), AppData.MetricRegistry));
+    ActorSystem->Register(NActors::CreateProcStatCollector(TDuration::Seconds(7), MetricRegistry));
     return Discovery();
 }
 
@@ -52,8 +51,6 @@ int TProxy::Discovery() {
         config.SetDatabase(Database);
         const auto driver = NYdb::TDriver(config);
         NEtcd::TSharedStuff::Get()->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
-        AppData.MetricRegistry = NMonitoring::TMetricRegistry::SharedInstance();
-
         return 0;
     } else {
         Cerr << res.GetIssues().ToString() << Endl;
@@ -136,7 +133,7 @@ int TProxy::Shutdown() {
 }
 
 TProxy::TProxy(int argc, char** argv)
-    : Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
+    : MetricRegistry(NMonitoring::TMetricRegistry::SharedInstance()), Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
 {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     bool useStdErr = false;
@@ -164,7 +161,7 @@ TProxy::TProxy(int argc, char** argv)
         NMonitoring::TMetricRegistry::SharedInstance());
     actorSystemSetup->LocalServices.emplace_back(loggerSettings->LoggerActorId, NActors::TActorSetupCmd(loggerActor, NActors::TMailboxType::HTSwap, 0));
 
-    ActorSystem = std::make_unique<NActors::TActorSystem>(actorSystemSetup, &AppData, loggerSettings);
+    ActorSystem = std::make_unique<NActors::TActorSystem>(actorSystemSetup, nullptr, loggerSettings);
 }
 
 TIntrusivePtr<NActors::NLog::TSettings> TProxy::BuildLoggerSettings() {

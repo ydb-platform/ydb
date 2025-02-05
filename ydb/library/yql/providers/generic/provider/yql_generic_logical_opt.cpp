@@ -27,6 +27,7 @@ namespace NYql {
                 AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
                 AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
                 AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqSourceWrap));
+                AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqLookupSourceWrap));
 #undef HNDL
             }
 
@@ -82,6 +83,26 @@ namespace NYql {
                         .Columns(extract.Members())
                     .Build()
                     .DataSource(input.Cast<TDqSourceWrap>().DataSource())
+                    .RowType(ExpandType(node.Pos(), GetSeqItemType(*extract.Ref().GetTypeAnn()), ctx))
+                    .Done();
+                // clang-format on
+            }
+
+            TMaybeNode<TExprBase> ExtractMembersOverDqLookupSourceWrap(TExprBase node, TExprContext& ctx) const {
+                const auto extract = node.Cast<TCoExtractMembers>();
+                const auto input = extract.Input();
+                const auto read = input.Maybe<TDqLookupSourceWrap>().Input().Maybe<TGenSourceSettings>();
+                if (!read) {
+                    return node;
+                }
+
+                // clang-format off
+                return Build<TDqLookupSourceWrap>(ctx, node.Pos())
+                    .Input<TGenSourceSettings>()
+                        .InitFrom(read.Cast())
+                        .Columns(extract.Members())
+                    .Build()
+                    .DataSource(input.Cast<TDqLookupSourceWrap>().DataSource())
                     .RowType(ExpandType(node.Pos(), GetSeqItemType(*extract.Ref().GetTypeAnn()), ctx))
                     .Done();
                 // clang-format on

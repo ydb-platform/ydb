@@ -24,6 +24,11 @@ protected:
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
         return std::make_shared<TTrivialArray>(Array->Slice(offset, count));
     }
+    virtual ui32 DoGetNullsCount() const override {
+        return Array->null_count();
+    }
+    virtual ui32 DoGetValueRawBytes() const override;
+
 public:
     const std::shared_ptr<arrow::Array>& GetArray() const {
         return Array;
@@ -77,6 +82,10 @@ private:
     const std::shared_ptr<arrow::ChunkedArray> Array;
 
 protected:
+    virtual ui32 DoGetValueRawBytes() const override;
+    virtual ui32 DoGetNullsCount() const override {
+        return Array->null_count();
+    }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::optional<ui64> DoGetRawSize() const override;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {

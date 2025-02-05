@@ -16,6 +16,10 @@ std::shared_ptr<arrow::Scalar> TTrivialArray::DoGetMaxScalar() const {
     return NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.second));
 }
 
+ui32 TTrivialArray::DoGetValueRawBytes() const {
+    return NArrow::GetArrayDataSize(Array);
+}
+
 namespace {
 class TChunkAccessor {
 private:
@@ -70,6 +74,14 @@ std::shared_ptr<arrow::Scalar> TTrivialChunkedArray::DoGetMaxScalar() const {
         }
     }
 
+    return result;
+}
+
+ui32 TTrivialChunkedArray::DoGetValueRawBytes() const {
+    ui32 result = 0;
+    for (auto&& i : Array->chunks()) {
+        result += NArrow::GetArrayDataSize(i);
+    }
     return result;
 }
 

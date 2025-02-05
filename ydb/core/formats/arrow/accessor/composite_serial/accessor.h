@@ -44,6 +44,14 @@ private:
     }
 
 protected:
+    virtual ui32 DoGetNullsCount() const override {
+        AFL_VERIFY(false);
+        return 0;
+    }
+    virtual ui32 DoGetValueRawBytes() const override {
+        AFL_VERIFY(false);
+        return 0;
+    }
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 /*offset*/, const ui32 /*count*/) const override {
         AFL_VERIFY(false);
         return nullptr;

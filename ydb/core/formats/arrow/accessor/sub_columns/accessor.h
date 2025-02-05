@@ -26,6 +26,15 @@ private:
     const NSubColumns::TSettings Settings;
 
 protected:
+    virtual ui32 DoGetNullsCount() const override {
+        AFL_VERIFY(false);
+        return 0;
+    }
+    virtual ui32 DoGetValueRawBytes() const override {
+        AFL_VERIFY(false);
+        return 0;
+    }
+
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
         return nullptr;
     }

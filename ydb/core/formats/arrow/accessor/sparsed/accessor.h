@@ -74,6 +74,18 @@ public:
 
     ui64 GetRawSize() const;
 
+    ui32 GetNullsCount() const {
+        if (!!DefaultValue) {
+            return ColValue->null_count();
+        } else {
+            AFL_VERIFY(GetNotDefaultRecordsCount() <= GetRecordsCount());
+            return GetRecordsCount() - GetNotDefaultRecordsCount();
+        }
+    }
+    ui32 GetValueRawBytes() const {
+        return NArrow::GetArrayDataSize(ColValue);
+    }
+
     TSparsedArrayChunk Slice(const ui32 newStart, const ui32 offset, const ui32 count) const {
         AFL_VERIFY(offset + count <= RecordsCount)("offset", offset)("count", count)("records", RecordsCount);
         std::optional<ui32> startPosition = NArrow::FindUpperOrEqualPosition(*UI32ColIndex, offset);
@@ -102,6 +114,21 @@ private:
 
 protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
+
+    virtual ui32 DoGetNullsCount() const override {
+        ui32 result = 0;
+        for (auto&& i : Records) {
+            result += i.GetNullsCount();
+        }
+        return result;
+    }
+    virtual ui32 DoGetValueRawBytes() const override {
+        ui32 result = 0;
+        for (auto&& i : Records) {
+            result += i.GetValueRawBytes();
+        }
+        return result;
+    }
 
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
         TBuilder builder(DefaultValue, GetDataType());

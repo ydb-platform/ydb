@@ -122,8 +122,9 @@ private:
 
     void Handle(TEvChange::TPtr& ev, const TActorContext& ctx) {
         const auto range = SubscriptionsMap.equal_range(std::make_pair(ev->Get()->Key, std::string()));
-        for (auto it = range.first; range.second != it; ++it) {
+        for (auto it = range.first; range.second != it;) {
             if (const auto sub = it->second.lock()) {
+                ++it;
                 if (EWatchKind::OnChanges == sub->Kind ||
                     (ev->Get()->NewData.Version ? EWatchKind::OnUpdates : EWatchKind::OnDeletions) == sub->Kind) {
                     etcdserverpb::WatchResponse res;
@@ -162,6 +163,8 @@ private:
                     if (!Ctx->Write(std::move(res)))
                         return UnsubscribeAndDie(ctx);
                 }
+            } else {
+                it = SubscriptionsMap.erase(it);
             }
         }
     }
@@ -270,9 +273,12 @@ private:
 
     void Handle(TEvChange::TPtr& ev, const TActorContext& ctx) {
         const auto range = SubscriptionsMap.equal_range(std::make_pair(ev->Get()->Key, std::string()));
-        for (auto it = range.first; range.second != it; ++it) {
+        for (auto it = range.first; range.second != it;) {
             if (const auto sub = it->second.lock()) {
+                ++it;
                 ctx.Send(sub->Watchman, new TEvChange(*ev->Get()));
+            } else {
+                it = SubscriptionsMap.erase(it);
             }
         }
     }

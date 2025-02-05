@@ -557,6 +557,8 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     SETUP_ETCD_LEASE_METHOD(LeaseGrant);
     SETUP_ETCD_LEASE_METHOD(LeaseRevoke);
+    SETUP_ETCD_LEASE_METHOD(LeaseTimeToLive);
+    SETUP_ETCD_LEASE_METHOD(LeaseLeases);
 
     #undef SETUP_ETCD_LEASE_METHOD
 

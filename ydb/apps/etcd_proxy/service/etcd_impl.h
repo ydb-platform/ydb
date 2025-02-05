@@ -16,4 +16,6 @@ namespace NKikimr::NGRpcService {
 
     NActors::IActor* MakeLeaseGrant(IRequestOpCtx* p);
     NActors::IActor* MakeLeaseRevoke(IRequestOpCtx* p);
+    NActors::IActor* MakeLeaseTimeToLive(IRequestOpCtx* p);
+    NActors::IActor* MakeLeaseLeases(IRequestOpCtx* p);
 } // NKikimr::NGRpcService

@@ -23,6 +23,8 @@ using TEvCompactKVRequest = TGrpcRequestOperationCall<etcdserverpb::CompactionRe
 
 using TEvLeaseGrantRequest = TGrpcRequestOperationCall<etcdserverpb::LeaseGrantRequest, etcdserverpb::LeaseGrantResponse>;
 using TEvLeaseRevokeRequest = TGrpcRequestOperationCall<etcdserverpb::LeaseRevokeRequest, etcdserverpb::LeaseRevokeResponse>;
+using TEvLeaseTimeToLiveRequest = TGrpcRequestOperationCall<etcdserverpb::LeaseTimeToLiveRequest, etcdserverpb::LeaseTimeToLiveResponse>;
+using TEvLeaseLeasesRequest = TGrpcRequestOperationCall<etcdserverpb::LeaseLeasesRequest, etcdserverpb::LeaseLeasesResponse>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -153,24 +155,23 @@ struct TRange : public TOperation {
     etcdserverpb::RangeResponse MakeResponse(const NYdb::TResultSets& results) const {
         etcdserverpb::RangeResponse response;
         if (!results.empty()) {
-            auto parser = NYdb::TResultSetParser(results[ResultIndex]);
             if (CountOnly) {
-                if (parser.TryNextRow()) {
+                if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
                     response.set_count(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
                 }
-            } else if (KeysOnly) {
-                while (parser.TryNextRow()) {
-                    response.add_kvs()->set_key(NYdb::TValueParser(parser.GetValue(0)).GetString());
-                }
             } else {
-                while (parser.TryNextRow()) {
-                    const auto kvs = response.add_kvs();
-                    kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
-                    kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
-                    kvs->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
-                    kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
-                    kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
-                    kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+                for (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow();) {
+                    if (KeysOnly)
+                        response.add_kvs()->set_key(NYdb::TValueParser(parser.GetValue(0)).GetString());
+                    else {
+                        const auto kvs = response.add_kvs();
+                        kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
+                        kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
+                        kvs->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
+                        kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
+                        kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
+                        kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
+                    }
                 }
             }
         }
@@ -323,8 +324,8 @@ struct TDeleteRange : public TOperation {
         }
 
         if (GetPrevious) {
-            auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]);
-            while (parser.TryNextRow()) {
+
+            for (auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]); parser.TryNextRow();) {
                 const auto kvs = response.add_prev_kvs();
                 kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
                 kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
@@ -335,8 +336,7 @@ struct TDeleteRange : public TOperation {
             }
         }
         if (NotifyWatchtower && notifier) {
-            auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]);
-            while (parser.TryNextRow()) {
+            for (auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]); parser.TryNextRow();) {
                 NEtcd::TData oldData;
                 oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
                 oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
@@ -1039,9 +1039,9 @@ private:
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
         const auto& revisionParamName = AddParam("Revision", params, Revision);
-        const auto where = std::string("where `lease` = ") += AddParam("Lease", params, Lease);
+        const auto& leaseParamName = AddParam("Lease", params, Lease);
 
-        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` " << where << ';' << Endl;
+        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` where " << leaseParamName << " = `lease`;" << Endl;
         sql << "insert into `verhaal`" << Endl;
         sql << "select `key`, `created`, " << revisionParamName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << Endl;
 
@@ -1049,13 +1049,13 @@ private:
             sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from $Victims;" << Endl;
         }
 
-        sql << "delete from `huidig` " << where << ';' << Endl;
+        sql << "delete from `huidig` where " << leaseParamName << " = `lease`;" << Endl;
+        sql << "delete from `leases` where " << leaseParamName << " = `id`;" << Endl;
     }
 
     void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
         if (NotifyWatchtower) {
-            auto parser = NYdb::TResultSetParser(results.front());
-            while (parser.TryNextRow()) {
+            for (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow();) {
                 NEtcd::TData oldData;
                 oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
                 oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
@@ -1078,6 +1078,88 @@ private:
     }
 
     i64 Lease;
+};
+
+class TLeaseTimeToLiveRequest
+    : public TEtcdRequestGrpc<TLeaseTimeToLiveRequest, TEvLeaseTimeToLiveRequest> {
+public:
+    using TBase = TEtcdRequestGrpc<TLeaseTimeToLiveRequest, TEvLeaseTimeToLiveRequest>;
+    using TBase::TBase;
+private:
+    bool ParseGrpcRequest() final {
+        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
+
+        const auto &rec = *GetProtoRequest();
+        Lease = rec.id();
+        Keys = rec.keys();
+        return Lease != 0LL;
+    }
+
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        const auto& leaseParamName = AddParam("Lease", params, Lease);
+
+        sql << "select `ttl`, `ttl` - unwrap(cast(CurrentUtcDatetime() - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leaseParamName << " = `id`;" << Endl;
+        if (Keys) {
+            sql << "select `key` from `huidig` where " << leaseParamName << " = `lease`;" << Endl;
+        }
+    }
+
+    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext&) final {
+        etcdserverpb::LeaseTimeToLiveResponse response;
+        const auto header = response.mutable_header();
+        header->set_revision(Revision);
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+
+        response.set_id(Lease);
+        auto parser = NYdb::TResultSetParser(results.front());
+        const bool exists = parser.TryNextRow();
+        response.set_ttl(exists ? NYdb::TValueParser(parser.GetValue("ttl")).GetInt64() : -1LL);
+        response.set_grantedttl(exists ? NYdb::TValueParser(parser.GetValue("granted")).GetInt64() : 0LL);
+
+        if (Keys) {
+            for (auto parser = NYdb::TResultSetParser(results.back()); parser.TryNextRow();) {
+                response.add_keys(NYdb::TValueParser(parser.GetValue(0)).GetString());
+            }
+        }
+
+        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+    }
+
+    i64 Lease = 0LL;
+    bool Keys = false;
+};
+
+class TLeaseLeasesRequest
+    : public TEtcdRequestGrpc<TLeaseLeasesRequest, TEvLeaseLeasesRequest> {
+public:
+    using TBase = TEtcdRequestGrpc<TLeaseLeasesRequest, TEvLeaseLeasesRequest>;
+    using TBase::TBase;
+private:
+    bool ParseGrpcRequest() final {
+        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
+        return true;
+    }
+
+    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder&) final {
+        sql << "select `id` from `leases`;" << Endl;
+    }
+
+    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext&) final {
+        etcdserverpb::LeaseLeasesResponse response;
+        const auto header = response.mutable_header();
+        header->set_revision(Revision);
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+
+        for (auto parser = NYdb::TResultSetParser(results.back()); parser.TryNextRow();) {
+            response.add_leases()->set_id(NYdb::TValueParser(parser.GetValue(0)).GetInt64());
+        }
+
+        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+    }
 };
 
 }
@@ -1108,6 +1190,14 @@ NActors::IActor* MakeLeaseGrant(IRequestOpCtx* p) {
 
 NActors::IActor* MakeLeaseRevoke(IRequestOpCtx* p) {
     return new TLeaseRevokeRequest(p);
+}
+
+NActors::IActor* MakeLeaseTimeToLive(IRequestOpCtx* p) {
+    return new TLeaseTimeToLiveRequest(p);
+}
+
+NActors::IActor* MakeLeaseLeases(IRequestOpCtx* p) {
+    return new TLeaseLeasesRequest(p);
 }
 
 } // namespace NKikimr::NGRpcService

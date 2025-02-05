@@ -171,6 +171,42 @@ void Write(const TString &key, const TString &value, const std::unique_ptr<etcds
     stub->Put(&writeCtx, putRequest, &putResponse);
 }
 
+i64 Grant(const i64 ttl, const std::unique_ptr<etcdserverpb::Lease::Stub> &stub)
+{
+    grpc::ClientContext leaseGrantCtx;
+    etcdserverpb::LeaseGrantRequest leaseGrantRequest;
+    leaseGrantRequest.set_ttl(ttl);
+
+    etcdserverpb::LeaseGrantResponse leaseGrantResponse;
+    stub->LeaseGrant(&leaseGrantCtx, leaseGrantRequest, &leaseGrantResponse);
+
+    const auto id = leaseGrantResponse.id();
+    UNIT_ASSERT(id != 0LL);
+    return id;
+}
+
+void Revoke(const i64 id, const std::unique_ptr<etcdserverpb::Lease::Stub> &stub)
+{
+    grpc::ClientContext leaseRevokeCtx;
+    etcdserverpb::LeaseRevokeRequest leaseRevokeRequest;
+    leaseRevokeRequest.set_id(id);
+
+    etcdserverpb::LeaseRevokeResponse leaseRevokeResponse;
+    stub->LeaseRevoke(&leaseRevokeCtx, leaseRevokeRequest, &leaseRevokeResponse);
+}
+
+std::unordered_multiset<i64> Leases(const std::unique_ptr<etcdserverpb::Lease::Stub> &stub)
+{
+    grpc::ClientContext leasesCtx;
+    etcdserverpb::LeaseLeasesRequest leasesRequest;
+    etcdserverpb::LeaseLeasesResponse leasesResponse;
+    stub->LeaseLeases(&leasesCtx, leasesRequest, &leasesResponse);
+    std::unordered_multiset<i64> result(leasesResponse.leases().size());
+    for (const auto& l : leasesResponse.leases())
+        result.emplace(l.id());
+    return result;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(EtcdKV) {
@@ -234,15 +270,7 @@ Y_UNIT_TEST_SUITE(EtcdKV) {
 Y_UNIT_TEST_SUITE(EtcdLease) {
     Y_UNIT_TEST(SimpleGrantAndRevoke) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd, const std::unique_ptr<etcdserverpb::Lease::Stub> &lease) {
-            grpc::ClientContext leaseGrantCtx;
-            etcdserverpb::LeaseGrantRequest leaseGrantRequest;
-            leaseGrantRequest.set_ttl(101LL);
-
-            etcdserverpb::LeaseGrantResponse leaseGrantResponse;
-            lease->LeaseGrant(&leaseGrantCtx, leaseGrantRequest, &leaseGrantResponse);
-
-            const auto leaseId = leaseGrantResponse.id();
-            UNIT_ASSERT(leaseId != 0LL);
+            const auto leaseId = Grant(101LL, lease);
 
             Write("key0", "value0", etcd);
             Write("key1", "value1", etcd, leaseId);
@@ -280,14 +308,9 @@ Y_UNIT_TEST_SUITE(EtcdLease) {
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(6).value(), "value6");
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(7).value(), "value7");
             }
-            {
-                grpc::ClientContext leaseRevokeCtx;
-                etcdserverpb::LeaseRevokeRequest leaseRevokeRequest;
-                leaseRevokeRequest.set_id(leaseId);
 
-                etcdserverpb::LeaseRevokeResponse leaseRevokeResponse;
-                lease->LeaseRevoke(&leaseRevokeCtx, leaseRevokeRequest, &leaseRevokeResponse);
-            }
+            Revoke(leaseId, lease);
+
             {
                 grpc::ClientContext readRangeCtx;
                 etcdserverpb::RangeRequest rangeRequest;
@@ -307,6 +330,108 @@ Y_UNIT_TEST_SUITE(EtcdLease) {
         });
     }
 
+    Y_UNIT_TEST(TimeToLive) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd, const std::unique_ptr<etcdserverpb::Lease::Stub> &lease) {
+            {
+                grpc::ClientContext timeToLiveCtx;
+                etcdserverpb::LeaseTimeToLiveRequest timeToLiveRequest;
+                timeToLiveRequest.set_id(42LL);
+
+                etcdserverpb::LeaseTimeToLiveResponse timeToLiveResponse;
+                lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse);
+
+                UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.id(), 42LL);
+                UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.ttl(), -1LL);
+                UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.grantedttl(), 0LL);
+                UNIT_ASSERT(timeToLiveResponse.keys().empty());
+            }
+
+            const i64 one = Grant(97LL, lease), two = Grant(17LL, lease);
+
+            Write("key0", "value0", etcd);
+            Write("key1", "value1", etcd, two);
+            Write("key2", "value2", etcd, one);
+            Write("key3", "value3", etcd, one);
+            Write("key4", "value4", etcd);
+            Write("key5", "value5", etcd, one);
+            Write("key6", "value6", etcd, two);
+            Write("key7", "value7", etcd);
+
+            {
+                grpc::ClientContext timeToLiveCtx;
+                etcdserverpb::LeaseTimeToLiveRequest timeToLiveRequest;
+                timeToLiveRequest.set_id(one);
+
+                etcdserverpb::LeaseTimeToLiveResponse timeToLiveResponse;
+                lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse);
+
+                UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.id(), one);
+                UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.ttl(), 97LL);
+                UNIT_ASSERT(timeToLiveResponse.grantedttl() > 0LL && timeToLiveResponse.grantedttl() <= 97LL);
+                UNIT_ASSERT(timeToLiveResponse.keys().empty());
+            }
+            {
+                grpc::ClientContext timeToLiveCtx;
+                etcdserverpb::LeaseTimeToLiveRequest timeToLiveRequest;
+                timeToLiveRequest.set_id(two);
+                timeToLiveRequest.set_keys(true);
+
+                etcdserverpb::LeaseTimeToLiveResponse timeToLiveResponse;
+                lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse);
+
+                UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.id(), two);
+                UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.ttl(), 17LL);
+                UNIT_ASSERT(timeToLiveResponse.grantedttl() > 0LL && timeToLiveResponse.grantedttl() <= 17LL);
+                UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.keys().size(), 2U);
+
+                const std::unordered_multiset<std::string> set(timeToLiveResponse.keys().cbegin(), timeToLiveResponse.keys().cend());
+                UNIT_ASSERT_VALUES_EQUAL(set.count("key1"), 1U);
+                UNIT_ASSERT_VALUES_EQUAL(set.count("key6"), 1U);
+            }
+
+            Revoke(one, lease);
+
+            {
+                grpc::ClientContext timeToLiveCtx;
+                etcdserverpb::LeaseTimeToLiveRequest timeToLiveRequest;
+                timeToLiveRequest.set_id(one);
+                timeToLiveRequest.set_keys(true);
+
+                etcdserverpb::LeaseTimeToLiveResponse timeToLiveResponse;
+                lease->LeaseTimeToLive(&timeToLiveCtx, timeToLiveRequest, &timeToLiveResponse);
+
+                UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.id(), one);
+                UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.ttl(), -1LL);
+                UNIT_ASSERT_VALUES_EQUAL(timeToLiveResponse.grantedttl(), 0LL);
+                UNIT_ASSERT(timeToLiveResponse.keys().empty());
+            }
+        });
+    }
+
+    Y_UNIT_TEST(Leases) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub>&, const std::unique_ptr<etcdserverpb::Lease::Stub> &lease) {
+
+            UNIT_ASSERT(Leases(lease).empty());
+
+            const i64 one = Grant(97LL, lease), two = Grant(17LL, lease);
+
+            {
+                const auto& leases = Leases(lease);
+                UNIT_ASSERT_VALUES_EQUAL(leases.size(), 2U);
+                UNIT_ASSERT_VALUES_EQUAL(leases.count(one), 1U);
+                UNIT_ASSERT_VALUES_EQUAL(leases.count(two), 1U);
+            }
+
+            Revoke(one, lease);
+
+            {
+                const auto& leases = Leases(lease);
+                UNIT_ASSERT_VALUES_EQUAL(leases.size(), 1U);
+                UNIT_ASSERT_VALUES_EQUAL(leases.count(one), 0U);
+                UNIT_ASSERT_VALUES_EQUAL(leases.count(two), 1U);
+            }
+        });
+    }
 } // Y_UNIT_TEST_SUITE(EtcdLease)
 
 } // NKikimr::NGRpcService

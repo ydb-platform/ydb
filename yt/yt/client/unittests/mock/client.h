@@ -65,7 +65,7 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options),
         (override));
 
@@ -120,7 +120,7 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options),
         (override));
 
@@ -401,6 +401,11 @@ public:
     MOCK_METHOD(TFuture<void>, UnfreezeTable, (
         const NYPath::TYPath& path,
         const TUnfreezeTableOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, CancelTabletTransition, (
+        NTabletClient::TTabletId tabletId,
+        const TCancelTabletTransitionOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, ReshardTable, (

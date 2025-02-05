@@ -63,12 +63,12 @@ public:
         (subrequests, options))
 
     DELEGATE_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options),
         (query, options))
 
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options),
         (query, options))
 
@@ -281,6 +281,11 @@ public:
         const NYPath::TYPath& path,
         const TUnfreezeTableOptions& options),
         (path, options))
+
+    DELEGATE_METHOD(TFuture<void>, CancelTabletTransition, (
+        NTabletClient::TTabletId tabletId,
+        const TCancelTabletTransitionOptions& options),
+        (tabletId, options))
 
     DELEGATE_METHOD(TFuture<void>, ReshardTable, (
         const NYPath::TYPath& path,

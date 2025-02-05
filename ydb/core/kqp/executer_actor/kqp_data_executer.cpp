@@ -135,22 +135,13 @@ public:
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId bufferActorId)
-        : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
+        : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, database, userToken, counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", streamResult, bufferActorId, txManager)
-        , AsyncIoFactory(std::move(asyncIoFactory))
-        , FederatedQuerySetup(federatedQuerySetup)
-        , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
         , AllowOlapDataQuery(tableServiceConfig.GetAllowOlapDataQuery())
-        , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(tableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
-        , VerboseMemoryLimitException(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException())
     {
-        if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
-            ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
-        }
-
         Target = creator;
 
         YQL_ENSURE(!TxManager || tableServiceConfig.GetEnableOltpSink());
@@ -1923,7 +1914,7 @@ private:
         if (ev->Get()->Snapshot.empty()) {
             LOG_E("Can not find default state storage group for database " << Database);
         }
-        ResourceSnapshot = std::move(ev->Get()->Snapshot);
+        ResourcesSnapshot = std::move(ev->Get()->Snapshot);
         ResourceSnapshotRequired = false;
         if (!WaitRequired()) {
             Execute();
@@ -2007,7 +1998,7 @@ private:
         size_t sourceScanPartitionsCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
-            auto scheduledTaskCount = ScheduleByCost(tx, ResourceSnapshot);
+            auto scheduledTaskCount = ScheduleByCost(tx, ResourcesSnapshot);
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
@@ -2055,7 +2046,7 @@ private:
                             break;
                         case NKqpProto::TKqpSource::kExternalSource: {
                             auto it = scheduledTaskCount.find(stageIdx);
-                            BuildReadTasksFromSource(stageInfo, ResourceSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
+                            BuildReadTasksFromSource(stageInfo, ResourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
                         }
                             break;
                         default:
@@ -2066,7 +2057,7 @@ private:
                 } else if (stageInfo.Meta.IsSysView()) {
                     BuildSysViewScanTasks(stageInfo);
                 } else if (stageInfo.Meta.ShardOperations.empty() || stage.SinksSize() > 0) {
-                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourceSnapshot.size()));
+                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourcesSnapshot.size()));
                 } else {
                     BuildDatashardTasks(stageInfo);
                 }
@@ -2723,52 +2714,13 @@ private:
             }
         }
 
-        const bool singlePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
-        const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty());
-        const bool localComputeTasks = !DatashardTxs.empty();
-        const bool mayRunTasksLocally = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.empty());
+        TasksGraph.GetMeta().SinglePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
+        TasksGraph.GetMeta().LocalComputeTasks = !DatashardTxs.empty();
+        TasksGraph.GetMeta().MayRunTasksLocally = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.empty());
 
-        Planner = CreateKqpPlanner({
-            .TasksGraph = TasksGraph,
-            .TxId = TxId,
-            .LockTxId = lockTxId,
-            .LockNodeId = SelfId().NodeId(),
-            .LockMode = TasksGraph.GetMeta().LockMode,
-            .Executer = SelfId(),
-            .Snapshot = GetSnapshot(),
-            .Database = Database,
-            .UserToken = UserToken,
-            .Deadline = Deadline.GetOrElse(TInstant::Zero()),
-            .StatsMode = Request.StatsMode,
-            .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
-            .RlPath = Nothing(),
-            .ExecuterSpan =  ExecuterSpan,
-            .ResourcesSnapshot = std::move(ResourceSnapshot),
-            .ExecuterRetriesConfig = ExecuterRetriesConfig,
-            .UseDataQueryPool = useDataQueryPool,
-            .LocalComputeTasks = localComputeTasks,
-            .MkqlMemoryLimit = Request.MkqlMemoryLimit,
-            .AsyncIoFactory = AsyncIoFactory,
-            .AllowSinglePartitionOpt = singlePartitionOptAllowed,
-            .UserRequestContext = GetUserRequestContext(),
-            .FederatedQuerySetup = FederatedQuerySetup,
-            .OutputChunkMaxSize = Request.OutputChunkMaxSize,
-            .GUCSettings = GUCSettings,
-            .MayRunTasksLocally = mayRunTasksLocally,
-            .ResourceManager_ = Request.ResourceManager_,
-            .CaFactory_ = Request.CaFactory_,
-            .BlockTrackingMode = BlockTrackingMode,
-            .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
-            .VerboseMemoryLimitException = VerboseMemoryLimitException,
-        });
-
-        auto err = Planner->PlanExecution();
-        if (err) {
-            TlsActivationContext->Send(err.release());
+        bool isSubmitSuccessful = BuildPlannerAndSubmitTasks();
+        if (!isSubmitSuccessful)
             return;
-        }
-
-        Planner->Submit();
 
         // then start data tasks with known actor ids of compute tasks
         for (auto& [shardId, shardTx] : DatashardTxs) {
@@ -3041,9 +2993,6 @@ private:
     }
 
 private:
-    NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
-    const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
     const bool AllowOlapDataQuery = false;
 
@@ -3051,7 +3000,6 @@ private:
     bool SecretSnapshotRequired = false;
     bool ResourceSnapshotRequired = false;
     bool SaveScriptExternalEffectRequired = false;
-    TVector<NKikimrKqp::TKqpNodeResources> ResourceSnapshot;
 
     ui64 TxCoordinator = 0;
     THashMap<ui64, TShardState> ShardStates;
@@ -3081,10 +3029,7 @@ private:
     TLockHandle LockHandle;
     ui64 LastShard = 0;
 
-    const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TDuration WaitCAStatsTimeout;
-    TMaybe<ui8> ArrayBufferMinFillPercentage;
-    const bool VerboseMemoryLimitException;
 };
 
 } // namespace

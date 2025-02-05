@@ -814,10 +814,10 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
             for (const auto& cookie : result->signed_cookies()) {
                 cookies.push_back(ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(cookie)));
             }
-            return TDistributedWriteSessionWithCookies{
-                .Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(result->signed_session())),
-                .Cookies = std::move(cookies),
-            };
+            TDistributedWriteSessionWithCookies sessionWithCookies;
+            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(result->signed_session())),
+            sessionWithCookies.Cookies = std::move(cookies);
+            return std::move(sessionWithCookies);
         }));
 }
 
@@ -1053,7 +1053,7 @@ void FillRequestBySelectRowsOptionsBase(
 }
 
 TFuture<TSelectRowsResult> TClientBase::SelectRows(
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1125,7 +1125,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
 }
 
 TFuture<TYsonString> TClientBase::ExplainQuery(
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

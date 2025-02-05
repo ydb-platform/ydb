@@ -963,6 +963,15 @@ namespace {
                     Types.OptimizerFlags.insert(to_lower(ToString(arg)));
                 }
             }
+            else if (name == "PeepholeFlags") {
+                for (auto& arg : args) {
+                    if (arg.empty()) {
+                        ctx.AddError(TIssue(pos, "Empty flags are not supported"));
+                        return false;
+                    }
+                    Types.PeepholeFlags.insert(to_lower(ToString(arg)));
+                }
+            }
             else if (name == "_EnableStreamLookupJoin" || name == "DisableStreamLookupJoin") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));

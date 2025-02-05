@@ -107,7 +107,9 @@ namespace NKikimr {
                          OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0,
                          state,
                          replicated,
-                         outOfSpaceFlags));
+                         outOfSpaceFlags,
+                         OverloadHandler ? OverloadHandler->IsThrottling() : false,
+                         OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0));
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }

@@ -23,7 +23,7 @@ public:
     TPermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), false)
+        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), false, true)
         , Effective(effective)
     {
     }
@@ -36,6 +36,8 @@ protected:
             batch.Finished = false;
             return;
         }
+
+        auto entryPath = CanonizePath(entry.Path);
         
         TVector<std::pair<TString, TString>> permissions;
         for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
@@ -45,10 +47,15 @@ protected:
             if (!Effective && ace.GetInherited()) {
                 continue;
             }
+            if (!ace.HasSID()) {
+                continue;
+            }
 
             auto acePermissions = ConvertACLMaskToYdbPermissionNames(ace.GetAccessRight());
             for (const auto& permission : acePermissions) {
-                permissions.emplace_back(ace.HasSID() ? ace.GetSID() : TString{}, std::move(permission));
+                if (StringKeyIsInTableRange({entryPath, ace.GetSID(), permission})) {
+                    permissions.emplace_back(ace.GetSID(), std::move(permission));
+                }
             }
         }
         // Note: due to rights inheritance permissions may be duplicated
@@ -58,8 +65,6 @@ protected:
         }, false);
 
         TVector<TCell> cells(::Reserve(Columns.size()));
-
-        auto entryPath = CanonizePath(entry.Path);
 
         for (const auto& [sid, permission] : permissions) {
             for (auto& column : Columns) {

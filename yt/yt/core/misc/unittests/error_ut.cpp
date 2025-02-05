@@ -206,7 +206,7 @@ TEST(TErrorTest, TraceContext)
 TEST(TErrorTest, NativeHostName)
 {
     auto hostName = "TestHost";
-    NNet::WriteLocalHostName(hostName);
+    NNet::SetLocalHostName(hostName);
 
     auto error = TError("NativeHostTest");
 

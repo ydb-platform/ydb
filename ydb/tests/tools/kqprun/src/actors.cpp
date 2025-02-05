@@ -83,14 +83,19 @@ public:
     }
 
     void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
-        if (ProgressCallback_) {
-            ProgressCallback_(QueryId_, ev->Get()->Record);
+        try {
+            if (ProgressCallback_) {
+                ProgressCallback_(QueryId_, ev->Get()->Record);
+            }
+        } catch (...) {
+            Cerr << CerrColors_.Red() << "Got unexpected exception during progress callback: " << CurrentExceptionMessage() << CerrColors_.Default() << Endl;
         }
     }
 
 private:
     const ui32 TargetNode_ = 0;
     const size_t QueryId_ = 0;
+    const NColorizer::TColors CerrColors_ = NColorizer::AutoColors(Cerr);
 
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvQueryRequest> Request_;
     NThreading::TPromise<TQueryResponse> Promise_;
@@ -229,48 +234,61 @@ private:
 };
 
 class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaiterActor> {
+    using IRetryPolicy = IRetryPolicy<bool>;
+    using EVerbose = TYdbSetupSettings::EVerbose;
+    using EHealthCheck = TYdbSetupSettings::EHealthCheck;
+
     static constexpr TDuration REFRESH_PERIOD = TDuration::MilliSeconds(10);
 
 public:
     TResourcesWaiterActor(NThreading::TPromise<void> promise, const TWaitResourcesSettings& settings)
         : Settings_(settings)
+        , RetryPolicy_(IRetryPolicy::GetExponentialBackoffPolicy(
+            &TResourcesWaiterActor::Retryable, REFRESH_PERIOD, 
+            TDuration::MilliSeconds(100), TDuration::Seconds(1),
+            std::numeric_limits<size_t>::max(), std::max(2 * REFRESH_PERIOD, Settings_.HealthCheckTimeout)
+        ))
         , Promise_(promise)
     {}
 
     void Bootstrap() {
-        if (Settings_.HealthCheckLevel < 1) {
+        Become(&TResourcesWaiterActor::StateFunc);
+
+        HealthCheckStage_ = EHealthCheck::NodesCount;
+        DoHealthCheck();
+    }
+
+    void DoHealthCheck() {
+        if (Settings_.HealthCheckLevel < HealthCheckStage_) {
             Finish();
             return;
         }
 
-        Become(&TResourcesWaiterActor::StateWaitNodeCont);
-        CheckResourcesPublish();
-    }
+        switch (HealthCheckStage_) {
+            case TYdbSetupSettings::EHealthCheck::NodesCount:
+                CheckResourcesPublish();
+                break;
 
-    void HandleWaitNodeCountWakeup() {
-        CheckResourcesPublish();
+            case TYdbSetupSettings::EHealthCheck::ScriptRequest:
+                StartScriptQuery();
+                break;
+
+            case TYdbSetupSettings::EHealthCheck::None:
+            case TYdbSetupSettings::EHealthCheck::Max:
+                Finish();
+                break;
+        }
     }
 
     void Handle(TEvPrivate::TEvResourcesInfo::TPtr& ev) {
-        const auto nodeCont = ev->Get()->NodeCount;
-        if (nodeCont == Settings_.ExpectedNodeCount) {
-            if (Settings_.HealthCheckLevel < 2) {
-                Finish();
-            } else {
-                Become(&TResourcesWaiterActor::StateWaitScript);
-                StartScriptQuery();
-            }
+        const auto nodeCount = ev->Get()->NodeCount;
+        if (nodeCount == Settings_.ExpectedNodeCount) {
+            HealthCheckStage_ = EHealthCheck::ScriptRequest;
+            DoHealthCheck();
             return;
         }
 
-        if (Settings_.VerboseLevel >= 2) {
-            Cout << CoutColors_.Cyan() << "Retry invalid node count, got " << nodeCont << ", expected " << Settings_.ExpectedNodeCount << CoutColors_.Default() << Endl;
-        }
-        Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
-    }
-
-    void HandleWaitScriptWakeup() {
-        StartScriptQuery();
+        Retry(TStringBuilder() << "invalid node count, got " << nodeCount << ", expected " << Settings_.ExpectedNodeCount, true);
     }
 
     void Handle(NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr& ev) {
@@ -280,45 +298,26 @@ public:
             return;
         }
 
-        if (Settings_.VerboseLevel >= 2) {
-            Cout << CoutColors_.Cyan() << "Retry script creation fail with status " << status << ", reason:\n" << CoutColors_.Default() << ev->Get()->Issues.ToString() << Endl;
-        }
-        Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
+        Retry(TStringBuilder() << "script creation fail with status " << status << ", reason:\n" << CoutColors_.Default() << ev->Get()->Issues.ToString(), true);
     }
 
-    STRICT_STFUNC(StateWaitNodeCont,
-        sFunc(NActors::TEvents::TEvWakeup, HandleWaitNodeCountWakeup);
+    STRICT_STFUNC(StateFunc,
+        sFunc(NActors::TEvents::TEvWakeup, DoHealthCheck);
         hFunc(TEvPrivate::TEvResourcesInfo, Handle);
-    )
-
-    STRICT_STFUNC(StateWaitScript,
-        sFunc(NActors::TEvents::TEvWakeup, HandleWaitScriptWakeup);
         hFunc(NKikimr::NKqp::TEvKqp::TEvScriptResponse, Handle);
     )
 
 private:
     void CheckResourcesPublish() {
-        GetResourceManager();
+        if (!ResourceManager_) {
+            ResourceManager_ = NKikimr::NKqp::TryGetKqpResourceManager(SelfId().NodeId());
+        }
 
         if (!ResourceManager_) {
-            if (Settings_.VerboseLevel >= 2) {
-                Cout << CoutColors_.Cyan() << "Retry uninitialized resource manager" << CoutColors_.Default() << Endl;
-            }
-            Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
+            Retry("uninitialized resource manager", true);
             return;
         }
 
-        UpdateResourcesInfo();
-    }
-
-    void GetResourceManager() {
-        if (ResourceManager_) {
-            return;
-        }
-        ResourceManager_ = NKikimr::NKqp::TryGetKqpResourceManager(SelfId().NodeId());
-    }
-
-    void UpdateResourcesInfo() const {
         ResourceManager_->RequestClusterResourcesInfo(
         [selfId = SelfId(), actorContext = ActorContext()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
             actorContext.Send(selfId, new TEvPrivate::TEvResourcesInfo(resources.size()));
@@ -338,20 +337,49 @@ private:
         Send(NKikimr::NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
     }
 
+    void Retry(const TString& message, bool shortRetry) {
+        if (RetryState_ == nullptr) {
+            RetryState_ = RetryPolicy_->CreateRetryState();
+        }
+
+        if (auto delay = RetryState_->GetNextRetryDelay(shortRetry)) {
+            if (Settings_.VerboseLevel >= EVerbose::InitLogs) {
+                Cout << CoutColors_.Cyan() << "Retry in " << *delay << " " << message << CoutColors_.Default() << Endl;
+            }
+            Schedule(*delay, new NActors::TEvents::TEvWakeup());
+        } else {
+            Fail(TStringBuilder() << "Health check timeout " << Settings_.HealthCheckTimeout << " exceeded, use --health-check-timeout for increasing it or check out health check logs by using --verbose " << static_cast<ui32>(EVerbose::InitLogs));
+        }
+    }
+
     void Finish() {
         Promise_.SetValue();
         PassAway();
     }
 
+    void Fail(const TString& error) {
+        Promise_.SetException(error);
+        PassAway();
+    }
+
+    static ERetryErrorClass Retryable(bool shortRetry) {
+        return shortRetry ? ERetryErrorClass::ShortRetry : ERetryErrorClass::LongRetry;
+    }
+
 private:
     const TWaitResourcesSettings Settings_;
     const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
+    const IRetryPolicy::TPtr RetryPolicy_;
+    IRetryPolicy::IRetryState::TPtr RetryState_ = nullptr;
     NThreading::TPromise<void> Promise_;
 
+    EHealthCheck HealthCheckStage_ = EHealthCheck::None;
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
 };
 
 class TSessionHolderActor : public NActors::TActorBootstrapped<TSessionHolderActor> {
+    using EVerbose = TYdbSetupSettings::EVerbose;
+
 public:
     TSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise)
         : TargetNode_(request.TargetNode)
@@ -375,7 +403,7 @@ public:
         }
 
         SessionId_ = response.GetResponse().GetSessionId();
-        if (VerboseLevel_ >= 1) {
+        if (VerboseLevel_ >= EVerbose::Info) {
             Cout << CoutColors_.Cyan() << "Created new session on node " << TargetNode_ << " with id " << SessionId_ << "\n";
         }
 
@@ -453,7 +481,7 @@ private:
 private:
     const ui32 TargetNode_;
     const TString TraceId_;
-    const ui8 VerboseLevel_;
+    const EVerbose VerboseLevel_;
     const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
 
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Request_;

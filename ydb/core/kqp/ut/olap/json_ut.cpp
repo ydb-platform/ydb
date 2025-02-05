@@ -320,6 +320,9 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "a2" ORDER BY Col1;
             EXPECTED: [[2u;["{\"a\":\"a2\"}"]]]
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
             
         )";
         TScriptVariator(script).Execute();

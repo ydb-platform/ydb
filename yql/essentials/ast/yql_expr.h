@@ -155,7 +155,7 @@ class TErrorTypeVisitor : public TDefaultTypeAnnotationVisitor
 public:
     TErrorTypeVisitor(TExprContext& ctx);
     void Visit(const TErrorExprType& type) override;
-    bool HasErrors();
+    bool HasErrors() const;
 
 private:
     TExprContext& Ctx_;

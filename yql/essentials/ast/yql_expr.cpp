@@ -3950,7 +3950,7 @@ void TDefaultTypeAnnotationVisitor::Visit(const TResourceExprType& type) {
 }
 
 void TDefaultTypeAnnotationVisitor::Visit(const TTypeExprType& type) {
-    Y_UNUSED(type);
+    type.GetType()->Accept(*this);
 }
 
 void TDefaultTypeAnnotationVisitor::Visit(const TDictExprType& type) {
@@ -4007,7 +4007,7 @@ void TErrorTypeVisitor::Visit(const TErrorExprType& type) {
     Ctx_.IssueManager.RaiseIssue(type.GetError());
 }
 
-bool TErrorTypeVisitor::HasErrors() {
+bool TErrorTypeVisitor::HasErrors() const {
     return HasErrors_;
 }
 

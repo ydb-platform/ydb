@@ -1,5 +1,7 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/client/forbid_peerdir.inc)
+
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_topic/include/codecs.h)
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_topic/include/control_plane.h)
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h)

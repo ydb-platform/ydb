@@ -1,5 +1,7 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/client/forbid_peerdir.inc)
+
 SRCS(
     kqp_session_common.cpp
 )

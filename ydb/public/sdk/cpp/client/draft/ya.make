@@ -1,5 +1,7 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/client/forbid_peerdir.inc)
+
 SRCS(
     ydb_dynamic_config.cpp
     ydb_replication.cpp

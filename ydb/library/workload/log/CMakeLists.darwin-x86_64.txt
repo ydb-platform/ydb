@@ -33,6 +33,7 @@ target_link_libraries(library-workload-log PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-workload-abstract
+  api-protos
   library-cpp-json
   library-cpp-resource
   tools-enum_parser-enum_serialization_runtime
@@ -57,6 +58,7 @@ target_link_libraries(library-workload-log.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-workload-abstract
+  api-protos
   library-cpp-json
   library-cpp-resource
   tools-enum_parser-enum_serialization_runtime

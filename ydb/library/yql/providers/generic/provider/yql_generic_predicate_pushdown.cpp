@@ -31,6 +31,115 @@ namespace NYql {
             return TString(from);
         }
 
+        bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSerializationContext& ctx, ui64 depth);
+
+#define MATCH_TYPE(DataType, PROTO_TYPE)                                                  \
+    if (dataSlot == NUdf::EDataSlot::DataType) {                                          \
+        dstType->set_type_id(Ydb::Type::PROTO_TYPE);                                      \
+        return true;                                                                      \
+    }
+
+        bool SerializeCastExpression(const TCoSafeCast& safeCast, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            const auto typeAnnotation = safeCast.Type().Ref().GetTypeAnn();
+            if (!typeAnnotation) {
+                ctx.Err << "expected non empty type annotation for safe cast";
+                return false;
+            }
+            if (typeAnnotation->GetKind() != ETypeAnnotationKind::Type) {
+                ctx.Err << "expected only type expression for safe cast";
+                return false;
+            }
+
+            auto* dstProto = proto->mutable_cast();
+            if (!SerializeExpression(safeCast.Value(), dstProto->mutable_value(), ctx, depth + 1)) {
+                return false;
+            }
+
+            auto type = typeAnnotation->Cast<TTypeExprType>()->GetType();
+            auto* dstType = dstProto->mutable_type();
+            if (type->GetKind() == ETypeAnnotationKind::Optional) {
+                type = type->Cast<TOptionalExprType>()->GetItemType();
+                dstType = dstType->mutable_optional_type()->mutable_item();
+            }
+            if (type->GetKind() != ETypeAnnotationKind::Data) {
+                ctx.Err << "expected only data type or optional data type for safe cast";
+                return false;
+            }
+            const auto dataSlot = type->Cast<TDataExprType>()->GetSlot();
+
+            MATCH_TYPE(Bool, BOOL);
+            MATCH_TYPE(Int8, INT8);
+            MATCH_TYPE(Int16, INT16);
+            MATCH_TYPE(Int32, INT32);
+            MATCH_TYPE(Int64, INT64);
+            MATCH_TYPE(Uint8, UINT8);
+            MATCH_TYPE(Uint16, UINT16);
+            MATCH_TYPE(Uint32, UINT32);
+            MATCH_TYPE(Uint64, UINT64);
+            MATCH_TYPE(Float, FLOAT);
+            MATCH_TYPE(Double, DOUBLE);
+            MATCH_TYPE(String, STRING);
+            MATCH_TYPE(Utf8, UTF8);
+            MATCH_TYPE(Json, JSON);
+            MATCH_TYPE(Timestamp, TIMESTAMP);
+
+            ctx.Err << "unknown data slot " << static_cast<ui64>(dataSlot) << " for safe cast";
+            return false;
+        }
+
+#undef MATCH_TYPE
+
+        bool SerializeToBytesExpression(const TExprBase& toBytes, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            if (toBytes.Ref().ChildrenSize() != 1) {
+                ctx.Err << "invalid ToBytes expression, expected 1 child but got " << toBytes.Ref().ChildrenSize();
+                return false;
+            }
+
+            const auto toBytexExpr = TExprBase(toBytes.Ref().Child(0));
+            auto typeAnnotation = toBytexExpr.Ref().GetTypeAnn();
+            if (!typeAnnotation) {
+                ctx.Err << "expected non empty type annotation for ToBytes";
+                return false;
+            }
+            if (typeAnnotation->GetKind() == ETypeAnnotationKind::Optional) {
+                typeAnnotation = typeAnnotation->Cast<TOptionalExprType>()->GetItemType();
+            }
+            if (typeAnnotation->GetKind() != ETypeAnnotationKind::Data) {
+                ctx.Err << "expected data type or optional from data type in ToBytes";
+                return false;
+            }
+
+            const auto dataSlot = typeAnnotation->Cast<TDataExprType>()->GetSlot();
+            if (!IsDataTypeString(dataSlot) && dataSlot != NUdf::EDataSlot::JsonDocument) {
+                ctx.Err << "expected only string like input type for ToBytes";
+                return false;
+            }
+
+            auto* dstProto = proto->mutable_cast();
+            dstProto->mutable_type()->set_type_id(Ydb::Type::STRING);
+            return SerializeExpression(toBytexExpr, dstProto->mutable_value(), ctx, depth + 1);
+        }
+
+        bool SerializeFlatMap(const TCoFlatMap& flatMap, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            const auto lambda = flatMap.Lambda();
+            const auto lambdaArgs = lambda.Args();
+            if (lambdaArgs.Size() != 1) {
+                ctx.Err << "expected only one argument for flat map lambda";
+                return false;
+            }
+
+            auto* dstProto = proto->mutable_if_();
+            dstProto->mutable_else_expression()->mutable_null();
+            auto* dstInput = dstProto->mutable_predicate()->mutable_is_not_null()->mutable_value();
+            if (!SerializeExpression(flatMap.Input(), dstInput, ctx, depth + 1)) {
+                return false;
+            }
+
+            // Duplicated arguments is ok, maybe one lambda was used twice
+            ctx.LambdaArgs.insert({lambdaArgs.Ref().Child(0), *dstInput});
+            return SerializeExpression(lambda.Body(), dstProto->mutable_then_expression(), ctx, depth + 1);
+        }
+
 #define MATCH_ATOM(AtomType, ATOM_ENUM, proto_name, cpp_type)                             \
     if (auto atom = expression.Maybe<Y_CAT(TCo, AtomType)>()) {                           \
         auto* value = proto->mutable_typed_value();                                       \

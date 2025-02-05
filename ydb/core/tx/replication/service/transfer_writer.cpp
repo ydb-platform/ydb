@@ -1,24 +1,17 @@
-#include "json_change_record.h"
 #include "logging.h"
 #include "transfer_writer.h"
 #include "worker.h"
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
-#include <ydb/core/tx/replication/service/lightweight_schema.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/purecalc_filter.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
-#include <yql/essentials/public/purecalc/common/interface.h>
 #include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
 #include <yql/essentials/public/udf/udf_string.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -31,9 +24,8 @@
 #include <ydb/core/persqueue/purecalc/purecalc.h>
 
 
-#include <library/cpp/json/json_writer.h>
 
-#include <util/generic/maybe.h>
+//#include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
 using namespace NFq::NRowDispatcher;
@@ -490,12 +482,6 @@ private:
         if (TableVersion && TableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
             // TODO ????
             return CompileTransferLambda();
-        }
-
-        auto schema = MakeIntrusive<TLightweightSchema>();
-        if (entry.Self && entry.Self->Info.HasVersion()) {
-            // TODO ???
-            schema->Version = entry.Self->Info.GetVersion().GetTableSchemaVersion();
         }
 
         if (entry.Kind == TNavigate::KindColumnTable) {

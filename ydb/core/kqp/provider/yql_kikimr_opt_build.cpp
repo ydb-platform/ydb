@@ -309,6 +309,11 @@ bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& 
     TExprBase providerArg(node.Ref().Child(1));
     if (auto maybeDataSource = providerArg.Maybe<TCoDataSource>()) {
         TStringBuf dataSourceCategory = maybeDataSource.Cast().Category();
+        if (dataSourceCategory == NYql::PgProviderName) {
+            // All pg reads should be replaced on TPgTableContent
+            return false;
+        }
+
         auto dataSourceProviderIt = types.DataSourceMap.find(dataSourceCategory);
         if (dataSourceProviderIt != types.DataSourceMap.end()) {
             if (auto* dqIntegration = dataSourceProviderIt->second->GetDqIntegration()) {

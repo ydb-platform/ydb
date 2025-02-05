@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     actor_persqueue_client_iface.h
     blob.cpp
-    blob_refcounter.cpp
     common_app.cpp
     cluster_tracker.cpp
     event_helpers.cpp

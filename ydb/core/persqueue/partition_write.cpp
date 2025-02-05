@@ -397,11 +397,9 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         while (!HeadKeys.empty() &&
                (HeadKeys.back().Key.GetOffset() > NewHeadKey.Key.GetOffset() ||
                 (HeadKeys.back().Key.GetOffset() == NewHeadKey.Key.GetOffset() && HeadKeys.back().Key.GetPartNo() >= NewHeadKey.Key.GetPartNo()))) {
-            auto k = std::move(HeadKeys.back());
             HeadKeys.pop_back();
         }
 
-        PQ_LOG_D("add new head key " << NewHeadKey.Key.ToString());
         HeadKeys.push_back(std::move(NewHeadKey));
 
         NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};
@@ -434,7 +432,6 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
                 GapSize += ck.first.GetOffset() - lastOffset;
             }
         }
-        PQ_LOG_D("add new body key " << ck.first.ToString());
         DataKeysBody.emplace_back(ck.first,
                                   ck.second,
                                   ctx.Now(),

@@ -421,8 +421,6 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
 }
 
 bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
-    PQ_LOG_D("CleanUpBlobs");
-
     if (StartOffset == EndOffset || DataKeysBody.size() <= 1) {
         return false;
     }
@@ -434,14 +432,9 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     const auto now = ctx.Now();
     const ui64 importantConsumerMinOffset = ImportantClientsMinOffset();
 
-    PQ_LOG_D("LifetimeLimit=" << partConfig.GetLifetimeSeconds() <<
-             ", StorageLimit=" << partConfig.GetStorageLimitBytes() <<
-             ", importantConsumerMinOffset=" << importantConsumerMinOffset);
-
     bool hasDrop = false;
     while (DataKeysBody.size() > 1) {
         auto& nextKey = DataKeysBody[1].Key;
-        PQ_LOG_D("nextKey=" << nextKey.ToString());
         if (importantConsumerMinOffset < nextKey.GetOffset()) {
             // The first message in the next blob was not read by an important consumer.
             // We also save the current blob, since not all messages from it could be read.
@@ -453,7 +446,6 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         }
 
         auto& firstKey = DataKeysBody.front();
-        PQ_LOG_D("firstKey=" << firstKey.Key.ToString() << ", BodySize=" << BodySize << ", keySize=" << firstKey.Size);
         if (hasStorageLimit) {
             const auto bodySize = BodySize - firstKey.Size;
             if (bodySize < partConfig.GetStorageLimitBytes()) {
@@ -466,7 +458,6 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         }
 
         BodySize -= firstKey.Size;
-
         DataKeysBody.pop_front();
 
         if (!GapOffsets.empty() && nextKey.GetOffset() == GapOffsets.front().second) {
@@ -494,15 +485,6 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             DataKeysBody.pop_front();
         }
     }
-
-    //TKey firstKey(TKeyPrefix::TypeData, Partition, 0, 0, 0, 0); //will drop all that could not be dropped before of case of full disks
-
-    //auto del = request->Record.AddCmdDeleteRange();
-    //auto range = del->MutableRange();
-    //range->SetFrom(firstKey.Data(), firstKey.Size());
-    //range->SetIncludeFrom(true);
-    //range->SetTo(lastKey.Data(), lastKey.Size());
-    //range->SetIncludeTo(StartOffset == EndOffset);
 
     Y_UNUSED(request);
 
@@ -2064,8 +2046,6 @@ void TPartition::RunPersist() {
         WriteInfosApplied.clear();
         //Done with counters.
 
-        DumpKeyValueRequest(PersistRequest->Record);
-
         PersistRequestSpan.Attribute("bytes", static_cast<i64>(PersistRequest->Record.ByteSizeLong()));
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
         CurrentPersistRequestSpan = std::move(PersistRequestSpan);
@@ -2084,8 +2064,6 @@ void TPartition::TryAddDeleteHeadKeysToPersistRequest()
 {
     while (!DeletedHeadKeys.empty()) {
         auto& k = DeletedHeadKeys.back();
-
-        PQ_LOG_D("delete key " << k);
 
         auto* cmd = PersistRequest->Record.AddCmdDeleteRange();
         auto* range = cmd->MutableRange();
@@ -3425,16 +3403,8 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
 }
 
 void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request) {
-    PQ_LOG_D("=== ClearOldHead ===");
-    PQ_LOG_D("offset=" << offset << ", partNo=" << partNo);
-    for (const auto& v : HeadKeys) {
-        PQ_LOG_D("key=" << v.Key.ToString() << ", refs=" << v.BlobKeyToken.use_count());
-    }
-    PQ_LOG_D("====================");
-
     for (auto it = HeadKeys.rbegin(); it != HeadKeys.rend(); ++it) {
         if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
-            PQ_LOG_D("schedule delete key " << it->BlobKeyToken->Key << " from head");
             DefferedKeysForDeletion.push_back(std::move(it->BlobKeyToken));
 
             Y_UNUSED(request);

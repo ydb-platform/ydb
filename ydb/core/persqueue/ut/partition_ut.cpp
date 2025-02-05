@@ -316,8 +316,6 @@ void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
     Ctx.ConstructInPlace();
     Finalizer.ConstructInPlace(*Ctx);
 
-    Ctx->EnableDetailedPQLog = true;
-
     Ctx->Prepare();
     Ctx->Runtime->SetScheduledLimit(5'000);
 }
@@ -1208,37 +1206,10 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
     }
 }
 
-void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
-{
-    Cerr << "=== DumpKeyValueRequest ===" << Endl;
-    Cerr << "--- delete ----------------" << Endl;
-    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
-        const auto& cmd = request.GetCmdDeleteRange(i);
-        const auto& range = cmd.GetRange();
-        Cerr <<
-            (range.GetIncludeFrom() ? '[' : '(') << range.GetFrom() <<
-            ", " <<
-            range.GetTo() << (range.GetIncludeTo() ? ']' : ')') <<
-            Endl;
-    }
-    Cerr << "--- write -----------------" << Endl;
-    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
-        const auto& cmd = request.GetCmdWrite(i);
-        Cerr << cmd.GetKey() << Endl;
-    }
-    Cerr << "--- rename ----------------" << Endl;
-    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
-        const auto& cmd = request.GetCmdRename(i);
-        Cerr << cmd.GetOldKey() << ", " << cmd.GetNewKey() << Endl;
-    }
-    Cerr << "===========================" << Endl;
-}
-
 void TPartitionFixture::WaitKeyValueRequest(TMaybe<ui64>& cookie)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
-    DumpKeyValueRequest(event->Record);
     if (event->Record.HasCookie()) {
         cookie = event->Record.GetCookie();
     } else {

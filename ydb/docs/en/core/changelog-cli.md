@@ -8,9 +8,9 @@ Released on February 5, 2025. To update to version **2.19.0**, select the [Downl
 
 * Added [changefeeds](./concepts/cdc.md) support in `ydb tools dump` and `ydb tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md). As a result, there are changes in the backup file structure: for tables with changefeeds, a subdirectory is created for each changefeed, named after the changefeed. This subdirectory contains two files: `changefeed_description.pb`, which contains the changefeed description, and `topic_description.pb`, which contains information about the underlying topic.
 * Added `CREATE TABLE` text suggestion on schema error during `ydb import file csv` [command](./reference/ydb-cli/export-import/import-file.md).
-* Added statistics output on the current progress of the query in the `ydb workload` [command](./reference/ydb-cli/commands/workload/).
-* Added query text to the error message if a query fails in the `ydb workload run` [command](./reference/ydb-cli/commands/workload/).
-* Added a message if the global timeout expired in the `ydb workload run` [command](./reference/ydb-cli/commands/workload/).
+* Added statistics output on the current progress of the query in the `ydb workload` [command](./reference/ydb-cli/commands/workload/index.md).
+* Added query text to the error message if a query fails in the `ydb workload run` [command](./reference/ydb-cli/commands/workload/index.md).
+* Added a message if the global timeout expired in the `ydb workload run` [command](./reference/ydb-cli/commands/workload/index.md).
 * Added some temporary changes to the experimental `ydb admin storage` command.
 * **_(Requires server v25.1+)_** Added [views](./concepts/datamodel/view.md) support in `ydb export s3` and `ydb import s3`. Views are exported as `CREATE VIEW` YQL statements, which are executed on import.
 * **_(Requires server v25.1+)_** Added the `--skip-checksum-validation` option to the `ydb import s3` [command](./reference/ydb-cli/export-import/import-s3.md) to skip server-side checksum validation.
@@ -19,9 +19,9 @@ Released on February 5, 2025. To update to version **2.19.0**, select the [Downl
 ### Bug fixes
 
 * Fixed a bug where the arm64 {{ ydb-short-name }} CLI binary was downloading the amd64 binary to replace itself during `ydb update` [command](./reference/ydb-cli/commands/service.md). To update already installed binaries to the latest arm64 version, {{ ydb-short-name }} CLI should be reinstalled.
-* Fixed the return code of the `ydb workload run` [command](./reference/ydb-cli/commands/workload/).
+* Fixed the return code of the `ydb workload run` [command](./reference/ydb-cli/commands/workload/index.md).
 * Fixed a bug where the `ydb workload tpch import generator` and `ydb workload tpcds import generator` [commands](./reference/ydb-cli/workload-tpch.md) were failing because not all tables had been created.
-* Fixed a bug with backslashes in `ydb workload` [commands](./reference/ydb-cli/commands/workload/) paths on Windows.
+* Fixed a bug with backslashes in `ydb workload` [commands](./reference/ydb-cli/commands/workload/index.md) paths on Windows.
 
 ## Version 2.18.0 {#2-18-0}
 

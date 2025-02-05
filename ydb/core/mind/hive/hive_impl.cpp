@@ -3110,6 +3110,14 @@ STFUNC(THive::StateInit) {
 }
 
 STFUNC(THive::StateWork) {
+    // For logging
+    TStringStream logOut;
+    logOut << "3Tablet "
+        << SelfId() << " "
+        << TabletID() << "\n";
+    Cerr << logOut.Str();
+    logOut.Clear();
+
     if (ResponsivenessPinger)
         ResponsivenessPinger->OnAnyEvent();
 

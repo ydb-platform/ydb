@@ -177,6 +177,14 @@ void TTabletExecutedFlat::Enqueue(STFUNC_SIG) {
 
 void TTabletExecutedFlat::ActivateExecutor(const TActorContext &ctx) {
     OnActivateExecutor(ctx);
+
+    // For logging
+    TStringStream logOut;
+    logOut << "2Tablet " 
+        << ctx.SelfID << " "
+        << TabletID() << "\n";
+    Cerr << logOut.Str();
+    logOut.Clear();
 }
 
 void TTabletExecutedFlat::Detach(const TActorContext &ctx) {

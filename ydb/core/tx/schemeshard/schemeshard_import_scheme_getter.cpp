@@ -396,13 +396,28 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void HandleChangefeeds(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {
+        Y_UNUSED(ev);
+        // Reply();
         const auto& result = ev.Get()->Get()->Result;
-
+        // Cerr << "result1: " << result << Endl;
+        Cerr << "re1: " << result.GetError().GetMessage()<< Endl;
+        // Cerr << "re1: " << result.GetError().GetErrorType()<< Endl;
+        // Cerr << "re1: " << result.GetError().GetResponseCode()<< Endl;
+        Cerr << "re1: " << result.GetError().GetExceptionName()<< Endl;
+        Cerr << result.IsSuccess() << Endl;
+        // Cerr << result.GetError() << Endl;
+        // Cerr << "ev1: " << ev << Endl;
+        // Cerr << "ev2: " << ev.Get() << Endl;
+        // Cerr << "ev3: " << ev.Get()->Get() << Endl;
+        if (!result.IsSuccess()) {
+            Reply();
+            return;
+        }
         LOG_D("HandleChangefeeds TEvExternalStorage::TEvListObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
-        if (!CheckResult(result, "ListObject")) {
+        if (!CheckResult(result, "ListObjects")) {
             return;
         }
 
@@ -471,7 +486,10 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
     void ListChangefeeds() {
         CreateClient();
-        ListObjects(ImportInfo->Settings.items(ItemIdx).source_prefix());
+        Cerr << "Key1: " << ImportInfo->Settings.items(ItemIdx).destination_path() << Endl;
+        Cerr << "Key1: " << ImportInfo->Settings.items(ItemIdx).source_prefix() << Endl;
+        Cerr << "bucj: " << ImportInfo->Settings.bucket() << Endl;
+        ListObjects("/");
     }
 
     void Download(const TString& key) {

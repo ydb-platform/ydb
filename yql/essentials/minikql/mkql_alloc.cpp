@@ -34,7 +34,6 @@ void TAllocState::CleanupPAllocList(TListEntry* root) {
         auto next = curr->Right;
         auto size = ((TMkqlPAllocHeader*)curr)->Size;
         auto fullSize = size + sizeof(TMkqlPAllocHeader);
-        // TODO: poison?
         MKQLFreeWithSize(curr, fullSize, EMemorySubPool::Default); // may free items from OffloadedBlocksRoot
         curr = next;
     }

@@ -104,6 +104,9 @@ private:
             FreePage(addr);
             return GetPageSize();
         }
+#elif __has_feature(address_sanitizer)
+        FreePage(addr);
+        return GetPageSize();
 #endif
 
         ++Count;
@@ -112,7 +115,6 @@ private:
     }
 
     void FreePage(void* addr) {
-        // TODO: poison?
         auto res = T::Munmap(addr, PageSize);
         Y_DEBUG_ABORT_UNLESS(0 == res, "Munmap failed: %s", LastSystemErrorText());
     }
@@ -472,8 +474,13 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
 #endif
 
     Y_DEBUG_ABORT_UNLESS(AllPages.find(addr) != AllPages.end());
+
+#if __has_feature(address_sanitizer)
+    Free(addr, POOL_PAGE_SIZE);
+#else
     ASAN_POISON_MEMORY_REGION(addr, POOL_PAGE_SIZE);
     FreePages.emplace(addr);
+#endif
 }
 
 template<typename T>
@@ -731,8 +738,12 @@ void* GetAlignedPage(ui64 size) {
         }
     }
 
+#if __has_feature(address_sanitizer)
+    void* mem = pool.DoMmap(size);
+#else
     auto allocSize = Max<ui64>(MaxMidSize, size);
     void* mem = pool.DoMmap(allocSize);
+#endif
     if (Y_UNLIKELY(MAP_FAILED == mem)) {
         TStringStream mmaps;
         const auto lastError = LastSystemError();
@@ -743,6 +754,7 @@ void* GetAlignedPage(ui64 size) {
         ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: " << LastSystemErrorText(lastError) << mmaps.Str();
     }
 
+#if !__has_feature(address_sanitizer)
     if (size < MaxMidSize) {
         // push extra allocated pages to cache
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
@@ -754,6 +766,7 @@ void* GetAlignedPage(ui64 size) {
             ptr += size;
         }
     }
+#endif
 
     ASAN_UNPOISON_MEMORY_REGION(mem, origSize);
     return mem;

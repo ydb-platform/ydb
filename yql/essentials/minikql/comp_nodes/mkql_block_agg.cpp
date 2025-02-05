@@ -1336,7 +1336,7 @@ public:
     }   
 
     void DumpState() {
-        return;
+        return ;
         std::cout << "# " << TlsAllocState->GetUsed() << " " << TlsAllocState->GetLimit() << " ";
 
         // if constexpr (!InlineAggState) {

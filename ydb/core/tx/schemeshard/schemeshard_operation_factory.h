@@ -20,6 +20,8 @@ protected:
 public:
     virtual ~IOperationFactory() = default;
 
+    // Returns operation parts for given tx (commonly identified by tx/operation type).
+    // Used to customize parts/behaviour.
     virtual TVector<TIntrusivePtr<ISubOperation>> MakeOperationParts(
         const TOperation& op,
         const TTxTransaction& tx,

@@ -107,9 +107,8 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
     class TDelayedPassAwayActor : public TActorBootstrapped<TDelayedPassAwayActor> {
         using TBase = TActorBootstrapped<TDelayedPassAwayActor>;
     public:
-        TDelayedPassAwayActor(ui32 delay, ui32 poolId)
+        TDelayedPassAwayActor(ui32 delay)
             : Delay(delay)
-            , PoolId(poolId)
         {}
 
         void Bootstrap() {
@@ -137,7 +136,6 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
     
     private:
         ui32 Delay;
-        ui32 PoolId;
     };
 
 
@@ -154,8 +152,8 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         std::atomic<ui64> actorsAlive = 0;
         THPTimer Timer;
 
-        auto actorFactory = [](ui64 iteration, ui32 poolId) -> std::vector<IActor*> {
-            return {new TDelayedPassAwayActor(iteration, poolId)};
+        auto actorFactory = [](ui64 iteration, ui32) -> std::vector<IActor*> {
+            return {new TDelayedPassAwayActor(iteration)};
         };
 
         Timer.Reset();

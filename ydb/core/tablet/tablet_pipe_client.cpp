@@ -49,6 +49,14 @@ namespace NTabletPipe {
         void Bootstrap(const TActorContext& ctx) {
             BLOG_D("::Bootstrap");
 
+            // For logging
+            TStringStream logOut;
+            logOut << "Pipe "
+                << SelfId() << " "
+                << TabletId << "\n";
+            Cerr << logOut.Str();
+            logOut.Clear();
+
             if (Config.ConnectToUserTablet ? Config.HintTabletActor : Config.HintTablet) {
                 LastKnownLeaderTablet = Config.HintTabletActor;
                 LastKnownLeader = Config.HintTablet;

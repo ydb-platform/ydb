@@ -527,6 +527,14 @@ namespace NFlatExecutorSetup {
             : TabletActorID(tablet)
             , TabletInfo(info)
         {
+            // For logging
+            TStringStream logOut;
+            logOut << "Tablet "
+                << tablet << " "
+                << info->TabletID << "\n";
+            Cerr << logOut.Str();
+            logOut.Clear();
+
             Y_ABORT_UNLESS(TTabletTypes::TypeInvalid != TabletInfo->TabletType);
         }
 

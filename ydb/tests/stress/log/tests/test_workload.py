@@ -43,6 +43,8 @@ class TestYdbLogWorkload(object):
     @pytest.mark.parametrize('store_type', ['row', 'column'])
     def test(self, store_type):
         upload_commands = [
+            # import command
+            self.get_command_prefix(subcmds=['import', '--bulk-size', '1000', '-t', '1', 'generator'], path=store_type) + self.get_insert_command_params() + ['--rows', '100000'],
             # bulk upsert workload
             self.get_command_prefix(subcmds=['run', 'bulk_upsert'], path=store_type) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
 

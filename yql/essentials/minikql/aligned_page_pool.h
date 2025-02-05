@@ -74,7 +74,7 @@ public:
     static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
     static constexpr ui64 PAGE_ADDR_MASK = ~(POOL_PAGE_SIZE - 1);
 #if __has_feature(address_sanitizer)
-    static constexpr ui64 ALLOC_AHEAD_PAGES = 0;
+    static constexpr ui64 ALLOC_AHEAD_PAGES = 1;
 #else
     static constexpr ui64 ALLOC_AHEAD_PAGES = 31;
 #endif

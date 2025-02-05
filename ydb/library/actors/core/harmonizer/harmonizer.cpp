@@ -169,7 +169,7 @@ void THarmonizer::ProcessNeedyState() {
         float threadCount = pool.GetFullThreadCount() + SharedInfo.CpuConsumption[needyPoolIdx].CpuQuota;
 
         if (Shared && SharedInfo.ForeignThreadsAllowed[needyPoolIdx] == 0) {
-            Shared->SetForeignThreadSlots(needyPoolIdx, 1);
+            Shared->SetForeignThreadSlots(needyPoolIdx, static_cast<i16>(Pools.size()));
             CpuConsumption.IsNeedyByPool[needyPoolIdx] = false;
         } else if (ProcessingBudget >= 1.0 && threadCount + 1 <= pool.MaxFullThreadCount) {
             pool.IncreasingThreadsByNeedyState.fetch_add(1, std::memory_order_relaxed);

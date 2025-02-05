@@ -81,7 +81,7 @@ namespace NActors {
         }
         for (ui64 i = 0; i < PoolManager.PoolInfos.size(); ++i) {
             ForeignThreadsAllowedByPool[i].store(0, std::memory_order_release);
-            ForeignThreadSlots[i].store(PoolManager.PoolInfos.size(), std::memory_order_release);
+            ForeignThreadSlots[i].store(0, std::memory_order_release);
             LocalThreads[i].store(PoolManager.PoolInfos[i].SharedThreadCount, std::memory_order_release);
             LocalNotifications[i].store(0, std::memory_order_release);
         }
@@ -140,7 +140,6 @@ namespace NActors {
     }
 
     void TSharedExecutorPool::SwitchToPool(i16 poolId, NHPTimer::STime) {
-        ACTORLIB_VERIFY(TlsThreadContext, "TlsThreadContext is nullptr");
         TWorkerId workerId = TlsThreadContext->WorkerId();
         TlsThreadContext->ExecutionStats->UpdateThreadTime();
         if (Threads[workerId].CurrentPoolId != poolId && Threads[workerId].CurrentPoolId != Threads[workerId].OwnerPoolId) {
@@ -247,8 +246,8 @@ namespace NActors {
                     SwitchToPool(thread.OwnerPoolId, hpnow); // already switched, needless
                     LocalThreads[thread.OwnerPoolId].fetch_sub(1, std::memory_order_acq_rel);
                     EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "going to sleep; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
-                    ACTORLIB_VERIFY(thread.OwnerPoolId < static_cast<i16>(Pools.size()), "thread.OwnerPoolId == ", thread.OwnerPoolId, " Pools.size() == ", Pools.size());
-                    ACTORLIB_VERIFY(Pools[thread.OwnerPoolId] != nullptr, "Pools[thread.OwnerPoolId] is nullptr");
+                    Y_DEBUG_ABORT_UNLESS(thread.OwnerPoolId < static_cast<i16>(Pools.size()), "thread.OwnerPoolId == ", thread.OwnerPoolId, " Pools.size() == ", Pools.size());
+                    Y_DEBUG_ABORT_UNLESS(Pools[thread.OwnerPoolId] != nullptr, "Pools[thread.OwnerPoolId] is nullptr");
                     if (thread.Wait(Pools[thread.OwnerPoolId]->SpinThresholdCycles.load(std::memory_order_relaxed), &StopFlag, &LocalNotifications[thread.OwnerPoolId], &ThreadsState)) {
                         EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "interrupted; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                         return nullptr; // interrupted
@@ -514,7 +513,6 @@ namespace NActors {
     }
 
     void TSharedExecutorPool::SetForeignThreadSlots(i16 poolId, i16 slots) {
-        slots = PoolManager.PoolInfos.size();
         i16 current = ForeignThreadsAllowedByPool[poolId].load(std::memory_order_acquire);
         if (current == slots) {
             return;

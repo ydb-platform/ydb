@@ -217,7 +217,7 @@ namespace NActors {
         NHPTimer::STime hpnow = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
 
-        ACTORLIB_VERIFY(workerId < MaxFullThreadCount && workerId >= 0, "workerId == ", workerId, " MaxFullThreadCount == ", MaxFullThreadCount);
+        Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
 
         Threads[workerId].UnsetWork();
         if (Harmonizer) {
@@ -511,14 +511,10 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
-
         Schedule(deadline - ActorSystem->Timestamp(), ev, cookie, workerId);
     }
 
     void TBasicExecutorPool::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
-
         const auto current = ActorSystem->Monotonic();
         if (deadline < current)
             deadline = current;
@@ -526,17 +522,17 @@ namespace NActors {
         if (auto sharedPool = TlsThreadContext->SharedPool()) {
             sharedPool->Schedule(deadline, ev, cookie, workerId);
         } else {
+            Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
             ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
         }
     }
 
     void TBasicExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
-
         const auto deadline = ActorSystem->Monotonic() + delta;
         if (auto sharedPool = TlsThreadContext->SharedPool()) {
             sharedPool->Schedule(deadline, ev, cookie, workerId);
         } else {
+            Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
             ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
         }
     }

@@ -87,7 +87,6 @@ namespace NActors {
 
     void TExecutorThread::UnregisterActor(TMailbox* mailbox, TActorId actorId) {
         Y_DEBUG_ABORT_UNLESS(actorId.PoolID() == ThreadCtx.PoolId() && ThreadCtx.Pool()->ResolveMailbox(actorId.Hint()) == mailbox);
-        ACTORLIB_VERIFY(actorId.PoolID() == ThreadCtx.PoolId(), "Worker_", TlsThreadContext->WorkerContext.WorkerId, " ", (ThreadCtx.IsShared() ? "Shared" : ThreadCtx.PoolName()), " UnregisterActor PoolId mismatch: ", (i64)actorId.PoolID(), " PoolId: ", (i64)ThreadCtx.PoolId(), " ActorId: ", actorId.ToString());
         IActor* actor = mailbox->DetachActor(actorId.LocalId());
         ExecutionStats.DecrementActorsAliveByActivity(actor->GetActivityType());
         DyingActors.push_back(THolder(actor));

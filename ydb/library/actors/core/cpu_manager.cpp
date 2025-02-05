@@ -72,10 +72,9 @@ namespace NActors {
         available.Current();
 
         Config.Shared.SoftProcessingDurationTs = Us2Ts(10'000);
-       //if (Config.Shared.UseShared) {
-       // TODO make good shared pool
+        if (Config.Shared.UseShared) {
             SetupShared();
-        //}
+        }
 
         if (Config.Jail) {
             Jail = std::make_unique<TExecutorPoolJail>(ExecutorPoolCount, *Config.Jail);

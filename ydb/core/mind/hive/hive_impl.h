@@ -424,6 +424,7 @@ protected:
     std::queue<TActorId> NodePingQueue;
     std::unordered_set<TNodeId> NodePingsInProgress;
     TFollowerUpdates PendingFollowerUpdates;
+    std::queue<TTabletId> StopTenantTabletsQueue;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;

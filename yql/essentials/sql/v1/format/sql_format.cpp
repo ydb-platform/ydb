@@ -2671,10 +2671,11 @@ private:
     }
 
     void VisitNeqSubexpr(const TRule_neq_subexpr& msg) {
-        VisitNeqSubexprImpl(msg, false);
+        bool pushedIndent = false;
+        VisitNeqSubexprImpl(msg, pushedIndent, true);
     }
 
-    void VisitNeqSubexprImpl(const TRule_neq_subexpr& msg, bool pushedIndent) {
+    void VisitNeqSubexprImpl(const TRule_neq_subexpr& msg, bool& pushedIndent, bool top) {
         auto getExpr = [](const TRule_neq_subexpr::TBlock2& b) -> const TRule_bit_subexpr& { return b.GetRule_bit_subexpr2(); };
         auto getOp = [](const TRule_neq_subexpr::TBlock2& b) -> const TRule_neq_subexpr::TBlock2::TBlock1& { return b.GetBlock1(); };
         VisitBinaryOp(msg.GetRule_bit_subexpr1(), getOp, getExpr, msg.GetBlock2().begin(), msg.GetBlock2().end());
@@ -2706,9 +2707,10 @@ private:
                     }
                 }
 
-                VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent);
-                if (pushedIndent) {
+                VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent, false);
+                if (pushedIndent && top) {
                     PopCurrentIndent();
+                    pushedIndent = false;
                 }
 
                 break;

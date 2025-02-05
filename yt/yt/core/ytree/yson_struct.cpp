@@ -277,7 +277,6 @@ DEFINE_REFCOUNTED_TYPE(TYsonStruct)
 
 } // namespace NYT::NYTree
 
-
 namespace NYT {
 
 using namespace NYTree;

@@ -247,6 +247,7 @@ namespace NKikimr {
 
         ///////////// THROTTLING SETTINGS //////////////////
         TControlWrapper ThrottlingDeviceSpeed;
+        TControlWrapper ThrottlingDryRun;
         TControlWrapper ThrottlingMinSstCount;
         TControlWrapper ThrottlingMaxSstCount;
         TControlWrapper ThrottlingMinInplacedSizeHDD;

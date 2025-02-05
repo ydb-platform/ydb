@@ -296,6 +296,10 @@ namespace NKikimr {
                 CurrentLogChunkCount > minLogChunkCount;
         }
 
+        bool IsThrottling() const {
+            return IsActive() && !VCfg->ThrottlingDryRun;
+        }
+
         ui32 GetThrottlingRate() const {
             if (!IsActive()) {
                 return 1000;
@@ -438,7 +442,7 @@ namespace NKikimr {
             auto now = ctx.Now();
             ThrottlingController->UpdateState(now, sstCount, dataInplacedSize, occupancy, LogChunkCount);
 
-            if (ThrottlingController->IsActive()) {
+            if (ThrottlingController->IsThrottling()) {
                 ThrottlingController->UpdateTime(now);
 
                 int count = batchSize;
@@ -517,7 +521,7 @@ namespace NKikimr {
     }
 
     bool TOverloadHandler::IsThrottling() const {
-        return ThrottlingController->IsActive();
+        return ThrottlingController->IsThrottling();
     }
 
     ui32 TOverloadHandler::GetThrottlingRate() const {
@@ -527,7 +531,7 @@ namespace NKikimr {
     template <class TEv>
     inline bool TOverloadHandler::PostponeEvent(TAutoPtr<TEventHandle<TEv>> &ev) {
         if (DynamicPDiskWeightsManager->StopPuts() ||
-            ThrottlingController->IsActive() ||
+            ThrottlingController->IsThrottling() ||
             !EmergencyQueue->Empty())
         {
             EmergencyQueue->Push(ev);

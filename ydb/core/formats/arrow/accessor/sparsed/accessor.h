@@ -218,6 +218,7 @@ public:
         return *it;
     }
 
+    template <class TDataType>
     class TSparsedBuilder {
     private:
         std::unique_ptr<arrow::ArrayBuilder> IndexBuilder;
@@ -229,28 +230,28 @@ public:
         TSparsedBuilder(const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 reserveItems, const ui32 reserveData)
             : DefaultValue(defaultValue) {
             IndexBuilder = NArrow::MakeBuilder(arrow::uint32(), reserveItems, 0);
-            ValueBuilder = NArrow::MakeBuilder(arrow::utf8(), reserveItems, reserveData);
+            ValueBuilder = NArrow::MakeBuilder(arrow::TypeTraits<TDataType>::type_singleton(), reserveItems, reserveData);
         }
 
         void AddRecord(const ui32 recordIndex, const std::string_view value) {
             AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
-            AFL_VERIFY(NArrow::Append<arrow::StringType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
+            AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
             ++RecordsCount;
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
-            TSparsedArray::TBuilder builder(DefaultValue, arrow::utf8());
+            TSparsedArray::TBuilder builder(DefaultValue, arrow::TypeTraits<TDataType>::type_singleton());
             std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders;
             builders.emplace_back(std::move(IndexBuilder));
             builders.emplace_back(std::move(ValueBuilder));
-            builder.AddChunk(recordsCount,
-                arrow::RecordBatch::Make(TSparsedArray::BuildSchema(arrow::utf8()), RecordsCount, NArrow::Finish(std::move(builders))));
+            builder.AddChunk(recordsCount, arrow::RecordBatch::Make(TSparsedArray::BuildSchema(arrow::TypeTraits<TDataType>::type_singleton()),
+                                               RecordsCount, NArrow::Finish(std::move(builders))));
             return builder.Finish();
         }
     };
 
-    static TSparsedBuilder MakeBuilderUtf8(const ui32 reserveItems = 0, const ui32 reserveData = 0) {
-        return TSparsedBuilder(nullptr, reserveItems, reserveData);
+    static TSparsedBuilder<arrow::StringType> MakeBuilderUtf8(const ui32 reserveItems = 0, const ui32 reserveData = 0) {
+        return TSparsedBuilder<arrow::StringType>(nullptr, reserveItems, reserveData);
     }
 
     class TBuilder {

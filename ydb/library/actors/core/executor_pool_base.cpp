@@ -171,7 +171,7 @@ namespace NActors {
         }
         if (mailbox && UseRingQueue) {
             ScheduleActivationEx(mailbox, 0);
-        } else {
+        } else if (mailbox) {
             ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
         }
     }

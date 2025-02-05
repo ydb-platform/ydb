@@ -32,6 +32,7 @@ target_link_libraries(kikimr_backup PUBLIC
   ydb_cli-dump-util
   public-lib-yson_value
   ydb_cli-dump-files
+  src-client-coordination
   src-client-draft
   src-client-driver
   src-client-proto

@@ -105,7 +105,7 @@ class bcolors:
 
 
 class StabilityCluster:
-    def __init__(self, ssh_username, cluster_path, ydbd_path, ydbd_next_path=None):
+    def __init__(self, ssh_username, cluster_path, ydbd_path=None, ydbd_next_path=None):
         self.working_dir = os.path.join(tempfile.gettempdir(), "ydb_stability")
         os.makedirs(self.working_dir, exist_ok=True)
         self.ssh_username = ssh_username
@@ -199,7 +199,7 @@ class StabilityCluster:
         return traces
 
     def get_all_errors(self):
-        logging.getLogger().setLevel(logging.WARNING)
+        #logging.getLogger().setLevel(logging.WARNING)
         all_results = []
         for node in self.kikimr_cluster.nodes.values():
             result = node.ssh_command("""
@@ -212,22 +212,27 @@ class StabilityCluster:
                         *) cat "$file" ;;
                     esac
                     done |
-                    grep -E 'VERIFY|FAIL|signal 11|signal 6|signal 15|uncaught exception' -A 20
+                    grep -E 'VERIFY|FAIL |signal 11|signal 6|signal 15|uncaught exception' -A 20
                                     """, raise_on_error=False)
             if result:
                 all_results.append(result.decode('utf-8'))
         all_results = self.process_lines(all_results)
         return all_results
 
-    def get_errors(self):
+    def get_errors(self, mode='raw'):
         errors = self.get_all_errors()
-        unique_traces = self.find_unique_traces_with_counts(errors)
-        for trace in unique_traces:
-            print(f"Trace (Occurrences: {len(unique_traces[trace])}):\n{trace}\n{'-'*60}")
+        if mode == 'raw':
+            print('Traces:')
+            for trace in errors:
+                print(f"{trace}\n{'-'*60}")
+        else:
+            unique_traces = self.find_unique_traces_with_counts(errors)
+            for trace in unique_traces:
+                print(f"Trace (Occurrences: {len(unique_traces[trace])}):\n{trace}\n{'-'*60}")
 
     def perform_checks(self):
 
-        safety_violations = safety_warden_factory(self.kikimr_cluster, self.ssh_username, lines_after=20, cut=False).list_of_safety_violations()
+        safety_violations = safety_warden_factory(self.kikimr_cluster, self.ssh_username, lines_after=20, cut=False, modification_days=3).list_of_safety_violations()
         liveness_violations = liveness_warden_factory(self.kikimr_cluster, self.ssh_username).list_of_liveness_violations
         coredumps_search_results = {}
         for node in self.kikimr_cluster.nodes.values():
@@ -258,7 +263,7 @@ class StabilityCluster:
         for node in self.kikimr_cluster.nodes.values():
             node.ssh_command(
                 'sudo pkill screen',
-                raise_on_error=True
+                raise_on_error=False
             )
 
     def stop_nemesis(self):
@@ -284,17 +289,14 @@ class StabilityCluster:
                 print(f'\t{state_object}:\t{status}')
 
     def cleanup(self, mode='all'):
-        if mode in ['all', 'logs']:
-            self.kikimr_cluster.cleanup_logs()
         for node in self.kikimr_cluster.nodes.values():
             if mode in ['all', 'dumps']:
                 node.ssh_command('sudo rm -rf /coredumps/*', raise_on_error=False)
             if mode in ['all', 'logs']:
+                node.ssh_command('sudo find /Berkanavt/kikimr*/logs/kikimr* -type f -exec rm -f {} +', raise_on_error=False)
                 node.ssh_command('sudo rm -rf /Berkanavt/nemesis/log/*', raise_on_error=False)
-            if mode == 'all':
-                self.stop_nemesis()
-                node.ssh_command('sudo pkill screen', raise_on_error=False)
-                node.ssh_command('sudo rm -rf /Berkanavt/kikimr/bin/*', raise_on_error=False)
+        if mode in ['all', 'logs']:
+            self.kikimr_cluster.cleanup_logs()
 
     def deploy_ydb(self):
         self.cleanup()
@@ -309,6 +311,7 @@ class StabilityCluster:
         node.ssh_command("/Berkanavt/kikimr/bin/kikimr admin console validator disable bootstrap", raise_on_error=True)
 
         self.deploy_tools()
+        self.get_state()
 
     def deploy_tools(self):
         for node in self.kikimr_cluster.nodes.values():
@@ -348,7 +351,7 @@ def parse_args():
     )
     parser.add_argument(
         "--ydbd_path",
-        required=True,
+        required=False,
         type=path_type,
         help="Path to ydbd",
     )
@@ -372,6 +375,7 @@ def parse_args():
         choices=[
             "get_errors",
             "get_state",
+            "clean_workload",
             "cleanup",
             "cleanup_logs",
             "cleanup_dumps",
@@ -379,7 +383,7 @@ def parse_args():
             "deploy_tools",
             "start_nemesis",
             "stop_nemesis",
-            "start_all_workloads",
+            "start_default_workloads",
             "start_workload_simple_queue_row",
             "start_workload_simple_queue_column",
             "start_workload_olap_workload",
@@ -387,26 +391,48 @@ def parse_args():
             "start_workload_log_column",
             "start_workload_log_row",
             "stop_workloads",
+            "stop_workload",
             "perform_checks",
         ],
         help="actions to execute",
     )
+    args, unknown = parser.parse_known_args()
+    if "stop_workload" in args.actions:
+        parser.add_argument(
+            "--name",
+            type=str,
+            required=True,
+            help="Name of the workload to stop",
+            choices=list(DICT_OF_PROCESSES.keys())
+        )
+
+    if "clean_workload" in args.actions:
+        parser.add_argument(
+            "--name",
+            type=str,
+            required=True,
+            help="Name of the workload to stop",
+            choices=list(DICT_OF_PROCESSES.keys())
+        )
+
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
     ssh_username = args.ssh_user
+    print('Start init')
     stability_cluster = StabilityCluster(
         ssh_username=ssh_username,
         cluster_path=args.cluster_path,
         ydbd_path=args.ydbd_path,
         ydbd_next_path=args.next_ydbd_path,
     )
-
+    
     for action in args.actions:
+        print(f'Start action {action}')
         if action == "get_errors":
-            stability_cluster.get_errors()
+            stability_cluster.get_errors(mode='raw')
         if action == "get_state":
             stability_cluster.get_state()
         if action == "deploy_ydb":
@@ -419,7 +445,7 @@ def main():
             stability_cluster.cleanup('dumps')
         if action == "deploy_tools":
             stability_cluster.deploy_tools()
-        if action == "start_all_workloads":
+        if action == "start_default_workloads":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(
                     'screen -s simple_queue_row -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
@@ -433,6 +459,52 @@ def main():
                     'screen -s olap_workload -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
                     raise_on_error=True
                 )
+            stability_cluster.get_state()
+        if action == "stop_workload":
+            workload_name = args.name
+            if DICT_OF_PROCESSES.get(workload_name):
+                for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                    node.ssh_command(
+                        f"ps aux | grep {workload_name} | grep -v grep | awk '{{print $2}}' | xargs kill -9",
+                        raise_on_error=True)
+            else:
+                print(f"Unknown workload {workload_name}")
+            stability_cluster.get_state()
+        if "clean_workload" in action:
+            workload_name = args.name
+            if DICT_OF_PROCESSES.get(workload_name):
+                store_type_list = []
+                if 'column' in workload_name:
+                    store_type_list.append('column')
+                elif 'row' in workload_name:
+                    store_type_list.append('row')
+                else:
+                    store_type_list = ['column', 'row']
+                if 'log_' in workload_name:
+                    first_node = stability_cluster.kikimr_cluster.nodes[1]
+                    for store_type in store_type_list:
+                        first_node.ssh_command([
+                            '/Berkanavt/nemesis/bin/ydb_cli',
+                            '--endpoint', f'grpc://localhost:{first_node.grpc_port}',
+                            '--database', '/Root/db1',
+                            'workload', 'log', 'clean',
+                            '--path', f'log_workload_{store_type}',
+                            ],
+                            raise_on_error=True
+                        )
+                        first_node.ssh_command([
+                            '/Berkanavt/nemesis/bin/ydb_cli',
+                            '--endpoint', f'grpc://localhost:{first_node.grpc_port}',
+                            '--database', '/Root/db1',
+                            'workload', 'log', 'clean',
+                            '--path', f'log_workload_select_{store_type}',
+                            ],
+                            raise_on_error=True
+                        )
+                else:
+                    print(f"Not supported workload clean command for {workload_name}")
+            else:
+                print(f"Unknown workload {workload_name}")
             stability_cluster.get_state()
         if "start_workload_log" in action:
             store_type_list = []
@@ -448,27 +520,18 @@ def main():
                     '/Berkanavt/nemesis/bin/ydb_cli',
                     '--endpoint', f'grpc://localhost:{first_node.grpc_port}',
                     '--database', '/Root/db1',
-                    'workload', 'log', 'clean',
-                    '--path', f'log_workload_{store_type}',
-                    ],
-                    raise_on_error=True
-                )
-                first_node.ssh_command([
-                    '/Berkanavt/nemesis/bin/ydb_cli',
-                    '--endpoint', f'grpc://localhost:{first_node.grpc_port}',
-                    '--database', '/Root/db1',
                     'workload', 'log', 'init',
                     '--len', '1000',
-                    '--int-cols', '20',
-                    '--key-cols', '20',
+                    '--int-cols', '18',
+                    '--key-cols', '18',
                     '--min-partitions', '100',
                     '--partition-size', '10',
                     '--auto-partition', '0',
                     '--store', store_type,
                     '--path', f'log_workload_{store_type}',
-                    '--ttl', '3600'
+                    '--ttl', '20160'
                     ],
-                    raise_on_error=True
+                    raise_on_error=False
                 )
                 for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                     node.ssh_command([
@@ -478,10 +541,25 @@ def main():
                         '--database', '/Root/db1',
                         'workload', 'log', 'run', 'bulk_upsert',
                         '--len', '1000',
-                        '--int-cols', '20',
-                        '--key-cols', '20',
-                        '--threads', '20',
+                        '--int-cols', '18',
+                        '--key-cols', '18',
+                        '--threads', '1',
                         '--timestamp_deviation', '180',
+                        '--seconds', '86400',
+                        '--path', f'log_workload_{store_type}',
+                        '; done"'
+                        ],
+                        raise_on_error=True
+                    )
+                    node.ssh_command([
+                        f'screen -s workload_log_{store_type}_select -d -m bash -c "while true; do',
+                        '/Berkanavt/nemesis/bin/ydb_cli',
+                        '--verbose',
+                        '--endpoint', f'grpc://localhost:{node.grpc_port}',
+                        '--database', '/Root/db1',
+                        'workload', 'log', 'run', 'select',
+                        '--client-timeout', '1800000',
+                        '--threads', '1',
                         '--seconds', '86400',
                         '--path', f'log_workload_{store_type}',
                         '; done"'

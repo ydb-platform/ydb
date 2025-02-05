@@ -13,17 +13,17 @@
 
 namespace NSQLComplete {
 
-    struct TCompletionInput final {
+    struct TCompletionInput {
         TStringBuf Text;
         size_t CursorPosition = Text.length();
     };
 
     // std::string is used to prevent copying into replxx api
-    struct TCompletionContext final {
+    struct TCompletionContext {
         TVector<std::string> Keywords;
     };
 
-    class TSqlCompletionEngine final {
+    class TSqlCompletionEngine {
         using TDefaultYQLGrammar = TAntlrGrammar<
             NALPDefaultAntlr4::SQLv1Antlr4Lexer,
             NALPDefaultAntlr4::SQLv1Antlr4Parser>;

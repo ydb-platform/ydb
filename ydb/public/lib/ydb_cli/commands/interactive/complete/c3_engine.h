@@ -17,7 +17,7 @@
 namespace NSQLComplete {
 
     // std::vector is used to prevent copying from c3 results
-    struct TSuggestedToken final {
+    struct TSuggestedToken {
         TTokenId Number;
         std::vector<TRuleId> ParserCallStack;
     };
@@ -27,7 +27,7 @@ namespace NSQLComplete {
         using TPtr = THolder<IC3Engine>;
 
         // std::unordered_set is used to prevent copying into c3 core
-        struct TConfig final {
+        struct TConfig {
             std::unordered_set<TTokenId> IgnoredTokens;
             std::unordered_set<TRuleId> PreferredRules;
         };
@@ -38,7 +38,7 @@ namespace NSQLComplete {
     };
 
     template <class Lexer, class Parser>
-    struct TAntlrGrammar final {
+    struct TAntlrGrammar {
         using TLexer = Lexer;
         using TParser = Parser;
 
@@ -46,7 +46,7 @@ namespace NSQLComplete {
     };
 
     template <class G>
-    class TC3Engine final: public IC3Engine {
+    class TC3Engine: public IC3Engine {
     public:
         explicit TC3Engine(TConfig config)
             : Chars()

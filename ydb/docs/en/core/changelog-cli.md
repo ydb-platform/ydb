@@ -2,7 +2,7 @@
 
 ## Version 2.19.0 {#2-19-0}
 
-Released on February 4, 2025. To update to version **2.19.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on February 5, 2025. To update to version **2.19.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 ### Features
 

@@ -335,7 +335,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &changefeed)) {
             return Reply(false, "Cannot parse сhangefeed");
         }
-        item.Changefeeds[IndexDownloadedChangefeed].Changefeed = std::move(changefeed);
+        *(*item.Changefeeds.MutableChangefeeds())[IndexDownloadedChangefeed].MutableChangefeed() = std::move(changefeed);
 
         auto nextStep = [this]() {
             HeadObject(TopicDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));
@@ -371,7 +371,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &topic)) {
             return Reply(false, "Cannot parse topic");
         }
-        item.Changefeeds[IndexDownloadedChangefeed].Topic = std::move(topic);
+        *(*item.Changefeeds.MutableChangefeeds())[IndexDownloadedChangefeed].MutableTopic() = std::move(topic);
 
         auto nextStep = [this]() {
             if (++IndexDownloadedChangefeed == ChangefeedsKeys.size()) {

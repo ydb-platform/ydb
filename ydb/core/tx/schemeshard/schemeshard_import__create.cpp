@@ -1236,7 +1236,7 @@ private:
             break;
         
         case EState::CreateChangefeed:
-            if (static_cast<ui64>(++item.NextChangefeedIdx) < item.Changefeeds.size()) {
+            if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
                 AllocateTxId(importInfo, itemIdx);
             } else {
                 item.State = EState::Done;

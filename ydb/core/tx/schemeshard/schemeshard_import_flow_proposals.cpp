@@ -236,8 +236,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TTxId txId,
     const TImportInfo::TItem& item
 ) {
-    Y_ABORT_UNLESS(static_cast<ui64>(item.NextChangefeedIdx) < item.Changefeeds.size());
-    const auto& [changefeed, topic] = item.Changefeeds[item.NextChangefeedIdx];
+    Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
+    const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];
+    const auto& changefeed = importChangefeedTopic.GetChangefeed();
+    const auto& topic = importChangefeedTopic.GetTopic();
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
     auto& modifyScheme = *record.AddTransaction();

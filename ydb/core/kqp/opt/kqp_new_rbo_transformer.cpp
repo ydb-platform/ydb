@@ -12,80 +12,80 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
 
     auto setItems = GetSetting(node->Head(), "set_items");
     
-    TVector<TCoAtom> columns;
-    TVector<TExprNode::TPtr> resultLambdas;
+    TVector<TExprNode::TPtr> resultElements;
 
-    THashMap<TString, TExprNode::TPtr> inputSources;
     TExprNode::TPtr joinExpr;
     TExprNode::TPtr filterExpr;
     TExprNode::TPtr lastAlias;
 
 
-    for (auto setItem : setItems->Tail().Children()) {
+    auto setItem = setItems->Tail().ChildPtr(0);
 
-        auto from = GetSetting(setItem->Tail(), "from");
+    auto from = GetSetting(setItem->Tail(), "from");
 
-        if (from) {
-            for (auto fromItem : from->Child(1)->Children()) {
-                auto readExpr = TKqlReadTableRanges(fromItem->Child(0));
-                auto alias = fromItem->Child(1);
+    if (from) {
+        for (auto fromItem : from->Child(1)->Children()) {
+            auto readExpr = TKqlReadTableRanges(fromItem->Child(0));
+            auto alias = fromItem->Child(1);
 
-                auto opRead = Build<TKqpOpRead>(ctx, node->Pos())
-                    .Table(readExpr.Table())
-                    .Columns(readExpr.Columns())
-                    .Done().Ptr();
-
-                if (!joinExpr) {
-                    joinExpr = opRead;
-                } 
-                else {
-                    joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
-                        .LeftInput(joinExpr)
-                        .RightInput(opRead)
-                        .LeftLabel(lastAlias)
-                        .RightLabel(alias)
-                        .Done().Ptr();
-                }
-                lastAlias = alias;
-            }
-        }
-
-        filterExpr = joinExpr;
-
-        auto where = GetSetting(setItem->Tail(), "where");
-
-        if (where) {
-            auto lambda = where->Child(1)->Child(1);
-            filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
-                .Input(filterExpr)
-                .Lambda(lambda)
+            auto opRead = Build<TKqpOpRead>(ctx, node->Pos())
+                .Table(readExpr.Table())
+                .Alias(alias)
+                .Columns(readExpr.Columns())
                 .Done().Ptr();
+
+            if (!joinExpr) {
+                joinExpr = opRead;
+            } 
+            else {
+                joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
+                    .LeftInput(joinExpr)
+                    .RightInput(opRead)
+                    .LeftLabel(lastAlias)
+                    .RightLabel(alias)
+                    .JoinKind().Value("Inner").Build()
+                    .Done().Ptr();
+            }
+            lastAlias = alias;
         }
+    }
 
-        auto result = GetSetting(setItem->Tail(), "result");
+    filterExpr = joinExpr;
 
-        for (auto resultItem : result->Child(1)->Children()) {
-            YQL_CLOG(TRACE, CoreDq) << "Result Item: " << resultItem->Dump();
-            columns.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(resultItem->Child(0)->Content()).Done());
-            YQL_CLOG(TRACE, CoreDq) << "Result lambda: " << resultItem->Child(2)->Dump();
+    auto where = GetSetting(setItem->Tail(), "where");
 
-            resultLambdas.push_back(resultItem->Child(2));
-        }
+    if (where) {
+        auto lambda = where->Child(1)->Child(1);
+        filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
+            .Input(filterExpr)
+            .Lambda(lambda)
+            .Done().Ptr();
     }
 
     if (!filterExpr) {
         filterExpr = Build<TKqpOpEmptySource>(ctx, node->Pos()).Done().Ptr();
     }
 
+    auto result = GetSetting(setItem->Tail(), "result");
+
+    TExprNode::TPtr resultExpr = filterExpr;
+
+    for (auto resultItem : result->Child(1)->Children()) {
+        auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(resultItem->Child(0)->Content()).Done();
+
+        resultElements.push_back(Build<TKqpOpMapElement>(ctx, node->Pos())
+            .Input(resultExpr)
+            .Variable(variable)
+            .Lambda(ctx.DeepCopyLambda(*(resultItem->Child(2))))
+            .Done().Ptr());
+    }
+
     return Build<TKqpOpMap>(ctx, node->Pos())
-        .Input(filterExpr)
-        .OutputColumns()
-            .Add(columns)
-        .Build()
-        .Lambdas()
-            .Add(resultLambdas)
-        .Build()
-        .Done().Ptr();
+            .Input(resultExpr)
+            .MapElements()
+                .Add(resultElements)
+            .Build()
+            .Done().Ptr();
 }
 
 }

@@ -4,11 +4,12 @@ You need to handle errors properly when using the {{ ydb-short-name }} SDK.
 
 Errors can be divided into three categories:
 
-* **Temporary failures** (retryable) include a short-term loss of network connectivity, temporary unavailability, overload of a {{ ydb-short-name }} subsystem, or a failure of {{ ydb-short-name }} to respond to a query within the set timeout. If one of these errors occurs, retrying the failed query is likely to be successful after some time.
+* {% include [retryable](./_includes/tooltips/retryable.md) %}
 
-* **Errors that cannot be fixed with a retry** (non-retryable) include incorrectly written queries, {{ ydb-short-name }} internal errors, or queries that mismatch the data schema. Retrying such queries will not resolve the issue. This situation requires developer attention.
+* {% include [non-retryable](./_includes/tooltips/nonretryable.md) %}
 
-* **Errors that can presumably be fixed with a retry after the client application response** (conditionally retryable) include idempotent operations such as no response within the set timeout or an authentication request.
+* {% include [conditionally-retryable](./_includes/tooltips/condretryable.md) %}
+
 
 ## Handling retryable errors {#handling-retryable-errors}
 
@@ -26,7 +27,7 @@ The built-in retry mechanisms in {{ ydb-short-name }} SDKs use the following bac
 
 When selecting an interval manually, the following strategies are usually used:
 
-* **Exponential backoff** – For each subsequent attempt, the interval increases exponentially.  
+* **Exponential backoff** – For each subsequent attempt, the interval increases exponentially.
 * **Intervals in increments** – For each subsequent attempt, the interval increases in certain increments.
 * **Constant intervals** – Retries are made at the same intervals.
 * **Instant retry** – Retries are made immediately.

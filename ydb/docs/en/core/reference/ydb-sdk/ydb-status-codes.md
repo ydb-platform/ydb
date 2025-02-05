@@ -308,7 +308,7 @@ File a [GitHub issue](https://github.com/ydb-platform/ydb/issues/new) or contact
 
 </div>
 
-The operation was aborted. Possible reasons might include lock invalidation with `TRANSACTION_LOCKS_INVALIDATE` in detailed error messages.
+The operation was aborted. Possible reasons might include lock invalidation with `TRANSACTION_LOCKS_INVALIDATED` in detailed error messages.
 
 Retry the entire transaction.
 

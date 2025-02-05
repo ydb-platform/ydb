@@ -1,6 +1,6 @@
 # gRPC status codes
 
-{{ ydb-short-name }}  provides the gRPC API, which you can use to manage your database resources and data. The following table describes the gRPC status codes:  
+{{ ydb-short-name }}  provides the gRPC API, which you can use to manage your database resources and data. The following table describes the gRPC status codes:
 
 #|
 ||
@@ -252,7 +252,7 @@ Unknown error. For example, this error may be returned when a `Status` value rec
 
 </div>
 
-The client specified an invalid argument. Note that this differs from `FAILED_PRECONDITION`. `INVALID_ARGUMENT` indicates arguments that are problematic regardless of the system state (e.g., a malformed file name).
+The client specified an invalid argument. Unlike `FAILED_PRECONDITION`, `INVALID_ARGUMENT` indicates arguments that are problematic regardless of the system state (e.g., a malformed file name).
 
 <div class="tags_list">
 
@@ -274,7 +274,7 @@ Check the specified timeout, network access, endpoint, and other network setting
 
 </div>
 
-A requested database object (for example, a table or directory) was not found.
+A requested scheme object (for example, a table or directory) was not found.
 
 <div class="tags_list">
 
@@ -284,7 +284,7 @@ A requested database object (for example, a table or directory) was not found.
 
 </div>
 
-The entity that a client attempted to create (e.g., file or directory) already exists.
+The scheme object that a client attempted to create (e.g., file or directory) already exists.
 
 <div class="tags_list">
 
@@ -389,6 +389,8 @@ Unrecoverable data loss or corruption.
 </div>
 
 The request did not have valid authentication credentials.
+
+Retry the request with valid authentication credentials.
 
 [*instant]: {% include [instant](./_includes/tooltips/instant.md) %}
 

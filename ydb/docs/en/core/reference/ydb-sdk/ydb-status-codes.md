@@ -129,8 +129,6 @@ no
 [TIMEOUT](#timeout)
 |
 [non-retryable](*nonretryable)
-<!-- conditionally-retryable -->
-<!-- TODO: Why is it non-retryable ? -->
 |
 –
 |
@@ -400,7 +398,6 @@ Correct the state or query, then retry.
 
 ## 400130: ALREADY_EXISTS {#already-exists}
 
-[//]: # (TODO: Verify the description)
 {% include notitle [non-retryable](./_includes/tags.md#non-retryable) %}
 
 </div>

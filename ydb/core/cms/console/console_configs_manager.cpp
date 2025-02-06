@@ -456,7 +456,7 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
     auto subscriptionRowset = db.Table<Schema::ConfigSubscriptions>().Range().Select<Schema::ConfigSubscriptions::TColumns>();
     auto validatorsRowset = db.Table<Schema::DisabledValidators>().Range().Select<Schema::DisabledValidators::TColumns>();
     auto yamlConfigRowset = db.Table<Schema::YamlConfig>().Reverse().Select<Schema::YamlConfig::TColumns>();
-    auto databaseYamlConfigRowset = db.Table<Schema::DatabaseYamlConfig>().Select<Schema::DatabaseYamlConfig::TColumns>();
+    auto databaseYamlConfigRowset = db.Table<Schema::DatabaseYamlConfigs>().Select<Schema::DatabaseYamlConfigs::TColumns>();
 
     if (!configItemRowset.IsReady()
         || !nextConfigItemIdRow.IsReady()
@@ -502,9 +502,9 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
     }
 
     while (!databaseYamlConfigRowset.EndOfSet()) {
-        TString tenant = databaseYamlConfigRowset.GetValue<Schema::DatabaseYamlConfig::Path>();
-        ui32 version = databaseYamlConfigRowset.GetValue<Schema::DatabaseYamlConfig::Version>();
-        TString config = databaseYamlConfigRowset.GetValue<Schema::DatabaseYamlConfig::Config>();
+        TString tenant = databaseYamlConfigRowset.GetValue<Schema::DatabaseYamlConfigs::Path>();
+        ui32 version = databaseYamlConfigRowset.GetValue<Schema::DatabaseYamlConfigs::Version>();
+        TString config = databaseYamlConfigRowset.GetValue<Schema::DatabaseYamlConfigs::Config>();
 
         DatabaseYamlConfigs[tenant] = TDatabaseYamlConfig {
             .Config = config,

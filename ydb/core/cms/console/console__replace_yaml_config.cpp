@@ -295,11 +295,11 @@ public:
             if (!DryRun && !hasForbiddenUnknown) {
                 DoInternalAudit(txc, ctx);
 
-                db.Table<Schema::DatabaseYamlConfig>().Key(TargetDatabase, Version + 1)
-                    .Update<Schema::DatabaseYamlConfig::Config>(Config);
+                db.Table<Schema::DatabaseYamlConfigs>().Key(TargetDatabase, Version + 1)
+                    .Update<Schema::DatabaseYamlConfigs::Config>(Config);
 
                 /* Later we shift this boundary to support rollback and history */
-                db.Table<Schema::DatabaseYamlConfig>().Key(TargetDatabase, Version)
+                db.Table<Schema::DatabaseYamlConfigs>().Key(TargetDatabase, Version)
                     .Delete();
             }
 

@@ -1153,7 +1153,6 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
             if (tasksGraph.GetMeta().LockMode) {
                 input.Meta.StreamLookupSettings->SetLockMode(*tasksGraph.GetMeta().LockMode);
             }
-
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
         } else if (input.Meta.SequencerSettings) {
             transformProto->MutableSettings()->PackFrom(*input.Meta.SequencerSettings);

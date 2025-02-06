@@ -43,7 +43,7 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
     }
     AFL_VERIFY(ReplaceKeyEdges.GetBatch());
     const TString data = ReplaceKeyEdges.SerializePayloadToString();
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("special_keys_serialization")("schema", ReplaceKeyEdges.GetBatch()->schema()->ToString())(
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "special_keys_serialization")("schema", ReplaceKeyEdges.GetBatch()->schema()->ToString())(
         "batch", ReplaceKeyEdges.GetBatch()->ToString())("data", Base64Encode(data));
     portionMeta.SetPrimaryKeyBorders(data);
 

@@ -3939,7 +3939,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.HasYamlConfig(), false);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.HasMainYamlConfig(), false);
     }
 
     Y_UNIT_TEST(TestConsoleRestart) {
@@ -3977,7 +3977,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetMainYamlConfig(), YAML_CONFIG_1_UPDATED);
     }
 
     Y_UNIT_TEST(TestConsoleRestartSimplified) {
@@ -4015,7 +4015,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_SIMPLIFIED_UPDATED);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetMainYamlConfig(), YAML_CONFIG_SIMPLIFIED_UPDATED);
     }
 
     Y_UNIT_TEST(TestComplexYamlConfigChanges) {
@@ -4060,14 +4060,14 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetMainYamlConfig(), YAML_CONFIG_1_UPDATED);
 
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
         notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetMainYamlConfig(), YAML_CONFIG_1_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
 
@@ -4100,7 +4100,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetMainYamlConfig(), YAML_CONFIG_1_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
 
@@ -4109,7 +4109,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetMainYamlConfig(), YAML_CONFIG_1_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[1].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
@@ -4119,7 +4119,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetMainYamlConfig(), YAML_CONFIG_1_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
 
@@ -4128,7 +4128,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_2_UPDATED);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetMainYamlConfig(), YAML_CONFIG_2_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 0);
     }
 
@@ -4179,8 +4179,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config1.ShortDebugString());
-        UNIT_ASSERT(!notification->Get()->Record.HasYamlConfig());
-        UNIT_ASSERT(notification->Get()->Record.GetYamlConfigNotChanged());
+        UNIT_ASSERT(!notification->Get()->Record.HasMainYamlConfig());
+        UNIT_ASSERT(notification->Get()->Record.GetMainYamlConfigNotChanged());
         for (auto &volatileConfig : notification->Get()->Record.GetVolatileConfigs()) {
             UNIT_ASSERT(volatileConfig.HasId());
             UNIT_ASSERT(!volatileConfig.HasConfig());
@@ -4230,7 +4230,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config1.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetMainYamlConfig(), YAML_CONFIG_1_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[1].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
@@ -4272,7 +4272,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
             event->Record.MutableOptions()->SetNodeType("type1");
             event->Record.SetServeYaml(true);
             event->Record.SetYamlApiVersion(1);
-            event->Record.SetYamlVersion(1);
+            event->Record.SetMainYamlVersion(1);
             event->Record.MutableKnownVersion()->CopyFrom(config1.GetVersion());
             return event;
         };
@@ -4301,8 +4301,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().GetVersion().ShortDebugString(), config1.GetVersion().ShortDebugString());
-        UNIT_ASSERT(!notification->Get()->Record.HasYamlConfig());
-        UNIT_ASSERT(notification->Get()->Record.GetYamlConfigNotChanged());
+        UNIT_ASSERT(!notification->Get()->Record.HasMainYamlConfig());
+        UNIT_ASSERT(notification->Get()->Record.GetMainYamlConfigNotChanged());
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
         UNIT_ASSERT(notification->Get()->Record.GetVolatileConfigs()[0].GetNotChanged());
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[1].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
@@ -4319,8 +4319,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().GetVersion().ShortDebugString(), config1.GetVersion().ShortDebugString());
-        UNIT_ASSERT(!notification->Get()->Record.HasYamlConfig());
-        UNIT_ASSERT(notification->Get()->Record.GetYamlConfigNotChanged());
+        UNIT_ASSERT(!notification->Get()->Record.HasMainYamlConfig());
+        UNIT_ASSERT(notification->Get()->Record.GetMainYamlConfigNotChanged());
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
         UNIT_ASSERT(notification->Get()->Record.GetVolatileConfigs()[1].GetNotChanged());
@@ -4343,8 +4343,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().GetVersion().ShortDebugString(), config1.GetVersion().ShortDebugString());
-        UNIT_ASSERT(!notification->Get()->Record.HasYamlConfig());
-        UNIT_ASSERT(notification->Get()->Record.GetYamlConfigNotChanged());
+        UNIT_ASSERT(!notification->Get()->Record.HasMainYamlConfig());
+        UNIT_ASSERT(notification->Get()->Record.GetMainYamlConfigNotChanged());
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
         UNIT_ASSERT(notification->Get()->Record.GetVolatileConfigs()[0].GetNotChanged());
         UNIT_ASSERT(notification->Get()->Record.GetVolatileConfigs()[1].GetNotChanged());

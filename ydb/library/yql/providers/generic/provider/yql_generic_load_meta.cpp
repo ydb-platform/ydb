@@ -155,62 +155,62 @@ namespace NYql {
                 const auto tableName = TString(keyArg.Tail().Head().Content());
 
                 const auto it = Results_.find(TGenericState::TTableAddress(clusterName, tableName));
-                if (Results_.cend() != it) {
-                    const auto& response = it->second->Response;
 
-                    if (NConnector::IsSuccess(*response)) {
-                        TGenericState::TTableMeta tableMeta;
-                        tableMeta.Schema = response->schema();
-                        tableMeta.DataSourceInstance = it->second->DataSourceInstance;
-
-                        const auto& parse = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
-
-                        if (parse) {
-                            tableMeta.ItemType = parse;
-                            if (const auto ins = replaces.emplace(read.Raw(), TExprNode::TPtr()); ins.second) {
-                                // clang-format off
-                                auto row = Build<TCoArgument>(ctx, read.Pos())
-                                    .Name("row")
-                                    .Done();
-
-                                auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
-                                    .Args({row})
-                                    .Body<TCoBool>()
-                                        .Literal().Build("true")
-                                        .Build()
-                                    .Done().Ptr();
-
-                                auto table = Build<TGenTable>(ctx, read.Pos())
-                                    .Name().Value(tableName).Build()
-                                    .Splits<TCoVoid>().Build().Done();
-
-                                ins.first->second = Build<TGenReadTable>(ctx, read.Pos())
-                                    .World(read.World())
-                                    .DataSource(read.DataSource())
-                                    .Table(table)
-                                    .Columns<TCoVoid>().Build()
-                                    .FilterPredicate(emptyPredicate)
-                                .Done().Ptr();
-                                // clang-format on
-                            }
-                            State_->AddTable(clusterName, tableName, std::move(tableMeta));
-                        } else {
-                            hasErrors = true;
-                            break;
-                        }
-                    } else {
-                        const auto& error = response->error();
-                        NConnector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
-                                                   TStringBuilder() << "Loading metadata for table: " << clusterName << '.' << tableName);
-                        hasErrors = true;
-                        break;
-                    }
-                } else {
+                if (it == Results_.cend()) {
                     ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder()
                                                                          << "Not found result for " << clusterName << '.' << tableName));
                     hasErrors = true;
                     break;
                 }
+
+                const auto& response = it->second->Response;
+
+                if (!NConnector::IsSuccess(*response)) {
+                    const auto& error = response->error();
+                    NConnector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
+                                                TStringBuilder() << "Loading metadata for table: " << clusterName << '.' << tableName);
+                    hasErrors = true;
+                    break;
+                }
+
+                TGenericState::TTableMeta tableMeta;
+                tableMeta.Schema = response->schema();
+                tableMeta.DataSourceInstance = it->second->DataSourceInstance;
+
+                const auto& parse = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
+                if (!parse) {
+                    hasErrors = true;
+                    break;
+                }
+
+                tableMeta.ItemType = parse;
+                if (const auto ins = replaces.emplace(read.Raw(), TExprNode::TPtr()); ins.second) {
+                    // clang-format off
+                    auto row = Build<TCoArgument>(ctx, read.Pos())
+                        .Name("row")
+                        .Done();
+
+                    auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
+                        .Args({row})
+                        .Body<TCoBool>()
+                            .Literal().Build("true")
+                            .Build()
+                        .Done().Ptr();
+
+                    auto table = Build<TGenTable>(ctx, read.Pos())
+                        .Name().Value(tableName).Build()
+                        .Splits<TCoVoid>().Build().Done();
+
+                    ins.first->second = Build<TGenReadTable>(ctx, read.Pos())
+                        .World(read.World())
+                        .DataSource(read.DataSource())
+                        .Table(table)
+                        .Columns<TCoVoid>().Build()
+                        .FilterPredicate(emptyPredicate)
+                    .Done().Ptr();
+                    // clang-format on
+                }
+                State_->AddTable(clusterName, tableName, std::move(tableMeta));
             }
 
             if (hasErrors) {

@@ -274,8 +274,8 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     LOG_D("Resolved db base path: " << dbBasePath.GetPath().Quote());
 
     auto oldDirectoryList = RecursiveList(SchemeClient, dbBasePath);
-    if (!oldDirectoryList.Status.IsSuccess()) {
-        LOG_E("Error listing db base path: " << dbBasePath.GetPath().Quote() << ": " << oldDirectoryList.Status.GetIssues().ToOneLineString());
+    if (const auto& status = oldDirectoryList.Status; !status.IsSuccess()) {
+        LOG_E("Error listing db base path: " << dbBasePath.GetPath().Quote() << ": " << status.GetIssues().ToOneLineString());
         return Result<TRestoreResult>(EStatus::SCHEME_ERROR, "Can not list existing directory");
     }
 
@@ -489,9 +489,8 @@ TRestoreResult TRestoreClient::RestoreView(
     TString query = TFileInput(createViewFile).ReadAll();
 
     NYql::TIssues issues;
-    if (!RewriteCreateViewQuery(query, dbRestoreRoot, IsDatabase(SchemeClient, dbRestoreRoot), dbPath,
-        createViewFile.GetPath().Quote(), issues
-    )) {
+    const bool isDb = IsDatabase(SchemeClient, dbRestoreRoot);
+    if (!RewriteCreateViewQuery(query, dbRestoreRoot, isDb, dbPath, createViewFile.GetPath().Quote(), issues)) {
         return Result<TRestoreResult>(dbPath, EStatus::BAD_REQUEST, issues.ToString());
     }
 
@@ -565,7 +564,7 @@ TRestoreResult TRestoreClient::RestoreCoordinationNode(
     LOG_I("Restore coordination node " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
     if (settings.DryRun_) {
-        return CheckExistenceAndType(SchemeClient, dbPath, NScheme::ESchemeEntryType::CoordinationNode);
+        return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::CoordinationNode);
     }
 
     const auto creationRequest = ReadCoordinationNodeCreationRequest(fsPath, Log.get());
@@ -727,7 +726,7 @@ TRestoreResult TRestoreClient::CreateDataAccumulators(
         TVector<THolder<NPrivate::IDataAccumulator>>& outAccumulators,
         const TString& dbPath,
         const TRestoreSettings& settings,
-        const NTable::TTableDescription& desc,
+        const TTableDescription& desc,
         ui32 dataFilesCount)
 {
     const ui32 accumulatorsCount = std::min(settings.InFly_, dataFilesCount);

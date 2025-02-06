@@ -955,10 +955,11 @@ private:
 } // anonymous
 
 NPrivate::IDataAccumulator* CreateImportDataAccumulator(
-        const NTable::TTableDescription& dumpedDesc,
-        const NTable::TTableDescription& actualDesc,
+        const TTableDescription& dumpedDesc,
+        const TTableDescription& actualDesc,
         const TRestoreSettings& settings,
-        const std::shared_ptr<TLog>& log) {
+        const std::shared_ptr<TLog>& log)
+{
     return new TDataAccumulator(dumpedDesc, actualDesc, settings, log);
 }
 
@@ -969,7 +970,8 @@ NPrivate::IDataWriter* CreateImportDataWriter(
         TTableClient& tableClient,
         const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators,
         const TRestoreSettings& settings,
-        const std::shared_ptr<TLog>& log) {
+        const std::shared_ptr<TLog>& log)
+{
     return new TDataWriter(path, desc, settings, importClient, tableClient, accumulators, log);
 }
 

@@ -13,6 +13,21 @@ private:
     const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor& Executor;
     NOlap::IColumnEngine& ColumnEngine;
 
+    void FillPortionStats(::NKikimrTableStats::TTableStats& to, const NOlap::TColumnEngineStats::TPortionsStats& from) const {
+        to.SetRowCount(from.Rows);
+        ui64 bytesInBlobStorage = 0;
+        for (ui32 ch = 0; ch < from.BytesByChannel.size(); ch++) {
+            ui64 dataSize = from.BytesByChannel[ch];
+            if (dataSize > 0) {
+                auto item = to.AddChannels();
+                item->SetChannel(ch);
+                item->SetDataSize(dataSize);
+                bytesInBlobStorage += dataSize;
+            }
+        }
+        to.SetDataSize(bytesInBlobStorage);
+    }
+
 public:
     TTableStatsBuilder(
         TCountersManager& counters, const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor, NOlap::IColumnEngine& columnEngine)
@@ -27,8 +42,7 @@ public:
         auto columnEngineStats = ColumnEngine.GetStats().FindPtr(pathId);
         if (columnEngineStats && *columnEngineStats) {
             auto activeStats = (*columnEngineStats)->Active();
-            tableStats.SetRowCount(activeStats.Rows);
-            tableStats.SetDataSize(activeStats.Bytes);
+            FillPortionStats(tableStats, activeStats);
         }
     }
 
@@ -39,16 +53,7 @@ public:
         tableStats.SetHasLoanedParts(Executor.HasLoanedParts());
 
         auto activeStats = ColumnEngine.GetTotalStats().Active();
-        tableStats.SetRowCount(activeStats.Rows);
-        tableStats.SetDataSize(activeStats.Bytes);
-        for (ui32 ch = 0; ch < activeStats.ByChannel.size(); ch++) {
-            ui64 dataSize = activeStats.ByChannel[ch];
-            if (dataSize > 0) {
-                auto item = tableStats.AddChannels();
-                item->SetChannel(ch);
-                item->SetDataSize(dataSize);
-            }
-        }
+        FillPortionStats(tableStats, activeStats);
     }
 };
 

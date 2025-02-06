@@ -94,7 +94,7 @@ public:
             result.Bytes = kff * Bytes;
             result.RawBytes = kff * RawBytes;
             for (const auto& [channel, bytes] : BytesByChannel) {
-                result.BytesByChannel[channel] = bytes * kff;
+                result.BytesByChannel[channel] = kff * bytes;
             }
             return result;
         }

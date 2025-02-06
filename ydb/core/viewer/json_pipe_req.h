@@ -42,7 +42,9 @@ protected:
     TString Database;
     TString SharedDatabase;
     bool Direct = false;
+    bool NeedRedirect = true;
     ui32 Requests = 0;
+    bool PassedAway = false;
     ui32 MaxRequestsInFlight = 200;
     NWilson::TSpan Span;
     IViewer* Viewer = nullptr;
@@ -303,6 +305,7 @@ protected:
     TString MakeForward(const std::vector<ui32>& nodes);
 
     void RequestDone(ui32 requests = 1);
+    void CancelAllRequests();
     void AddEvent(const TString& name);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);

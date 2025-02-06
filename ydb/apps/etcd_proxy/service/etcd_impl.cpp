@@ -538,7 +538,7 @@ class TBaseEtcdRequest {
 protected:
     virtual bool ParseGrpcRequest() = 0;
     virtual void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) = 0;
-    virtual void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) = 0;
+    virtual void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) = 0;
 
     void FillHeader(etcdserverpb::ResponseHeader& header) const {
         header.set_revision(Revision);
@@ -589,7 +589,7 @@ private:
         }
     }
 
-    void Handle(NEtcd::TEvQueryResult::TPtr &ev, const TActivationContext& ctx) {
+    void Handle(NEtcd::TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
         this->ReplyWith(ev->Get()->Results, ctx);
     }
 
@@ -624,10 +624,10 @@ private:
         return Range.MakeQueryWithParams(sql, params);
     }
 
-    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         auto response = Range.MakeResponse(results);
         FillHeader(*response.mutable_header());
-        return this->Reply(response, ctx.AsActorContext());
+        return this->Reply(response, ctx);
     }
 
     TRange Range;
@@ -649,7 +649,7 @@ private:
         return Put.MakeQueryWithParams(sql, params);
     }
 
-    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
         const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
@@ -657,7 +657,7 @@ private:
 
         auto response = Put.MakeResponse(results, notifier);
         FillHeader(*response.mutable_header());
-        return this->Reply(response, ctx.AsActorContext());
+        return this->Reply(response, ctx);
     }
 
     TPut Put;
@@ -679,7 +679,7 @@ private:
         return DeleteRange.MakeQueryWithParams(sql, params);
     }
 
-    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
         const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
@@ -687,7 +687,7 @@ private:
 
         auto response = DeleteRange.MakeResponse(results, notifier);
         FillHeader(*response.mutable_header());
-        return this->Reply(response, ctx.AsActorContext());
+        return this->Reply(response, ctx);
     }
 
     TDeleteRange DeleteRange;
@@ -710,7 +710,7 @@ private:
         return Txn.MakeQueryWithParams(sql, params, &resultsCounter, &paramsCounter);
     }
 
-    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
         const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
@@ -718,7 +718,7 @@ private:
 
         auto response = Txn.MakeResponse(results, notifier);
         FillHeader(*response.mutable_header());
-        return this->Reply(response, ctx.AsActorContext());
+        return this->Reply(response, ctx);
     }
 
     TTxn Txn;
@@ -742,10 +742,10 @@ private:
         sql << "delete from `verhaal` where `modified` < " << AddParam("Revision", params, KeyRevision) << ';' << Endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets&, const TActivationContext& ctx) final {
+    void ReplyWith(const NYdb::TResultSets&, const TActorContext& ctx) final {
         etcdserverpb::CompactionResponse response;
         FillHeader(*response.mutable_header());
-        return this->Reply(response, ctx.AsActorContext());
+        return this->Reply(response, ctx);
     }
 
     i64 KeyRevision;
@@ -771,12 +771,12 @@ private:
         sql << '\t' << "values (" << AddParam("Lease", params, Lease) << ',' << AddParam("TimeToLive", params, TTL) << ",CurrentUtcDatetime(),CurrentUtcDatetime());" << Endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets&, const TActivationContext& ctx) final {
+    void ReplyWith(const NYdb::TResultSets&, const TActorContext& ctx) final {
         etcdserverpb::LeaseGrantResponse response;
         FillHeader(*response.mutable_header());
         response.set_id(Lease);
         response.set_ttl(TTL);
-        return this->Reply(response, ctx.AsActorContext());
+        return this->Reply(response, ctx);
     }
 
     i64 Lease, TTL;
@@ -812,7 +812,7 @@ private:
         sql << "delete from `leases` where " << leaseParamName << " = `id`;" << Endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         if (NotifyWatchtower) {
             for (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow();) {
                 NEtcd::TData oldData;
@@ -829,7 +829,7 @@ private:
 
         etcdserverpb::LeaseRevokeResponse response;
         FillHeader(*response.mutable_header());
-        return this->Reply(response, ctx.AsActorContext());
+        return this->Reply(response, ctx);
     }
 
     i64 Lease;
@@ -859,7 +859,7 @@ private:
         }
     }
 
-    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         etcdserverpb::LeaseTimeToLiveResponse response;
         FillHeader(*response.mutable_header());
 
@@ -875,7 +875,7 @@ private:
             }
         }
 
-        return this->Reply(response, ctx.AsActorContext());
+        return this->Reply(response, ctx);
     }
 
     i64 Lease = 0LL;
@@ -897,7 +897,7 @@ private:
         sql << "select `id` from `leases`;" << Endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         etcdserverpb::LeaseLeasesResponse response;
         FillHeader(*response.mutable_header());
 
@@ -905,7 +905,7 @@ private:
             response.add_leases()->set_id(NYdb::TValueParser(parser.GetValue(0)).GetInt64());
         }
 
-        return this->Reply(response, ctx.AsActorContext());
+        return this->Reply(response, ctx);
     }
 };
 

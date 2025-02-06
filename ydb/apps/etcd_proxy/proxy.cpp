@@ -11,6 +11,7 @@
 #include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
 #include <ydb/apps/etcd_proxy/service/etcd_shared.h>
 #include <ydb/apps/etcd_proxy/service/etcd_watch.h>
+#include <ydb/apps/etcd_proxy/service/etcd_lease.h>
 #include <ydb/apps/etcd_proxy/service/etcd_grpc.h>
 #include <ydb/core/grpc_services/base/base.h>
 
@@ -86,6 +87,7 @@ int TProxy::StartServer() {
     opts.SetPort(ListeningPort);
 
     ActorSystem->Register(NEtcd::CreateEtcdWatchtower(Counters));
+    ActorSystem->Register(NEtcd::CreateEtcdLeasingOffice(Counters));
 
     GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts, Counters);
     GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdKVService(ActorSystem.get(), Counters));

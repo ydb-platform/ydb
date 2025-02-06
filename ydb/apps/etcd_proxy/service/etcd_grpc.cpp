@@ -13,9 +13,7 @@ namespace {
 template <ui32 TRpcId, typename TReq, typename TResp, typename TDerived>
 class TEtcdRequestWrapperImpl
     : public IRequestNoOpCtx
-    , public std::conditional_t<TRpcId == TRpcServices::EvGrpcRuntimeRequest,
-        TEvProxyRuntimeEvent,
-        TEvProxyLegacyEvent<TRpcId, TDerived>>
+    , public TEvProxyRuntimeEvent
 {
 friend class TProtoResponseHelper;
 public:

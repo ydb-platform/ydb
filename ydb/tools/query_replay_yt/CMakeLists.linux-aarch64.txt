@@ -101,7 +101,6 @@ target_link_libraries(query_replay_yt PUBLIC
   string_udf
   top_udf
   topfreq_udf
-  unicode_udf
   url_udf
   yson2_udf
   dsv_udf

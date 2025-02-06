@@ -1,10 +1,12 @@
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 #include <ydb/library/actors/core/log.h>
+
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NKikimr::NOlap {
 
@@ -40,9 +42,10 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
             break;
     }
     AFL_VERIFY(ReplaceKeyEdges.GetBatch());
+    const TString data = ReplaceKeyEdges.SerializePayloadToString();
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("special_keys_serialization")("schema", ReplaceKeyEdges.GetBatch()->schema()->ToString())(
-        "batch", ReplaceKeyEdges.GetBatch()->ToString());
-    portionMeta.SetPrimaryKeyBorders(ReplaceKeyEdges.SerializePayloadToString());
+        "batch", ReplaceKeyEdges.GetBatch()->ToString())("data", Base64Encode(data));
+    portionMeta.SetPrimaryKeyBorders(data);
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());
     RecordSnapshotMax.SerializeToProto(*portionMeta.MutableRecordSnapshotMax());
@@ -74,4 +77,4 @@ TString TPortionAddress::DebugString() const {
     return TStringBuilder() << "(path_id=" << PathId << ";portion_id=" << PortionId << ")";
 }
 
-}
+}   // namespace NKikimr::NOlap

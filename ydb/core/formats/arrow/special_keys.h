@@ -3,7 +3,9 @@
 #include "arrow_helpers.h"
 
 #include <ydb/library/formats/arrow/replace_key.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NKikimr::NArrow {
 
@@ -46,6 +48,7 @@ public:
 class TFirstLastSpecialKeys: public TSpecialKeys {
 private:
     using TBase = TSpecialKeys;
+
 public:
     const std::shared_ptr<arrow::RecordBatch>& GetBatch() const {
         return Data;
@@ -62,8 +65,7 @@ public:
 
     explicit TFirstLastSpecialKeys(const TString& data);
     explicit TFirstLastSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema)
-        : TBase(data, schema)
-    {
+        : TBase(data, schema) {
         Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
     }
     explicit TFirstLastSpecialKeys(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& columnNames = {});
@@ -72,10 +74,12 @@ public:
 class TMinMaxSpecialKeys: public TSpecialKeys {
 private:
     using TBase = TSpecialKeys;
+
 protected:
     TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> data)
         : TBase(data) {
     }
+
 public:
     std::shared_ptr<TMinMaxSpecialKeys> BuildAccordingToSchemaVerified(const std::shared_ptr<arrow::Schema>& schema) const;
 
@@ -99,4 +103,4 @@ public:
     explicit TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema);
 };
 
-}
+}   // namespace NKikimr::NArrow

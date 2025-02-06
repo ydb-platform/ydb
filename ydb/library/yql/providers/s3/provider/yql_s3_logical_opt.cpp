@@ -286,7 +286,7 @@ public:
             }
         }
         NPushdown::TPredicateNode predicateToPush;
-        predicateToPush.SetPredicates(pushable, ctx, pos);
+        predicateToPush.SetPredicates(pushable, ctx, pos, predicateTree.Op);
         return predicateToPush;
     }
 
@@ -302,7 +302,7 @@ public:
 
         TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
         NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
-        NPushdown::CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg.Get(), TExprBase(lambdaArg), TPushdownSettings());
+        NPushdown::CollectPredicates(optionalIf.Predicate(), predicateTree, TExprBase(lambdaArg), TExprBase(lambdaArg), TPushdownSettings());
         YQL_ENSURE(predicateTree.IsValid(), "Collected filter predicates are invalid");
 
         NPushdown::TPredicateNode predicateToPush = SplitForPartialPushdown(predicateTree, ctx, pos);

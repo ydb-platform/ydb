@@ -84,7 +84,6 @@ SET(YDB_REPLAY_PEERDIRS
     yql/essentials/udfs/common/string
     yql/essentials/udfs/common/top
     yql/essentials/udfs/common/topfreq
-    yql/essentials/udfs/common/unicode_base
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/logs/dsv

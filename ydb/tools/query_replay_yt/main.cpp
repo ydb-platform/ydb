@@ -141,7 +141,7 @@ public:
 
     THolder<TQueryReplayEvents::TEvCompileResponse> RunReplay(NJson::TJsonValue&& json) {
         TString queryType = json["query_type"].GetStringSafe();
-        if (queryType == "QUERY_TYPE_AST_SCAN") {
+        if (queryType == "QUERY_TYPE_AST_SCAN" || queryType == "QUERY_TYPE_AST_DML") {
             return nullptr;
         }
 

@@ -36,31 +36,34 @@ public:
     class TIterator {
     private:
         ui32 KeyIndex;
-        std::shared_ptr<IChunkedArray> ChunkedArray;
-        std::shared_ptr<arrow::StringArray> CurrentArray;
-        IChunkedArray::TReader Reader;
-        IChunkedArray::TAddress CurrentAddress;
+        std::shared_ptr<IChunkedArray> GlobalChunkedArray;
+        std::shared_ptr<arrow::StringArray> CurrentArrayData;
+        std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
+        std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
 
         void InitArrays() {
-            while (CurrentIndex < ChunkedArray->GetRecordsCount()) {
-                CurrentAddress = Reader.GetReadChunk(CurrentIndex);
-                AFL_VERIFY(CurrentAddress.GetPosition() == 0);
-                AFL_VERIFY(CurrentAddress.GetArray()->type()->id() == arrow::utf8()->id());
-                CurrentArray = std::static_pointer_cast<arrow::StringArray>(CurrentAddress.GetArray());
-                if (ChunkedArray->GetTypeDeep() == IChunkedArray::EType::Array) {
-                    if (CurrentArray->IsNull(0)) {
+            while (CurrentIndex < GlobalChunkedArray->GetRecordsCount()) {
+                if (!FullArrayAddress || !FullArrayAddress->GetAddress().Contains(CurrentIndex)) {
+                    FullArrayAddress = GlobalChunkedArray->GetArray(FullArrayAddress, CurrentIndex, GlobalChunkedArray);
+                    ChunkAddress = std::nullopt;
+                }
+                ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex));
+                AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::utf8()->id());
+                CurrentArrayData = std::static_pointer_cast<arrow::StringArray>(ChunkAddress->GetArray());
+                if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
+                    if (CurrentArrayData->IsNull(0)) {
                         Next();
                     }
                     break;
-                } else if (ChunkedArray->GetTypeDeep() == IChunkedArray::EType::SparsedArray) {
-                    if (CurrentArray->IsNull(0)) {
-                        CurrentIndex += CurrentAddress.GetArray()->length();
+                } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
+                    if (CurrentArrayData->IsNull(0)) {
+                        CurrentIndex += ChunkAddress->GetArray()->length();
                     } else {
                         break;
                     }
                 } else {
-                    AFL_VERIFY(false)("type", ChunkedArray->GetType());
+                    AFL_VERIFY(false)("type", FullArrayAddress->GetArray()->GetType());
                 }
             }
         }
@@ -68,9 +71,7 @@ public:
     public:
         TIterator(const ui32 keyIndex, const std::shared_ptr<IChunkedArray>& chunkedArray)
             : KeyIndex(keyIndex)
-            , ChunkedArray(chunkedArray)
-            , Reader(ChunkedArray)
-            , CurrentAddress(Reader.GetReadChunk(0)) {
+            , GlobalChunkedArray(chunkedArray) {
             InitArrays();
         }
 
@@ -83,28 +84,27 @@ public:
         }
 
         std::string_view GetValue() const {
-            auto view = CurrentArray->GetView(CurrentAddress.GetPosition());
+            auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
             return std::string_view(view.data(), view.size());
         }
 
         bool HasValue() const {
-            return !CurrentArray->IsNull(CurrentAddress.GetPosition());
+            return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
         }
 
         bool IsValid() const {
-            return CurrentIndex < ChunkedArray->GetRecordsCount();
+            return CurrentIndex < GlobalChunkedArray->GetRecordsCount();
         }
 
         bool Next() {
             AFL_VERIFY(IsValid());
             while (true) {
-                if (CurrentAddress.NextPosition()) {
-                    AFL_VERIFY(++CurrentIndex < ChunkedArray->GetRecordsCount());
-                    if (CurrentArray->IsNull(CurrentIndex)) {
+                if (ChunkAddress->GetAddress().Contains(++CurrentIndex)) {
+                    if (CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex))) {
                         continue;
                     }
                     return true;
-                } else if (++CurrentIndex == ChunkedArray->GetRecordsCount()) {
+                } else if (CurrentIndex == GlobalChunkedArray->GetRecordsCount()) {
                     return false;
                 } else {
                     InitArrays();

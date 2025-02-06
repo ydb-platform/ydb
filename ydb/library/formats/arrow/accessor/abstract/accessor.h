@@ -308,7 +308,7 @@ protected:
             chunkCurrentInfo << chunkCurrent->DebugString();
         }
         AFL_VERIFY(recordsCountChunks == GetRecordsCount())("pos", position)("count", GetRecordsCount())("chunks_map", sb)(
-            "chunk_current", chunkCurrentInfo);
+            "chunk_current", chunkCurrentInfo)("chunks_count", recordsCountChunks);
         AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb)("chunk_current", chunkCurrentInfo);
     }
 
@@ -449,10 +449,6 @@ public:
 
     TFullChunkedArrayAddress GetArraySlow(const ui64 position, const std::shared_ptr<IChunkedArray>& selfPtr) const {
         return GetArray(std::optional<TAddressChain>(), position, selfPtr);
-    }
-
-    virtual EType GetTypeDeep() const {
-        return GetType();
     }
 
     TFullDataAddress GetChunk(const std::optional<TAddressChain>& chunkCurrent, const ui64 position) const;

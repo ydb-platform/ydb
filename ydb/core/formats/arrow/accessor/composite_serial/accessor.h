@@ -40,9 +40,6 @@ private:
     std::vector<TChunk> Chunks;
 
 protected:
-    virtual EType GetTypeDeep() const override {
-        return Loader->GetAccessorConstructor()->GetType();
-    }
     virtual ui32 DoGetNullsCount() const override {
         AFL_VERIFY(false);
         return 0;

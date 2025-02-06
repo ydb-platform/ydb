@@ -13,7 +13,6 @@
 # changes in this file.
 
 add_subdirectory(resource_tracker)
-add_subdirectory(tcmalloc)
 
 add_library(yt-library-profiling)
 

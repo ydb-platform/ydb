@@ -2,15 +2,16 @@
 
 namespace NKafka {
 
-const TString INSERT_NEW_GROUP = R"(
+const TString INSERT_NEW_GROUP = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Generation AS Uint64;
     DECLARE $State AS Uint64;
     DECLARE $Database AS Utf8;
     DECLARE $Master AS Utf8;
+    DECLARE $LastHeartbeat AS Datetime;
 
-    INSERT INTO `/Root/.metadata/kafka_consumer_groups`
+    INSERT INTO `%s`
     (
         consumer_group,
         generation,
@@ -25,54 +26,58 @@ const TString INSERT_NEW_GROUP = R"(
         $Generation,
         $State,
         $Database,
-        CurrentUtcDateTime(),
+        $LastHeartbeat,
         $Master
     );
-)";
+)sql";
 
-const TString UPDATE_GROUP = R"(
+const TString UPDATE_GROUP = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $State AS Uint64;
     DECLARE $Generation AS Uint64;
     DECLARE $Database AS Utf8;
     DECLARE $Master AS Utf8;
+    DECLARE $LastHeartbeat AS Datetime;
 
-    UPDATE `/Root/.metadata/kafka_consumer_groups`
+    UPDATE `%s`
     SET
         state = $State,
         generation = $Generation,
-        last_heartbeat_time = CurrentUtcDateTime(),
+        last_heartbeat_time = $LastHeartbeat,
         master = $Master
     WHERE consumer_group = $ConsumerGroup
       AND database = $Database;
-)";
+)sql";
 
-const TString UPDATE_GROUP_STATE_AND_PROTOCOL = R"(
+const TString UPDATE_GROUP_STATE_AND_PROTOCOL = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $State AS Uint64;
     DECLARE $Database AS Utf8;
     DECLARE $Protocol AS Utf8;
+    DECLARE $LastHeartbeat AS Datetime;
 
-    UPDATE `/Root/.metadata/kafka_consumer_groups`
+    UPDATE `%s`
     SET
         state = $State,
-        last_heartbeat_time = CurrentUtcDateTime(),
+        last_heartbeat_time = $LastHeartbeat,
         protocol = $Protocol
     WHERE consumer_group = $ConsumerGroup
     AND database = $Database;
-)";
+)sql";
 
-const TString INSERT_MEMBER = R"(
+const TString INSERT_MEMBER = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup       AS Utf8;
     DECLARE $Generation          AS Uint64;
     DECLARE $MemberId            AS Utf8;
     DECLARE $WorkerStateProto    AS String;
     DECLARE $Database            AS Utf8;
+    DECLARE $LastHeartbeat AS Datetime;
 
-    INSERT INTO `/Root/.metadata/kafka_consumer_members` (
+    INSERT INTO `%s`
+    (
         consumer_group,
         generation,
         member_id,
@@ -84,21 +89,22 @@ const TString INSERT_MEMBER = R"(
         $ConsumerGroup,
         $Generation,
         $MemberId,
-        CurrentUtcDateTime(),
+        $LastHeartbeat,
         $WorkerStateProto,
         $Database
     );
-)";
+)sql";
 
-const TString UPSERT_ASSIGNMENTS_AND_SET_WORKING_STATE = R"(
+const TString UPSERT_ASSIGNMENTS_AND_SET_WORKING_STATE = R"sql(
     --!syntax_v1
     DECLARE $Assignments AS List<Struct<MemberId: Utf8, Assignment: Bytes>>;
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Database AS Utf8;
     DECLARE $Generation AS Uint64;
     DECLARE $State AS Uint64;
+    DECLARE $LastHeartbeat AS Datetime;
 
-    UPSERT INTO `/Root/.metadata/kafka_consumer_members`
+    UPSERT INTO `%s`
     SELECT
         item.MemberId AS member_id,
         item.Assignment AS assignment,
@@ -107,47 +113,48 @@ const TString UPSERT_ASSIGNMENTS_AND_SET_WORKING_STATE = R"(
         $Generation AS generation
     FROM AS_TABLE($Assignments) AS item;
 
-    UPDATE `/Root/.metadata/kafka_consumer_groups`
+    UPDATE `%s`
     SET
         state = $State,
-        last_heartbeat_time = CurrentUtcDateTime()
+        last_heartbeat_time = $LastHeartbeat
     WHERE consumer_group = $ConsumerGroup
       AND database = $Database;
-)";
+)sql";
 
-const TString UPDATE_GROUPS_AND_SELECT_WORKER_STATES = R"(
+const TString UPDATE_GROUPS_AND_SELECT_WORKER_STATES = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $State AS Uint64;
     DECLARE $Generation AS Uint64;
     DECLARE $Database AS Utf8;
+    DECLARE $LastHeartbeat AS Datetime;
 
-    UPDATE `/Root/.metadata/kafka_consumer_groups`
+    UPDATE `%s`
     SET
         state = $State,
-        last_heartbeat_time = CurrentUtcDateTime()
+        last_heartbeat_time = $LastHeartbeat
     WHERE consumer_group = $ConsumerGroup
       AND database = $Database;
 
     SELECT worker_state_proto, member_id
-    FROM `/Root/.metadata/kafka_consumer_members`
+    FROM `%s`
     WHERE consumer_group = $ConsumerGroup
       AND generation = $Generation
       AND database = $Database;
-)";
+)sql";
 
-const TString CHECK_GROUP_STATE = R"(
+const TString CHECK_GROUP_STATE = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Database AS Utf8;
 
     SELECT state, generation, master, last_heartbeat_time, consumer_group, database
-    FROM `/Root/.metadata/kafka_consumer_groups`
+    FROM `%s`
     WHERE consumer_group = $ConsumerGroup
     AND database = $Database;
-)";
+)sql";
 
-const TString FETCH_ASSIGNMENTS = R"(
+const TString FETCH_ASSIGNMENTS = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Generation AS Uint64;
@@ -155,14 +162,14 @@ const TString FETCH_ASSIGNMENTS = R"(
     DECLARE $Database AS Utf8;
 
     SELECT assignment
-    FROM `/Root/.metadata/kafka_consumer_members`
+    FROM `%s`
     WHERE consumer_group = $ConsumerGroup
       AND generation = $Generation
       AND member_id = $MemberId
       AND database = $Database;
-)";
+)sql";
 
-const TString CHECK_DEAD_MEMBERS = R"(
+const TString CHECK_DEAD_MEMBERS = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Generation AS Uint64;
@@ -170,52 +177,51 @@ const TString CHECK_DEAD_MEMBERS = R"(
     DECLARE $Deadline AS Datetime;
 
     SELECT COUNT(1) as cnt
-    FROM `/Root/.metadata/kafka_consumer_members`
+    FROM `%s`
     WHERE consumer_group = $ConsumerGroup
       AND generation = $Generation
       AND database = $Database
       AND last_heartbeat_time < $Deadline;
-)";
+)sql";
 
-const TString UPDATE_TTLS = R"(
+const TString UPDATE_TTLS = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Generation AS Uint64;
     DECLARE $MemberId AS Utf8;
     DECLARE $Database AS Utf8;
-    DECLARE $HeartbeatDeadline AS Datetime;
+    DECLARE $LastHeartbeat AS Datetime;
     DECLARE $UpdateGroupHeartbeat AS Bool;
 
-    UPDATE `/Root/.metadata/kafka_consumer_groups`
-    SET last_heartbeat_time = CurrentUtcDateTime()
+    UPDATE `%s`
+    SET last_heartbeat_time = $LastHeartbeat
     WHERE consumer_group = $ConsumerGroup
         AND database = $Database
         AND $UpdateGroupHeartbeat = True;
 
-    UPDATE `/Root/.metadata/kafka_consumer_members`
-    SET last_heartbeat_time = $HeartbeatDeadline
+    UPDATE `%s`
+    SET last_heartbeat_time = $LastHeartbeat
     WHERE consumer_group = $ConsumerGroup
       AND generation = $Generation
       AND member_id = $MemberId
       AND database = $Database;
-)";
+)sql";
 
 
-const TString UPDATE_TTL_LEAVE_GROUP = R"(
+const TString UPDATE_TTL_LEAVE_GROUP = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $MemberId AS Utf8;
     DECLARE $Database AS Utf8;
+    DECLARE $LastHeartbeat AS Datetime;
 
-    UPDATE `/Root/.metadata/kafka_consumer_members`
-    SET last_heartbeat_time = CurrentUtcDateTime() - Interval("PT1H")
+    UPDATE `%s`
+    SET last_heartbeat_time = $LastHeartbeat
     WHERE consumer_group = $ConsumerGroup
     AND member_id = $MemberId
     AND database = $Database;
-)";
-
+)sql";
 
 } // namespace NKafka
-
 
 // savnik check max members count

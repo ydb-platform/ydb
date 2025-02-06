@@ -3259,6 +3259,11 @@ public:
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "BlockEngine"), BuildQuotedAtom(Pos, mode))));
                 }
+
+                if (ctx.Engine) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "Engine"), BuildQuotedAtom(Pos, *ctx.Engine))));
+                }
             }
         }
 

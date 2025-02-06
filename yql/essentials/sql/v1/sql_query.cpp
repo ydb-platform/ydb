@@ -3095,6 +3095,22 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 enable = true;
                 force = false;
             }
+
+            if (isDqEngine && Ctx.Engine) {
+                if (*Ctx.Engine == "ytflow") {
+                    if (force) {
+                        Error() << "Expected `disable|auto` argument for: " << pragma << " pragma "
+                            << "with Engine pragma argument `ytflow`";
+
+                        Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                        return {};
+                    }
+
+                    enable = false;
+                } else if (*Ctx.Engine == "dq") {
+                    force = true;
+                }
+            }
         } else if (normalizedPragma == "ansirankfornullablekeys") {
             Ctx.AnsiRankForNullableKeys = true;
             Ctx.IncrementMonCounter("sql_pragma", "AnsiRankForNullableKeys");
@@ -3322,6 +3338,35 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableemitunionmerge") {
             Ctx.EmitUnionMerge = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableEmitUnionMerge");
+        } else if (normalizedPragma == "engine") {
+            Ctx.IncrementMonCounter("sql_pragma", "Engine");
+
+            const TString* literal = values.size() == 1
+                ? values[0].GetLiteral()
+                : nullptr;
+
+            if (!literal || ! (*literal == "default" || *literal == "dq" || *literal == "ytflow")) {
+                Error() << "Expected `default|dq|ytflow' argument for: " << pragma;
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
+            if (*literal == "ytflow") {
+                if (Ctx.DqEngineForce) {
+                    Error() << "Expected `disable|auto` argument for DqEngine pragma "
+                        << " with " << pragma << " pragma argument `ytflow`";
+
+                        Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                        return {};
+                }
+
+                Ctx.DqEngineEnable = false;
+            } else if (*literal == "dq") {
+                Ctx.DqEngineEnable = true;
+                Ctx.DqEngineForce = true;
+            }
+
+            Ctx.Engine = *literal;
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

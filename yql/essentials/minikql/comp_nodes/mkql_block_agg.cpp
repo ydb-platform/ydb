@@ -10,6 +10,10 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 
+#include <yql/essentials/minikql/computation/mkql_spiller.h>
+#include <yql/essentials/minikql/computation/mkql_spiller_factory.h>
+#include <yql/essentials/utils/log/log.h>
+
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
@@ -31,8 +35,14 @@ namespace NMiniKQL {
 
 namespace {
 
+ui64 linescount = 0;
+
 bool HasMemoryForProcessing() {
+    ++linescount;
+    if (linescount % 100 == 0) return false;
+    return true;
     return !TlsAllocState->IsMemoryYellowZoneEnabled();
+}
 
 constexpr bool InlineAggState = false;
 
@@ -1292,6 +1302,29 @@ public:
         SpillerFactory_ = ctx.SpillerFactory;
     }
 
+    enum class EOperatingMode {
+        InMemory,
+        Spilling,
+        Restoring,
+        Done
+    };
+
+    bool HasSpilledState_ = false;
+    EOperatingMode Mode_ = EOperatingMode::InMemory; 
+
+    void LogMemoryUsage() const {
+        const auto used = TlsAllocState->GetUsed();
+        const auto limit = TlsAllocState->GetLimit();
+        TStringBuilder logmsg;
+        logmsg << "Memory usage: ";
+        if (limit) {
+            logmsg << (used*100/limit) << "%=";
+        }
+        logmsg << (used/1_MB) << "MB/" << (limit/1_MB) << "MB";
+
+        YQL_LOG(INFO) << logmsg;
+    }
+
     void PrepareForSpilling() {
         std::cerr << "Preparing for spilling" << std::endl;
         SpillingBuckets_.resize(NumberOfSpillingBuckets_);
@@ -1303,8 +1336,82 @@ public:
         std::cerr << "maxBlockLen: " << MaxBlockLen_ << std::endl;
     }
 
+
+    void SwitchMode(EOperatingMode mode) {
+        LogMemoryUsage();
+        switch(mode) {
+            case EOperatingMode::InMemory: {
+                YQL_LOG(INFO) << "switching Memory mode to InMemory";
+                break;
+            }
+            case EOperatingMode::Spilling: {
+                YQL_LOG(INFO) << "switching Memory mode to Spilling";
+                if (!HasSpilledState_) {
+                    HasSpilledState_ = true;
+                    PrepareForSpilling();
+                }
+                break;
+            }
+            case EOperatingMode::Restoring: {
+                YQL_LOG(INFO) << "switching Memory mode to Restoring";
+                break;
+            }
+            case EOperatingMode::Done: {
+                YQL_LOG(INFO) << "switching Memory mode to Done";
+                break;
+           }
+        }
+
+        Mode_ = mode;
+    }
+
+    bool FinishFetched = false;
+
+    bool CheckSpillingAndWait() {
+        switch(Mode_) {
+            case EOperatingMode::InMemory: {
+                if (!HasMemoryForProcessing() || FinishFetched && HasSpilledState_) {
+                    SwitchMode(EOperatingMode::Spilling);
+                    return CheckSpillingAndWait();
+                }
+                return false;
+            }
+            case EOperatingMode::Spilling: {
+                if (!SpillEverything()) return true;
+                std::cerr << "MISHA blobs spilled: " << std::endl;
+                for (ui64 bucketId = 0; bucketId < NumberOfSpillingBuckets_; ++bucketId) {
+                    std::cerr << "BucketID: " << bucketId << std::endl;
+                    for (auto blobId : SpillingBuckets_[bucketId].SpillingKeys_) {
+                        std::cerr << blobId << " ";
+                    }
+                    std::cerr << std::endl;
+                }
+                Clear();
+
+                if (!FinishFetched) {
+                    SwitchMode(EOperatingMode::InMemory);
+                    return false;
+                }
+                SwitchMode(EOperatingMode(EOperatingMode::Restoring));
+                return CheckSpillingAndWait();
+            }
+            case EOperatingMode::Restoring: {
+                if (!LoadNextBucket()) return true;
+                SwitchMode(EOperatingMode::Done);
+                return false;
+            }
+            case EOperatingMode::Done: {
+                return false;
+
+            }
+
+        }
+    }
+
     void Clear() {
         TotalStateSize_ = 0;
+        IteratorsInitialized = 0;
+        IsExtractingFinished = false;
 
         Aggs_.resize(0);
         AggStateOffsets_.resize(0);
@@ -1522,7 +1629,7 @@ public:
 
     ui64 LoadingBucket = 0;
 
-    bool LoadEverything() {
+    bool LoadNextBucket() {
         std::cerr << "Loading bucket " << LoadingBucket << std::endl;
         if (SpillingBuckets_[LoadingBucket].LoadingOperation_.has_value() && !SpillingBuckets_[LoadingBucket].LoadingOperation_->HasValue()) return false;
 
@@ -2355,6 +2462,9 @@ private:
                 }
 
                 while (!state.WritingOutput_) {
+                    if constexpr(Finalize) {
+                        if (state.CheckSpillingAndWait()) return NUdf::EFetchStatus::Yield;
+                    }
                     switch (Stream_.WideFetch(inputFields, inputWidth)) {
                         case NUdf::EFetchStatus::Yield:
                             return NUdf::EFetchStatus::Yield;
@@ -2362,41 +2472,17 @@ private:
                             state.ProcessInput(HolderFactory_);
                             continue;
                         case NUdf::EFetchStatus::Finish:
-                            if constexpr(Finalize) {
-                                if (spillingState == TSpillingState::InMemory) {
-                                    state.PrepareForSpilling();
-                                    spillingState = TSpillingState::Spilling;
-                                }
-                                if (spillingState == TSpillingState::Spilling) {
-                                    if (!state.SpillEverything()) return NUdf::EFetchStatus::Yield;
-                                    std::cerr << "MISHA blobs spilled: ";
-                                    for (ui64 bucketId = 0; bucketId < state.NumberOfSpillingBuckets_; ++bucketId) {
-                                        std::cerr << "BucketID: " << bucketId << std::endl;
-                                        for (auto blobId : state.SpillingBuckets_[bucketId].SpillingKeys_) {
-                                            std::cerr << blobId << " ";
-                                        }
-                                        std::cerr << std::endl;
-                                    }
-                                    state.Clear();
-
-                                    spillingState = TSpillingState::Restoring;
-                                }
-
-                            }
+                            state.FinishFetched = true;
                             break;
                     }
 
                     if constexpr (Finalize) {
-                        if (spillingState == TSpillingState::Restoring) {
-                            if (!state.LoadEverything()) return NUdf::EFetchStatus::Yield;
-                            spillingState = TSpillingState::Done;
-                        }
+                        if (state.CheckSpillingAndWait()) return NUdf::EFetchStatus::Yield;
                     }
 
                     if (state.Finish())
                         break;
                     else {
-
                         if constexpr(Finalize) {
                             MKQL_ENSURE(false, "HERE");
                         }

@@ -17,7 +17,6 @@ namespace NCoordination {
 using NThreading::TFuture;
 using NThreading::TPromise;
 using NThreading::NewPromise;
-using NYdbGrpc::TQueueClientFixedEvent;
 
 namespace {
 
@@ -31,30 +30,6 @@ inline TResultPromise<T> NewResultPromise() {
     return NewPromise<TResult<T>>();
 
 
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-template<class Settings>
-void ConvertSettingsToProtoConfig(
-    const Settings& settings,
-    Ydb::Coordination::Config* config)
-{
-    if (settings.SelfCheckPeriod_) {
-        config->set_self_check_period_millis(settings.SelfCheckPeriod_->MilliSeconds());
-    }
-    if (settings.SessionGracePeriod_) {
-        config->set_session_grace_period_millis(settings.SessionGracePeriod_->MilliSeconds());
-    }
-    if (settings.ReadConsistencyMode_ != EConsistencyMode::UNSET) {
-        config->set_read_consistency_mode(static_cast<Ydb::Coordination::ConsistencyMode>(settings.ReadConsistencyMode_));
-    }
-    if (settings.AttachConsistencyMode_ != EConsistencyMode::UNSET) {
-        config->set_attach_consistency_mode(static_cast<Ydb::Coordination::ConsistencyMode>(settings.AttachConsistencyMode_));
-    }
-    if (settings.RateLimiterCountersMode_ != ERateLimiterCountersMode::UNSET) {
-        config->set_rate_limiter_counters_mode(static_cast<Ydb::Coordination::RateLimiterCountersMode>(settings.RateLimiterCountersMode_));
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -87,6 +62,12 @@ struct TNodeDescription::TImpl {
         Owner_ = desc.self().owner();
         PermissionToSchemeEntry(desc.self().effective_permissions(), &EffectivePermissions_);
         Proto_ = desc;
+    }
+
+    void SerializeTo(Ydb::Coordination::CreateNodeRequest& creationRequest) {
+        auto& config = *creationRequest.mutable_config();
+        config.CopyFrom(Proto_.config());
+        config.clear_path();
     }
 
     std::optional<TDuration> SelfCheckPeriod_;
@@ -134,6 +115,10 @@ const std::vector<NScheme::TPermissions>& TNodeDescription::GetEffectivePermissi
 
 const Ydb::Coordination::DescribeNodeResult& TNodeDescription::GetProto() const {
     return Impl_->Proto_;
+}
+
+void TNodeDescription::SerializeTo(Ydb::Coordination::CreateNodeRequest& creationRequest) const {
+    return Impl_->SerializeTo(creationRequest);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1804,6 +1789,52 @@ private:
 
     bool IsStopping = false;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+template<class Settings>
+void ConvertSettingsToProtoConfig(
+    const Settings& settings,
+    Ydb::Coordination::Config* config)
+{
+    if (settings.SelfCheckPeriod_) {
+        config->set_self_check_period_millis(settings.SelfCheckPeriod_->MilliSeconds());
+    }
+    if (settings.SessionGracePeriod_) {
+        config->set_session_grace_period_millis(settings.SessionGracePeriod_->MilliSeconds());
+    }
+    if (settings.ReadConsistencyMode_ != EConsistencyMode::UNSET) {
+        config->set_read_consistency_mode(static_cast<Ydb::Coordination::ConsistencyMode>(settings.ReadConsistencyMode_));
+    }
+    if (settings.AttachConsistencyMode_ != EConsistencyMode::UNSET) {
+        config->set_attach_consistency_mode(static_cast<Ydb::Coordination::ConsistencyMode>(settings.AttachConsistencyMode_));
+    }
+    if (settings.RateLimiterCountersMode_ != ERateLimiterCountersMode::UNSET) {
+        config->set_rate_limiter_counters_mode(static_cast<Ydb::Coordination::RateLimiterCountersMode>(settings.RateLimiterCountersMode_));
+    }
+}
+
+}
+
+TCreateNodeSettings::TCreateNodeSettings(const Ydb::Coordination::Config& config) {
+    if (config.self_check_period_millis() != 0u) {
+        SelfCheckPeriod(TDuration::MilliSeconds(config.self_check_period_millis()));
+    }
+    if (config.session_grace_period_millis() != 0u) {
+        SessionGracePeriod(TDuration::MilliSeconds(config.session_grace_period_millis()));
+    }
+    if (config.read_consistency_mode() != Ydb::Coordination::CONSISTENCY_MODE_UNSET) {
+        ReadConsistencyMode(static_cast<EConsistencyMode>(config.read_consistency_mode()));
+    }
+    if (config.attach_consistency_mode() != Ydb::Coordination::CONSISTENCY_MODE_UNSET) {
+        AttachConsistencyMode(static_cast<EConsistencyMode>(config.attach_consistency_mode()));
+    }
+    if (config.rate_limiter_counters_mode() != Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_UNSET) {
+        RateLimiterCountersMode(static_cast<ERateLimiterCountersMode>(config.rate_limiter_counters_mode()));
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

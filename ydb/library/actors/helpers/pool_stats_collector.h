@@ -2,7 +2,6 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -459,12 +458,12 @@ private:
             TVector<TExecutorThreadStats> stats;
             TVector<TExecutorThreadStats> sharedStats;
             TExecutorPoolStats poolStats;
-            ctx.ExecutorThread.ActorSystem->GetPoolStats(poolId, poolStats, stats, sharedStats);
+            ctx.ActorSystem()->GetPoolStats(poolId, poolStats, stats, sharedStats);
             SetAggregatedCounters(PoolCounters[poolId], poolStats, stats, sharedStats);
             ctx.Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup(poolId + 1));
             return;
         }
-        THarmonizerStats harmonizerStats = ctx.ExecutorThread.ActorSystem->GetHarmonizerStats();
+        THarmonizerStats harmonizerStats = ctx.ActorSystem()->GetHarmonizerStats();
         ActorSystemCounters.Set(harmonizerStats);
         OnWakeup(ctx);
         ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));

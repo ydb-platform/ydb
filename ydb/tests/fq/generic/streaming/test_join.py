@@ -629,7 +629,7 @@ class TestJoinStreaming(TestYdsBase):
 
         if wide_channels:
             sql = 'pragma dq.UseWideChannels = "true";\n' + sql
-        else if wide_channels is not None:
+        elif wide_channels is not None:
             sql = 'pragma dq.UseWideChannels = "false";\n' + sql
 
         one_time_waiter.wait()

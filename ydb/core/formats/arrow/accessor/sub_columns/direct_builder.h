@@ -78,7 +78,6 @@ public:
 
     void AddKVOwn(const TStringBuf key, const TString& value) {
         Storage.emplace_back(value);
-        Storage.emplace_back(TString(key.data(), key.size()));
         auto itElements = Elements.find(Storage.back());
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(Storage.back(), Storage.back()).first;

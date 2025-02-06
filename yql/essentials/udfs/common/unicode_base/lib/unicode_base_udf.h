@@ -218,7 +218,7 @@ namespace {
     static void SplitToListImpl(
             const IValueBuilder* valueBuilder,
             const TUnboxedValue& input,
-            const TUtf16String::const_iterator start,
+            const TUtf32String::const_iterator start,
             const TIt& it,
             TTmpVector& result) {
         const std::string_view& original = input.AsStringRef();
@@ -281,8 +281,8 @@ namespace {
                     SplitToListImpl(valueBuilder, args[0], input.cbegin(), it, skipEmpty, result);
                 }
             } else {
-                const auto& input = UTF8ToWide(args[0].AsStringRef());
-                const auto& delimeter = UTF8ToWide(args[1].AsStringRef());
+                const auto& input = UTF8ToUTF32<true>(args[0].AsStringRef());
+                const auto& delimeter = UTF8ToUTF32<true>(args[1].AsStringRef());
                 if (limit) {
                     auto it = StringSplitter(input).SplitBySet(delimeter.c_str()).Limit(limit + 1);
                     SplitToListImpl(valueBuilder, args[0], input.cbegin(), it, skipEmpty, result);
@@ -313,9 +313,9 @@ namespace {
         Y_UNUSED(valueBuilder);
         const TStringBuf left(args[0].AsStringRef());
         const TStringBuf right(args[1].AsStringRef());
-        const TUtf16String& leftWide = UTF8ToWide(left);
-        const TUtf16String& rightWide = UTF8ToWide(right);
-        const ui64 result = NLevenshtein::Distance(leftWide, rightWide);
+        const auto& leftUtf32 = UTF8ToUTF32<true>(left);
+        const auto& rightUtf32 = UTF8ToUTF32<true>(right);
+        const ui64 result = NLevenshtein::Distance(leftUtf32, rightUtf32);
         return TUnboxedValuePod(result);
     }
 

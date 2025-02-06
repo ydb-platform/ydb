@@ -1925,6 +1925,30 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 node.HasBlock4(), context));
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore61: {
+            // alter_database_stmt: ALTER DATABASE an_id_schema OWNER TO role_name
+            auto& node = core.GetAlt_sql_stmt_core61().GetRule_alter_database_stmt1();
+
+            TDeferredAtom roleName;
+            {
+                bool allowSystemRoles = true;
+                if (!RoleNameClause(node.GetRule_role_name6(), roleName, allowSystemRoles)) {
+                    return false;
+                }
+            }
+
+            TAlterDatabaseParameters alterDatabaseParams;
+            alterDatabaseParams.Owner = roleName;
+            alterDatabaseParams.DbPath = Id(node.GetRule_an_id_schema3(), *this);
+
+            const TPosition pos = Ctx.Pos();
+            TString service = Ctx.Scoped->CurrService;
+            TDeferredAtom cluster = Ctx.Scoped->CurrCluster;
+
+            auto stmt = BuildAlterDatabase(pos, service, cluster, alterDatabaseParams, Ctx.Scoped);
+            AddStatementToBlocks(blocks, stmt);
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);

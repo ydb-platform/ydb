@@ -52,7 +52,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        ChangeLog [12657:12659]
+        ChangeLog [14240:14242]
 
 KEEP     MIT                  85545b6051abd36fce0fc9cd8d2d53cc
 BELONGS ya.make
@@ -75,7 +75,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsla.LICENSE
     Files with this license:
-        tif_lzw.c [1446:1456]
+        tif_lzw.c [1444:1454]
 
 KEEP     libtiff              a9ebcbf36a981b235e0c3e99fd1fad00
 BELONGS ya.make

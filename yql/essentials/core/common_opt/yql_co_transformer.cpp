@@ -19,9 +19,10 @@ namespace {
 
 class TCommonOptTransformer final : public TSyncTransformerBase {
 public:
-    TCommonOptTransformer(TTypeAnnotationContext* typeCtx, bool final)
+    TCommonOptTransformer(TTypeAnnotationContext* typeCtx, bool final, bool ignorePgRules=false)
         : TypeCtx(typeCtx)
         , Final(final)
+        , IgnorePgRules(ignorePgRules)
     {}
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
@@ -40,12 +41,13 @@ private:
     TProcessedNodesSet FinalProcessedNodes;
     TTypeAnnotationContext* TypeCtx;
     const bool Final;
+    const bool IgnorePgRules;
 };
 
 }
 
-TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(TTypeAnnotationContext* typeCtx) {
-    return new TCommonOptTransformer(typeCtx, false);
+TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(TTypeAnnotationContext* typeCtx, bool ignorePgRules) {
+    return new TCommonOptTransformer(typeCtx, false, ignorePgRules);
 }
 
 TAutoPtr<IGraphTransformer> CreateCommonOptFinalTransformer(TTypeAnnotationContext* typeCtx) {
@@ -57,24 +59,24 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr in
     output = std::move(input);
 
     if (Final) {
-        return DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().FinalCallables, FinalProcessedNodes, true);
+        return DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance(IgnorePgRules).FinalCallables, FinalProcessedNodes, true);
     }
 
     for (ui32 i = 0; i < TCoCallableRules::SIMPLE_STEPS; ++i) {
-        status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().SimpleCallables[i], SimpleProcessedNodes[i], true);
+        status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance(IgnorePgRules).SimpleCallables[i], SimpleProcessedNodes[i], true);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
     }
 
     for (ui32 i = 0; i < TCoCallableRules::FLOW_STEPS; ++i) {
-        status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().FlowCallables[i], FlowProcessedNodes[i], true);
+        status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance(IgnorePgRules).FlowCallables[i], FlowProcessedNodes[i], true);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
     }
 
-    status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().Finalizers);
+    status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance(IgnorePgRules).Finalizers);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
     }
@@ -184,12 +186,12 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(const TExprNode::T
     return IGraphTransformer::TStatus::Ok;
 }
 
-const TCoCallableRules& TCoCallableRules::Instance() {
-    return *Singleton<TCoCallableRules>();
+const TCoCallableRules& TCoCallableRules::Instance(bool ignorePgRules) {
+    return *Singleton<TCoCallableRules>(ignorePgRules);
 }
 
-TCoCallableRules::TCoCallableRules() {
-    RegisterCoSimpleCallables1(SimpleCallables[SIMPLE_STEP_1]);
+TCoCallableRules::TCoCallableRules(bool ignorePgRules) {
+    RegisterCoSimpleCallables1(SimpleCallables[SIMPLE_STEP_1], ignorePgRules);
     RegisterCoSimpleCallables2(SimpleCallables[SIMPLE_STEP_2]);
     RegisterCoSimpleCallables3(SimpleCallables[SIMPLE_STEP_3]);
     RegisterCoFlowCallables1(FlowCallables[FLOW_STEP_1]);

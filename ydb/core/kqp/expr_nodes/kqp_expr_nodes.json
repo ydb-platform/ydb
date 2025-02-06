@@ -722,6 +722,67 @@
                 {"Index": 2, "Name": "IssueCode", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Message", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name": "TKqpOpRead",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpRead"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Alias", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList", "Optional": true}
+            ]
+        },
+        {
+            "Name": "TKqpOpEmptySource",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpEmpySource"}
+        },
+        {
+            "Name": "TKqpOpMapElement",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpElement"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Variable", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"}
+            ]         
+        },
+        {
+            "Name": "TKqpOpElementList",
+            "ListBase" : "TKqpOpMapElement"
+        },
+        {
+            "Name": "TKqpOpMap",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpMap"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "MapElements", "Type": "TKqpOpElementList"}
+            ]
+        },
+        {
+            "Name": "TKqpOpFilter",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpFilter"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TKqpOpJoin",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "TKqpOpJoin"},
+            "Children": [
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+                {"Index": 2, "Name": "LeftLabel", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "RightLabel", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "JoinKind", "Type":"TCoAtom"},
+                {"Index": 5, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList", "Optional" : true}
+            ]
         }
+
     ]
 }

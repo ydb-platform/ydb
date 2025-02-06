@@ -315,6 +315,8 @@ private:
 
         bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
 
+        bool enableNewRBO = TableServiceConfig.GetEnableNewRBO();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -345,7 +347,8 @@ private:
             TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
             TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
             TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
-            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW) {
+            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
+            TableServiceConfig.GetEnableNewRBO() != enableNewRBO) {
 
             QueryCache->Clear();
 

@@ -1334,9 +1334,12 @@ private:
 
         YQL_ENSURE(queryAst->Root);
         TExprNode::TPtr queryExpr;
+        YQL_CLOG(INFO, CoreDq) << "Good place to weld in";
+
         if (!CompileExpr(*queryAst->Root, queryExpr, ctx, ModuleResolver.get(), nullptr)) {
             return result;
         }
+        YQL_CLOG(INFO, CoreDq) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
 
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
 
@@ -1431,7 +1434,7 @@ private:
             return nullptr;
         }
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformerNewRBO, Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -1491,8 +1494,15 @@ private:
             return nullptr;
         }
 
-        return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-            query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
+        auto transformer = YqlTransformer;
+        if (SessionCtx->Config().EnableNewRBO) {  
+            return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformerNewRBO, SessionCtx->QueryPtr(),
+                query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
+        }
+        else {
+            return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+                query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
+        }
     }
 
     IAsyncQueryResultPtr PrepareDataQueryAstInternal(const TKqpQueryRef& queryAst, const TPrepareSettings& settings,
@@ -1944,6 +1954,23 @@ private:
             .AddRun(&NullProgressWriter)
             .Build();
 
+        YqlTransformerNewRBO = TTransformationPipeline(TypesCtx)
+            .AddServiceTransformers()
+            .Add(TLogExprTransformer::Sync("YqlTransformerNewRBO", NYql::NLog::EComponent::ProviderKqp,
+                NYql::NLog::ELevel::TRACE), "LogYqlTransformNewRBO")
+            .AddPreTypeAnnotation()
+            .AddExpressionEvaluation(*FuncRegistry)
+            .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
+            .AddIOAnnotation(false)
+            .AddTypeAnnotation()
+            .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
+            .AddPostTypeAnnotation()
+            .AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION, true)
+            .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
+            .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
+            .AddRun(&NullProgressWriter)
+            .Build();
+
         DataQueryAstTransformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
             .AddIntentDeterminationTransformer()
@@ -1978,6 +2005,7 @@ private:
         SetupSession(queryType);
 
         YqlTransformer->Rewind();
+        YqlTransformerNewRBO->Rewind();
 
         ResultProviderConfig->FillSettings = FillSettings;
         ResultProviderConfig->CommittedResults.clear();
@@ -2014,6 +2042,7 @@ private:
     IDataProvider::TFillSettings FillSettings;
     TIntrusivePtr<TResultProviderConfig> ResultProviderConfig;
     TAutoPtr<IGraphTransformer> YqlTransformer;
+    TAutoPtr<IGraphTransformer> YqlTransformerNewRBO;
     TAutoPtr<IGraphTransformer> DataQueryAstTransformer;
     TExprNode::TPtr FakeWorld;
     TKqpAsyncResultBase<IKqpHost::TQueryResult>::TAsyncTransformStatusCallback DataProvidersFinalizer;

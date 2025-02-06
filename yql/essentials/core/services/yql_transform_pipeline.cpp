@@ -137,13 +137,13 @@ TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool for
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddCommonOptimization(EYqlIssueCode issueCode) {
+TTransformationPipeline& TTransformationPipeline::AddCommonOptimization(EYqlIssueCode issueCode, bool ignorePgRules) {
     // auto instantCallableTransformer =
     //    CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_, true);
     // TypeAnnotationContext_->CustomInstantTypeTransformer =
     //     CreateTypeAnnotationTransformer(instantCallableTransformer, *TypeAnnotationContext_);
     Transformers_.push_back(TTransformStage(
-        CreateCommonOptTransformer(TypeAnnotationContext_.Get()),
+        CreateCommonOptTransformer(TypeAnnotationContext_.Get(), ignorePgRules),
         "CommonOptimization",
         issueCode));
     return *this;
@@ -157,8 +157,8 @@ TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYq
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
-    AddCommonOptimization(issueCode);
+TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode, bool ignorePgRules) {
+    AddCommonOptimization(issueCode, ignorePgRules);
     Transformers_.push_back(TTransformStage(
         CreateRecaptureDataProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
         "RecaptureDataProposals",

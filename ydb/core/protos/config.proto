@@ -1397,12 +1397,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
-        optional uint64 ThrottlingMinSstCount = 15 [(ControlOptions) = {
+        optional uint64 ThrottlingMinLevel0SstCount = 15 [(ControlOptions) = {
             Description: "Minimum level 0 SST count - throttling is turned on",
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 100 }];
-        optional uint64 ThrottlingMaxSstCount = 16 [(ControlOptions) = {
+        optional uint64 ThrottlingMaxLevel0SstCount = 16 [(ControlOptions) = {
             Description: "Maximum level 0 SST count - throttling speed is zero",
             MinValue: 1,
             MaxValue: 1000,

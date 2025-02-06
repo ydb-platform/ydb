@@ -13,6 +13,7 @@ namespace NKikimr::NPQ {
 // before deleting the token.
 struct TBlobKeyToken {
     TString Key;
+    bool NeedDelete = true;
 };
 
 using TBlobKeyTokenPtr = std::shared_ptr<TBlobKeyToken>;

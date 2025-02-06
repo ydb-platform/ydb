@@ -2103,7 +2103,9 @@ TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
     auto ptr = std::make_unique<TBlobKeyToken>(key);
 
     auto deleter = [this](TBlobKeyToken* token) {
-        DeletedHeadKeys.emplace_back(std::move(token->Key));
+        if (token->NeedDelete) {
+            DeletedHeadKeys.emplace_back(std::move(token->Key));
+        }
         delete token;
     };
 
@@ -2341,6 +2343,8 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                 CompactedKeys.emplace_back(write->Key, write->Value.size());
             }
             Parameters->CurOffset += k.Key.GetCount();
+            // The key does not need to be deleted, as it will be renamed
+            k.BlobKeyToken->NeedDelete = false;
         }
 
         PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << PartitionedBlob.GetFormedBlobs().size());

@@ -215,7 +215,7 @@ std::variant<TMainMetadata, TDatabaseMetadata, TError> GetGenericMetadata(const 
 /**
  * Parses config metadata
  */
-TMainMetadata GetMetadata(const TString& config);
+TMainMetadata GetMainMetadata(const TString& config);
 
 /**
  * Parses database config metadata

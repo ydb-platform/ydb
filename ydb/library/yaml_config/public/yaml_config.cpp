@@ -640,20 +640,32 @@ selector: {}
 }
 
 ui64 GetVersion(const TString& config) {
-    auto metadata = GetMetadata(config);
+    auto metadata = GetMainMetadata(config);
     return metadata.Version.value_or(0);
 }
 
-TMainMetadata GetMetadata(const TString& config) {
+struct TMetadataDocument {
+    NFyaml::TDocument Doc;
+    NFyaml::TMapping Node;
+
+    TMetadataDocument(const TString& yaml)
+        : Doc(NFyaml::TDocument::Parse(yaml))
+        , Node(Doc.Root().Map()["metadata"].Map())
+    {}
+};
+
+std::optional<TMetadataDocument> GetMetadataDoc(const TString& config) {
     if (config.empty()) {
         return {};
     }
 
-    auto doc = NFyaml::TDocument::Parse(config);
+    return TMetadataDocument(config);
+}
 
-    if (auto node = doc.Root().Map()["metadata"]; node) {
-        auto versionNode = node.Map()["version"];
-        auto clusterNode = node.Map()["cluster"];
+TMainMetadata GetMainMetadata(const TString& config) {
+    if (auto doc = GetMetadataDoc(config); doc) {
+        auto versionNode = doc->Node["version"];
+        auto clusterNode = doc->Node["cluster"];
         return TMainMetadata{
             .Version = versionNode ? std::optional{FromString<ui64>(versionNode.Scalar())} : std::nullopt,
             .Cluster = clusterNode ? std::optional{clusterNode.Scalar()} : std::nullopt,
@@ -664,15 +676,9 @@ TMainMetadata GetMetadata(const TString& config) {
 }
 
 TDatabaseMetadata GetDatabaseMetadata(const TString& config) {
-    if (config.empty()) {
-        return {};
-    }
-
-    auto doc = NFyaml::TDocument::Parse(config);
-
-    if (auto node = doc.Root().Map()["metadata"]; node) {
-        auto databaseNode = node.Map()["database"];
-        auto versionNode = node.Map()["version"];
+    if (auto doc = GetMetadataDoc(config); doc) {
+        auto databaseNode = doc->Node["database"];
+        auto versionNode = doc->Node["version"];
         return TDatabaseMetadata{
             .Version = versionNode ? std::optional{FromString<ui64>(versionNode.Scalar())} : std::nullopt,
             .Database = databaseNode ? std::optional{databaseNode.Scalar()} : std::nullopt,
@@ -683,16 +689,10 @@ TDatabaseMetadata GetDatabaseMetadata(const TString& config) {
 }
 
 TVolatileMetadata GetVolatileMetadata(const TString& config) {
-    if (config.empty()) {
-        return {};
-    }
-
-    auto doc = NFyaml::TDocument::Parse(config);
-
-    if (auto node = doc.Root().Map().at("metadata"); node) {
-        auto versionNode = node.Map().at("version");
-        auto clusterNode = node.Map().at("cluster");
-        auto idNode = node.Map().at("id");
+    if (auto doc = GetMetadataDoc(config); doc) {
+        auto versionNode = doc->Node.at("version");
+        auto clusterNode = doc->Node.at("cluster");
+        auto idNode = doc->Node.at("id");
         return TVolatileMetadata{
             .Version = versionNode ? std::make_optional(FromString<ui64>(versionNode.Scalar())) : std::nullopt,
             .Cluster = clusterNode ? std::make_optional(clusterNode.Scalar()) : std::nullopt,
@@ -828,12 +828,12 @@ std::variant<TMainMetadata, TDatabaseMetadata, TError> GetGenericMetadata(const 
         // later we will remove this behaviour
         // but we need it for compatibility for now
         if (!metadata.Has("kind")) {
-            return GetMetadata(config);
+            return GetMainMetadata(config);
         }
 
         auto kind = metadata.at("kind").Scalar();
         if (kind == "MainConfig") {
-            return GetMetadata(config);
+            return GetMainMetadata(config);
         } else if (kind == "DatabaseConfig") {
             return GetDatabaseMetadata(config);
         } else {

@@ -55,7 +55,7 @@ bool TConfigsManager::CheckConfig(const NKikimrConsole::TConfigsConfig &config,
 void TConfigsManager::ReplaceMainConfigMetadata(const TString &config, bool force, TUpdateConfigOpContext& opCtx) {
     try {
         if (!force) {
-            auto metadata = NYamlConfig::GetMetadata(config);
+            auto metadata = NYamlConfig::GetMainMetadata(config);
             opCtx.Cluster = metadata.Cluster.value_or(TString("unknown"));
             opCtx.Version = metadata.Version.value_or(0);
         } else {

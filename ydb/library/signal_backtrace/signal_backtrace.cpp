@@ -91,8 +91,9 @@ private:
 // static
 const THashSet<int> TTraceCollector::DEFAULT_SIGNALS = {SIGABRT, SIGBUS, SIGILL, SIGSEGV};
 
-TTraceCollector::TTraceCollector(const THashSet<int>& signalHandlers)
-    : HandledSignals(signalHandlers)
+TTraceCollector::TTraceCollector(const THashSet<int>& signalHandlers, IOutputStream& out)
+    : Out(out)
+    , HandledSignals(signalHandlers)
     , Connection(MakeHolder<TPipeConnection>())
 {
     static_assert(sizeof(TStackTrace) <= PIPE_BUF, "Reading and writing TStackTrace to the pipe should be atomic");
@@ -100,13 +101,9 @@ TTraceCollector::TTraceCollector(const THashSet<int>& signalHandlers)
     CollectorPid = fork();
 
     if (CollectorPid < 0) {
-        // TODO: DISTBUILD_LOG(ERROR, "Failed to fork process: " << strerror(-CollectorPid));
+        Out << "Failed to fork process: " << strerror(-CollectorPid) << Endl;
     } else if (CollectorPid == 0) {
-        // TODO:
-        // if (logBackend) {
-        //     auto* ptr = logBackend.Get();
-        //     ChangeLogBackend(std::move(logBackend), ptr);
-        // }
+        // TODO: place to setup custom logging facility for the trace collector in the future
         // Trace collector process
         RunChildMain();
     } else {
@@ -114,7 +111,7 @@ TTraceCollector::TTraceCollector(const THashSet<int>& signalHandlers)
         Connection->CloseRead();
         SetSignalHandlers();
 
-        // TODO: DISTBUILD_LOG(INFO, "Trace collector pid: " << CollectorPid);
+        Out << "Trace collector pid: " << CollectorPid << Endl;
     }
 }
 
@@ -134,8 +131,8 @@ void TTraceCollector::SetSignalHandlers() {
         Y_VERIFY_S(signal < NSIG, "Signal number is too big");
 
         SetSignalHandler(signal, [&](int sig, siginfo_t*, void*) {
-            // TODO: it's a dubious place for log - make sure that in case of heap corruption we don't make things worse,
-            // LOG("Received signal " << sig);
+            // TODO: it's a dubious place for log - make sure that in case of heap corruption we don't make things worse
+            Out << "Received signal " << sig << Endl;
 
             static_assert(PIPE_BUF >= 512);
             static_assert(sizeof(TStackTrace) <= PIPE_BUF, "Only write to pipe the chunk of size PIPE_BUF is atomic");
@@ -158,19 +155,19 @@ void TTraceCollector::SetSignalHandlers() {
             switch(info->si_code) {
                 case CLD_EXITED:
                     if (info->si_status == 0) {
-                        // LOG("The trace collector has finished work normally");
+                        Out << "The trace collector has finished work normally" << Endl;
                     } else {
-                        // LOG("The trace collector has finished work with exit_code=" << info->si_status);
+                        Out << "The trace collector has finished work with exit_code=" << info->si_status << Endl;
                     }
                     break;
                 case CLD_KILLED:
-                    // LOG("The trace collector was killed by signal=" << info->si_status);
+                    Out << "The trace collector was killed by signal=" << info->si_status << Endl;
                     break;
                 case CLD_DUMPED:
-                    // LOG("The trace collector terminated abnormally by signal=" << info->si_status);
+                    Out << "The trace collector terminated abnormally by signal=" << info->si_status << Endl;
                     break;
                 default: [[unlikely]]
-                    // LOG("Unexpected si_code: " << info->si_code);
+                    Out << "Unexpected si_code: " << info->si_code << Endl;
                     ;
             }
 
@@ -178,7 +175,7 @@ void TTraceCollector::SetSignalHandlers() {
         } else {
             const auto& oldHandler = OldActions[sig].sa_handler;
             if (oldHandler == SIG_DFL || oldHandler == SIG_IGN) {
-                // TODO(ilezhankin): we should raise signal again in case of SIG_DFL
+                // TODO: we should raise signal again in case of SIG_DFL
                 return;
             } else {
                 // Call previous signal handler
@@ -196,7 +193,7 @@ void TTraceCollector::RestoreSignalHandlers() {
 }
 
 void TTraceCollector::RunChildMain() {
-    Cerr << "The trace collector is running" << Endl;
+    Out << "The trace collector is running" << Endl;
 
     Connection->CloseWrite();
     try {
@@ -205,7 +202,11 @@ void TTraceCollector::RunChildMain() {
 
         if (read != 0) {
             Y_VERIFY_S(sizeof(TStackTrace) == read, "Read from pipe is not atomic");
-            Cerr << "Backtrace:\n" << Symbolize(trace) << Endl;
+            {
+                TStringStream backtrace;
+                backtrace << "Backtrace:\n" << Symbolize(trace) << Endl;
+                Out << backtrace.Str();
+            }
         }
     } catch (const std::exception& error) {
         Y_FAIL_S("Error while the trace collector is running: " << error.what());
@@ -230,16 +231,4 @@ TString TTraceCollector::Symbolize(const TStackTrace& stackTrace) const {
     }
 
     return trace.Str();
-}
-
-void NKikimr::WaitSignals() {
-    sigset_t signal_mask;
-    sigemptyset(&signal_mask);
-    sigaddset(&signal_mask, SIGTERM);
-    sigaddset(&signal_mask, SIGINT);
-
-    int sig;
-    sigwait(&signal_mask, &sig);
-
-    // TODO: DISTBUILD_LOG(FATAL, "Received " << sig << " signal: " << strsignal(sig));
 }

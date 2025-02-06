@@ -15,7 +15,7 @@ class TTraceCollector : public TSingletonTraits<TTraceCollector> {
 public:
     static const THashSet<int> DEFAULT_SIGNALS;
 
-    TTraceCollector(const THashSet<int>& signalHandlers);
+    explicit TTraceCollector(const THashSet<int>& signalHandlers, IOutputStream& out = Cerr);
     ~TTraceCollector();
 
 private:
@@ -28,12 +28,11 @@ private:
     TString Symbolize(const TStackTrace& stackTrace) const;
 
 private:
+    IOutputStream& Out;
     const THashSet<int> HandledSignals;
     THolder<TPipeConnection> Connection;
     pid_t CollectorPid;
     std::array<struct sigaction, NSIG> OldActions;
 };
-
-void WaitSignals();
 
 } // namespace NKikimr

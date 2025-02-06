@@ -48,16 +48,17 @@ public:
                     FullArrayAddress = GlobalChunkedArray->GetArray(FullArrayAddress, CurrentIndex, GlobalChunkedArray);
                     ChunkAddress = std::nullopt;
                 }
-                ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex));
+                const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
+                ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
                 AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::utf8()->id());
                 CurrentArrayData = std::static_pointer_cast<arrow::StringArray>(ChunkAddress->GetArray());
                 if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
-                    if (CurrentArrayData->IsNull(0)) {
+                    if (CurrentArrayData->IsNull(localIndex)) {
                         Next();
                     }
                     break;
                 } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
-                    if (CurrentArrayData->IsNull(0)) {
+                    if (CurrentArrayData->IsNull(localIndex) && std::static_pointer_cast<TSparsedArray>(CurrentArrayData)->GetDefaultValue() == nullptr) {
                         CurrentIndex += ChunkAddress->GetArray()->length();
                     } else {
                         break;
@@ -66,6 +67,7 @@ public:
                     AFL_VERIFY(false)("type", FullArrayAddress->GetArray()->GetType());
                 }
             }
+            AFL_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount());
         }
 
     public:
@@ -99,7 +101,8 @@ public:
         bool Next() {
             AFL_VERIFY(IsValid());
             while (true) {
-                if (ChunkAddress->GetAddress().Contains(++CurrentIndex)) {
+                ++CurrentIndex;
+                if (ChunkAddress->GetAddress().Contains(CurrentIndex)) {
                     if (CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex))) {
                         continue;
                     }

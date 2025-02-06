@@ -35,7 +35,7 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
                     continue;
                 }
                 if (value.GetType() == NBinaryJson::EEntryType::String) {
-                    dataBuilder.AddKVOwn(key.GetString(), TString(value.GetString().data(), value.GetString().size()));
+                    dataBuilder.AddKV(key.GetString(), value.GetString());
                 } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
                     dataBuilder.AddKVOwn(key.GetString(), ::ToString(value.GetNumber()));
                 } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {

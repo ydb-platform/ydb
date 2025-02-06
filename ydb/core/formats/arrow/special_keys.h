@@ -4,6 +4,7 @@
 
 #include <ydb/library/formats/arrow/replace_key.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NKikimr::NArrow {
 
@@ -27,7 +28,7 @@ public:
 
     TSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema) {
         Data = NArrow::DeserializeBatch(data, schema);
-        Y_ABORT_UNLESS(Data);
+        AFL_VERIFY(Data)("data", Base64Encode(data))("schema", schema ? schema->ToString() : "null");
         Y_DEBUG_ABORT_UNLESS(Data->ValidateFull().ok());
     }
 

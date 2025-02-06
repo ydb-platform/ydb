@@ -20,7 +20,7 @@ class TExampleLookupRequestActor : public TActor<TExampleLookupRequestActor> {
     void PassAway() override {
         const ui32 replicaNode = Replica.NodeId();
         if (replicaNode != SelfId().NodeId()) {
-            const TActorId &interconnectProxy = TlsActivationContext->ExecutorThread.ActorSystem->InterconnectProxy(Replica.NodeId());
+            const TActorId &interconnectProxy = TActivationContext::ActorSystem()->InterconnectProxy(Replica.NodeId());
             Send(interconnectProxy, new TEvents::TEvUnsubscribe());
         }
         return IActor::PassAway();

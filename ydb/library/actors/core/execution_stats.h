@@ -8,13 +8,13 @@
 #include "lease.h"
 #include "mailbox.h"
 #include "mon_stats.h"
+#include "thread_context.h"
 
 #include <ydb/library/actors/util/cpumask.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/util/intrinsics.h>
 #include <ydb/library/actors/util/thread.h>
 
-#include <library/cpp/lwtrace/shuttle.h>
 
 namespace NActors {
     struct TSharedExecutorThreadCtx;
@@ -28,35 +28,14 @@ namespace NActors {
         }
     };
     
-    struct TWorkerContext {
-        TWorkerId WorkerId;
-        const TCpuId CpuId;
-        TLease Lease;
-        IExecutorPool* Executor = nullptr;
-        TMailboxTable* MailboxTable = nullptr;
-        ui64 TimePerMailboxTs = 0;
-        ui32 EventsPerMailbox = 0;
-        ui64 SoftDeadlineTs = ui64(-1);
-        TExecutorThreadStats* Stats = &WorkerStats; // pool stats
-        TExecutorThreadStats WorkerStats;
-        TPoolId PoolId = MaxPools;
-        mutable NLWTrace::TOrbit Orbit;
-        bool IsNeededToWaitNextActivation = true;
-        i64 HPStart = 0;
-        ui32 ExecutedEvents = 0;
-        ui32 OverwrittenEventsPerMailbox = 0;
-        ui64 OverwrittenTimePerMailboxTs = 0;
-        TSharedExecutorThreadCtx *SharedThread = nullptr;
+    struct TExecutionStats {
+        TExecutorThreadStats* Stats = nullptr; // pool stats
         TCpuSensor CpuSensor;
-        TStackVec<TActorId, 1> PreemptionSubscribed;
 
-        TMailboxCache MailboxCache;
 
-        TWorkerContext(TWorkerId workerId, TCpuId cpuId)
-            : WorkerId(workerId)
-            , CpuId(cpuId)
-            , Lease(WorkerId, NeverExpire)
-        {}
+        TExecutionStats();
+
+        ~TExecutionStats();
 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         void GetCurrentStats(TExecutorThreadStats& statsCopy) const {
@@ -70,7 +49,7 @@ namespace NActors {
         }
 
         void AddElapsedCycles(ui32 activityType, i64 elapsed) {
-            if (Y_LIKELY(elapsed > 0)) {
+            if (Y_LIKELY(elapsed > 0) && activityType != Max<ui32>()) {
                 Y_DEBUG_ABORT_UNLESS(activityType < Stats->MaxActivityType());
                 RelaxedStore(&Stats->ElapsedTicks, RelaxedLoad(&Stats->ElapsedTicks) + elapsed);
                 RelaxedStore(&Stats->ElapsedTicksByActivity[activityType], RelaxedLoad(&Stats->ElapsedTicksByActivity[activityType]) + elapsed);
@@ -81,10 +60,6 @@ namespace NActors {
             if (Y_LIKELY(elapsed > 0)) {
                 RelaxedStore(&Stats->ParkedTicks, RelaxedLoad(&Stats->ParkedTicks) + elapsed);
             }
-        }
-
-        void AddBlockedCycles(i64 elapsed) {
-            RelaxedStore(&Stats->BlockedTicks, RelaxedLoad(&Stats->BlockedTicks) + elapsed);
         }
 
         void IncrementSentEvents() {
@@ -152,17 +127,18 @@ namespace NActors {
             return elapsed;
         }
 
-        void UpdateActorsStats(size_t dyingActorsCnt) {
+        void UpdateActorsStats(size_t dyingActorsCnt, IExecutorPool* pool) {
             if (dyingActorsCnt) {
-                AtomicAdd(Executor->DestroyedActors, dyingActorsCnt);
+                AtomicAdd(pool->DestroyedActors, dyingActorsCnt);
             }
-            RelaxedStore(&Stats->PoolDestroyedActors, (ui64)RelaxedLoad(&Executor->DestroyedActors));
-            RelaxedStore(&Stats->PoolActorRegistrations, (ui64)RelaxedLoad(&Executor->ActorRegistrations));
-            RelaxedStore(&Stats->PoolAllocatedMailboxes, MailboxTable->GetAllocatedMailboxCountFast());
+            RelaxedStore(&Stats->PoolDestroyedActors, (ui64)RelaxedLoad(&pool->DestroyedActors));
+            RelaxedStore(&Stats->PoolActorRegistrations, (ui64)RelaxedLoad(&pool->ActorRegistrations));
+            RelaxedStore(&Stats->PoolAllocatedMailboxes, pool->GetMailboxTable()->GetAllocatedMailboxCountFast());
         }
 
         void UpdateThreadTime() {
             RelaxedStore(&Stats->SafeElapsedTicks, (ui64)RelaxedLoad(&Stats->ElapsedTicks));
+            RelaxedStore(&Stats->SafeParkedTicks, (ui64)RelaxedLoad(&Stats->ParkedTicks));
             RelaxedStore(&Stats->CpuUs, (ui64)RelaxedLoad(&Stats->CpuUs) + CpuSensor.GetDiff());
         }
 
@@ -175,7 +151,6 @@ namespace NActors {
         void SetCurrentActivationTime(ui32, i64) {}
         inline void AddElapsedCycles(ui32, i64) {}
         inline void AddParkedCycles(i64) {}
-        inline void AddBlockedCycles(i64) {}
         inline void IncrementSentEvents() {}
         inline void IncrementPreemptedEvents() {}
         inline void IncrementMailboxPushedOutByTailSending() {}
@@ -193,29 +168,9 @@ namespace NActors {
         void IncreaseNotEnoughCpuExecutions() {}
 #endif
 
-        void Switch(IExecutorPool* executor,
-                    TMailboxTable* mailboxTable,
-                    ui64 timePerMailboxTs,
-                    ui32 eventsPerMailbox,
-                    ui64 softDeadlineTs,
-                    TExecutorThreadStats* stats)
+        void Switch(TExecutorThreadStats* stats)
         {
-            Executor = executor;
-            MailboxTable = mailboxTable;
-            TimePerMailboxTs = timePerMailboxTs;
-            EventsPerMailbox = eventsPerMailbox;
-            SoftDeadlineTs = softDeadlineTs;
             Stats = stats;
-            PoolId = Executor ? Executor->PoolId : MaxPools;
-            MailboxCache.Switch(mailboxTable);
-        }
-
-        void SwitchToIdle() {
-            Executor = nullptr;
-            MailboxTable = nullptr;
-            MailboxCache.Switch(nullptr);
-            //Stats = &WorkerStats; // TODO: in actorsystem 2.0 idle stats cannot be related to specific pool
-            PoolId = MaxPools;
         }
     };
 }

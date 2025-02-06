@@ -287,7 +287,7 @@ TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
 void TNodeWarden::StartInvalidGroupProxy() {
     const ui32 groupId = Max<ui32>();
     STLOG(PRI_DEBUG, BS_NODE, NW11, "StartInvalidGroupProxy", (GroupId, groupId));
-    TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(MakeBlobStorageProxyID(groupId), Register(
+    TActivationContext::ActorSystem()->RegisterLocalService(MakeBlobStorageProxyID(groupId), Register(
         CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId));
 }
 
@@ -327,7 +327,7 @@ void TNodeWarden::Bootstrap() {
 
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(BLOBSTORAGE_PROVIDER));
 
-    TActorSystem *actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
+    TActorSystem *actorSystem = TActivationContext::ActorSystem();
     if (auto mon = AppData()->Mon) {
 
         TString name = "NodeWarden";

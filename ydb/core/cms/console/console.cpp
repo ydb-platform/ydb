@@ -143,7 +143,7 @@ void TConsole::ProcessEnqueuedEvents(const TActorContext &ctx)
         LOG_DEBUG(ctx, NKikimrServices::CMS,
                   "TConsole::Dequeue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
                   TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
-        ctx.ExecutorThread.Send(ev.Release());
+        ctx.Send(ev.Release());
         InitQueue.pop_front();
     }
 }

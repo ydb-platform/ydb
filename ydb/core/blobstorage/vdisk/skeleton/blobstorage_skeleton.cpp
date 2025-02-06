@@ -1355,7 +1355,7 @@ namespace NKikimr {
                 actorId = RunInBatchPool(ctx, CreateMonStreamActor(Hull->GetIndexSnapshot(), ev));
                 ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
-            ctx.ExecutorThread.ActorSystem->Send(ev->Forward(actorId));
+            ctx.Send(ev->Forward(actorId));
         }
 
         void Handle(TEvBlobStorage::TEvMonStreamActorDeathNote::TPtr& ev, const TActorContext& /*ctx*/) {
@@ -1969,7 +1969,7 @@ namespace NKikimr {
                 // create Hull
                 Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, HugeBlobCtx, MinHugeBlobInBytes,
                     Db->SkeletonID, Config->BalancingEnableDelete, std::move(*ev->Get()->Uncond),
-                    ctx.ExecutorThread.ActorSystem, Config->BarrierValidation, Db->HugeKeeperID);
+                    TActivationContext::ActorSystem(), Config->BarrierValidation, Db->HugeKeeperID);
                 ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
                     Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
 

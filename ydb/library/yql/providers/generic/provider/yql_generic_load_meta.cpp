@@ -25,16 +25,17 @@ namespace NYql {
     using namespace NKikimr;
     using namespace NKikimr::NMiniKQL;
 
-    struct TGenericTableDescription {
-        using TPtr = std::shared_ptr<TGenericTableDescription>;
-
-        NYql::TGenericDataSourceInstance DataSourceInstance;
-        std::optional<NConnector::NApi::TDescribeTableResponse> Response;
-    };
 
     class TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
+        struct TTableDescription {
+            using TPtr = std::shared_ptr<TTableDescription>;
+
+            NYql::TGenericDataSourceInstance DataSourceInstance;
+            std::optional<NConnector::NApi::TDescribeTableResponse> Response;
+        };
+
         using TMapType =
-            std::unordered_map<TGenericState::TTableAddress, TGenericTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
+            std::unordered_map<TGenericState::TTableAddress, TTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
 
     public:
         TGenericLoadTableMetadataTransformer(TGenericState::TPtr state)
@@ -101,7 +102,7 @@ namespace NYql {
                 handles.emplace_back(promise.GetFuture());
 
                 // preserve data source instance for the further usage
-                auto emplaceIt = Results_.emplace(std::make_pair(item, std::make_shared<TGenericTableDescription>()));
+                auto emplaceIt = Results_.emplace(std::make_pair(item, std::make_shared<TTableDescription>()));
                 auto desc = emplaceIt.first->second;
                 desc->DataSourceInstance = request.data_source_instance();
 
@@ -171,6 +172,7 @@ namespace NYql {
                                 auto row = Build<TCoArgument>(ctx, read.Pos())
                                     .Name("row")
                                     .Done();
+
                                 auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
                                     .Args({row})
                                     .Body<TCoBool>()
@@ -178,10 +180,14 @@ namespace NYql {
                                         .Build()
                                     .Done().Ptr();
 
+                                auto table = Build<TGenTable>(ctx, read.Pos())
+                                    .Name().Value(tableName).Build()
+                                    .Splits<TCoVoid>().Build().Done();
+
                                 ins.first->second = Build<TGenReadTable>(ctx, read.Pos())
                                     .World(read.World())
                                     .DataSource(read.DataSource())
-                                    .Table().Value(tableName).Build()
+                                    .Table(table)
                                     .Columns<TCoVoid>().Build()
                                     .FilterPredicate(emptyPredicate)
                                 .Done().Ptr();

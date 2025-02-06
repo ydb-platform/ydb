@@ -3,7 +3,6 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/partition.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
-#include <ydb/core/persqueue/pq_l2_service.h>
 #include <ydb/core/security/ticket_parser.h>
 
 #include <ydb/core/testlib/fake_scheme_shard.h>
@@ -2599,116 +2598,6 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     // Making sure that the blobs for messages with offsets 2 and 3 are removed
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
-}
-
-TVector<TString> GetTabletKeys(const TTestContext& tc)
-{
-    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-    request->Record.SetCookie(12345);
-
-    auto* readRange = request->Record.AddCmdReadRange();
-    readRange->SetIncludeData(false);
-
-    auto* range = readRange->MutableRange();
-    range->SetFrom("\x00");
-    range->SetIncludeFrom(true);
-    range->SetTo("\xFF");
-    range->SetIncludeTo(true);
-
-    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-
-    TAutoPtr<IEventHandle> handle;
-    TEvKeyValue::TEvResponse* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
-
-    TVector<TString> keys;
-
-    for (const auto& pair : result->Record.GetReadRangeResult(0).GetPair()) {
-        const TString& key = pair.GetKey();
-        if (key.empty() ||
-            ((std::tolower(key.front()) != TKeyPrefix::TypeData) &&
-             (std::tolower(key.front()) != TKeyPrefix::TypeTmpData))) {
-            continue;
-        }
-        keys.push_back(key);
-    }
-
-    return keys;
-}
-
-TVector<TEvPqCache::TEvCacheKeysResponse::TKey> GetPQCacheKeys(const TTestContext& tc)
-{
-    auto request = MakeHolder<TEvPqCache::TEvCacheKeysRequest>();
-
-    tc.Runtime->Send(MakePersQueueL2CacheID(), tc.Edge, request.Release());
-
-    TAutoPtr<IEventHandle> handle;
-    auto* result = tc.Runtime->GrabEdgeEvent<TEvPqCache::TEvCacheKeysResponse>(handle);
-
-    return result->Keys;
-}
-
-void EnsureKeysIsEqual(const TTestContext& tc, size_t seqNo)
-{
-    auto tabletKeys = GetTabletKeys(tc);
-    auto cacheKeys = GetPQCacheKeys(tc);
-
-    UNIT_ASSERT_VALUES_EQUAL_C(tabletKeys.size(), cacheKeys.size(), "seqNo=" << seqNo);
-
-    auto compareBlobId = [](const TEvPqCache::TEvCacheKeysResponse::TKey& lhs,
-                            const TEvPqCache::TEvCacheKeysResponse::TKey& rhs) {
-        auto makeTuple = [](const TEvPqCache::TEvCacheKeysResponse::TKey& v) {
-            return std::make_tuple(v.TabletId,
-                                   v.Partition,
-                                   v.Offset,
-                                   v.PartNo);
-        };
-
-        return makeTuple(lhs) < makeTuple(rhs);
-    };
-
-    std::sort(tabletKeys.begin(), tabletKeys.end());
-    std::sort(cacheKeys.begin(), cacheKeys.end(), compareBlobId);
-
-    for (size_t i = 0; i < tabletKeys.size(); ++i) {
-        const TKey key(tabletKeys[i]);
-        const auto& blobId = cacheKeys[i];
-
-        UNIT_ASSERT_VALUES_EQUAL_C(key.GetPartition().InternalPartitionId, blobId.Partition.InternalPartitionId,
-                                   "seqNo=" << seqNo << ", i=" << i);
-        UNIT_ASSERT_VALUES_EQUAL_C(key.GetOffset(), blobId.Offset,
-                                   "seqNo=" << seqNo << ", i=" << i);
-        UNIT_ASSERT_VALUES_EQUAL_C(key.GetPartNo(), blobId.PartNo,
-                                   "seqNo=" << seqNo << ", i=" << i);
-    }
-}
-
-void WriteToPartition(ui32 partition, unsigned seqNo, unsigned count, size_t size, TTestContext& tc)
-{
-    for (unsigned i = 0; i < count; ++i, ++seqNo) {
-        TVector<std::pair<ui64, TString>> data;
-        TString s{size, 'x'};
-        data.push_back({seqNo, s});
-
-        CmdWrite(partition, "source_id", data, tc);
-
-        EnsureKeysIsEqual(tc, seqNo);
-    }
-}
-
-Y_UNIT_TEST(Foo)
-{
-    TTestContext tc;
-    TFinalizer finalizer(tc);
-    tc.Prepare();
-
-    tc.Runtime->SetScheduledLimit(150);
-    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
-    tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
-
-    PQTabletPrepare({}, {{"consumer", true}}, tc);
-
-    WriteToPartition(0, 1, 252, 100'000, tc);
-    //WriteToPartition(0, 1, 1, 36'789'012, tc);
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

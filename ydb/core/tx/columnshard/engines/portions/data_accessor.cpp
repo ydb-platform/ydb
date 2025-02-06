@@ -747,7 +747,7 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
     for (auto& blob : Blobs) {
         auto chunkedArray = blob.BuildRecordBatch(*Loader);
         if (chunkedArray.IsFail()) {
-            return chunkedArray;
+            return chunkedArray.AddMessageInfo("field: " + GetField()->name());
         }
         builder.AddChunk(chunkedArray.DetachResult());
     }
@@ -799,7 +799,7 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
         }
     } else {
         AFL_VERIFY(ExpectedRowsCount);
-        return loader.ApplyConclusion(Data, *ExpectedRowsCount);
+        return loader.ApplyConclusion(Data, *ExpectedRowsCount).AddMessageInfo(::ToString(loader.GetAccessorConstructor()->GetType()));
     }
 }
 
@@ -814,7 +814,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TPortionDataAccessor::TP
         } else {
             auto conclusion = i.AssembleAccessor();
             if (conclusion.IsFail()) {
-                return conclusion;
+                return TConclusionStatus::Fail(conclusion.GetErrorMessage() + ";" + i.GetName());
             }
             columns.emplace_back(conclusion.DetachResult());
         }

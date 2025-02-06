@@ -58,7 +58,7 @@ public:
         ui32 RecordsCount = 0;
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> Chunks;
         const std::shared_ptr<arrow::DataType> Type;
-
+        bool Finished = false;
     public:
         TBuilder(const std::shared_ptr<arrow::DataType>& type)
             : Type(type) {
@@ -66,12 +66,15 @@ public:
         }
 
         void AddChunk(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arr) {
+            AFL_VERIFY(!Finished);
             AFL_VERIFY(arr->GetDataType()->id() == Type->id())("incoming", arr->GetDataType()->ToString())("main", Type->ToString());
             Chunks.emplace_back(arr);
             RecordsCount += arr->GetRecordsCount();
         }
 
         std::shared_ptr<TCompositeChunkedArray> Finish() {
+            AFL_VERIFY(!Finished);
+            Finished = true;
             return std::shared_ptr<TCompositeChunkedArray>(new TCompositeChunkedArray(std::move(Chunks), RecordsCount, Type));
         }
     };

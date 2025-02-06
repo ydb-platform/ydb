@@ -53,8 +53,7 @@ public:
         : OriginalArray(originalArray)
         , Loader(loader)
         , Remapper(remapper)
-        , SourceIdx(sourceIdx)
-    {
+        , SourceIdx(sourceIdx) {
     }
 
     void Start() {
@@ -69,7 +68,8 @@ public:
             finishRecordActor();
             return;
         }
-        if (recordIndex - CurrentChunkStartPosition >= CurrentSubColumnsArray->GetRecordsCount()) {
+        AFL_VERIFY(CurrentChunkStartPosition <= recordIndex)("pred", CurrentChunkStartPosition)("record", recordIndex);
+        if (recordIndex - CurrentChunkStartPosition >= CurrentChunk->GetArray()->GetRecordsCount()) {
             InitArray(recordIndex);
         }
         AFL_VERIFY(CurrentChunk->GetAddress().Contains(recordIndex));

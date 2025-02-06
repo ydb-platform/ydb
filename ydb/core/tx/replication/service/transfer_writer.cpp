@@ -505,7 +505,7 @@ private:
 
     TString GenerateSql() {
         TStringBuilder sb;
-        sb << Config.GetTransferSpecific().GetTargets(0).GetTransformLambda();
+        sb << TransformLambda;
         sb << "SELECT $__ydb_transfer_lambda(TableRow()) AS " << RESULT_COLUMN_NAME << " FROM Input;\n";
         LOG_D("SQL: " << sb);
         return sb;
@@ -632,7 +632,6 @@ private:
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[TransferWriter]"
-                << TableName
                 << SelfId() << " ";
         }
 
@@ -676,21 +675,18 @@ public:
     }
 
     explicit TTransferWriter(
-        const NKikimrReplication::TReplicationConfig& config,
+        const TString& transformLambda,
         const TPathId& tablePathId,
-        const TString& tableName,
         const TActorId& compileServiceId)
-        : Config(config)
+        : TransformLambda(transformLambda)
         , TablePathId(tablePathId)
-        , TableName(tableName)
         , CompileServiceId(compileServiceId)
         
     {}
 
 private:
-    const NKikimrReplication::TReplicationConfig Config;
+    const TString TransformLambda;
     const TPathId TablePathId;
-    const TString TableName;
     const TActorId CompileServiceId;
     TActorId Worker;
 
@@ -711,10 +707,9 @@ private:
 
 }; // TTransferWriter
 
-IActor* CreateTransferWriter(const NKikimrReplication::TReplicationConfig& config,
-    const TPathId& tablePathId, const TString& tableName,
+IActor* CreateTransferWriter(const TString& transformLambda, const TPathId& tablePathId,
     const TActorId& compileServiceId) {
-    return new TTransferWriter(config, tablePathId, tableName, compileServiceId);
+    return new TTransferWriter(transformLambda, tablePathId, compileServiceId);
 }
 
 }

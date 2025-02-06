@@ -11,8 +11,7 @@ namespace NKikimr {
 
 namespace NKikimr::NReplication::NService {
 
-IActor* CreateTransferWriter(const NKikimrReplication::TReplicationConfig& config,
-    const TPathId& tablePathId, const TString& tableName,
+IActor* CreateTransferWriter(const TString& transformLambda, const TPathId& tablePathId,
     const TActorId& compileServiceId);
 
 }

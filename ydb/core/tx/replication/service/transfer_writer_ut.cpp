@@ -34,23 +34,20 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
             },
         }));
 
-        NKikimrReplication::TReplicationConfig config;
-        auto* target = config.MutableTransferSpecific()->AddTargets();
-        target->SetTransformLambda(R"(
+        auto lambda = R"(
             $__ydb_transfer_lambda = ($x) -> {
                 RETURN <|
                     key:CAST($x._offset As Uint32)
                     , value:CAST($x._data AS Utf8)
                 |>;
             };
-        )");
+        )";
 
         const TPathId tablePathId = env.GetPathId("/Root/Table");
-        const TString tableName = "/Root/Table";
 
         auto compiler = env.GetRuntime().Register(NFq::NRowDispatcher::CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>()));
 
-        auto writer = env.GetRuntime().Register(CreateTransferWriter(config, tablePathId, tableName, compiler));
+        auto writer = env.GetRuntime().Register(CreateTransferWriter(lambda, tablePathId, compiler));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData("TestSource", {

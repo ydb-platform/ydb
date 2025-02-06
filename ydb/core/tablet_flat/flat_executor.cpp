@@ -4262,6 +4262,10 @@ NMetrics::TResourceMetrics* TExecutor::GetResourceMetrics() const {
     return ResourceMetrics.Get();
 }
 
+TExecutorCounters* TExecutor::GetCounters() {
+    return Counters.Get();
+}
+
 void TExecutor::ReadResourceProfile() {
     if (Database) {
         auto type = static_cast<TMemory::ETablet>(Owner->TabletType());

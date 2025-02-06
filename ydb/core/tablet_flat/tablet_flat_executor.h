@@ -27,6 +27,7 @@ class TTransactionContext;
 class TExecutor;
 struct TPageCollectionTxEnv;
 struct TSeat;
+class TExecutorCounters;
 
 class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend class TExecutor;
@@ -622,6 +623,7 @@ namespace NFlatExecutorSetup {
 
         virtual const TExecutorStats& GetStats() const = 0;
         virtual NMetrics::TResourceMetrics* GetResourceMetrics() const = 0;
+        virtual TExecutorCounters* GetCounters() = 0;
 
         /* This stange looking functionallity probably should be dropped */
 

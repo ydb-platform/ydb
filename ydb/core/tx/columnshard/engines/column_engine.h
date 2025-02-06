@@ -74,7 +74,7 @@ public:
         i64 Rows = 0;
         i64 Bytes = 0;
         i64 RawBytes = 0;
-        std::vector<i64> BytesByChannel;
+        THashMap<ui32, i64> BytesByChannel;
 
         TString DebugString() const {
             return TStringBuilder() << "portions=" << Portions << ";blobs=" << Blobs << ";rows=" << Rows << ";bytes=" << Bytes
@@ -93,9 +93,8 @@ public:
             result.Rows = kff * Rows;
             result.Bytes = kff * Bytes;
             result.RawBytes = kff * RawBytes;
-            result.BytesByChannel.reserve(BytesByChannel.size());
-            for (i64 channelBytes: BytesByChannel) {
-                result.BytesByChannel.push_back(kff * channelBytes);
+            for (const auto& [channel, bytes] : BytesByChannel) {
+                result.BytesByChannel[channel] = bytes * kff;
             }
             return result;
         }
@@ -110,11 +109,8 @@ public:
             Rows = SumVerifiedPositive(Rows, item.Rows);
             Bytes = SumVerifiedPositive(Bytes, item.Bytes);
             RawBytes = SumVerifiedPositive(RawBytes, item.RawBytes);
-            if (BytesByChannel.size() < item.BytesByChannel.size()) {
-                BytesByChannel.resize(item.BytesByChannel.size());
-            }
-            for (ui32 ch = 0; ch < item.BytesByChannel.size(); ch++) {
-                BytesByChannel[ch] = SumVerifiedPositive(BytesByChannel[ch], item.BytesByChannel[ch]);
+            for (const auto& [channel, bytes] : item.BytesByChannel) {
+                BytesByChannel[channel] = SumVerifiedPositive(BytesByChannel[channel], bytes);
             }
             return *this;
         }

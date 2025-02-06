@@ -92,10 +92,8 @@ TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo) {
     deltaStats.RawBytes = portionInfo.GetTotalRawBytes();
     deltaStats.Blobs = portionInfo.GetBlobIdsCount();
     deltaStats.Portions = 1;
-    deltaStats.BytesByChannel.resize(portionInfo.GetBlobIdsCount());
     for (const auto& blob : portionInfo.GetBlobIds()) {
         const ui32 channel = blob.Channel();
-        AFL_VERIFY(deltaStats.BytesByChannel.size() > channel)("channel", channel)("size", deltaStats.BytesByChannel.size());
         deltaStats.BytesByChannel[channel] += blob.BlobSize();
     }
     return deltaStats;

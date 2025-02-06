@@ -16,14 +16,11 @@ private:
     void FillPortionStats(::NKikimrTableStats::TTableStats& to, const NOlap::TColumnEngineStats::TPortionsStats& from) const {
         to.SetRowCount(from.Rows);
         ui64 bytesInBlobStorage = 0;
-        for (ui32 ch = 0; ch < from.BytesByChannel.size(); ch++) {
-            ui64 dataSize = from.BytesByChannel[ch];
-            if (dataSize > 0) {
-                auto item = to.AddChannels();
-                item->SetChannel(ch);
-                item->SetDataSize(dataSize);
-                bytesInBlobStorage += dataSize;
-            }
+        for (const auto& [channel, bytes] : from.BytesByChannel) {
+            auto item = to.AddChannels();
+            item->SetChannel(channel);
+            item->SetDataSize(bytes);
+            bytesInBlobStorage += bytes;
         }
         to.SetDataSize(bytesInBlobStorage);
     }

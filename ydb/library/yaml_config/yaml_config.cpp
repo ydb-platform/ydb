@@ -41,36 +41,40 @@ void ResolveAndParseYamlConfig(
     TString* resolvedYamlConfig,
     TString* resolvedJsonConfig)
 {
-    auto tree = NFyaml::TDocument::Parse(yamlConfig);
-
-    if (databaseConfig) {
-        auto d = NFyaml::TDocument::Parse(*databaseConfig);
-        NYamlConfig::AppendDatabaseConfig(tree, d);
-    }
-
-    for (auto& [_, config] : volatileYamlConfigs) {
-        auto d = NFyaml::TDocument::Parse(config);
-        NYamlConfig::AppendVolatileConfigs(tree, d);
-    }
-
-    TSet<NYamlConfig::TNamedLabel> namedLabels;
-    for (auto& [name, label] : labels) {
-        namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
-    }
-
-    auto config = NYamlConfig::Resolve(tree, namedLabels);
-
-    if (resolvedYamlConfig) {
-        TStringStream resolvedYamlConfigStream;
-        resolvedYamlConfigStream << config.second;
-        *resolvedYamlConfig = resolvedYamlConfigStream.Str();
-    }
-
     TStringStream resolvedJsonConfigStream;
-    resolvedJsonConfigStream << NFyaml::TJsonEmitter(config.second);
+    if (yamlConfig) {
+        auto tree = NFyaml::TDocument::Parse(yamlConfig);
 
-    if (resolvedJsonConfig) {
-        *resolvedJsonConfig = resolvedJsonConfigStream.Str();
+        if (databaseConfig) {
+            auto d = NFyaml::TDocument::Parse(*databaseConfig);
+            NYamlConfig::AppendDatabaseConfig(tree, d);
+        }
+
+        for (auto& [_, config] : volatileYamlConfigs) {
+            auto d = NFyaml::TDocument::Parse(config);
+            NYamlConfig::AppendVolatileConfigs(tree, d);
+        }
+
+        TSet<NYamlConfig::TNamedLabel> namedLabels;
+        for (auto& [name, label] : labels) {
+            namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
+        }
+
+        auto config = NYamlConfig::Resolve(tree, namedLabels);
+
+        if (resolvedYamlConfig) {
+            TStringStream resolvedYamlConfigStream;
+            resolvedYamlConfigStream << config.second;
+            *resolvedYamlConfig = resolvedYamlConfigStream.Str();
+        }
+
+        resolvedJsonConfigStream << NFyaml::TJsonEmitter(config.second);
+
+        if (resolvedJsonConfig) {
+            *resolvedJsonConfig = resolvedJsonConfigStream.Str();
+        }
+    } else {
+        resolvedJsonConfigStream << "{}";
     }
 
     NJson::TJsonValue json;

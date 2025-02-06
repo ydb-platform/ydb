@@ -25,7 +25,36 @@ public:
         }
     }
 };
+
 }   // namespace
+
+std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoISlice(const ui32 offset, const ui32 count) const {
+    ui32 slicedRecordsCount = 0;
+    ui32 currentIndex = offset;
+    std::optional<IChunkedArray::TFullChunkedArrayAddress> arrAddress;
+    std::vector<std::shared_ptr<IChunkedArray>> chunks;
+    while (slicedRecordsCount < count) {
+        arrAddress = GetArray(arrAddress, currentIndex, nullptr);
+        const ui32 localIndex = arrAddress->GetAddress().GetLocalIndex(currentIndex);
+        const ui32 localCount = (arrAddress->GetArray()->GetRecordsCount() + slicedRecordsCount < count)
+                                    ? arrAddress->GetArray()->GetRecordsCount()
+                                    : (arrAddress->GetArray()->GetRecordsCount() + slicedRecordsCount - count);
+
+        if (localIndex == 0 && localCount == arrAddress->GetArray()->GetRecordsCount()) {
+            chunks.emplace_back(arrAddress->GetArray());
+        } else {
+            chunks.emplace_back(arrAddress->GetArray()->ISlice(localIndex, localCount));
+        }
+        slicedRecordsCount += localCount;
+        currentIndex += localCount;
+    }
+    AFL_VERIFY(slicedRecordsCount == count);
+    if (chunks.size() == 1) {
+        return chunks.front();
+    } else {
+        return std::make_shared<TCompositeChunkedArray>(std::move(chunks), count, GetDataType());
+    }
+}
 
 IChunkedArray::TLocalDataAddress TCompositeChunkedArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {

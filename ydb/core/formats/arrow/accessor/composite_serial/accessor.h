@@ -1,12 +1,14 @@
 #pragma once
 #include <ydb/core/formats/arrow/save_load/loader.h>
+
 #include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/library/formats/arrow/accessor/composite/accessor.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
-class TDeserializeChunkedArray: public NArrow::NAccessor::IChunkedArray {
+class TDeserializeChunkedArray: public ICompositeChunkedArray {
 private:
-    using TBase = NArrow::NAccessor::IChunkedArray;
+    using TBase = ICompositeChunkedArray;
 
 public:
     class TChunk {
@@ -48,10 +50,6 @@ protected:
         AFL_VERIFY(false);
         return 0;
     }
-    virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 /*offset*/, const ui32 /*count*/) const override {
-        AFL_VERIFY(false);
-        return nullptr;
-    }
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
@@ -72,6 +70,7 @@ protected:
         AFL_VERIFY(false);
         return nullptr;
     }
+
 public:
     TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, std::vector<TChunk>&& chunks)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())

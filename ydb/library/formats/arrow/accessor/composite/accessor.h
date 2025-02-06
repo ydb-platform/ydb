@@ -4,9 +4,18 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-class TCompositeChunkedArray: public IChunkedArray {
+class ICompositeChunkedArray: public NArrow::NAccessor::IChunkedArray {
 private:
-    using TBase = IChunkedArray;
+    using TBase = NArrow::NAccessor::IChunkedArray;
+    virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override final;
+
+public:
+    using TBase::TBase;
+};
+
+class TCompositeChunkedArray: public ICompositeChunkedArray {
+private:
+    using TBase = ICompositeChunkedArray;
 
 private:
     std::vector<std::shared_ptr<IChunkedArray>> Chunks;
@@ -19,10 +28,6 @@ protected:
     virtual ui32 DoGetValueRawBytes() const override {
         AFL_VERIFY(false);
         return 0;
-    }
-    virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 /*offset*/, const ui32 /*count*/) const override {
-        AFL_VERIFY(false);
-        return nullptr;
     }
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
@@ -41,13 +46,13 @@ protected:
     }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
 
+public:
     TCompositeChunkedArray(std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& chunks, const ui32 recordsCount,
         const std::shared_ptr<arrow::DataType>& type)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, type)
         , Chunks(std::move(chunks)) {
     }
 
-public:
     class TBuilder {
     private:
         ui32 RecordsCount = 0;

@@ -97,7 +97,7 @@ struct TSetup {
             FunctionRegistry = mutableRegistry;
         }
 
-        Alloc.Ref().ForcefullySetMemoryYellowZone(EnableSpilling);
+        Alloc.Ref().ForcefullySetMemoryYellowZone(false);
 
         RandomProvider = CreateDeterministicRandomProvider(1);
         TimeProvider = CreateDeterministicTimeProvider(10000000);

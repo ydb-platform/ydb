@@ -8,15 +8,16 @@
 
 ### Функциональность
 
-* Добавлена поддержка [потоков изменений (changefeeds)](./concepts/cdc.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `ydb tools dump` и `ydb tools restore`. В результате появились изменения в файле бэкапа: для таблиц с потоками изменений создаётся одноимённая директория на каждый поток изменений. Каждая такая директория содержит два файла: `changefeed_description.pb` с описанием потока изменений и `topic_description.pb` с информацией о связанном топике.
+* Добавлена поддержка [потоков изменений (changefeeds)](./concepts/cdc.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `ydb tools dump` и `ydb tools restore`.
 * Добавлена рекомендация с текстом `CREATE TABLE` при схемной ошибке во время выполнения [команды](./reference/ydb-cli/export-import/import-file.md) `ydb import file csv`.
 * Добавлен вывод статистики для текущего процесса при выполнении [команды](./reference/ydb-cli/commands/workload/index.md) `ydb workload`.
 * Добавлен текст запроса к сообщению, если запрос завершился ошибкой при выполнении [команды](./reference/ydb-cli/commands/workload/index.md) `ydb workload run`.
 * Добавлено сообщение в случае ошибки истечения глобального таймаута при выполнении [команды](./reference/ydb-cli/commands/workload/index.md) `ydb workload run`.
-* Внесены временные изменения в экспериментальной команде `ydb admin storage`.
 * **_(Требуется сервер v25.1+)_** Добавлена поддержка [представлений (VIEW)](./concepts/datamodel/view.md) при выполнении операций `ydb export s3` и `ydb import s3`. Представления экспортируются как YQL-выражение `CREATE VIEW`, которое выполняется при импорте.
 * **_(Требуется сервер v25.1+)_** Добавлена опция `--skip-checksum-validation` для [команды](./reference/ydb-cli/export-import/import-s3.md) `ydb import s3`, позволяющая отключить валидацию контрольной суммы на стороне сервера.
-* **_(Требуется сервер v25.1+)_** Добавлены новые экспериментальные опции `--chain-length`, `--chain-work-duration`, `--no-tail-chain` для команды `ydb debug ping`.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `ydb debug ping` добавлены новые опции: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `ydb admin storage fetch` добавлены новые опции: `--dedicated-storage-section` and `--dedicated-cluster-section`.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `ydb admin storage replace` добавлены новые опции: `--filename`, `--dedicated-cluster-yaml`, `--dedicated-storage-yaml`, `--enable-dedicated-storage-section` and `--disable-dedicated-storage-section`.
 
 ### Исправления ошибок
 
@@ -37,6 +38,7 @@
 * [Команда](./reference/ydb-cli/export-import/import-file.md) `ydb import file csv` теперь сохраняет прогресс выполнения. Повторный запуск команды импорта продолжится с той строки, на которой она была прервана.
 * В командах `ydb workload kv` и `ydb workload stock` значение параметра `--executer` по умолчанию изменено на "generic", благодаря чему они больше не используют устаревшую инфраструктуру выполнения запросов.
 * Изменен формат загрузки данных в таблицы для нагрузочных тестов `ydb workload` с CSV на Parquet.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена команда `ydb admin storage` с подкомандами `fetch` и `replace` для управления конфигурацией хранилища сервера.
 
 ### Изменения с потерей обратной совместимости
 

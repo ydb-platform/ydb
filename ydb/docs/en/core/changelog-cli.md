@@ -6,15 +6,16 @@ Released on February 5, 2025. To update to version **2.19.0**, select the [Downl
 
 ### Features
 
-* Added [changefeeds](./concepts/cdc.md) support in `ydb tools dump` and `ydb tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md). As a result, there are changes in the backup file structure: for tables with changefeeds, a subdirectory is created for each changefeed, named after the changefeed. This subdirectory contains two files: `changefeed_description.pb`, which contains the changefeed description, and `topic_description.pb`, which contains information about the underlying topic.
+* Added [changefeeds](./concepts/cdc.md) support in `ydb tools dump` and `ydb tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
 * Added `CREATE TABLE` text suggestion on schema error during `ydb import file csv` [command](./reference/ydb-cli/export-import/import-file.md).
 * Added statistics output on the current progress of the query in the `ydb workload` [command](./reference/ydb-cli/commands/workload/index.md).
 * Added query text to the error message if a query fails in the `ydb workload run` [command](./reference/ydb-cli/commands/workload/index.md).
 * Added a message if the global timeout expired in the `ydb workload run` [command](./reference/ydb-cli/commands/workload/index.md).
-* Added some temporary changes to the experimental `ydb admin storage` command.
 * **_(Requires server v25.1+)_** Added [views](./concepts/datamodel/view.md) support in `ydb export s3` and `ydb import s3`. Views are exported as `CREATE VIEW` YQL statements, which are executed on import.
 * **_(Requires server v25.1+)_** Added the `--skip-checksum-validation` option to the `ydb import s3` [command](./reference/ydb-cli/export-import/import-s3.md) to skip server-side checksum validation.
-* **_(Requires server v25.1+)_** Added new experimental options for the `ydb debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added new options for the `ydb debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added new options for the `ydb admin storage fetch` command: `--dedicated-storage-section` and `--dedicated-cluster-section`.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added new options for `ydb admin storage replace` command: `--filename`, `--dedicated-cluster-yaml`, `--dedicated-storage-yaml`, `--enable-dedicated-storage-section` and `--disable-dedicated-storage-section`.
 
 ### Bug fixes
 
@@ -35,6 +36,7 @@ Released on December 24, 2024. To update to version **2.18.0**, select the [Down
 * The `ydb import file csv` [command](./reference/ydb-cli/export-import/import-file.md) now saves the import progress. Relaunching the import command will resume the process from the row where it was interrupted.
 * In the `ydb workload kv` and `ydb workload stock` commands, the default value of the `--executer` option has been changed to `generic`, which makes them no longer rely on the legacy query execution infrastructure.
 * Replaced the CSV format with Parquet for filling tables in `ydb workload` benchmarks.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added new `ydb admin storage` command with `fetch` and `replace` subcommands to manage server storage configuration.
 
 ### Backward incompatible changes
 

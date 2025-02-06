@@ -519,10 +519,11 @@ bool TColumnShard::ProgressMoveTable(const NKikimrTxColumnShard::TMoveTable& pro
     const ui64 dstPathId = proto.GetDstPathId();
     AFL_VERIFY(!InsertTable->HasCommittedByPathId(srcPathId));
     if (!TablesManager.HasTable(dstPathId)) {
+
         TablesManager.CloneTable(srcPathId, dstPathId, version, db, Tiers);
     }
     if (!MoveTableDataLock) {
-        MoveTableDataLock = DataLocksManager->RegisterLock(std::make_shared<NOlap::NDataLocks::TListTablesLock>(TString("MOVE_TABLE::") + ToString(srcPathId), THashSet<ui64>{srcPathId}));
+        MoveTableDataLock = DataLocksManager->RegisterLock(std::make_shared<NOlap::NDataLocks::TListTablesLock>(TString("MOVE_TABLE::") + ToString(srcPathId), THashSet<ui64>{srcPathId}, NOlap::NDataLocks::ELockCategory::Tables));
     }
     if (!TablesManager.GetPrimaryIndex()->ProgressMoveTableData(srcPathId, dstPathId, txc.DB)) {
         return false;
@@ -533,9 +534,11 @@ bool TColumnShard::ProgressMoveTable(const NKikimrTxColumnShard::TMoveTable& pro
     MoveTableDataLock.reset();
     TBlobGroupSelector dsGroupSelector(Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, srcPathId);
 
-    TryAbortWrites(db, dbTable, std::move(writesToAbort));
+    // todo(avevad):
+    // THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, srcPathId);
+    // TryAbortWrites(db, dbTable, std::move(writesToAbort));
+
     return true;
 }
 
@@ -1121,7 +1124,7 @@ void TColumnShard::SetupCleanupTables() {
         pathIdsEmptyInInsertTable.emplace(i);
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(TablesManager.GetPathsToDrop());
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(TablesManager.GetPathsToDrop(GetMinReadSnapshot()));
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;

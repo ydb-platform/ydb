@@ -27,9 +27,9 @@ TLongTxTransactionOperator::TProposeResult TLongTxTransactionOperator::DoStartPr
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
                     TStringBuilder() << "Commit TxId# " << GetTxId() << " references WriteId# " << (ui64)writeId << " declined through sharding deprecated");
             }
-            if (owner.TablesManager.IsNewDataTxLocked(pathId)) {
+            if (owner.TablesManager.IsNewDataTxLocked(inserted->GetPathId())) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
-                    TStringBuilder() << "Commit TxId# " << GetTxId() << " references WriteId# " << (ui64)writeId << " with PathId" << pathId << " which is locked");
+                    TStringBuilder() << "Commit TxId# " << GetTxId() << " references WriteId# " << (ui64)writeId << " with PathId" << inserted->GetPathId() << " which is locked");
             }
         }
     }

@@ -62,9 +62,10 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             }
             if (table.IsDropped()) {
                 if (const auto& movedTo = table.GetOptionalMovedToPathId()) {
+                    // todo(avevad):
                     PathToMove = std::pair{table.GetPathId(), *movedTo};
                 } else {
-                    PathsToDrop.insert(table.GetPathId());
+                    AFL_VERIFY(PathsToDrop[table.GetDropVersionVerified()].emplace(table.GetPathId()).second);
                 }
             }
 
@@ -148,9 +149,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                     vIt->second = version;
                 }
             }
-            table.AddVersion(version);
             table.UpdateVersion(version, versionInfo);
-            versionsInfo.AddVersion(version, versionInfo);
             if (!rowset.Next()) {
                 timer.AddLoadingFail();
                 return false;
@@ -263,11 +262,13 @@ void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& ver
     Schema::SaveSchemaPresetDropVersion(db, presetId, version);
 }
 
-void TTablesManager::CloneTable(const ui64 srcPathId, const ui64 dstPathId, const NOlap::TSnapshot& snapshot, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager> tiers) {
+//todo(avevad): unused tiers?
+void TTablesManager::CloneTable(const ui64 srcPathId, const ui64 dstPathId, const NOlap::TSnapshot& snapshot, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager> /*tiers*/) {
     AFL_VERIFY(!Tables.contains(dstPathId));
     const auto srcTable = Tables.FindPtr(srcPathId);
     AFL_VERIFY(srcTable);
-    AFL_VERIFY(srcTable->GetTieringUsage().Empty());
+    // TODO(avevad):
+    // AFL_VERIFY(srcTable->GetTieringUsage().Empty());
     AFL_VERIFY(!srcTable->IsDropped());
     AFL_VERIFY(!srcTable->GetVersions().empty());
 
@@ -276,7 +277,7 @@ void TTablesManager::CloneTable(const ui64 srcPathId, const ui64 dstPathId, cons
     TTableInfo dstTable(dstPathId, {}, srcTable->GetVersionInfo()); //and the initial for dst table
 
     RegisterTable(std::move(dstTable), db);
-    AddTableVersion(dstPathId, snapshot, srcTable->GetVersionInfo(), db, tiers);
+    AddTableVersion(dstPathId, snapshot, srcTable->GetVersionInfo(), std::nullopt, db);
 
     // Schema::SaveTableInfo(db, srcTable->GetPathId(), srcTable->GetTieringUsage());
     // AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("path_id", dstPathId);

@@ -11,7 +11,7 @@ bool TInsertTableInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext
     NIceDb::TNiceDb db(txc.DB);
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
+    auto localInsertTable = std::make_unique<NOlap::TInsertTable>(std::shared_ptr<NSubscriber::TManager>{});
     for (auto&& i : Self->TablesManager.GetTables()) {
         localInsertTable->RegisterPathInfo(i.first);
     }

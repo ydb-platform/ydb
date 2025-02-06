@@ -628,7 +628,6 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
     return db.LoadCounters(callback);
 }
 
-}   // namespace NKikimr::NOlap
 bool TColumnEngineForLogs::ProgressMoveTableData(const ui64 srcPathId, const ui64 dstPathId, NTable::TDatabase& db) {
     Y_UNUSED(db);
     auto srcGranule = GranulesStorage->GetGranuleOptional(srcPathId);
@@ -647,8 +646,9 @@ bool TColumnEngineForLogs::ProgressMoveTableData(const ui64 srcPathId, const ui6
         AFL_VERIFY(portionInfo->GetPathId() == srcPathId);
         portionInfo->SetPathId(dstPathId);
         auto schemaPtr = GetVersionedIndex().GetLastSchema();
-        portionInfo->SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), true);
-        dstGranule->UpsertPortion(*portionInfo);
+        // todo(avevad):
+        // portionInfo->SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), true);
+        //dstGranule->UpsertPortion(*portionInfo);
         ids.push_back(id);
         ++count;
         if (count == ChangeAtOnceLimit) {

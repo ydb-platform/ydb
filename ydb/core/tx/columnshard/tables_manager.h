@@ -121,8 +121,8 @@ public:
         Versions.insert(snapshot);
     }
 
-    void SetMoveVersion(const NOlap::TSnapshot& version, ui64 newPathId) {
-        DropVersion = version;
+    void SetMoveVersion(const NOlap::TSnapshot& /*version*/, ui64 newPathId) {
+        //DropVersion = version;
         MovedToPathId = newPathId;
     }
 

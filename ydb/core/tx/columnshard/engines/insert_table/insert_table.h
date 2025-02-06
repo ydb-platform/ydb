@@ -85,7 +85,7 @@ public:
         return Summary.GetInserted();
     }
     bool HasCommittedByPathId(const ui64 pathId) {
-        return !Summary.GetPathInfo(pathId).GetCommitted().empty();
+        return !Summary.GetPathInfo().at(pathId).GetCommitted().empty();
     }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {
         return Summary.GetCountersPrepared();

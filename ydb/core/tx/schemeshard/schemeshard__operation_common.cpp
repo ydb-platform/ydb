@@ -665,7 +665,7 @@ bool CollectSchemaChanged(
     return false;
 }
 
-bool NTableState::CollectSchemaChanged(
+bool CollectSchemaChanged(
         const TOperationId& operationId,
         const TEvColumnShard::TEvProposeTransactionResult::TPtr& ev,
         TOperationContext& context)

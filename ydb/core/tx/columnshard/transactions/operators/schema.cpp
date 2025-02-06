@@ -178,38 +178,38 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             if (!owner.TablesManager.HasTable(srcPathId)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No such table");
             }
-            if (!owner.TablesManager.GetTable(srcPathId).GetTieringUsage().empty()) {
-                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Tiering is on");
-            }
+            // TODO(avevad):
+            // if (!owner.TablesManager.GetTable(srcPathId).GetTieringUsage().empty()) {
+            //    return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Tiering is on");
+            // }
             if (owner.TablesManager.HasTable(dstPathId)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Rename to existing table");
             }
             auto txIds = owner.GetProgressTxController().GetTxs();  //TODO GetTxsByPathId(srcPathId) #8650
             AFL_VERIFY(!txIds.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIds));
-            waitOnPropose = std::make_shared<TWaitTransactions>(
-                std::move(txIds),
-                [srcPathId, this, &owner](){
-                    auto txIds = owner.GetProgressTxController().GetTxs();
-                    AFL_VERIFY(txIds.empty() || (txIds.size() == 1 && txIds.contains(GetTxId())))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIds));
-                    THashSet<TWriteId> writeIds{TWriteId{199}};
-                    auto hasDataToIndex = owner.InsertTable->HasCommittedByPathId(srcPathId);
-                    owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitIndexation>(
-                        hasDataToIndex ? std::optional{srcPathId} : std::nullopt,
-                        [this, &owner]() {
-                            owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
-                        }
-                    ));
-                }             
-            );
+            // waitOnPropose = std::make_shared<TWaitTransactions>(
+            //     std::move(txIds),
+            //     [srcPathId, this, &owner](){
+            //         auto txIds = owner.GetProgressTxController().GetTxs();
+            //         AFL_VERIFY(txIds.empty() || (txIds.size() == 1 && txIds.contains(GetTxId())))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIds));
+            //         auto hasDataToIndex = owner.InsertTable->HasCommittedByPathId(srcPathId);
+            //         owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitIndexation>(
+            //             hasDataToIndex ? std::optional{srcPathId} : std::nullopt,
+            //             [this, &owner]() {
+            //                 owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
+            //             }
+            //         ));
+            //     }
+            // ); // todo(avevad)
             owner.TablesManager.StartMovingTable(srcPathId, dstPathId);
             break;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
-    if (waitOnPropose && !waitOnPropose->IsFinished()) {
-        WaitOnPropose = std::move(waitOnPropose);
-    }
+    // if (waitOnPropose && !waitOnPropose->IsFinished()) {
+    //     WaitOnPropose = std::move(waitOnPropose);
+    // } // todo(avevad)
 
     owner.UpdateSchemaSeqNo(seqNo, txc);
     return TProposeResult();

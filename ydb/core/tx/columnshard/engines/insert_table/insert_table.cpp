@@ -109,8 +109,8 @@ void TInsertTable::EraseCommittedOnComplete(const TCommittedData& data) {
         RemoveBlobLinkOnComplete(data.GetBlobRange().BlobId);
     }
     //TODO improve me
-    if (!HasCommittedByPathId(data.PathId)) {
-        Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventIndexationCompleted>(data.PathId));
+    if (!HasCommittedByPathId(data.GetPathId())) {
+        Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventIndexationCompleted>(data.GetPathId()));
     }
 }
 

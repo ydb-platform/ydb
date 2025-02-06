@@ -2057,8 +2057,8 @@ void TPartition::RunPersist() {
 
 void TPartition::TryAddDeleteHeadKeysToPersistRequest()
 {
-    while (!DeletedHeadKeys.empty()) {
-        auto& k = DeletedHeadKeys.back();
+    while (!DeletedKeys.empty()) {
+        auto& k = DeletedKeys.back();
 
         auto* cmd = PersistRequest->Record.AddCmdDeleteRange();
         auto* range = cmd->MutableRange();
@@ -2068,7 +2068,7 @@ void TPartition::TryAddDeleteHeadKeysToPersistRequest()
         range->SetTo(k.data(), k.size());
         range->SetIncludeTo(true);
 
-        DeletedHeadKeys.pop_back();
+        DeletedKeys.pop_back();
     }
 }
 
@@ -2104,7 +2104,7 @@ TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
 
     auto deleter = [this](TBlobKeyToken* token) {
         if (token->NeedDelete) {
-            DeletedHeadKeys.emplace_back(std::move(token->Key));
+            DeletedKeys.emplace_back(std::move(token->Key));
         }
         delete token;
     };

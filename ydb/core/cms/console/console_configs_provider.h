@@ -272,7 +272,7 @@ private:
     TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
     THashMap<TString, TDatabaseYamlConfig> DatabaseYamlConfigs;
-    ui64 YamlConfigVersion = 0;
+    ui64 MainYamlConfigVersion = 0;
     TMap<ui64, ui64> VolatileYamlConfigHashes;
 };
 

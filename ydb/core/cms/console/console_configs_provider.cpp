@@ -649,7 +649,7 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
 
     bool yamlChanged = false;
 
-    if (subscription->YamlConfigVersion != YamlConfigVersion) {
+    if (subscription->MainYamlConfigVersion != MainYamlConfigVersion) {
         yamlChanged = true;
     }
 
@@ -683,8 +683,8 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
             std::move(appConfig),
             affectedKinds);
 
-    if (subscription->YamlConfigVersion != YamlConfigVersion) {
-        subscription->YamlConfigVersion = YamlConfigVersion;
+    if (subscription->MainYamlConfigVersion != MainYamlConfigVersion) {
+        subscription->MainYamlConfigVersion = MainYamlConfigVersion;
         request->Record.SetMainYamlConfig(MainYamlConfig);
     } else {
         request->Record.SetMainYamlConfigNotChanged(true);
@@ -758,7 +758,7 @@ void TConfigsProvider::DumpStateHTML(IOutputStream &os) const {
                            << "  ConfigVersions: " << s->LastProvided.ShortDebugString() << Endl
                            << "  ServeYaml: " << s->ServeYaml << Endl
                            << "  YamlApiVersion: " << s->YamlApiVersion << Endl
-                           << "  YamlVersion: " << s->YamlConfigVersion << ".[";
+                           << "  YamlVersion: " << s->MainYamlConfigVersion << ".[";
                         bool first = true;
                         for (auto &[id, hash] : s->VolatileYamlConfigHashes) {
                             os << (first ? "" : ",") << id << "." << hash;
@@ -818,7 +818,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
     if (rec.HasServeYaml() && rec.GetServeYaml() && rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1) {
         subscription->ServeYaml = rec.GetServeYaml();
         subscription->YamlApiVersion = rec.GetYamlApiVersion();
-        subscription->YamlConfigVersion = rec.GetYamlVersion();
+        subscription->MainYamlConfigVersion = rec.GetMainYamlVersion();
         for (auto &volatileConfigVersion : rec.GetVolatileYamlVersion()) {
             subscription->VolatileYamlConfigHashes[volatileConfigVersion.GetId()] = volatileConfigVersion.GetHash();
         }
@@ -1241,7 +1241,7 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const T
         MainYamlConfig = ev->Get()->MainYamlConfig;
         VolatileYamlConfigs.clear();
 
-        YamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
+        MainYamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
         VolatileYamlConfigHashes.clear();
 
         for (auto& [id, config] : ev->Get()->VolatileYamlConfigs) {
@@ -1275,8 +1275,8 @@ void TConfigsProvider::UpdateConfig(TInMemorySubscription::TPtr subscription,
             NKikimrConfig::TAppConfig{},
             THashSet<ui32>{});
 
-    if (subscription->YamlConfigVersion != YamlConfigVersion) {
-        subscription->YamlConfigVersion = YamlConfigVersion;
+    if (subscription->MainYamlConfigVersion != MainYamlConfigVersion) {
+        subscription->MainYamlConfigVersion = MainYamlConfigVersion;
         request->Record.SetMainYamlConfig(MainYamlConfig);
     } else {
         request->Record.SetMainYamlConfigNotChanged(true);

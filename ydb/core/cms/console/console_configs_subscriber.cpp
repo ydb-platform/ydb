@@ -64,7 +64,7 @@ public:
         , VolatileYamlConfigs(volatileYamlConfigs)
     {
         if (ServeYaml && !MainYamlConfig.empty()) {
-            YamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
+            MainYamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
             for (auto &[id, config] : VolatileYamlConfigs) {
                 VolatileYamlConfigHashes[id] = THash<TString>()(config);
             }
@@ -226,7 +226,7 @@ public:
             if (!(rec.HasMainYamlConfigNotChanged() && rec.GetMainYamlConfigNotChanged())) {
                 if (rec.HasMainYamlConfig()) {
                     MainYamlConfig = rec.GetMainYamlConfig();
-                    YamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
+                    MainYamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
                 }
 
                 notChanged = false;
@@ -375,7 +375,7 @@ private:
 
         if (ServeYaml) {
             if (!MainYamlConfig.empty()) {
-                request->Record.SetYamlVersion(YamlConfigVersion);
+                request->Record.SetMainYamlVersion(MainYamlConfigVersion);
                 for (auto &[id, hash] : VolatileYamlConfigHashes) {
                     auto *item = request->Record.AddVolatileYamlVersion();
                     item->SetId(id);
@@ -419,7 +419,7 @@ private:
     ui64 Version;
     TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
-    ui64 YamlConfigVersion = 0;
+    ui64 MainYamlConfigVersion = 0;
     TMap<ui64, ui64> VolatileYamlConfigHashes;
 
     TString Tenant;

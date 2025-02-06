@@ -489,9 +489,10 @@ message TConfigSubscriptionRequest {
     repeated uint32 ConfigItemKinds = 3;
     optional NKikimrConfig.TConfigVersion KnownVersion = 4;
     optional bool ServeYaml = 5;
-    optional uint64 YamlVersion = 6;
+    optional uint64 MainYamlVersion = 6;
     repeated TVolatileYamlConfigVersion VolatileYamlVersion = 7;
     optional uint32 YamlApiVersion = 8;
+    repeated uint64 DatabaseYamlVersion = 9;
 }
 
 message TConfigSubscriptionResponse {

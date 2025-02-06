@@ -313,10 +313,8 @@ public:
         NKqp::IDataBatchPtr batch = Batcher->Build();
         auto data = batch->ExtractBatch();
 
-        auto* internalData = reinterpret_cast<arrow::RecordBatch*>(data.get());
-        Y_VERIFY(internalData);
-
-        std::shared_ptr<arrow::RecordBatch> arrowBatch = std::shared_ptr<arrow::RecordBatch>{data, internalData};
+        auto arrowBatch = reinterpret_pointer_cast<arrow::RecordBatch>(data);
+        Y_VERIFY(arrowBatch);
 
         Issues = std::make_shared<NYql::TIssues>();
 
@@ -334,9 +332,9 @@ public:
     }
 
 private:
-
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
     TString Path;
+
     std::shared_ptr<NYql::TIssues> Issues;
 };
 
@@ -556,7 +554,6 @@ private:
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);
 
-            //sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -610,7 +607,7 @@ private:
             hFunc(TEvents::TEvCompleted, Handle);
             hFunc(TEvWorker::TEvHandshake, HoldHandle);
             hFunc(TEvWorker::TEvData, HoldHandle);
-            //sFunc(TEvents::TEvWakeup, SendS3Request);
+
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }

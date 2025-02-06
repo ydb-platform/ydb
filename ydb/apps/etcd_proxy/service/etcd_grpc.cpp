@@ -4,7 +4,6 @@
 #include "etcd_shared.h"
 #include "etcd_events.h"
 
-#include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
@@ -18,8 +17,7 @@ class TEtcdRequestWrapperImpl
         TEvProxyRuntimeEvent,
         TEvProxyLegacyEvent<TRpcId, TDerived>>
 {
-    friend class TProtoResponseHelper;
-
+friend class TProtoResponseHelper;
 public:
     using TRequest = TReq;
     using TResponse = TResp;

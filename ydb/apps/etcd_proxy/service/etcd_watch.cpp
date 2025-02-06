@@ -251,7 +251,7 @@ private:
     }
 
     void Handle(TEvWatchRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.RegisterWithSameMailbox(new TWatchman(ev->Get()->ReleaseStreamCtx(), ctx.SelfID));
+        ctx.RegisterWithSameMailbox(new TWatchman(ev->Get()->GetStreamCtx(), ctx.SelfID));
     }
 
     void Handle(TEvSubscribe::TPtr& ev, const TActorContext&) {

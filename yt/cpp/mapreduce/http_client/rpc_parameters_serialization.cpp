@@ -882,7 +882,10 @@ TNode SerializeParamsForSkyShareTable(
     }
 
     if (options.Pool_) {
-        result["pool"] = *options.Pool_;
+        result["share_operation_options"] = BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("pool").Value(*options.Pool_)
+            .EndMap();
     }
 
     return result;

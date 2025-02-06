@@ -285,9 +285,9 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
         } else if (name == TKqpUpsertRowsSettings::AllowInconsistentWritesSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.AllowInconsistentWrites = true;
-        } else if (name == TKqpUpsertRowsSettings::EnableStreamWriteSettingName) {
+        } else if (name == TKqpUpsertRowsSettings::IsConditionalUpdateSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.EnableStreamWrite = true;
+            settings.IsConditionalUpdate = true;
         } else if (name == TKqpUpsertRowsSettings::ModeSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.Mode = tuple.Value().template Cast<TCoAtom>().Value();
@@ -319,16 +319,16 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
                 .Name().Build(IsUpdateSettingName)
                 .Done());
     }
+    if (IsConditionalUpdate) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(IsConditionalUpdateSettingName)
+                .Done());
+    }
     if (AllowInconsistentWrites) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(AllowInconsistentWritesSettingName)
-                .Done());
-    }
-    if (EnableStreamWrite) {
-        settings.emplace_back(
-            Build<TCoNameValueTuple>(ctx, pos)
-                .Name().Build(EnableStreamWriteSettingName)
                 .Done());
     }
 
@@ -351,9 +351,9 @@ TKqpDeleteRowsSettings TKqpDeleteRowsSettings::Parse(const NNodes::TCoNameValueT
     for (const auto& tuple : settingsList) {
         TStringBuf name = tuple.Name().Value();
         
-        if (name == TKqpDeleteRowsSettings::EnableStreamWriteSettingName) {
+        if (name == TKqpDeleteRowsSettings::IsConditionalDeleteSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.EnableStreamWrite = true;
+            settings.IsConditionalDelete = true;
         } else {
             YQL_ENSURE(false, "Unknown KqpDeleteRows setting name '" << name << "'");
         }
@@ -362,18 +362,14 @@ TKqpDeleteRowsSettings TKqpDeleteRowsSettings::Parse(const NNodes::TCoNameValueT
     return settings;
 }
 
-TKqpDeleteRowsSettings TKqpDeleteRowsSettings::Parse(const NNodes::TKqpDeleteRows& node) {
-    return TKqpDeleteRowsSettings::Parse(node.Settings());
-}
-
 NNodes::TCoNameValueTupleList TKqpDeleteRowsSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
     TVector<TCoNameValueTuple> settings;
     settings.reserve(1);
 
-    if (EnableStreamWrite) {
+    if (IsConditionalDelete) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
-                .Name().Build(EnableStreamWriteSettingName)
+                .Name().Build(IsConditionalDeleteSettingName)
                 .Done());
     }
 

@@ -291,8 +291,7 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumnsMetadata,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& columnsMetadata,
         std::vector<ui32>&& writeIndexes,
-        i64 priority,
-        bool EnableStreamWrite) {
+        i64 priority) {
         YQL_ENSURE(!Closed);
         auto token = ShardedWriteController->Open(
             TableId,
@@ -300,8 +299,7 @@ public:
             std::move(keyColumnsMetadata),
             std::move(columnsMetadata),
             std::move(writeIndexes),
-            priority,
-            EnableStreamWrite);
+            priority);
         CA_LOG_D("Open: token=" << token);
         return token;
     }
@@ -1220,8 +1218,7 @@ public:
                 std::move(keyColumnsMetadata),
                 std::move(columnsMetadata),
                 std::move(writeIndex),
-                Settings.GetPriority(),
-                Settings.GetEnableStreamWrite());
+                Settings.GetPriority());
             WaitingForTableActor = true;
         } catch (...) {
             RuntimeError(
@@ -1580,8 +1577,7 @@ public:
                 std::move(settings.KeyColumns),
                 std::move(settings.Columns),
                 std::move(settings.WriteIndex),
-                settings.Priority,
-                settings.EnableStreamWrite);
+                settings.Priority);
             token = TWriteToken{settings.TableId, cookie};
         } else {
             token = *ev->Get()->Token;

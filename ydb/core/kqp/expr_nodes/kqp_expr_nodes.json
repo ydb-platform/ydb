@@ -540,10 +540,7 @@
         {
             "Name": "TKqpDeleteRows",
             "Base": "TKqlDeleteRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqpDeleteRows"},
-            "Children": [
-                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"}
-            ]
+            "Match": {"Type": "Callable", "Name": "KqpDeleteRows"}
         },
         {
             "Name": "TKqpTableSinkSettings",

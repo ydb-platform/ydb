@@ -1132,11 +1132,7 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         std::vector<ui32>&& writeIndex,
-        const i64 priority,
-        const bool EnableStreamWrite) override {
-        // Priority can't be used with stream write. It's used only as temporary fix for working with secondary indexes.
-        YQL_ENSURE(priority == 0 || !EnableStreamWrite);
-
+        const i64 priority) override {
         auto token = CurrentWriteToken++;
         auto iter = WriteInfos.emplace(
             token,

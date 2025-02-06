@@ -104,20 +104,20 @@ struct TKqpReadTableSettings {
 struct TKqpUpsertRowsSettings {
     static constexpr TStringBuf InplaceSettingName = "Inplace";
     static constexpr TStringBuf IsUpdateSettingName = "IsUpdate";
+    static constexpr TStringBuf IsConditionalUpdateSettingName = "IsConditionalUpdate";
     static constexpr TStringBuf AllowInconsistentWritesSettingName = "AllowInconsistentWrites";
-    static constexpr TStringBuf EnableStreamWriteSettingName = "EnableStreamWrite";
     static constexpr TStringBuf ModeSettingName = "Mode";
 
     bool Inplace = false;
     bool IsUpdate = false;
+    bool IsConditionalUpdate = false;
     bool AllowInconsistentWrites = false;
-    bool EnableStreamWrite = false;
     TString Mode = "";
 
     void SetInplace() { Inplace = true; }
     void SetIsUpdate() { IsUpdate = true; }
+    void SetIsConditionalUpdate() { IsConditionalUpdate = true; }
     void SetAllowInconsistentWrites() { AllowInconsistentWrites = true; }
-    void SetEnableStreamWrite() { EnableStreamWrite = true; }
     void SetMode(TStringBuf mode) { Mode = mode; }
 
     static TKqpUpsertRowsSettings Parse(const NNodes::TCoNameValueTupleList& settingsList);
@@ -126,14 +126,13 @@ struct TKqpUpsertRowsSettings {
 };
 
 struct TKqpDeleteRowsSettings {
-    static constexpr TStringBuf EnableStreamWriteSettingName = "EnableStreamWrite";
+    static constexpr TStringBuf IsConditionalDeleteSettingName = "IsConditionalDelete";
 
-    bool EnableStreamWrite = false;
+    bool IsConditionalDelete = false;
 
-    void SetEnableStreamWrite() { EnableStreamWrite = true; }
+    void SetIsConditionalDelete() { IsConditionalDelete = true; }
 
     static TKqpDeleteRowsSettings Parse(const NNodes::TCoNameValueTupleList& settingsList);
-    static TKqpDeleteRowsSettings Parse(const NNodes::TKqpDeleteRows& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 

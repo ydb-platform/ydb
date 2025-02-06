@@ -878,6 +878,88 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(ImportDataShouldHandleErrors) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* dbPath = "/Root";
+        constexpr const char* table = "/Root/table";
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )",
+            table
+        ));
+        ExecuteDataModificationQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (Key, Value)
+                VALUES (1, "one");
+            )",
+            table
+        ));
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Dump(dbPath, pathToBackup, NDump::TDumpSettings().Database(dbPath));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto opts = NDump::TRestoreSettings().Mode(NDump::TRestoreSettings::EMode::ImportData);
+        using TYdbErrorException = V3::NStatusHelpers::TYdbErrorException;
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Utf8,
+                    Value Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )", table
+        ));
+        UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
+            [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::BAD_REQUEST; });
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )", table
+        ));
+        UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
+            [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::BAD_REQUEST; });
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX Idx GLOBAL SYNC ON (Value)
+                );
+            )", table
+        ));
+        UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
+            [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::SCHEME_ERROR; });
+    }
+
     // TO DO: test index impl table split boundaries restoration from a backup
 
     Y_UNIT_TEST(RestoreViewQueryText) {

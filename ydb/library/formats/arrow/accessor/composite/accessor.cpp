@@ -33,12 +33,12 @@ std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoISlice(const ui32 offse
     ui32 currentIndex = offset;
     std::optional<IChunkedArray::TFullChunkedArrayAddress> arrAddress;
     std::vector<std::shared_ptr<IChunkedArray>> chunks;
-    while (slicedRecordsCount < count) {
+    while (slicedRecordsCount < count && currentIndex < GetRecordsCount()) {
         arrAddress = GetArray(arrAddress, currentIndex, nullptr);
         const ui32 localIndex = arrAddress->GetAddress().GetLocalIndex(currentIndex);
         const ui32 localCount = (arrAddress->GetArray()->GetRecordsCount() + slicedRecordsCount < count)
                                     ? arrAddress->GetArray()->GetRecordsCount()
-                                    : (arrAddress->GetArray()->GetRecordsCount() + slicedRecordsCount - count);
+                                    : (count - slicedRecordsCount);
 
         if (localIndex == 0 && localCount == arrAddress->GetArray()->GetRecordsCount()) {
             chunks.emplace_back(arrAddress->GetArray());
@@ -48,7 +48,7 @@ std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoISlice(const ui32 offse
         slicedRecordsCount += localCount;
         currentIndex += localCount;
     }
-    AFL_VERIFY(slicedRecordsCount == count);
+    AFL_VERIFY(slicedRecordsCount == count)("sliced", slicedRecordsCount)("count", count);
     if (chunks.size() == 1) {
         return chunks.front();
     } else {

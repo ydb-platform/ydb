@@ -23,6 +23,22 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
         UNIT_ASSERT_VALUES_EQUAL(label.GetName(), "metric_name_label");
     }
 
+    Y_UNIT_TEST(MetricNamePrefix) {
+        constexpr auto input = TStringBuf(R"([["something_axxx", 42]])");
+
+        NProto::TMultiSamplesList samples;
+        auto encoder = EncoderProtobuf(&samples);
+
+        DecodeUnistat(input, encoder.Get(), "metric_name_label", "prefix.");
+
+        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1);
+        auto sample = samples.GetSamples(0);
+
+        auto label = sample.GetLabels(0);
+        UNIT_ASSERT_VALUES_EQUAL(label.GetName(), "metric_name_label");
+        UNIT_ASSERT_VALUES_EQUAL(label.GetValue(), "prefix.something_axxx");
+    }
+
     Y_UNIT_TEST(ScalarMetric) {
         constexpr auto input = TStringBuf(R"([["something_axxx", 42]])");
 

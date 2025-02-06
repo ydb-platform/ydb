@@ -1683,6 +1683,7 @@ message TReqCopyNode
     optional bool lock_existing = 13 [default = false];
     optional bool pessimistic_quota_check = 9 [default = true];
     optional bool enable_cross_cell_copying = 15 [default = true];
+    optional bool allow_secondary_index_abandonment = 16 [default = false];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -1712,6 +1713,7 @@ message TReqMoveNode
     optional bool preserve_acl = 14 [default = false];
     optional bool pessimistic_quota_check = 7 [default = true];
     optional bool enable_cross_cell_copying = 13 [default = true];
+    optional bool allow_secondary_index_abandonment = 15 [default = false];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -2432,6 +2434,8 @@ message TReqListJobs
     optional string task_name = 19;
 
     optional bool with_monitoring_descriptor = 21;
+
+    optional string operation_incarnation = 25;
 
     optional uint64 from_time = 22; // TInstant
     optional uint64 to_time = 23; // TInstant
@@ -3170,6 +3174,7 @@ message TJob
     optional uint64 job_cookie = 27;
     optional bytes archive_features = 29; // YSON
     optional string monitoring_descriptor = 30;
+    optional string operation_incarnation = 31;
 }
 
 message TListJobsStatistics

@@ -88,9 +88,6 @@ struct TExecutionOptions {
 
     TRequestOptions GetSchemeQueryOptions() const {
         TString sql = SchemeQuery;
-        if (UseTemplates) {
-            ReplaceYqlTokenTemplate(sql);
-        }
 
         return {
             .Query = sql,
@@ -108,7 +105,6 @@ struct TExecutionOptions {
 
         TString sql = ScriptQueries[index];
         if (UseTemplates) {
-            ReplaceYqlTokenTemplate(sql);
             SubstGlobal(sql, "${QUERY_ID}", ToString(queryId));
         }
 
@@ -269,16 +265,6 @@ private:
         }
         if (ydbSettings.FormatStorage && !ydbSettings.PDisksPath) {
             ythrow yexception() << "Cannot format storage without real PDisks, please use --storage-path";
-        }
-    }
-
-private:
-    static void ReplaceYqlTokenTemplate(TString& sql) {
-        const TString variableName = TStringBuilder() << "${" << YQL_TOKEN_VARIABLE << "}";
-        if (const TString& yqlToken = GetEnv(YQL_TOKEN_VARIABLE)) {
-            SubstGlobal(sql, variableName, yqlToken);
-        } else if (sql.Contains(variableName)) {
-            ythrow yexception() << "Failed to replace ${YQL_TOKEN} template, please specify YQL_TOKEN environment variable\n";
         }
     }
 };
@@ -446,6 +432,7 @@ class TMain : public TMainClassArgs {
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
 
+    std::unordered_map<TString, TString> Templates;
     THashMap<TString, TString> TablesMapping;
     TVector<TString> UdfsPaths;
     TString UdfsDirectory;
@@ -536,6 +523,31 @@ protected:
         options.AddLongOption("templates", "Enable templates for -s and -p queries, such as ${YQL_TOKEN} and ${QUERY_ID}")
             .NoArgument()
             .SetFlag(&ExecutionOptions.UseTemplates);
+
+        options.AddLongOption("var-template", "Add template from environment variables or file for -s and -p queries (use variable@file for files)")
+            .RequiredArgument("variable")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TStringBuf variable;
+                TStringBuf filePath;
+                TStringBuf(option->CurVal()).Split('@', variable, filePath);
+                if (variable.empty()) {
+                    ythrow yexception() << "Variable name should not be empty";
+                }
+
+                TString value;
+                if (!filePath.empty()) {
+                    value = LoadFile(TString(filePath));
+                } else {
+                    value = GetEnv(TString(variable));
+                    if (!value) {
+                        ythrow yexception() << "Invalid env template, can not find value for variable '" << variable << "'";
+                    }
+                }
+
+                if (!Templates.emplace(variable, value).second) {
+                    ythrow yexception() << "Got duplicated template variable name '" << variable << "'";
+                }
+            });
 
         options.AddLongOption('t', "table", "File with input table (can be used by YT with -E flag), table@file")
             .RequiredArgument("table@file")
@@ -740,10 +752,12 @@ protected:
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
 
-        options.AddLongOption("verbose", "Common verbose level (max level 2)")
+        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(TYdbSetupSettings::EVerbose::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(1)
-            .StoreResult(&RunnerOptions.YdbSettings.VerboseLevel);
+            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EVerbose::Info))
+            .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.VerboseLevel, [](ui8 value) {
+                return static_cast<TYdbSetupSettings::EVerbose>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EVerbose::Max)));
+            });
 
         TChoices<TAsyncQueriesSettings::EVerbose> verbose({
             {"each-query", TAsyncQueriesSettings::EVerbose::EachQuery},
@@ -845,6 +859,18 @@ protected:
             .NoArgument()
             .SetFlag(&EmulateYt);
 
+        options.AddLongOption('H', "health-check", TStringBuilder() << "Level of health check before start (max level " << static_cast<ui32>(TYdbSetupSettings::EHealthCheck::Max) - 1 << ")")
+            .RequiredArgument("uint")
+            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EHealthCheck::NodesCount))
+            .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.HealthCheckLevel, [](ui8 value) {
+                return static_cast<TYdbSetupSettings::EHealthCheck>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EHealthCheck::Max)));
+            });
+
+        options.AddLongOption("health-check-timeout", "Health check timeout in seconds")
+            .RequiredArgument("uint")
+            .DefaultValue(10)
+            .StoreMappedResultT<ui64>(&RunnerOptions.YdbSettings.HealthCheckTimeout, &TDuration::Seconds<ui64>);
+
         options.AddLongOption("domain", "Test cluster domain name")
             .RequiredArgument("name")
             .DefaultValue(RunnerOptions.YdbSettings.DomainName)
@@ -862,9 +888,8 @@ protected:
             .RequiredArgument("path")
             .InsertTo(&RunnerOptions.YdbSettings.ServerlessTenants);
 
-        options.AddLongOption("storage-size", "Domain storage size in gigabytes")
+        options.AddLongOption("storage-size", TStringBuilder() << "Domain storage size in gigabytes (" << NKikimr::NBlobDepot::FormatByteSize(DEFAULT_STORAGE_SIZE) << " by default)")
             .RequiredArgument("uint")
-            .DefaultValue(32)
             .StoreMappedResultT<ui32>(&RunnerOptions.YdbSettings.DiskSize, [](ui32 diskSize) {
                 return static_cast<ui64>(diskSize) << 30;
             });
@@ -897,6 +922,11 @@ protected:
 
     int DoRun(NLastGetopt::TOptsParseResult&&) override {
         ExecutionOptions.Validate(RunnerOptions);
+
+        ReplaceTemplates(ExecutionOptions.SchemeQuery);
+        for (auto& sql : ExecutionOptions.ScriptQueries) {
+            ReplaceTemplates(sql);
+        }
 
         RunnerOptions.YdbSettings.YqlToken = YqlToken;
         RunnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(UdfsDirectory, UdfsPaths, ExcludeLinkedUdfs).Get();
@@ -943,6 +973,21 @@ protected:
 
         return 0;
     }
+
+private:
+    void ReplaceTemplates(TString& sql) const {
+        for (const auto& [variable, value] : Templates) {
+            SubstGlobal(sql, TStringBuilder() << "${" << variable <<"}", value);
+        }
+        if (ExecutionOptions.UseTemplates) {
+            const TString tokenVariableName = TStringBuilder() << "${" << YQL_TOKEN_VARIABLE << "}";
+            if (const TString& yqlToken = GetEnv(YQL_TOKEN_VARIABLE)) {
+                SubstGlobal(sql, tokenVariableName, yqlToken);
+            } else if (sql.Contains(tokenVariableName)) {
+                ythrow yexception() << "Failed to replace ${YQL_TOKEN} template, please specify YQL_TOKEN environment variable";
+            }
+        }
+    }
 };
 
 
@@ -972,7 +1017,7 @@ void FloatingPointExceptionHandler(int) {
 
     Cerr << colors.Red() << "======= floating point exception call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "==============================================" << colors.Default() << Endl;
+    Cerr << colors.Red() << "====================================================" << colors.Default() << Endl;
 
     abort();
 }

@@ -839,24 +839,32 @@ protected:
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx) {
         auto now = TMonotonic::Now();
         const auto& request = ev->Get()->Record;
+        auto matchesFilter = [
+            changedSince = request.has_changedsince() ? request.changedsince() : 0,
+            filterTenantId = request.has_filtertenantid() ? NKikimr::TSubDomainKey(request.filtertenantid()) : NKikimr::TSubDomainKey()
+        ](const NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo) {
+            return tabletStateInfo.changetime() >= changedSince
+                && (!filterTenantId || filterTenantId == NKikimr::TSubDomainKey(tabletStateInfo.tenantid()));
+        };
         std::unique_ptr<TEvWhiteboard::TEvTabletStateResponse> response = std::make_unique<TEvWhiteboard::TEvTabletStateResponse>();
         auto& record = response->Record;
         if (request.format() == "packed5") {
             TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(TabletStateInfo.size());
             for (const auto& [tabletId, tabletInfo] : TabletStateInfo) {
-                ptr->TabletId = tabletInfo.tabletid();
-                ptr->FollowerId = tabletInfo.followerid();
-                ptr->Generation = tabletInfo.generation();
-                ptr->Type = tabletInfo.type();
-                ptr->State = tabletInfo.state();
-                ++ptr;
+                if (matchesFilter(tabletInfo)) {
+                    ptr->TabletId = tabletInfo.tabletid();
+                    ptr->FollowerId = tabletInfo.followerid();
+                    ptr->Generation = tabletInfo.generation();
+                    ptr->Type = tabletInfo.type();
+                    ptr->State = tabletInfo.state();
+                    ++ptr;
+                }
             }
         } else {
             if (request.groupby().empty()) {
-                ui64 changedSince = request.has_changedsince() ? request.changedsince() : 0;
                 if (request.filtertabletid_size() == 0) {
                     for (const auto& pr : TabletStateInfo) {
-                        if (pr.second.changetime() >= changedSince) {
+                        if (matchesFilter(pr.second)) {
                             NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
                             Copy(tabletStateInfo, pr.second, request);
                         }
@@ -865,7 +873,7 @@ protected:
                     for (auto tabletId : request.filtertabletid()) {
                         auto it = TabletStateInfo.find({tabletId, 0});
                         if (it != TabletStateInfo.end()) {
-                            if (it->second.changetime() >= changedSince) {
+                            if (matchesFilter(it->second)) {
                                 NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
                                 Copy(tabletStateInfo, it->second, request);
                             }
@@ -876,6 +884,9 @@ protected:
                 std::unordered_map<std::pair<NKikimrTabletBase::TTabletTypes::EType,
                     NKikimrWhiteboard::TTabletStateInfo::ETabletState>, NKikimrWhiteboard::TTabletStateInfo> stateGroupBy;
                 for (const auto& [id, stateInfo] : TabletStateInfo) {
+                    if (!matchesFilter(stateInfo)) {
+                        continue;
+                    }
                     NKikimrWhiteboard::TTabletStateInfo& state = stateGroupBy[{stateInfo.type(), stateInfo.state()}];
                     auto count = state.count();
                     if (count == 0) {

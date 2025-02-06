@@ -37,6 +37,7 @@ public:
                     request.User = createUser.GetUser();
                     request.Password = createUser.GetPassword();
                     request.CanLogin = createUser.GetCanLogin();
+                    request.IsHashedPassword = createUser.GetIsHashedPassword();
 
                     auto response = context.SS->LoginProvider.CreateUser(request);
 
@@ -73,6 +74,7 @@ public:
 
                     if (modifyUser.HasPassword()) {
                         request.Password = modifyUser.GetPassword();
+                        request.IsHashedPassword = modifyUser.GetIsHashedPassword();
                     }
 
                     if (modifyUser.HasCanLogin()) {
@@ -286,6 +288,10 @@ public:
     }
 
     NLogin::TLoginProvider::TBasicResponse CanRemoveSid(TOperationContext& context, const TString sid, const TString& sidType) {
+        if (!AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
+            return {}; 
+        }
+
         auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
         for (auto pathId : subTree) {
             TPathElement::TPtr path = context.SS->PathsById.at(pathId);

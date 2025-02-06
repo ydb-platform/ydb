@@ -38,17 +38,17 @@ public:
 
     template<typename TPtr>
     void HandleFw(TPtr& ev, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(new IEventHandle(VDiskId, ctx.SelfID, ev->Release().Release(), 0, ev->Cookie));
+        ctx.Send(new IEventHandle(VDiskId, ctx.SelfID, ev->Release().Release(), 0, ev->Cookie));
     }
 
     template<typename TPtr>
     void HandleBw(TPtr& ev, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(ev->Forward(QueueId));
+        ctx.Send(ev->Forward(QueueId));
     }
 
     template<typename TPtr>
     void HandleForward(TPtr& ev, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(ev->Forward(VDiskId));
+        ctx.Send(ev->Forward(VDiskId));
     }
 
     STFUNC(StateFunc) {
@@ -94,7 +94,7 @@ public:
                 Counters, bsCtx, NBackpressure::TQueueClientId(), "PutTabletLog", 0, false, TDuration::Minutes(1),
                 flowRecord, NMonitoring::TCountableBase::EVisibility::Public));
 
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(QueueActorId, actorId);
+        ctx.ActorSystem()->RegisterLocalService(QueueActorId, actorId);
     }
 
     void Handle(TEvProxyQueueState::TPtr& ev, const TActorContext& /*ctx*/) {

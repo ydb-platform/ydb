@@ -17,7 +17,7 @@ void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
     auto mon = appData->Mon;
     if (mon) {
         NMonitoring::TIndexMonPage * page = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(page, "pql2", "PersQueue Node Cache", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        mon->RegisterActorPage(page, "pql2", "PersQueue Node Cache", false, ctx.ActorSystem(), ctx.SelfID);
     }
 
     Become(&TThis::StateFunc);

@@ -102,8 +102,6 @@ abseil_cpp = CMakeNinjaNixProject(
     arcdir="contrib/restricted/abseil-cpp",
     nixattr="abseil-cpp",
     disable_includes=[
-        "emscripten.h",
-        "emscripten/*.h",
         # if defined(__myriad2__)
         "rtems.h",
         # if defined(__Fuchsia__)

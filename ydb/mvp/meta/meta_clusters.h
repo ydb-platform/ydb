@@ -56,7 +56,7 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx) {
         Client = std::make_shared<NYdb::NTable::TTableClient>(std::move(Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location))));
 
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
 
         CreateLoadVersionsActor(actorId, Client, Location.RootDomain, ctx);
@@ -76,7 +76,7 @@ public:
 
             auto session = result.GetSession();
             TString query = TStringBuilder() << "SELECT * FROM `" + Location.RootDomain + "/ydb/MasterClusterExt.db`";
-            NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+            NActors::TActorSystem* actorSystem = ctx.ActorSystem();
             NActors::TActorId actorId = ctx.SelfID;
             session.ExecuteDataQuery(query,
                                      NYdb::NTable::TTxControl::BeginTx(

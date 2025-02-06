@@ -2,15 +2,18 @@
 
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
+#include <ydb/public/api/protos/draft/ydb_view.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb-cpp-sdk/client/export/export.h>
 #include <ydb-cpp-sdk/client/import/import.h>
 #include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/value/value.h>
-#include <ydb-cpp-sdk/client/query/client.h>
 
 #include <ydb/library/backup/backup.h>
 
@@ -25,6 +28,7 @@ using namespace NYdb;
 using namespace NYdb::NOperation;
 using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
+using namespace NYdb::NView;
 
 namespace NYdb::NTable {
 
@@ -102,10 +106,28 @@ TDataQueryResult ExecuteDataModificationQuery(TSession& session,
     return result;
 }
 
+NQuery::TExecuteQueryResult ExecuteQuery(NQuery::TSession& session, const TString& script, bool isDDL = false) {
+    const auto result = session.ExecuteQuery(
+        script,
+        isDDL ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx().CommitTx()
+    ).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), "query:\n" << script << "\nissues:\n" << result.GetIssues().ToString());
+    return result;
+}
+
 TDataQueryResult GetTableContent(TSession& session, const char* table,
     const char* keyColumn = "Key"
 ) {
     return ExecuteDataModificationQuery(session, Sprintf(R"(
+            SELECT * FROM `%s` ORDER BY %s;
+        )", table, keyColumn
+    ));
+}
+
+NQuery::TExecuteQueryResult GetTableContent(NQuery::TSession& session, const char* table,
+    const char* keyColumn = "Key"
+) {
+    return ExecuteQuery(session, Sprintf(R"(
             SELECT * FROM `%s` ORDER BY %s;
         )", table, keyColumn
     ));
@@ -122,6 +144,10 @@ void CompareResults(const std::vector<TResultSet>& first, const std::vector<TRes
 }
 
 void CompareResults(const TDataQueryResult& first, const TDataQueryResult& second) {
+    CompareResults(first.GetResultSets(), second.GetResultSets());
+}
+
+void CompareResults(const NQuery::TExecuteQueryResult& first, const NQuery::TExecuteQueryResult& second) {
     CompareResults(first.GetResultSets(), second.GetResultSets());
 }
 
@@ -147,9 +173,42 @@ auto CreateMinPartitionsChecker(ui32 expectedMinPartitions, const TString& debug
 auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType) {
     return [=](const TTableDescription& tableDescription) {
         for (const auto& indexDesc : tableDescription.GetIndexDescriptions()) {
-            if (indexDesc.GetIndexName() == indexName && indexDesc.GetIndexType() == indexType) {
+            if (indexDesc.GetIndexName() != indexName) {
+                continue;
+            }
+            if (indexDesc.GetIndexType() != indexType) {
+                continue;
+            }
+            if (indexDesc.GetIndexColumns().size() != 1) {
+                continue;
+            }
+            if (indexDesc.GetDataColumns().size() != 0) {
+                continue;
+            }
+            if (indexDesc.GetIndexColumns()[0] != "Value") {
+                continue;
+            }
+            if (indexType != NYdb::NTable::EIndexType::GlobalVectorKMeansTree) {
                 return true;
             }
+            auto* settings = std::get_if<TKMeansTreeSettings>(&indexDesc.GetIndexSettings());
+            UNIT_ASSERT(settings);
+            if (settings->Settings.Metric != NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct) {
+                continue;
+            }
+            if (settings->Settings.VectorType != NYdb::NTable::TVectorIndexSettings::EVectorType::Float) {
+                continue;
+            }
+            if (settings->Settings.VectorDimension != 768) {
+                continue;
+            }
+            if (settings->Levels != 2) {
+                continue;
+            }
+            if (settings->Clusters != 80) {
+                continue;
+            }
+            return true;
         }
         return false;
     };
@@ -181,6 +240,29 @@ void CheckBuildIndexOperationsCleared(TDriver& driver) {
     const auto result = operationClient.List<TBuildIndexOperation>().GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), "issues:\n" << result.GetIssues().ToString());
     UNIT_ASSERT_C(result.GetList().empty(), "Build index operations aren't cleared:\n" << result.ToJsonString());
+}
+
+TViewDescription DescribeView(TViewClient& viewClient, const TString& path) {
+    const auto describeResult = viewClient.DescribeView(path).ExtractValueSync();
+    UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+    return describeResult.GetViewDescription();
+}
+
+NTopic::TTopicDescription DescribeTopic(NTopic::TTopicClient& topicClient, const TString& path) {
+    const auto describeResult = topicClient.DescribeTopic(path).ExtractValueSync();
+    UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+    return describeResult.GetTopicDescription();
+}
+
+// note: the storage pool kind must be preconfigured in the server
+void CreateDatabase(TTenants& tenants, TStringBuf path, TStringBuf storagePoolKind) {
+    Ydb::Cms::CreateDatabaseRequest request;
+    request.set_path(path);
+    auto& storage = *request.mutable_resources()->add_storage_units();
+    storage.set_unit_kind(storagePoolKind);
+    storage.set_count(1);
+
+    tenants.CreateTenant(std::move(request));
 }
 
 // whole database backup
@@ -437,16 +519,27 @@ void TestRestoreTableWithIndex(
     const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, TSession& session,
     TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
-    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+    TString query;
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+        query = Sprintf(R"(CREATE TABLE `%s` (
+            Key Uint32,
+            Value String,
+            PRIMARY KEY (Key),
+            INDEX %s GLOBAL USING vector_kmeans_tree
+                ON (Value)
+                WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+        );)", table, index);
+    } else {
+        query = Sprintf(R"(
             CREATE TABLE `%s` (
                 Key Uint32,
                 Value Uint32,
                 PRIMARY KEY (Key),
                 INDEX %s %s ON (Value)
             );
-        )",
-        table, index, ConvertIndexTypeToSQL(indexType)
-    ));
+        )", table, index, ConvertIndexTypeToSQL(indexType));
+    }
+    ExecuteDataDefinitionQuery(session, query);
 
     backup();
 
@@ -481,6 +574,226 @@ void TestRestoreDirectory(const char* directory, TSchemeClient& client, TBackupF
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetEntry().Type, ESchemeEntryType::Directory);
     }
+}
+
+void TestViewOutputIsPreserved(
+    const char* view, NQuery::TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    constexpr const char* viewQuery = R"(
+        SELECT 1 AS Key
+        UNION
+        SELECT 2 AS Key
+        UNION
+        SELECT 3 AS Key;
+    )";
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE VIEW `%s` WITH security_invoker = TRUE AS %s;
+            )", view, viewQuery
+        ), true
+    );
+    const auto originalContent = GetTableContent(session, view);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+            )", view
+        ), true
+    );
+
+    restore();
+    CompareResults(GetTableContent(session, view), originalContent);
+}
+
+void TestViewQueryTextIsPreserved(
+    const char* view, TViewClient& viewClient, NQuery::TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    constexpr const char* viewQuery = "SELECT 42";
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE VIEW `%s` WITH security_invoker = TRUE AS %s;
+            )", view, viewQuery
+        ), true
+    );
+    const auto originalText = DescribeView(viewClient, view).GetQueryText();
+    UNIT_ASSERT_STRINGS_EQUAL(originalText, viewQuery);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+            )", view
+        ), true
+    );
+
+    restore();
+    UNIT_ASSERT_STRINGS_EQUAL(
+        DescribeView(viewClient, view).GetQueryText(),
+        originalText
+    );
+}
+
+// The view might be restored to a different path from the original.
+void TestViewReferenceTableIsPreserved(
+    const char* view, const char* table, const char* restoredView, NQuery::TSession& session,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", table
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+            UPSERT INTO `%s` (
+                Key,
+                Value
+            )
+            VALUES
+                (1, "one"),
+                (2, "two"),
+                (3, "three");
+        )",
+        table
+    ));
+
+    const TString viewQuery = Sprintf(R"(
+            SELECT * FROM `%s`
+        )", table
+    );
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE VIEW `%s` WITH security_invoker = TRUE AS %s;
+            )", view, viewQuery.c_str()
+        ), true
+    );
+    const auto originalContent = GetTableContent(session, view);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+            )", view
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ), true
+    );
+
+    restore();
+    CompareResults(GetTableContent(session, restoredView), originalContent);
+}
+
+void TestViewReferenceTableIsPreserved(
+    const char* view, const char* table, NQuery::TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    // view is restored to the original path
+    TestViewReferenceTableIsPreserved(view, table, view, session, std::move(backup), std::move(restore));
+}
+
+void TestTopicSettingsArePreserved(
+    const char* topic, NQuery::TSession& session, NTopic::TTopicClient& topicClient,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    constexpr int minPartitions = 2;
+    constexpr int maxPartitions = 5;
+    constexpr const char* autoPartitioningStrategy = "scale_up";
+    constexpr int retentionPeriodDays = 7;
+
+    ExecuteQuery(session, Sprintf(R"(
+            CREATE TOPIC `%s` (
+                CONSUMER basic_consumer,
+                CONSUMER important_consumer WITH (important = TRUE)
+            ) WITH (
+                min_active_partitions = %d,
+                max_active_partitions = %d,
+                auto_partitioning_strategy = '%s',
+                retention_period = Interval('%s')
+            );
+        )",
+        topic, minPartitions, maxPartitions, autoPartitioningStrategy, Sprintf("P%dD", retentionPeriodDays).c_str()
+    ), true);
+
+    const auto checkDescription = [&](const NTopic::TTopicDescription& description, const TString& debugHint) {
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetConsumers().at(0).GetConsumerName(), "basic_consumer", debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetConsumers().at(0).GetImportant(), false, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetConsumers().at(1).GetConsumerName(), "important_consumer", debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetConsumers().at(1).GetImportant(), true, debugHint);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitioningSettings().GetMinActivePartitions(), minPartitions, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitioningSettings().GetMaxActivePartitions(), maxPartitions, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), NTopic::EAutoPartitioningStrategy::ScaleUp, debugHint);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitions().size(), 2, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitions().at(0).GetActive(), true, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetPartitions().at(1).GetActive(), true, debugHint);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetRetentionPeriod(), TDuration::Days(retentionPeriodDays), debugHint);
+    };
+    checkDescription(DescribeTopic(topicClient, topic), DEBUG_HINT);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+            DROP TOPIC `%s`;
+        )", topic
+    ), true);
+
+    restore();
+    checkDescription(DescribeTopic(topicClient, topic), DEBUG_HINT);
+}
+
+void CreateCoordinationNode(
+    NCoordination::TClient& client, const std::string& path, const NCoordination::TCreateNodeSettings& settings)
+{
+    const auto result = client.CreateNode(path, settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+NCoordination::TNodeDescription DescribeCoordinationNode(NCoordination::TClient& client, const std::string& path) {
+    const auto result = client.DescribeNode(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return result.GetResult();
+}
+
+void DropCoordinationNode(NCoordination::TClient& client, const std::string& path) {
+    const auto result = client.DropNode(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void TestCoordinationNodeSettingsArePreserved(
+    const std::string& path,
+    NCoordination::TClient& nodeClient,
+    TBackupFunction&& backup,
+    TRestoreFunction&& restore
+) {
+    const auto settings = NCoordination::TCreateNodeSettings()
+        .SelfCheckPeriod(TDuration::Seconds(2))
+        .SessionGracePeriod(TDuration::Seconds(30))
+        .ReadConsistencyMode(NCoordination::EConsistencyMode::STRICT_MODE)
+        .AttachConsistencyMode(NCoordination::EConsistencyMode::STRICT_MODE)
+        .RateLimiterCountersMode(NCoordination::ERateLimiterCountersMode::DETAILED);
+
+    CreateCoordinationNode(nodeClient, path, settings);
+
+    const auto checkDescription = [&](const NCoordination::TNodeDescription& description, const TString& debugHint) {
+        UNIT_ASSERT_VALUES_EQUAL_C(*description.GetSelfCheckPeriod(), *settings.SelfCheckPeriod_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(*description.GetSessionGracePeriod(), *settings.SessionGracePeriod_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetReadConsistencyMode(), settings.ReadConsistencyMode_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetAttachConsistencyMode(), settings.AttachConsistencyMode_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetRateLimiterCountersMode(), settings.RateLimiterCountersMode_, debugHint);
+    };
+    checkDescription(DescribeCoordinationNode(nodeClient, path), DEBUG_HINT);
+
+    backup();
+
+    DropCoordinationNode(nodeClient, path);
+
+    restore();
+    checkDescription(DescribeCoordinationNode(nodeClient, path), DEBUG_HINT);
 }
 
 }
@@ -567,6 +880,79 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     // TO DO: test index impl table split boundaries restoration from a backup
 
+    Y_UNIT_TEST(RestoreViewQueryText) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TViewClient viewClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* view = "/Root/view";
+
+        TestViewQueryTextIsPreserved(
+            view,
+            viewClient,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewReferenceTable) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* view = "/Root/view";
+        constexpr const char* table = "/Root/a/b/c/table";
+
+        TestViewReferenceTableIsPreserved(
+            view,
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewToDifferentDatabase) {
+        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
+
+        constexpr const char* alice = "/Root/tenants/alice";
+        constexpr const char* bob = "/Root/tenants/bob";
+        CreateDatabase(*server.Tenants_, alice, "ssd");
+        CreateDatabase(*server.Tenants_, bob, "hdd");
+
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        // query client lives on the node 0, so it is enough to enable the views only on it
+        server.GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
+
+        const TString view = JoinFsPaths(alice, "view");
+        const TString table = JoinFsPaths(alice, "a", "b", "c", "table");
+        const TString restoredView = JoinFsPaths(bob, "view");
+
+        TestViewReferenceTableIsPreserved(
+            view.c_str(),
+            table.c_str(),
+            restoredView.c_str(),
+            session,
+            CreateBackupLambda(driver, pathToBackup, alice),
+            CreateRestoreLambda(driver, pathToBackup, bob)
+        );
+    }
+
     void TestTableBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
@@ -586,7 +972,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+        TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
+
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
@@ -639,6 +1028,62 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    void TestViewBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* view = "/Root/view";
+
+        TestViewOutputIsPreserved(
+            view,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    void TestTopicBackupRestoreWithoutData() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        NTopic::TTopicClient topicClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* topic = "/Root/topic";
+
+        TestTopicSettingsArePreserved(
+            topic,
+            session,
+            topicClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    void TestKesusBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NCoordination::TClient nodeClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        const std::string kesus = "/Root/kesus";
+
+        TestCoordinationNodeSettingsArePreserved(
+            kesus,
+            nodeClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
@@ -656,12 +1101,14 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 TestDirectoryBackupRestore();
                 break;
             case EPathTypePersQueueGroup:
-                break; // https://github.com/ydb-platform/ydb/issues/10431
+                TestTopicBackupRestoreWithoutData();
+                break;
             case EPathTypeSubDomain:
             case EPathTypeExtSubDomain:
                 break; // https://github.com/ydb-platform/ydb/issues/10432
             case EPathTypeView:
-                break; // https://github.com/ydb-platform/ydb/issues/10433
+                TestViewBackupRestore();
+                break;
             case EPathTypeCdcStream:
                 break; // https://github.com/ydb-platform/ydb/issues/7054
             case EPathTypeReplication:
@@ -674,7 +1121,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeResourcePool:
                 break; // https://github.com/ydb-platform/ydb/issues/10440
             case EPathTypeKesus:
-                break; // https://github.com/ydb-platform/ydb/issues/10444
+                TestKesusBackupRestore();
+                break;
             case EPathTypeColumnStore:
             case EPathTypeColumnTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10459
@@ -698,12 +1146,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
+            case EIndexTypeGlobalVectorKmeansTree:
                 TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeGlobalUnique:
                 break; // https://github.com/ydb-platform/ydb/issues/10468
-            case EIndexTypeGlobalVectorKmeansTree:
-                break; // https://github.com/ydb-platform/ydb/issues/10469
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -740,7 +1187,12 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     public:
         TS3TestEnv()
-            : Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())))
+            : Server([&] {
+                    NKikimrConfig::TAppConfig appConfig;
+                    appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+                    return appConfig;
+                }())
+            , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())))
             , TableClient(Driver)
             , TableSession(TableClient.CreateSession().ExtractValueSync().GetSession())
             , QueryClient(Driver)
@@ -753,6 +1205,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             auto& runtime = *Server.GetRuntime();
             runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
+            runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+            runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
         }
 
         TKikimrWithGrpcAndRootSchema& GetServer() {
@@ -1033,6 +1487,36 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    Y_UNIT_TEST(RestoreViewQueryText) {
+        TS3TestEnv testEnv;
+        TViewClient viewClient(testEnv.GetDriver());
+        constexpr const char* view = "/Root/view";
+
+        TestViewQueryTextIsPreserved(
+            view,
+            viewClient,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view" })
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewReferenceTable) {
+        TS3TestEnv testEnv;
+        constexpr const char* view = "/Root/view";
+        constexpr const char* table = "/Root/a/b/c/table";
+
+        TestViewReferenceTableIsPreserved(
+            view,
+            table,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view", "a/b/c/table" })
+        );
+    }
+
+    // TO DO: test view restoration to a different database
+
     void TestTableBackupRestore() {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
@@ -1072,6 +1556,18 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    void TestViewBackupRestore() {
+        TS3TestEnv testEnv;
+        constexpr const char* view = "/Root/view";
+
+        TestViewOutputIsPreserved(
+            view,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view" })
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
@@ -1093,7 +1589,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeExtSubDomain:
                 break; // https://github.com/ydb-platform/ydb/issues/10432
             case EPathTypeView:
-                break; // https://github.com/ydb-platform/ydb/issues/10433
+                TestViewBackupRestore();
+                break;
             case EPathTypeCdcStream:
                 break; // https://github.com/ydb-platform/ydb/issues/7054
             case EPathTypeReplication:
@@ -1130,12 +1627,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
+            case EIndexTypeGlobalVectorKmeansTree:
                 TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeGlobalUnique:
                 break; // https://github.com/ydb-platform/ydb/issues/10468
-            case EIndexTypeGlobalVectorKmeansTree:
-                break; // https://github.com/ydb-platform/ydb/issues/10469
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

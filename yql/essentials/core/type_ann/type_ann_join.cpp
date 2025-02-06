@@ -1006,9 +1006,9 @@ namespace NTypeAnnImpl {
         }
 
         const auto joinKind = input->Child(2)->Content();
-        if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly") {
+        if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly"&& joinKind != "Cross") {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
-                << ", supported: Inner, Left, LeftSemi, LeftOnly"));
+                << ", supported: Inner, Left, LeftSemi, LeftOnly, Cross"));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1018,6 +1018,10 @@ namespace NTypeAnnImpl {
         }
 
         auto checkKeyColumns = [&](std::unordered_set<ui32>& keyColumns, bool isLeft, const TExprNode& keyColumnsNode, const TMultiExprType* itemType) {
+            if (joinKind == "Cross" && !keyColumnsNode.Children().empty()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyColumnsNode.Pos()), "Specifying key columns is not allowed for cross join"));
+                return false;
+            }
             for (const auto& keyColumnNode : keyColumnsNode.Children()) {
                 auto position = GetWideBlockFieldPosition(*itemType, keyColumnNode->Content());
                 if (!position) {
@@ -1030,6 +1034,10 @@ namespace NTypeAnnImpl {
         };
 
         auto checkKeyDrops = [&](std::unordered_set<ui32>& keyDrops, bool isLeft, const std::unordered_set<ui32>& keyColumns, const TExprNode& keyDropsNode, const TMultiExprType* itemType) {
+            if (joinKind == "Cross" && !keyDropsNode.Children().empty()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropsNode.Pos()), "Specifying key drops is not allowed for cross join"));
+                return false;
+            }
             for (const auto& keyDropNode : keyDropsNode.Children()) {
                 auto position = GetWideBlockFieldPosition(*itemType, keyDropNode->Content());
                 if (!position) {

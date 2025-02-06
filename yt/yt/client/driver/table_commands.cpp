@@ -575,6 +575,19 @@ void TUnfreezeTableCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TCancelTabletTransitionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto asyncResult = context->GetClient()->CancelTabletTransition(
+        TabletId,
+        Options);
+    WaitFor(asyncResult)
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TReshardTableCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("pivot_keys", &TThis::PivotKeys)

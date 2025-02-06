@@ -376,6 +376,7 @@ message TEvDrainNode {
     optional bool KeepDown = 4 [default = false]; // deprecated in favor of DownPolicy
     optional uint32 DrainInFlight = 5;
     optional EDrainDownPolicy DownPolicy = 6 [default = DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART];
+    optional uint64 SeqNo = 7;
 }
 
 message TEvDrainNodeResult {

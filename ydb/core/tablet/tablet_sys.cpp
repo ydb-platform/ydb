@@ -1285,6 +1285,15 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
         }
         break;
     case NKikimrProto::OK:
+        if (GcInFly == 0 && GcForStepAckRequest) {
+            const auto& req = *GcForStepAckRequest->Get();
+            const ui32 gen = StateStorageInfo.KnownGeneration;
+            if (std::tie(req.Generation, req.Step) <= std::tie(gen, GcInFlyStep)) {
+                Send(GcForStepAckRequest->Sender, new TEvTablet::TEvGcForStepAckResponse(gen, GcInFlyStep));
+                GcForStepAckRequest = nullptr;
+            }
+        }
+        [[fallthrough]];
     default: // silently ignore unrecognized errors (assume temporary)
         if (GcInFly == 0 && GcNextStep != 0) {
             GcLogChannel(std::exchange(GcNextStep, 0));
@@ -1293,6 +1302,16 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
     }
 
     CheckBlobStorageError();
+}
+
+void TTablet::Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev) {
+    const auto& req = *ev->Get();
+    const ui32 gen = StateStorageInfo.KnownGeneration;
+    if (GcInFly == 0 && std::tie(req.Generation, req.Step) <= std::tie(gen, GcInFlyStep)) {
+        Send(ev->Sender, new TEvTablet::TEvGcForStepAckResponse(gen, GcInFlyStep));
+    } else {
+        GcForStepAckRequest = ev;
+    }
 }
 
 void TTablet::GcLogChannel(ui32 step) {
@@ -1951,13 +1970,13 @@ TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, const TActorContext &
 
 TActorId TTabletSetupInfo::Tablet(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
                                   ui32 suggestedGeneration, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
-    return ctx.ExecutorThread.RegisterActor(CreateTablet(launcher, info, this, suggestedGeneration, profiles, txCacheQuota),
+    return ctx.Register(CreateTablet(launcher, info, this, suggestedGeneration, profiles, txCacheQuota),
                                             TabletMailboxType, TabletPoolId);
 }
 
 TActorId TTabletSetupInfo::Follower(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
                                  ui32 followerId, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
-    return ctx.ExecutorThread.RegisterActor(CreateTabletFollower(launcher, info, this, followerId, profiles, txCacheQuota),
+    return ctx.Register(CreateTabletFollower(launcher, info, this, followerId, profiles, txCacheQuota),
                                             TabletMailboxType, TabletPoolId);
 }
 

@@ -52,7 +52,9 @@ struct TContext {
     NKikimr::NPQ::TRlContext RlContext;
 
     bool Authenticated() {
+        
         return !RequireAuthentication || AuthenticationStep == SUCCESS;
+    
     }
 
     TActorId DiscoveryCacheActor;
@@ -128,6 +130,8 @@ inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) 
     switch (code) {
         case Ydb::PersQueue::ErrorCode::ErrorCode::OK:
             return EKafkaErrors::NONE_ERROR;
+        case Ydb::PersQueue::ErrorCode::ErrorCode::UNKNOWN_READ_RULE:
+            return EKafkaErrors::GROUP_ID_NOT_FOUND;
         case Ydb::PersQueue::ErrorCode::ErrorCode::BAD_REQUEST:
             return EKafkaErrors::INVALID_REQUEST;
         case Ydb::PersQueue::ErrorCode::ErrorCode::ERROR:

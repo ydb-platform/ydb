@@ -111,6 +111,10 @@ namespace NKikimr::NStorage {
                 // it's okay, just wait for another configuration change or something like that
                 ConfigCommittedToConsole = true;
                 break;
+
+            case NKikimrBlobStorage::TEvControllerProposeConfigResponse::ReverseCommit:
+                Y_DEBUG_ABORT();
+                break;
         }
     }
 

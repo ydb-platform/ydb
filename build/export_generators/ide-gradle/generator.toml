@@ -47,6 +47,7 @@ proto_common_version="str"
 
 proto_grpc="flag"
 proto_grpc_version="str"
+proto_kotlin="flag"
 proto_kotlin_grpc="flag"
 proto_kotlin_grpc_version="str"
 

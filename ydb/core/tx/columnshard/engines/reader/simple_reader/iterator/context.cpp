@@ -48,21 +48,17 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         }
     }
     {
-        auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
+        auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
                                           [hasDeletions ? 1 : 0];
-        if (!result) {
-            TGuard<TMutex> wg(Mutex);
-            result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                         [hasDeletions ? 1 : 0];
-            if (!result) {
-                result = BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions);
-                CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                    [hasDeletions ? 1 : 0] = result;
+        if (result.NeedInitialization()) {
+            TGuard<TMutex> g(Mutex);
+            if (auto gInit = result.StartInitialization()) {
+                gInit->InitializationFinished(
+                    BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions));
             }
+            AFL_VERIFY(!result.NeedInitialization());
         }
-        AFL_VERIFY(result);
-        AFL_VERIFY(*result);
-        return *result;
+        return result.GetScriptVerified();
     }
 }
 
@@ -144,9 +140,9 @@ TString TSpecialReadContext::ProfileDebugString() const {
     };
 
     for (ui32 i = 0; i < (1 << 5); ++i) {
-        auto script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)];
-        if (script && *script) {
-            sb << (*script)->DebugString() << ";";
+        auto& script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)];
+        if (script.HasScript()) {
+            sb << script.DebugString() << ";";
         }
     }
     return sb;

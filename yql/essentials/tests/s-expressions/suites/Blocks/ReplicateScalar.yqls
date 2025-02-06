@@ -1,0 +1,14 @@
+(
+#comment
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+(let value (Int32 '1))
+(let count (Uint64 '10))
+(let r (ReplicateScalar (AsScalar value) (AsScalar count)))
+(let list (AsList '(r (AsScalar count))))
+(let data (Collect (NarrowMap (ToFlow (WideFromBlocks (FromFlow (ExpandMap 
+    (ToFlow list) (lambda '(x) (Nth x '0) (Nth x '1)) )))) (lambda '(x) x))))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

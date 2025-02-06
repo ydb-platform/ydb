@@ -335,7 +335,7 @@ void TKafkaBalancerActor::HandleJoinGroupResponse(
             params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
             params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
 
-            Kqp->SendYqlRequest(CHECK_GROUP_STATE, params.Build(), KqpReqCookie, ctx);
+            Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_STATE.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
             break;
         }
 
@@ -384,8 +384,9 @@ void TKafkaBalancerActor::HandleJoinGroupResponse(
             params.AddParam("$State").Uint64(GROUP_STATE_JOIN).Build();
             params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
             params.AddParam("$Master").Utf8(MemberId).Build();
+            params.AddParam("$LastHeartbeat").Datetime(TInstant::Now()).Build();
 
-            Kqp->SendYqlRequest(yqlRequest, params.Build(), KqpReqCookie, ctx);
+            Kqp->SendYqlRequest(Sprintf(yqlRequest.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
 
             break;
         }
@@ -406,6 +407,8 @@ void TKafkaBalancerActor::HandleJoinGroupResponse(
             params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
             params.AddParam("$Generation").Uint64(GenerationId).Build();
             params.AddParam("$MemberId").Utf8(MemberId).Build();
+            params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+            params.AddParam("$LastHeartbeat").Datetime(TInstant::Now()).Build();
 
             NKafka::TWorkerState workerState;
             for (const auto& protocol : JoinGroupRequestData->Protocols) {
@@ -419,9 +422,8 @@ void TKafkaBalancerActor::HandleJoinGroupResponse(
             TString serializedWorkerState = workerState.SerializeAsString();
 
             params.AddParam("$WorkerStateProto").String(serializedWorkerState).Build();
-            params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
 
-            Kqp->SendYqlRequest(INSERT_MEMBER, params.Build(), KqpReqCookie, ctx);
+            Kqp->SendYqlRequest(Sprintf(INSERT_MEMBER.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
             break;
         }
 
@@ -459,12 +461,7 @@ void TKafkaBalancerActor::HandleJoinGroupResponse(
             params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
             params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
 
-            Kqp->SendYqlRequest(
-                CHECK_GROUP_STATE,
-                params.Build(),
-                KqpReqCookie,
-                ctx
-            );
+            Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_STATE.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
             break;
         }
 
@@ -499,8 +496,11 @@ void TKafkaBalancerActor::HandleJoinGroupResponse(
                 params.AddParam("$State").Uint64(GROUP_STATE_JOINED).Build();
                 params.AddParam("$Generation").Uint64(GenerationId).Build();
                 params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+                params.AddParam("$LastHeartbeat").Datetime(TInstant::Now()).Build();
 
-                Kqp->SendYqlRequest(UPDATE_GROUPS_AND_SELECT_WORKER_STATES, params.Build(), KqpReqCookie, ctx);
+                auto sql = Sprintf(UPDATE_GROUPS_AND_SELECT_WORKER_STATES.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str());
+
+                Kqp->SendYqlRequest(sql, params.Build(), KqpReqCookie, ctx);
             } else {
                 if (!groupExists || generation != GenerationId) {
                     SendJoinGroupResponseFail(ctx, CorrelationId,
@@ -512,7 +512,7 @@ void TKafkaBalancerActor::HandleJoinGroupResponse(
 
                 if (state != GROUP_STATE_SYNC) {
                     if (WaitingWorkingStateRetries == WAIT_STATE_MAX_RETRY_COUNT) {
-                        SendSyncGroupResponseFail(ctx, CorrelationId, REBALANCE_IN_PROGRESS);
+                        SendJoinGroupResponseFail(ctx, CorrelationId, REBALANCE_IN_PROGRESS);
                         PassAway();
                         return;
                     }
@@ -550,10 +550,9 @@ void TKafkaBalancerActor::HandleJoinGroupResponse(
                 params.AddParam("$State").Uint64(GROUP_STATE_SYNC).Build();
                 params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
                 params.AddParam("$Protocol").Utf8(Protocol).Build();
+                params.AddParam("$LastHeartbeat").Datetime(TInstant::Now()).Build();
 
-                Cerr << "SAVNIK Protocol: " << Protocol << "\n";
-
-                Kqp->SendYqlRequest(UPDATE_GROUP_STATE_AND_PROTOCOL, params.Build(), KqpReqCookie, ctx, true);
+                Kqp->SendYqlRequest(Sprintf(UPDATE_GROUP_STATE_AND_PROTOCOL.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx, true);
             } else {
                 KqpReqCookie++;
                 Kqp->CommitTx(KqpReqCookie, ctx);
@@ -678,7 +677,7 @@ void TKafkaBalancerActor::HandleSyncGroupResponse(
             NYdb::TParamsBuilder params;
             params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
             params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
-            Kqp->SendYqlRequest(CHECK_GROUP_STATE, params.Build(), KqpReqCookie, ctx);
+            Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_STATE.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
             break;
         }
 
@@ -713,6 +712,7 @@ void TKafkaBalancerActor::HandleSyncGroupResponse(
                 params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
                 params.AddParam("$Generation").Uint64(GenerationId).Build();
                 params.AddParam("$State").Uint64(GROUP_STATE_WORKING).Build();
+                params.AddParam("$LastHeartbeat").Datetime(TInstant::Now()).Build();
 
                 if (SyncGroupRequestData->Assignments.size() == 0) {
                     SendSyncGroupResponseFail(ctx, CorrelationId, EKafkaErrors::INVALID_REQUEST);
@@ -722,8 +722,6 @@ void TKafkaBalancerActor::HandleSyncGroupResponse(
 
                 auto& assignmentList = params.AddParam("$Assignments").BeginList();
                 for (auto& assignment: SyncGroupRequestData->Assignments) {
-
-
                     assignmentList.AddListItem()
                         .BeginStruct()
                             .AddMember("MemberId").Utf8(assignment.MemberId.value())
@@ -732,7 +730,7 @@ void TKafkaBalancerActor::HandleSyncGroupResponse(
                         .EndStruct();
                 }
                 assignmentList.EndList().Build();
-                Kqp->SendYqlRequest(UPSERT_ASSIGNMENTS_AND_SET_WORKING_STATE, params.Build(), KqpReqCookie, ctx);
+                Kqp->SendYqlRequest(Sprintf(UPSERT_ASSIGNMENTS_AND_SET_WORKING_STATE.c_str(),  TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
             } else {
                 HandleSyncGroupResponse(nullptr, ctx);
             }
@@ -763,7 +761,7 @@ void TKafkaBalancerActor::HandleSyncGroupResponse(
             params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
             params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
 
-            Kqp->SendYqlRequest(CHECK_GROUP_STATE, params.Build(), KqpReqCookie, ctx);
+            Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_STATE.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
             break;
         }
 
@@ -807,7 +805,7 @@ void TKafkaBalancerActor::HandleSyncGroupResponse(
             params.AddParam("$MemberId").Utf8(MemberId).Build();
             params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
 
-            Kqp->SendYqlRequest(FETCH_ASSIGNMENTS, params.Build(), KqpReqCookie, ctx);
+            Kqp->SendYqlRequest(Sprintf(FETCH_ASSIGNMENTS.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
             break;
         }
 
@@ -861,8 +859,9 @@ void TKafkaBalancerActor::HandleLeaveGroupResponse(
             params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
             params.AddParam("$MemberId").Utf8(MemberId).Build();
             params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+            params.AddParam("$LastHeartbeat").Datetime(TInstant::Now() - TDuration::Hours(1)).Build();
 
-            Kqp->SendYqlRequest(UPDATE_TTL_LEAVE_GROUP, params.Build(), KqpReqCookie, ctx);
+            Kqp->SendYqlRequest(Sprintf(UPDATE_TTL_LEAVE_GROUP.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
             break;
         }
 
@@ -921,7 +920,7 @@ void TKafkaBalancerActor::HandleHeartbeatResponse(
             params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
             params.AddParam("$Deadline").Datetime(TInstant::Now() - TDuration::Seconds(30)).Build();
 
-            Kqp->SendYqlRequest(CHECK_DEAD_MEMBERS, params.Build(), KqpReqCookie, ctx);
+            Kqp->SendYqlRequest(Sprintf(CHECK_DEAD_MEMBERS.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
             break;
         }
 
@@ -961,7 +960,7 @@ void TKafkaBalancerActor::HandleHeartbeatResponse(
             params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
             params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
 
-            Kqp->SendYqlRequest(CHECK_GROUP_STATE, params.Build(), KqpReqCookie, ctx);
+            Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_STATE.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
             break;
         }
 
@@ -993,7 +992,7 @@ void TKafkaBalancerActor::HandleHeartbeatResponse(
             params.AddParam("$Generation").Uint64(GenerationId).Build();
             params.AddParam("$MemberId").Utf8(MemberId).Build();
             params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
-            params.AddParam("$HeartbeatDeadline").Datetime(TInstant::Now()).Build(); // savnik
+            params.AddParam("$LastHeartbeat").Datetime(TInstant::Now()).Build();
 
             if (IsMaster) {
                 params.AddParam("$UpdateGroupHeartbeat").Bool(true).Build();
@@ -1001,7 +1000,7 @@ void TKafkaBalancerActor::HandleHeartbeatResponse(
                 params.AddParam("$UpdateGroupHeartbeat").Bool(false).Build();
             }
 
-            Kqp->SendYqlRequest(UPDATE_TTLS, params.Build(), KqpReqCookie, ctx);
+            Kqp->SendYqlRequest(Sprintf(UPDATE_TTLS.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
             break;
         }
 

@@ -492,7 +492,7 @@ message TConfigSubscriptionRequest {
     optional uint64 MainYamlVersion = 6;
     repeated TVolatileYamlConfigVersion VolatileYamlVersion = 7;
     optional uint32 YamlApiVersion = 8;
-    repeated uint64 DatabaseYamlVersion = 9;
+    optional uint64 DatabaseYamlVersion = 9;
 }
 
 message TConfigSubscriptionResponse {

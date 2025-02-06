@@ -106,25 +106,25 @@ public:
 
         struct TEvUpdateYamlConfig : public TEventLocal<TEvUpdateYamlConfig, EvUpdateYamlConfig> {
             TEvUpdateYamlConfig(
-                const TString &mainYamlConfig,
-                const TMap<ui64, TString> &volatileYamlConfigs = {})
+                    const TString &mainYamlConfig,
+                    const TMap<ui64, TString> &volatileYamlConfigs = {})
                 : MainYamlConfig(mainYamlConfig)
                 , VolatileYamlConfigs(volatileYamlConfigs)
             {
             }
 
             TEvUpdateYamlConfig(
-                const TString &mainYamlConfig,
-                const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase)
+                    const TString &mainYamlConfig,
+                    const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase)
                 : MainYamlConfig(mainYamlConfig)
                 , DatabaseYamlConfigs(yamlConfigPerDatabase)
             {
             }
 
             TEvUpdateYamlConfig(
-                const TString &mainYamlConfig,
-                const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase,
-                const TMap<ui64, TString> &volatileYamlConfigs)
+                    const TString &mainYamlConfig,
+                    const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase,
+                    const TMap<ui64, TString> &volatileYamlConfigs)
                 : MainYamlConfig(mainYamlConfig)
                 , DatabaseYamlConfigs(yamlConfigPerDatabase)
                 , VolatileYamlConfigs(volatileYamlConfigs)
@@ -132,10 +132,10 @@ public:
             }
 
             TEvUpdateYamlConfig(
-                const TString &mainYamlConfig,
-                const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase,
-                const TMap<ui64, TString> &volatileYamlConfigs,
-                const TString& changedDatabase)
+                    const TString &mainYamlConfig,
+                    const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase,
+                    const TMap<ui64, TString> &volatileYamlConfigs,
+                    const TString& changedDatabase)
                 : MainYamlConfig(mainYamlConfig)
                 , DatabaseYamlConfigs(yamlConfigPerDatabase)
                 , VolatileYamlConfigs(volatileYamlConfigs)

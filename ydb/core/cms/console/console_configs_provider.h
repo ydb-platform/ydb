@@ -106,44 +106,44 @@ public:
 
         struct TEvUpdateYamlConfig : public TEventLocal<TEvUpdateYamlConfig, EvUpdateYamlConfig> {
             TEvUpdateYamlConfig(
-                const TString &yamlConfig,
+                const TString &mainYamlConfig,
                 const TMap<ui64, TString> &volatileYamlConfigs = {})
-                : YamlConfig(yamlConfig)
+                : MainYamlConfig(mainYamlConfig)
                 , VolatileYamlConfigs(volatileYamlConfigs)
             {
             }
 
             TEvUpdateYamlConfig(
-                const TString &yamlConfig,
+                const TString &mainYamlConfig,
                 const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase)
-                : YamlConfig(yamlConfig)
+                : MainYamlConfig(mainYamlConfig)
                 , YamlConfigPerDatabase(yamlConfigPerDatabase)
             {
             }
 
             TEvUpdateYamlConfig(
-                const TString &yamlConfig,
+                const TString &mainYamlConfig,
                 const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase,
                 const TMap<ui64, TString> &volatileYamlConfigs)
-                : YamlConfig(yamlConfig)
+                : MainYamlConfig(mainYamlConfig)
                 , YamlConfigPerDatabase(yamlConfigPerDatabase)
                 , VolatileYamlConfigs(volatileYamlConfigs)
             {
             }
 
             TEvUpdateYamlConfig(
-                const TString &yamlConfig,
+                const TString &mainYamlConfig,
                 const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase,
                 const TMap<ui64, TString> &volatileYamlConfigs,
                 const TString& changedDatabase)
-                : YamlConfig(yamlConfig)
+                : MainYamlConfig(mainYamlConfig)
                 , YamlConfigPerDatabase(yamlConfigPerDatabase)
                 , VolatileYamlConfigs(volatileYamlConfigs)
                 , ChangedDatabase(changedDatabase)
             {
             }
 
-            TString YamlConfig;
+            TString MainYamlConfig;
             THashMap<TString, TDatabaseYamlConfig> YamlConfigPerDatabase;
             TMap<ui64, TString> VolatileYamlConfigs;
             TString ChangedDatabase;
@@ -269,7 +269,7 @@ private:
     TSubscriptionIndex SubscriptionIndex;
     TInMemorySubscriptionIndex InMemoryIndex;
 
-    TString YamlConfig;
+    TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
     THashMap<TString, TDatabaseYamlConfig> YamlConfigPerDatabase;
     ui64 YamlConfigVersion = 0;

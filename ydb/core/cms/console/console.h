@@ -343,7 +343,7 @@ namespace TEvConsole {
                 Record.AddAffectedKinds(kind);
 
             if (!yamlConfig.empty()) {
-                Record.SetYamlConfig(yamlConfig);
+                Record.SetMainYamlConfig(yamlConfig);
                 for (auto &[id, config] : volatileYamlConfigs) {
                     auto *volatileConfig = Record.AddVolatileConfigs();
                     volatileConfig->SetId(id);
@@ -367,7 +367,7 @@ namespace TEvConsole {
                 Record.AddAffectedKinds(kind);
 
             if (!yamlConfig.empty()) {
-                Record.SetYamlConfig(yamlConfig);
+                Record.SetMainYamlConfig(yamlConfig);
                 for (auto &[id, config] : volatileYamlConfigs) {
                     auto *volatileConfig = Record.AddVolatileConfigs();
                     volatileConfig->SetId(id);
@@ -383,7 +383,7 @@ namespace TEvConsole {
             const TString &yamlConfig,
             const TMap<ui64, TString> &volatileYamlConfigs,
             const NKikimrConfig::TAppConfig &rawConfig,
-            const TMaybe<TString> dbc)
+            const TMaybe<TString> databaseYamlConfig)
         {
             Record.SetGeneration(generation);
             Record.MutableConfig()->CopyFrom(config);
@@ -392,15 +392,15 @@ namespace TEvConsole {
                 Record.AddAffectedKinds(kind);
 
             if (!yamlConfig.empty()) {
-                Record.SetYamlConfig(yamlConfig);
+                Record.SetMainYamlConfig(yamlConfig);
                 for (auto &[id, config] : volatileYamlConfigs) {
                     auto *volatileConfig = Record.AddVolatileConfigs();
                     volatileConfig->SetId(id);
                     volatileConfig->SetConfig(config);
                 }
             }
-            if (dbc) {
-                Record.SetDatabaseConfig(*dbc);
+            if (databaseYamlConfig) {
+                Record.SetDatabaseYamlConfig(*databaseYamlConfig);
             }
         }
 

@@ -74,7 +74,7 @@ void TConfigsManager::ReplaceMainConfigMetadata(const TString &config, bool forc
 
 void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
     try {
-        if (opCtx.UpdatedConfig != YamlConfig || YamlDropped) {
+        if (opCtx.UpdatedConfig != MainYamlConfig || YamlDropped) {
             auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
             auto resolved = NYamlConfig::ResolveAll(tree);
 
@@ -148,7 +148,7 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
             currentConfig = it->second.Config;
         }
         if (opCtx.UpdatedConfig != currentConfig) {
-            auto tree = NFyaml::TDocument::Parse(YamlConfig);
+            auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
             auto d = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
             NYamlConfig::AppendDatabaseConfig(tree, d);
             auto resolved = NYamlConfig::ResolveAll(tree);
@@ -456,7 +456,7 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
     auto subscriptionRowset = db.Table<Schema::ConfigSubscriptions>().Range().Select<Schema::ConfigSubscriptions::TColumns>();
     auto validatorsRowset = db.Table<Schema::DisabledValidators>().Range().Select<Schema::DisabledValidators::TColumns>();
     auto yamlConfigRowset = db.Table<Schema::YamlConfig>().Reverse().Select<Schema::YamlConfig::TColumns>();
-    auto perDatabaseYamlConfigRowset = db.Table<Schema::PerTenantYamlConfig>().Select<Schema::PerTenantYamlConfig::TColumns>();
+    auto databaseYamlConfigRowset = db.Table<Schema::DatabaseYamlConfig>().Select<Schema::DatabaseYamlConfig::TColumns>();
 
     if (!configItemRowset.IsReady()
         || !nextConfigItemIdRow.IsReady()
@@ -464,7 +464,7 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         || !subscriptionRowset.IsReady()
         || !validatorsRowset.IsReady()
         || !yamlConfigRowset.IsReady()
-        || !perDatabaseYamlConfigRowset.IsReady())
+        || !databaseYamlConfigRowset.IsReady())
     {
         return false;
     }
@@ -495,23 +495,23 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
 
     if (!yamlConfigRowset.EndOfSet()) {
         YamlVersion = yamlConfigRowset.template GetValue<Schema::YamlConfig::Version>();
-        YamlConfig = yamlConfigRowset.template GetValue<Schema::YamlConfig::Config>();
+        MainYamlConfig = yamlConfigRowset.template GetValue<Schema::YamlConfig::Config>();
         // ignore this as deprecated
         // now used only for disabling new config layout for older console
         YamlDropped = false;
     }
 
-    while (!perDatabaseYamlConfigRowset.EndOfSet()) {
-        TString tenant = perDatabaseYamlConfigRowset.GetValue<Schema::PerTenantYamlConfig::Path>();
-        ui32 version = perDatabaseYamlConfigRowset.GetValue<Schema::PerTenantYamlConfig::Version>();
-        TString config = perDatabaseYamlConfigRowset.GetValue<Schema::PerTenantYamlConfig::Config>();
+    while (!databaseYamlConfigRowset.EndOfSet()) {
+        TString tenant = databaseYamlConfigRowset.GetValue<Schema::DatabaseYamlConfig::Path>();
+        ui32 version = databaseYamlConfigRowset.GetValue<Schema::DatabaseYamlConfig::Version>();
+        TString config = databaseYamlConfigRowset.GetValue<Schema::DatabaseYamlConfig::Config>();
 
         YamlConfigPerDatabase[tenant] = TDatabaseYamlConfig {
             .Config = config,
             .Version = version,
         };
 
-        if (!perDatabaseYamlConfigRowset.Next()) {
+        if (!databaseYamlConfigRowset.Next()) {
             return false;
         }
     }
@@ -784,7 +784,7 @@ void TConfigsManager::Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, 
                     /* peer = */ ev->Get()->Record.GetPeerName(),
                     /* userSID = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID(),
                     /* sanitizedToken = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetSanitizedToken(),
-                    /* oldConfig = */ YamlConfig,
+                    /* oldConfig = */ MainYamlConfig,
                     /* newConfig = */ ev->Get()->Record.GetRequest().config(),
                     /* reason = */ error.Error,
                     /* success = */ false);
@@ -812,7 +812,7 @@ void TConfigsManager::Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, cons
                     /* peer = */ ev->Get()->Record.GetPeerName(),
                     /* userSID = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID(),
                     /* sanitizedToken = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetSanitizedToken(),
-                    /* oldConfig = */ YamlConfig,
+                    /* oldConfig = */ MainYamlConfig,
                     /* newConfig = */ ev->Get()->Record.GetRequest().config(),
                     /* reason = */ error.Error,
                     /* success = */ false);
@@ -1024,7 +1024,7 @@ void TConfigsManager::Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, 
         auto node = doc.Root().Map().at("selector_config");
 
         if (VolatileYamlConfigs.empty() || VolatileYamlConfigs.rbegin()->first + 1 == id) {
-            auto config = YamlConfig;
+            auto config = MainYamlConfig;
             auto tree = NFyaml::TDocument::Parse(config);
 
             for (auto &[_, config] : VolatileYamlConfigs) {
@@ -1052,7 +1052,7 @@ void TConfigsManager::Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, 
             VolatileYamlConfigs.try_emplace(id, cfg);
 
             auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
-                YamlConfig,
+                MainYamlConfig,
                 VolatileYamlConfigs);
             ctx.Send(ConfigsProvider, resp.Release());
         } else if (auto it = VolatileYamlConfigs.find(id); it == VolatileYamlConfigs.end() || it->second != cfg) {
@@ -1102,7 +1102,7 @@ void TConfigsManager::Handle(TEvConsole::TEvRemoveVolatileConfigRequest::TPtr &e
         }
 
         auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
-            YamlConfig,
+            MainYamlConfig,
             VolatileYamlConfigs);
         ctx.Send(ConfigsProvider, resp.Release());
 
@@ -1128,8 +1128,8 @@ void TConfigsManager::Handle(TEvPrivate::TEvStateLoaded::TPtr &/*ev*/, const TAc
     ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvSetConfigs(ConfigIndex.GetConfigItems()));
     ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvSetSubscriptions(SubscriptionIndex.GetSubscriptions()));
     ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
-    if (!YamlConfig.empty()) {
-        ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig(YamlConfig, YamlConfigPerDatabase, VolatileYamlConfigs));
+    if (!MainYamlConfig.empty()) {
+        ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig(MainYamlConfig, YamlConfigPerDatabase, VolatileYamlConfigs));
     }
     ScheduleLogCleanup(ctx);
 }
@@ -1173,7 +1173,7 @@ void TConfigsManager::HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest
         /* peer = */ ev->Get()->Record.GetPeerName(),
         /* userSID = */ ev->Get()->Record.GetUserToken(),
         /* sanitizedToken = */ TString(),
-        /* oldConfig = */ YamlConfig,
+        /* oldConfig = */ MainYamlConfig,
         /* newConfig = */ ev->Get()->Record.GetRequest().config(),
         /* reason = */ "Unauthorized.",
         /* success = */ false);
@@ -1184,7 +1184,7 @@ void TConfigsManager::HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TP
         /* peer = */ ev->Get()->Record.GetPeerName(),
         /* userSID = */ ev->Get()->Record.GetUserToken(),
         /* sanitizedToken = */ TString(),
-        /* oldConfig = */ YamlConfig,
+        /* oldConfig = */ MainYamlConfig,
         /* newConfig = */ ev->Get()->Record.GetRequest().config(),
         /* reason = */ "Unauthorized.",
         /* success = */ false);

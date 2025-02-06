@@ -259,7 +259,7 @@ private:
     THashMap<TDynBitMap, TSubscription::TPtr> SubscriptionsByKinds;
     THashMap<TActorId, TSubscriber::TPtr> Subscribers;
 
-    TString YamlConfig;
+    TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
     TMap<ui64, size_t> VolatileYamlConfigHashes;
     std::optional<TString> DatabaseYamlConfig;
@@ -375,7 +375,7 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
 
     try {
         NYamlConfig::ResolveAndParseYamlConfig(
-            YamlConfig,
+            MainYamlConfig,
             VolatileYamlConfigs,
             Labels,
             newYamlProtoConfig,
@@ -419,7 +419,7 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
         labels.AppendValue(std::move(label));
     }
 
-    response.InsertValue("yaml_config", YamlConfig);
+    response.InsertValue("yaml_config", MainYamlConfig);
     response.InsertValue("resolved_json_config", NJson::ReadJsonFastTree(ResolvedJsonConfig, true));
     response.InsertValue("current_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
 
@@ -679,7 +679,7 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                         DIV_CLASS("yaml-sticky-btn") { }
                                     }
                                     TAG_ATTRS(TDiv, {{"id", "yaml-config-item"}, {"name", "yaml-config-itemm"}}) {
-                                        str << YamlConfig;
+                                        str << MainYamlConfig;
                                     }
                                 }
                                 str << "<hr/>" << Endl;
@@ -793,12 +793,12 @@ public:
         return Config;
     }
 
-    bool HasYamlConfig() const override {
-        return !YamlConfig.empty();
+    bool HasMainYamlConfig() const override {
+        return !MainYamlConfig.empty();
     }
 
-    const TString& GetYamlConfig() const override {
-        return YamlConfig;
+    const TString& GetMainYamlConfig() const override {
+        return MainYamlConfig;
     }
 
     TMap<ui64, TString> GetVolatileYamlConfigs() const override {
@@ -814,7 +814,7 @@ public:
     }
 
     NKikimrConfig::TAppConfig Config;
-    TString YamlConfig;
+    TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
     TString DatabaseYamlConfig;
 };
@@ -836,9 +836,9 @@ try {
     auto configs = std::make_shared<TConfigurationResult>();
     dcClient->SavedResult = configs;
     configs->Config = rec.GetRawConsoleConfig();
-    configs->YamlConfig = rec.GetYamlConfig();
-    if (rec.HasDatabaseConfig()) {
-        configs->DatabaseYamlConfig = rec.GetDatabaseConfig();
+    configs->MainYamlConfig = rec.GetMainYamlConfig();
+    if (rec.HasDatabaseYamlConfig()) {
+        configs->DatabaseYamlConfig = rec.GetDatabaseYamlConfig();
     }
     // TODO volatile
     RecordedInitialConfiguratorDeps->DynConfigClient = std::move(dcClient);
@@ -904,12 +904,12 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
     CurrentConfig = rec.GetConfig();
 
-    auto newYamlConfig = rec.GetYamlConfig();
+    auto newYamlConfig = rec.GetMainYamlConfig();
 
-    bool isYamlChanged = newYamlConfig != YamlConfig;
+    bool isYamlChanged = newYamlConfig != MainYamlConfig;
 
-    if (rec.HasDatabaseConfig() && rec.GetDatabaseConfig() != DatabaseYamlConfig.value_or("")) {
-        DatabaseYamlConfig = rec.GetDatabaseConfig();
+    if (rec.HasDatabaseYamlConfig() && rec.GetDatabaseYamlConfig() != DatabaseYamlConfig.value_or("")) {
+        DatabaseYamlConfig = rec.GetDatabaseYamlConfig();
         isYamlChanged = true;
     }
 
@@ -925,7 +925,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
     }
 
     if (isYamlChanged) {
-        YamlConfig = newYamlConfig;
+        MainYamlConfig = newYamlConfig;
         VolatileYamlConfigs.clear();
         VolatileYamlConfigHashes.clear();
         for (auto &volatileConfig : rec.GetVolatileConfigs()) {
@@ -938,12 +938,12 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
     bool yamlConfigTurnedOff = false;
 
-    if (!YamlConfig.empty() && isYamlChanged) {
+    if (!MainYamlConfig.empty() && isYamlChanged) {
         newYamlProtoConfig = ParseYamlProtoConfig();
         bool wasYamlConfigEnabled = YamlConfigEnabled;
         YamlConfigEnabled = newYamlProtoConfig.HasYamlConfigEnabled() && newYamlProtoConfig.GetYamlConfigEnabled();
         yamlConfigTurnedOff = wasYamlConfigEnabled && !YamlConfigEnabled;
-    } else if (YamlConfig.empty()) {
+    } else if (MainYamlConfig.empty()) {
         bool wasYamlConfigEnabled = YamlConfigEnabled;
         YamlConfigEnabled = false;
         yamlConfigTurnedOff = wasYamlConfigEnabled && !YamlConfigEnabled;
@@ -1023,7 +1023,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 void TConfigsDispatcher::UpdateYamlVersion(const TSubscription::TPtr &subscription) const
 {
     TYamlVersion yamlVersion;
-    yamlVersion.Version = NYamlConfig::GetVersion(YamlConfig);
+    yamlVersion.Version = NYamlConfig::GetVersion(MainYamlConfig);
     for (auto &[id, hash] : VolatileYamlConfigHashes) {
         yamlVersion.VolatileVersions[id] = hash;
     }

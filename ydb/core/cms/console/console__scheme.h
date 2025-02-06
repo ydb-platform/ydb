@@ -166,7 +166,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Version, Config, Dropped>;
     };
 
-    struct PerTenantYamlConfig : Table<104> {
+    struct DatabaseYamlConfig : Table<104> {
         struct Path : Column<1, NScheme::NTypeIds::Utf8> {};
         struct Version : Column<2, NScheme::NTypeIds::Uint64> {};
         struct Config : Column<3, NScheme::NTypeIds::String> {};
@@ -178,7 +178,7 @@ struct Schema : NIceDb::Schema {
 
     using TTables = SchemaTables<Config, Tenants, TenantPools, TenantUnits, RemovedTenants,
                                  RegisteredUnits, LogRecords, ConfigItems, ConfigSubscriptions, DisabledValidators,
-                                 YamlConfig, PerTenantYamlConfig>;
+                                 YamlConfig, DatabaseYamlConfig>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };

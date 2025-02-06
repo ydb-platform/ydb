@@ -207,7 +207,7 @@ private:
         request->Record.SetUserToken(this->Request_->GetSerializedToken());
         request->Record.SetPeerName(this->Request_->GetPeerName());
         if (this->Request_->GetDatabaseName()) {
-            request->Record.SetDatabase(*this->Request_->GetDatabaseName());
+            request->Record.SetIngressDatabase(*this->Request_->GetDatabaseName());
         }
         NTabletPipe::SendData(IActor::SelfId(), ConsolePipe, request.Release());
     }

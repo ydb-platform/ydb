@@ -322,12 +322,12 @@ public:
         return Result.GetConfig();
     }
 
-    bool HasYamlConfig() const override {
-        return Result.HasYamlConfig();
+    bool HasMainYamlConfig() const override {
+        return Result.HasMainYamlConfig();
     }
 
-    const TString& GetYamlConfig() const override {
-        return Result.GetYamlConfig();
+    const TString& GetMainYamlConfig() const override {
+        return Result.GetMainYamlConfig();
     }
 
     TMap<ui64, TString> GetVolatileYamlConfigs() const override {
@@ -586,8 +586,8 @@ void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErr
     }
 }
 
-void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location) {
-    if (!yamlConfigFile) {
+void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location) {
+    if (!mainYamlConfigFile) {
         return;
     }
 
@@ -595,17 +595,17 @@ void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConf
     IErrorCollector& errorCollector = refs.ErrorCollector;
     IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
-    const TString yamlConfigString = protoConfigFileProvider.GetProtoFromFile(yamlConfigFile, errorCollector);
+    const TString mainYamlConfigString = protoConfigFileProvider.GetProtoFromFile(mainYamlConfigFile, errorCollector);
 
     if (appConfig.GetSelfManagementConfig().GetEnabled()) {
         // fill in InitialConfigYaml only when self-management through distconf is enabled
-        appConfig.MutableSelfManagementConfig()->SetInitialConfigYaml(yamlConfigString);
+        appConfig.MutableSelfManagementConfig()->SetInitialConfigYaml(mainYamlConfigString);
     }
 
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
      */
-    NKikimrConfig::TAppConfig parsedConfig = NKikimr::NYaml::Parse(yamlConfigString); // FIXME
+    NKikimrConfig::TAppConfig parsedConfig = NKikimr::NYaml::Parse(mainYamlConfigString); // FIXME
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
      */
@@ -693,16 +693,16 @@ NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, cons
 }
 
 NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels) {
-    NKikimrConfig::TAppConfig yamlConfig;
-    if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
+    NKikimrConfig::TAppConfig appConfig;
+    if (result.HasMainYamlConfig() && !result.GetMainYamlConfig().empty()) {
         NYamlConfig::ResolveAndParseYamlConfig(
-            result.GetYamlConfig(),
+            result.GetMainYamlConfig(),
             result.GetVolatileYamlConfigs(),
             labels,
-            yamlConfig,
+            appConfig,
             result.HasDatabaseYamlConfig() ? std::optional{result.GetDatabaseYamlConfig()} : std::nullopt);
     }
-    return yamlConfig;
+    return appConfig;
 }
 
 NKikimrConfig::TAppConfig GetActualDynConfig(

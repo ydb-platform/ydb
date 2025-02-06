@@ -29,7 +29,7 @@ class TConfigsManager::TTxReplaceYamlConfigBase
             , Force(force)
             , AllowUnknownFields(ev->Get()->Record.GetRequest().allow_unknown_fields())
             , DryRun(ev->Get()->Record.GetRequest().dry_run())
-            , IngressDatabase(ev->Get()->Record.HasDatabase() ? TMaybe<TString>{ev->Get()->Record.GetDatabase()} : TMaybe<TString>{})
+            , IngressDatabase(ev->Get()->Record.HasIngressDatabase() ? TMaybe<TString>{ev->Get()->Record.GetIngressDatabase()} : TMaybe<TString>{})
     {
     }
 
@@ -126,9 +126,9 @@ public:
 
         try {
             Version = opCtx.Version;
-            UpdatedConfig = opCtx.UpdatedConfig;
+            UpdatedMainConfig = opCtx.UpdatedConfig;
             Cluster = opCtx.Cluster;
-            Modify = opCtx.UpdatedConfig != Self->YamlConfig || Self->YamlDropped;
+            Modify = opCtx.UpdatedConfig != Self->MainYamlConfig || Self->YamlDropped;
 
             if (IngressDatabase) {
                 WarnDatabaseBypass = true;
@@ -138,7 +138,7 @@ public:
                 DoInternalAudit(txc, ctx);
 
                 db.Table<Schema::YamlConfig>().Key(Version + 1)
-                    .Update<Schema::YamlConfig::Config>(UpdatedConfig)
+                    .Update<Schema::YamlConfig::Config>(UpdatedMainConfig)
                     // set config dropped by default to support rollback to previous versions
                     // where new config layout is not supported
                     // it will lead to ignoring config from new versions
@@ -172,7 +172,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceYamlConfig Complete");
+        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceMainYamlConfig Complete");
 
         ctx.Send(Response.Release());
 
@@ -181,25 +181,25 @@ public:
                 /* peer = */ Peer,
                 /* userSID = */ UserToken.GetUserSID(),
                 /* sanitizedToken = */ UserToken.GetSanitizedToken(),
-                /* oldConfig = */ Self->YamlConfig,
+                /* oldConfig = */ Self->MainYamlConfig,
                 /* newConfig = */ Config,
                 /* reason = */ {},
                 /* success = */ true);
 
             Self->YamlVersion = Version + 1;
-            Self->YamlConfig = UpdatedConfig;
+            Self->MainYamlConfig = UpdatedMainConfig;
             Self->YamlDropped = false;
 
             Self->VolatileYamlConfigs.clear();
 
-            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->YamlConfig, Self->YamlConfigPerDatabase);
+            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->MainYamlConfig, Self->YamlConfigPerDatabase);
             ctx.Send(Self->ConfigsProvider, resp.Release());
         } else if (Error && !DryRun) {
             AuditLogReplaceConfigTransaction(
                 /* peer = */ Peer,
                 /* userSID = */ UserToken.GetUserSID(),
                 /* sanitizedToken = */ UserToken.GetSanitizedToken(),
-                /* oldConfig = */ Self->YamlConfig,
+                /* oldConfig = */ Self->MainYamlConfig,
                 /* newConfig = */ Config,
                 /* reason = */ ErrorReason,
                 /* success = */ false);
@@ -214,11 +214,11 @@ public:
 
         // for backward compatibility in ui
         logData.MutableAction()->AddActions()->MutableModifyConfigItem()->MutableConfigItem();
-        logData.AddAffectedKinds(NKikimrConsole::TConfigItem::YamlConfigChangeItem);
+        logData.AddAffectedKinds(NKikimrConsole::TConfigItem::MainYamlConfigChangeItem);
 
-        auto& yamlConfigChange = *logData.MutableYamlConfigChange();
-        yamlConfigChange.SetOldYamlConfig(Self->YamlConfig);
-        yamlConfigChange.SetNewYamlConfig(UpdatedConfig);
+        auto& yamlConfigChange = *logData.MutableMainYamlConfigChange();
+        yamlConfigChange.SetOldYamlConfig(Self->MainYamlConfig);
+        yamlConfigChange.SetNewYamlConfig(UpdatedMainConfig);
         for (auto& [id, config] : Self->VolatileYamlConfigs) {
             auto& oldVolatileConfig = *yamlConfigChange.AddOldVolatileYamlConfigs();
             oldVolatileConfig.SetId(id);
@@ -231,7 +231,7 @@ public:
 private:
     ui32 Version;
     TString Cluster;
-    TString UpdatedConfig;
+    TString UpdatedMainConfig;
 };
 
 class TConfigsManager::TTxReplaceDatabaseYamlConfig
@@ -268,7 +268,7 @@ public:
 
         try {
             Version = opCtx.Version;
-            UpdatedConfig = opCtx.UpdatedConfig;
+            UpdatedDatabaseConfig = opCtx.UpdatedConfig;
             TString currentConfig;
             if (auto it = Self->YamlConfigPerDatabase.find(opCtx.TargetDatabase); it != Self->YamlConfigPerDatabase.end()) {
                 currentConfig = it->second.Config;
@@ -279,7 +279,7 @@ public:
                 WarnDatabaseBypass = true;
             }
 
-            if (!AppData(ctx)->FeatureFlags.GetPerDatabaseConfigAllowed()) {
+            if (!AppData(ctx)->FeatureFlags.GetDatabaseYamlConfigAllowed()) {
                 Error = true;
                 auto ev = MakeHolder<TEvConsole::TEvGenericError>();
 
@@ -295,11 +295,11 @@ public:
             if (!DryRun && !hasForbiddenUnknown) {
                 DoInternalAudit(txc, ctx);
 
-                db.Table<Schema::PerTenantYamlConfig>().Key(TargetDatabase, Version + 1)
-                    .Update<Schema::PerTenantYamlConfig::Config>(Config);
+                db.Table<Schema::DatabaseYamlConfig>().Key(TargetDatabase, Version + 1)
+                    .Update<Schema::DatabaseYamlConfig::Config>(Config);
 
                 /* Later we shift this boundary to support rollback and history */
-                db.Table<Schema::PerTenantYamlConfig>().Key(TargetDatabase, Version)
+                db.Table<Schema::DatabaseYamlConfig>().Key(TargetDatabase, Version)
                     .Delete();
             }
 
@@ -338,17 +338,17 @@ public:
         logData.MutableAction()->AddActions()->MutableModifyConfigItem()->MutableConfigItem();
         logData.AddAffectedKinds(NKikimrConsole::TConfigItem::DatabaseYamlConfigChangeItem);
 
-        auto& databaseConfigChange = *logData.MutableDatabaseConfigChange();
+        auto& databaseConfigChange = *logData.MutableDatabaseYamlConfigChange();
         databaseConfigChange.SetDatabase(TargetDatabase);
         databaseConfigChange.SetOldYamlConfig(oldConfig);
-        databaseConfigChange.SetNewYamlConfig(UpdatedConfig);
+        databaseConfigChange.SetNewYamlConfig(UpdatedDatabaseConfig);
 
         Self->Logger.DbLogData(UserToken.GetUserSID(), logData, txc, ctx);
     }
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceYamlConfig Complete");
+        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceDatabaseYamlConfig Complete");
 
         ctx.Send(Response.Release());
 
@@ -370,12 +370,12 @@ public:
                 /* success = */ true);
 
             Self->YamlConfigPerDatabase[*IngressDatabase] = TDatabaseYamlConfig {
-                .Config = UpdatedConfig,
+                .Config = UpdatedDatabaseConfig,
                 .Version = Version + 1,
             };
 
             auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
-                Self->YamlConfig,
+                Self->MainYamlConfig,
                 Self->YamlConfigPerDatabase,
                 Self->VolatileYamlConfigs,
                 TargetDatabase);
@@ -399,7 +399,7 @@ public:
 private:
     ui32 Version;
     TString TargetDatabase;
-    TString UpdatedConfig;
+    TString UpdatedDatabaseConfig;
 };
 
 ITransaction *TConfigsManager::CreateTxReplaceMainYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev)

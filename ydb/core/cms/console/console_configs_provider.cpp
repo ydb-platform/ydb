@@ -685,9 +685,9 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
 
     if (subscription->YamlConfigVersion != YamlConfigVersion) {
         subscription->YamlConfigVersion = YamlConfigVersion;
-        request->Record.SetYamlConfig(YamlConfig);
+        request->Record.SetMainYamlConfig(MainYamlConfig);
     } else {
-        request->Record.SetYamlConfigNotChanged(true);
+        request->Record.SetMainYamlConfigNotChanged(true);
     }
 
     for (auto &[id, hash] : VolatileYamlConfigHashes) {
@@ -712,9 +712,9 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
     if (auto it = YamlConfigPerDatabase.find(subscription->Tenant); it != YamlConfigPerDatabase.end()) {
         if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version) {
             subscription->DatabaseYamlConfigVersion = it->second.Version;
-            request->Record.SetDatabaseConfig(it->second.Config);
+            request->Record.SetDatabaseYamlConfig(it->second.Config);
         } else {
-            request->Record.SetDatabaseConfigNotChanged(true);
+            request->Record.SetDatabaseYamlConfigNotChanged(true);
         }
     }
 
@@ -731,7 +731,7 @@ void TConfigsProvider::DumpStateHTML(IOutputStream &os) const {
                     os << "Presistent Config" << Endl;
                 }
                 PRE() {
-                    os << YamlConfig;
+                    os << MainYamlConfig;
                 }
                 for (auto &[id, config] : VolatileYamlConfigs) {
                     TAG(TH5) {
@@ -1101,7 +1101,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
                 "Send TEvGetNodeConfigResponse: " << response->Record.ShortDebugString());
 
     if (rec.HasServeYaml() && rec.GetServeYaml() && rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1) {
-        response->Record.SetYamlConfig(YamlConfig);
+        response->Record.SetMainYamlConfig(MainYamlConfig);
 
         for (auto &[id, config] : VolatileYamlConfigs) {
             auto &item = *response->Record.AddVolatileConfigs();
@@ -1238,10 +1238,10 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
 void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const TActorContext &ctx) {
     YamlConfigPerDatabase = ev->Get()->YamlConfigPerDatabase;
     if (!ev->Get()->ChangedDatabase) {
-        YamlConfig = ev->Get()->YamlConfig;
+        MainYamlConfig = ev->Get()->MainYamlConfig;
         VolatileYamlConfigs.clear();
 
-        YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
+        YamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
         VolatileYamlConfigHashes.clear();
 
         for (auto& [id, config] : ev->Get()->VolatileYamlConfigs) {
@@ -1277,9 +1277,9 @@ void TConfigsProvider::UpdateConfig(TInMemorySubscription::TPtr subscription,
 
     if (subscription->YamlConfigVersion != YamlConfigVersion) {
         subscription->YamlConfigVersion = YamlConfigVersion;
-        request->Record.SetYamlConfig(YamlConfig);
+        request->Record.SetMainYamlConfig(MainYamlConfig);
     } else {
-        request->Record.SetYamlConfigNotChanged(true);
+        request->Record.SetMainYamlConfigNotChanged(true);
     }
 
     for (auto &[id, hash] : VolatileYamlConfigHashes) {
@@ -1297,9 +1297,9 @@ void TConfigsProvider::UpdateConfig(TInMemorySubscription::TPtr subscription,
     if (auto it = YamlConfigPerDatabase.find(subscription->Tenant); it != YamlConfigPerDatabase.end()) {
         if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version) {
             subscription->DatabaseYamlConfigVersion = it->second.Version;
-            request->Record.SetDatabaseConfig(it->second.Config);
+            request->Record.SetDatabaseYamlConfig(it->second.Config);
         } else {
-            request->Record.SetDatabaseConfigNotChanged(true);
+            request->Record.SetDatabaseYamlConfigNotChanged(true);
         }
     }
 

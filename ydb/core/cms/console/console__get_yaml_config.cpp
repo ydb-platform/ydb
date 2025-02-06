@@ -12,7 +12,7 @@ public:
                      TEvConsole::TEvGetAllConfigsRequest::TPtr &ev)
         : TBase(self)
         , Request(std::move(ev))
-        , IngressDatabase(Request->Get()->Record.HasDatabase() ? TMaybe<TString>{Request->Get()->Record.GetDatabase()} : TMaybe<TString>{})
+        , IngressDatabase(Request->Get()->Record.HasIngressDatabase() ? TMaybe<TString>{Request->Get()->Record.GetIngressDatabase()} : TMaybe<TString>{})
     {
     }
 
@@ -34,7 +34,7 @@ public:
         auto& identity = *Response->Record.MutableResponse()->add_identity();
         identity.set_cluster(Self->ClusterName);
         identity.set_version(Self->YamlVersion);
-        Response->Record.MutableResponse()->add_config(Self->YamlConfig);
+        Response->Record.MutableResponse()->add_config(Self->MainYamlConfig);
 
         for (const auto& [database, config] : Self->YamlConfigPerDatabase) {
             Response->Record.MutableResponse()->add_identity()->set_database(database);

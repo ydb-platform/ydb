@@ -149,7 +149,7 @@ message TConfigItem {
 
         // synthetic kinds for audit purposes only
         DatabaseYamlConfigChangeItem = 32767;
-        YamlConfigChangeItem = 32768;
+        MainYamlConfigChangeItem = 32768;
     }
 
     enum EMergeStrategy {
@@ -264,7 +264,7 @@ message TSetYamlConfigRequest {
     optional Ydb.DynamicConfig.SetConfigRequest Request = 1;
     optional bytes UserToken = 2;
     optional string PeerName = 3;
-    optional string Database = 4;
+    optional string IngressDatabase = 4;
 }
 
 message TSetYamlConfigResponse {
@@ -275,7 +275,7 @@ message TReplaceYamlConfigRequest {
     optional Ydb.DynamicConfig.ReplaceConfigRequest Request = 1;
     optional bytes UserToken = 2;
     optional string PeerName = 3;
-    optional string Database = 4;
+    optional string IngressDatabase = 4;
 }
 
 message TReplaceYamlConfigResponse {
@@ -286,7 +286,7 @@ message TDropConfigRequest {
     optional Ydb.DynamicConfig.DropConfigRequest Request = 1;
     optional bytes UserToken = 2;
     optional string PeerName = 3;
-    optional string Database = 4;
+    optional string IngressDatabase = 4;
 }
 
 message TDropConfigResponse {
@@ -296,7 +296,7 @@ message TAddVolatileConfigRequest {
     optional Ydb.DynamicConfig.AddVolatileConfigRequest Request = 1;
     optional bytes UserToken = 2;
     optional string PeerName = 3;
-    optional string Database = 4;
+    optional string IngressDatabase = 4;
 }
 
 message TAddVolatileConfigResponse {
@@ -306,7 +306,7 @@ message TGetAllConfigsRequest {
     optional Ydb.DynamicConfig.GetConfigRequest Request = 1;
     optional bytes UserToken = 2;
     optional string PeerName = 3;
-    optional string Database = 4;
+    optional string IngressDatabase = 4;
 }
 
 message TGetAllConfigsResponse {
@@ -317,7 +317,7 @@ message TGetAllConfigsResponse {
 message TIsYamlReadOnlyRequest {
     optional bytes UserToken = 1;
     optional string PeerName = 3;
-    optional string Database = 4;
+    optional string IngressDatabase = 4;
 }
 
 message TIsYamlReadOnlyResponse {
@@ -328,7 +328,7 @@ message TGetNodeLabelsRequest {
     optional Ydb.DynamicConfig.GetNodeLabelsRequest Request = 1;
     optional bytes UserToken = 2;
     optional string PeerName = 3;
-    optional string Database = 4;
+    optional string IngressDatabase = 4;
 }
 
 message TGetNodeLabelsResponse {
@@ -339,7 +339,7 @@ message TGetAllMetadataRequest {
     optional Ydb.DynamicConfig.GetMetadataRequest Request = 1;
     optional bytes UserToken = 2;
     optional string PeerName = 3;
-    optional string Database = 4;
+    optional string IngressDatabase = 4;
 }
 
 message TGetAllMetadataResponse {
@@ -350,7 +350,7 @@ message TRemoveVolatileConfigRequest {
     optional Ydb.DynamicConfig.RemoveVolatileConfigRequest Request = 1;
     optional bytes UserToken = 2;
     optional string PeerName = 3;
-    optional string Database = 4;
+    optional string IngressDatabase = 4;
 }
 
 message TRemoveVolatileConfigResponse {
@@ -360,7 +360,7 @@ message TResolveConfigRequest {
     optional Ydb.DynamicConfig.ResolveConfigRequest Request = 1;
     optional bytes UserToken = 2;
     optional string PeerName = 3;
-    optional string Database = 4;
+    optional string IngressDatabase = 4;
 }
 
 message TResolveConfigResponse {
@@ -371,7 +371,7 @@ message TResolveAllConfigRequest {
     optional Ydb.DynamicConfig.ResolveAllConfigRequest Request = 1;
     optional bytes UserToken = 2;
     optional string PeerName = 3;
-    optional string Database = 4;
+    optional string IngressDatabase = 4;
 }
 
 message TResolveAllConfigResponse {
@@ -459,7 +459,7 @@ message TGetNodeConfigRequest {
 message TGetNodeConfigResponse {
     optional TStatus Status = 1;
     optional NKikimrConfig.TAppConfig Config = 2;
-    optional string YamlConfig = 3;
+    optional string MainYamlConfig = 3;
     repeated TVolatileYamlConfig VolatileConfigs = 4;
     optional string DatabaseYamlConfig = 5;
 }
@@ -513,11 +513,11 @@ message TConfigSubscriptionNotification {
     optional uint64 Generation = 2;
     optional NKikimrConfig.TAppConfig Config = 3;
     repeated uint32 AffectedKinds = 4;
-    optional string YamlConfig = 5;
-    optional bool YamlConfigNotChanged = 6;
+    optional string MainYamlConfig = 5;
+    optional bool MainYamlConfigNotChanged = 6;
     repeated TVolatileYamlConfig VolatileConfigs = 7;
-    optional string DatabaseConfig = 8;
-    optional bool DatabaseConfigNotChanged = 9;
+    optional string DatabaseYamlConfig = 8;
+    optional bool DatabaseYamlConfigNotChanged = 9;
     optional NKikimrConfig.TAppConfig RawConsoleConfig = 103; // Used for correct next startup config prediction
 }
 

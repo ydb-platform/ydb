@@ -33,20 +33,20 @@ NKikimrConfig::TAppConfig YamlToProto(
 }
 
 void ResolveAndParseYamlConfig(
-    const TString& yamlConfig,
+    const TString& mainYamlConfig,
     const TMap<ui64, TString>& volatileYamlConfigs,
     const TMap<TString, TString>& labels,
     NKikimrConfig::TAppConfig& appConfig,
-    std::optional<TString> databaseConfig,
+    std::optional<TString> databaseYamlConfig,
     TString* resolvedYamlConfig,
     TString* resolvedJsonConfig)
 {
     TStringStream resolvedJsonConfigStream;
-    if (yamlConfig) {
-        auto tree = NFyaml::TDocument::Parse(yamlConfig);
+    if (mainYamlConfig) {
+        auto tree = NFyaml::TDocument::Parse(mainYamlConfig);
 
-        if (databaseConfig) {
-            auto d = NFyaml::TDocument::Parse(*databaseConfig);
+        if (databaseYamlConfig) {
+            auto d = NFyaml::TDocument::Parse(*databaseYamlConfig);
             NYamlConfig::AppendDatabaseConfig(tree, d);
         }
 

@@ -323,7 +323,7 @@ private:
 
     TString ClusterName;
     ui32 YamlVersion = 0;
-    TString YamlConfig;
+    TString MainYamlConfig;
     THashMap<TString, TDatabaseYamlConfig> YamlConfigPerDatabase;
     bool YamlDropped = false;
     bool YamlReadOnly = true;

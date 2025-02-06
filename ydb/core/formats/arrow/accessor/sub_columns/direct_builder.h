@@ -78,9 +78,9 @@ public:
 
     void AddKVOwn(const TStringBuf key, const TString& value) {
         Storage.emplace_back(value);
-        auto itElements = Elements.find(Storage.back());
+        auto itElements = Elements.find(key);
         if (itElements == Elements.end()) {
-            itElements = Elements.emplace(Storage.back(), Storage.back()).first;
+            itElements = Elements.emplace(key, key).first;
         }
         itElements->second.AddData(value, CurrentRecordIndex);
     }

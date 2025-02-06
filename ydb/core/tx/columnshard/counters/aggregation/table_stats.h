@@ -25,10 +25,11 @@ private:
                 bytesInBlobStorage += dataSize;
             }
         }
-        // TODO: Report total volume of table's data after migration to separate quotas by storage kinds.
+        // TODO: Report total volume of table's data in DataSize after migration
+        // to separate quotas by storage kinds:
         // https://github.com/ydb-platform/ydb-rfc/blob/main/per_storage_kind_quotas.md#migration
-        // Reason: TTableStats::DataSize is used for limiting storage consumption, but also for displaying
-        // total volume of table's data in UI.
+        // Reason: TTableStats::DataSize is currently used for limiting storage
+        // consumption, but also shown as total volume of table's data in UI.
         to.SetDataSize(bytesInBlobStorage);
     }
 

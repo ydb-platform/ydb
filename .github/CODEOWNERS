@@ -13,6 +13,7 @@
 /yt @ydb-platform/ci
 
 /ydb/core/fq/ @ydb-platform/fq
+/ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/public_http/ @ydb-platform/fq
 
 /ydb/docs/ @ydb-platform/docs

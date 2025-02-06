@@ -59,7 +59,8 @@ public:
                     }
                     break;
                 } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
-                    if (CurrentArrayData->IsNull(localIndex) && std::static_pointer_cast<TSparsedArray>(CurrentArrayData)->GetDefaultValue() == nullptr) {
+                    if (CurrentArrayData->IsNull(localIndex) &&
+                        std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
                         CurrentIndex += ChunkAddress->GetArray()->length();
                     } else {
                         break;

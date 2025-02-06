@@ -246,8 +246,8 @@ private:
     ui64 GetTopicTabletId(const TActorId& actorId,
                           const TString& topicPath,
                           ui32 partition);
-    TVector<TString> GetTabletKeys(const TActorId& actorId,
-                                   ui64 tabletId);
+    std::vector<std::string> GetTabletKeys(const TActorId& actorId,
+                                           ui64 tabletId);
     NPQ::TWriteId GetTransactionWriteId(const TActorId& actorId,
                                         ui64 tabletId);
     void SendLongTxLockStatus(const TActorId& actorId,
@@ -1047,7 +1047,8 @@ ui64 TFixture::GetTopicTabletId(const TActorId& actorId, const TString& topicPat
     return Max<ui64>();
 }
 
-TVector<TString> TFixture::GetTabletKeys(const TActorId& actorId, ui64 tabletId)
+std::vector<std::string> TFixture::GetTabletKeys(const TActorId& actorId,
+                                                 ui64 tabletId)
 {
     using TEvKeyValue = NKikimr::TEvKeyValue;
 
@@ -1072,7 +1073,7 @@ TVector<TString> TFixture::GetTabletKeys(const TActorId& actorId, ui64 tabletId)
     UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
     UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadRangeResultSize(), 1);
 
-    TVector<TString> keys;
+    std::vector<std::string> keys;
 
     auto& result = response->Record.GetReadRangeResult(0);
     for (size_t i = 0; i < result.PairSize(); ++i) {
@@ -1754,7 +1755,7 @@ void TFixture::CheckTabletKeys(const TString& topicName)
     };
 
     bool found;
-    TVector<TString> keys;
+    std::vector<std::string> keys;
     for (size_t i = 0; i < 20; ++i) {
         keys = GetTabletKeys(edge, tabletId);
 

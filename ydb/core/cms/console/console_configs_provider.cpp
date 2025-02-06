@@ -709,7 +709,7 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
 
     subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
 
-    if (auto it = YamlConfigPerDatabase.find(subscription->Tenant); it != YamlConfigPerDatabase.end()) {
+    if (auto it = DatabaseYamlConfigs.find(subscription->Tenant); it != DatabaseYamlConfigs.end()) {
         if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version) {
             subscription->DatabaseYamlConfigVersion = it->second.Version;
             request->Record.SetDatabaseYamlConfig(it->second.Config);
@@ -1109,7 +1109,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
             item.SetConfig(config);
         }
 
-        if (auto it = YamlConfigPerDatabase.find(rec.GetNode().GetTenant()); it != YamlConfigPerDatabase.end()) {
+        if (auto it = DatabaseYamlConfigs.find(rec.GetNode().GetTenant()); it != DatabaseYamlConfigs.end()) {
             response->Record.SetDatabaseYamlConfig(it->second.Config);
         }
     }
@@ -1236,7 +1236,7 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
 }
 
 void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const TActorContext &ctx) {
-    YamlConfigPerDatabase = ev->Get()->YamlConfigPerDatabase;
+    DatabaseYamlConfigs = ev->Get()->DatabaseYamlConfigs;
     if (!ev->Get()->ChangedDatabase) {
         MainYamlConfig = ev->Get()->MainYamlConfig;
         VolatileYamlConfigs.clear();
@@ -1294,7 +1294,7 @@ void TConfigsProvider::UpdateConfig(TInMemorySubscription::TPtr subscription,
 
     subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
 
-    if (auto it = YamlConfigPerDatabase.find(subscription->Tenant); it != YamlConfigPerDatabase.end()) {
+    if (auto it = DatabaseYamlConfigs.find(subscription->Tenant); it != DatabaseYamlConfigs.end()) {
         if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version) {
             subscription->DatabaseYamlConfigVersion = it->second.Version;
             request->Record.SetDatabaseYamlConfig(it->second.Config);

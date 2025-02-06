@@ -192,7 +192,7 @@ public:
 
             Self->VolatileYamlConfigs.clear();
 
-            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->MainYamlConfig, Self->YamlConfigPerDatabase);
+            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->MainYamlConfig, Self->DatabaseYamlConfigs);
             ctx.Send(Self->ConfigsProvider, resp.Release());
         } else if (Error && !DryRun) {
             AuditLogReplaceConfigTransaction(
@@ -270,7 +270,7 @@ public:
             Version = opCtx.Version;
             UpdatedDatabaseConfig = opCtx.UpdatedConfig;
             TString currentConfig;
-            if (auto it = Self->YamlConfigPerDatabase.find(opCtx.TargetDatabase); it != Self->YamlConfigPerDatabase.end()) {
+            if (auto it = Self->DatabaseYamlConfigs.find(opCtx.TargetDatabase); it != Self->DatabaseYamlConfigs.end()) {
                 currentConfig = it->second.Config;
             }
             Modify = opCtx.UpdatedConfig != currentConfig;
@@ -328,8 +328,8 @@ public:
     {
         TString oldConfig;
 
-        if (Self->YamlConfigPerDatabase.contains(TargetDatabase)) {
-            oldConfig = Self->YamlConfigPerDatabase[TargetDatabase].Config;
+        if (Self->DatabaseYamlConfigs.contains(TargetDatabase)) {
+            oldConfig = Self->DatabaseYamlConfigs[TargetDatabase].Config;
         }
 
         auto logData = NKikimrConsole::TLogRecordData{};
@@ -354,8 +354,8 @@ public:
 
         TString oldConfig;
 
-        if (Self->YamlConfigPerDatabase.contains(TargetDatabase)) {
-            oldConfig = Self->YamlConfigPerDatabase[TargetDatabase].Config;
+        if (Self->DatabaseYamlConfigs.contains(TargetDatabase)) {
+            oldConfig = Self->DatabaseYamlConfigs[TargetDatabase].Config;
         }
 
         if (!Error && Modify && !DryRun) {
@@ -369,14 +369,14 @@ public:
                 /* reason = */ {},
                 /* success = */ true);
 
-            Self->YamlConfigPerDatabase[*IngressDatabase] = TDatabaseYamlConfig {
+            Self->DatabaseYamlConfigs[*IngressDatabase] = TDatabaseYamlConfig {
                 .Config = UpdatedDatabaseConfig,
                 .Version = Version + 1,
             };
 
             auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
                 Self->MainYamlConfig,
-                Self->YamlConfigPerDatabase,
+                Self->DatabaseYamlConfigs,
                 Self->VolatileYamlConfigs,
                 TargetDatabase);
 

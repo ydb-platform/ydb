@@ -144,7 +144,7 @@ void TConfigsManager::ReplaceDatabaseConfigMetadata(const TString &config, bool 
 void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opCtx) {
     try {
         TString currentConfig;
-        if (auto it = YamlConfigPerDatabase.find(opCtx.TargetDatabase); it != YamlConfigPerDatabase.end()) {
+        if (auto it = DatabaseYamlConfigs.find(opCtx.TargetDatabase); it != DatabaseYamlConfigs.end()) {
             currentConfig = it->second.Config;
         }
         if (opCtx.UpdatedConfig != currentConfig) {
@@ -506,7 +506,7 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         ui32 version = databaseYamlConfigRowset.GetValue<Schema::DatabaseYamlConfig::Version>();
         TString config = databaseYamlConfigRowset.GetValue<Schema::DatabaseYamlConfig::Config>();
 
-        YamlConfigPerDatabase[tenant] = TDatabaseYamlConfig {
+        DatabaseYamlConfigs[tenant] = TDatabaseYamlConfig {
             .Config = config,
             .Version = version,
         };
@@ -1129,7 +1129,7 @@ void TConfigsManager::Handle(TEvPrivate::TEvStateLoaded::TPtr &/*ev*/, const TAc
     ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvSetSubscriptions(SubscriptionIndex.GetSubscriptions()));
     ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
     if (!MainYamlConfig.empty()) {
-        ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig(MainYamlConfig, YamlConfigPerDatabase, VolatileYamlConfigs));
+        ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig(MainYamlConfig, DatabaseYamlConfigs, VolatileYamlConfigs));
     }
     ScheduleLogCleanup(ctx);
 }

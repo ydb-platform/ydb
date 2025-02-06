@@ -117,7 +117,7 @@ public:
                 const TString &mainYamlConfig,
                 const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase)
                 : MainYamlConfig(mainYamlConfig)
-                , YamlConfigPerDatabase(yamlConfigPerDatabase)
+                , DatabaseYamlConfigs(yamlConfigPerDatabase)
             {
             }
 
@@ -126,7 +126,7 @@ public:
                 const THashMap<TString, TDatabaseYamlConfig> &yamlConfigPerDatabase,
                 const TMap<ui64, TString> &volatileYamlConfigs)
                 : MainYamlConfig(mainYamlConfig)
-                , YamlConfigPerDatabase(yamlConfigPerDatabase)
+                , DatabaseYamlConfigs(yamlConfigPerDatabase)
                 , VolatileYamlConfigs(volatileYamlConfigs)
             {
             }
@@ -137,14 +137,14 @@ public:
                 const TMap<ui64, TString> &volatileYamlConfigs,
                 const TString& changedDatabase)
                 : MainYamlConfig(mainYamlConfig)
-                , YamlConfigPerDatabase(yamlConfigPerDatabase)
+                , DatabaseYamlConfigs(yamlConfigPerDatabase)
                 , VolatileYamlConfigs(volatileYamlConfigs)
                 , ChangedDatabase(changedDatabase)
             {
             }
 
             TString MainYamlConfig;
-            THashMap<TString, TDatabaseYamlConfig> YamlConfigPerDatabase;
+            THashMap<TString, TDatabaseYamlConfig> DatabaseYamlConfigs;
             TMap<ui64, TString> VolatileYamlConfigs;
             TString ChangedDatabase;
         };
@@ -271,7 +271,7 @@ private:
 
     TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
-    THashMap<TString, TDatabaseYamlConfig> YamlConfigPerDatabase;
+    THashMap<TString, TDatabaseYamlConfig> DatabaseYamlConfigs;
     ui64 YamlConfigVersion = 0;
     TMap<ui64, ui64> VolatileYamlConfigHashes;
 };

@@ -21,11 +21,11 @@ public:
         Response = MakeHolder<TEvConsole::TEvGetAllConfigsResponse>();
 
         if (IngressDatabase) {
-            if (Self->YamlConfigPerDatabase.contains(*IngressDatabase)) {
+            if (Self->DatabaseYamlConfigs.contains(*IngressDatabase)) {
                 auto& identity = *Response->Record.MutableResponse()->add_identity();
                 identity.set_database(*IngressDatabase);
-                identity.set_version(Self->YamlConfigPerDatabase[*IngressDatabase].Version);
-                Response->Record.MutableResponse()->add_config(Self->YamlConfigPerDatabase[*IngressDatabase].Config);
+                identity.set_version(Self->DatabaseYamlConfigs[*IngressDatabase].Version);
+                Response->Record.MutableResponse()->add_config(Self->DatabaseYamlConfigs[*IngressDatabase].Config);
             }
 
             return true;
@@ -36,7 +36,7 @@ public:
         identity.set_version(Self->YamlVersion);
         Response->Record.MutableResponse()->add_config(Self->MainYamlConfig);
 
-        for (const auto& [database, config] : Self->YamlConfigPerDatabase) {
+        for (const auto& [database, config] : Self->DatabaseYamlConfigs) {
             Response->Record.MutableResponse()->add_identity()->set_database(database);
             Response->Record.MutableResponse()->add_identity()->set_version(config.Version);
             Response->Record.MutableResponse()->add_config(config.Config);

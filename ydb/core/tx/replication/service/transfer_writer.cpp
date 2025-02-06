@@ -2,31 +2,20 @@
 #include "transfer_writer.h"
 #include "worker.h"
 
-#include <ydb/core/tx/scheme_cache/helpers.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/purecalc_filter.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
+#include <ydb/core/kqp/runtime/kqp_write_table.h>
+#include <ydb/core/persqueue/purecalc/purecalc.h>
+#include <ydb/core/tx/scheme_cache/helpers.h>
+#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
-#include <yql/essentials/public/udf/udf_string.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
-
-#include <ydb/core/kqp/runtime/kqp_write_table.h>
-
-#include <ydb/core/persqueue/purecalc/purecalc.h>
-
-
-
-//#include <util/generic/maybe.h>
-#include <util/string/builder.h>
 
 using namespace NFq::NRowDispatcher;
 

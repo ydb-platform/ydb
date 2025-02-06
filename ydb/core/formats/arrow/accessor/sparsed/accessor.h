@@ -109,7 +109,7 @@ public:
 class TSparsedArray: public IChunkedArray {
 private:
     using TBase = IChunkedArray;
-    std::shared_ptr<arrow::Scalar> DefaultValue;
+    YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, DefaultValue);
     std::vector<TSparsedArrayChunk> Records;
 
 protected:

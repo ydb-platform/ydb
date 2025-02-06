@@ -7,6 +7,7 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 

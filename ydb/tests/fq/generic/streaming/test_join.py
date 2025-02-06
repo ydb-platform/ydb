@@ -635,7 +635,9 @@ class TestJoinStreaming(TestYdsBase):
         one_time_waiter.wait()
 
         query_id = fq_client.create_query(
-            f"slj_{partitions_count}{streamlookup}{testcase}w{wide_channels}", sql, type=fq.QueryContent.QueryType.STREAMING
+            f"slj_{partitions_count}{streamlookup}{testcase}w{wide_channels}",
+            sql,
+            type=fq.QueryContent.QueryType.STREAMING,
         ).result.query_id
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)

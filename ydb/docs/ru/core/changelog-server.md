@@ -2,14 +2,12 @@
 
 ## Версия 24.3 {#24-3}
 
-### Версия 24.3.15.4
+### Версия 24.3.15.5 {#24-3-15-5}
 
-Дата выхода: 3 февраля 2024.
+Дата выхода: 7 февраля 2024.
 
 #### Функциональность
 
-* [Поддержан](https://github.com/ydb-platform/ydb/pull/11276) рестарт без потери доступности кластера в [минимальной отказоустойчивой конфигурации](./concepts/topology#reduced) из трех узлов.
-* [Добавлены](https://github.com/ydb-platform/ydb/pull/13218) новый функции UDF Roaring bitmap: AndNotWithBinary, FromUint32List, RunOptimize.
 * Добавлена возможность регистрировать [динамический узел](./concepts/glossary#dynamic) по сертификату. В [Node Broker](./reference/configuration/#node-broker-config), системная таблетке, которая отвечает за регистрацию динамических узлов в кластере, добавлен флаг `AuthorizeByCertificate` использования сертификата при регистрации.
 * [Добавлены](https://github.com/ydb-platform/ydb/pull/11775) приоритеты проверки аутентификационных тикетов [с использованием стороннего IAM-провайдера](./security/authentication#iam), с самым высоким приоритетом обрабатываются запросы от новых пользователей.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/13748) возможность настраивать шаг планирования координатора c помощью [динамически обновляемой настройки](./maintenance/manual/dynamic-config#dynamic-kinds) `immediate_controls_config`.
@@ -32,6 +30,7 @@
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/12448) [ошибка](https://github.com/ydb-platform/ydb/issues/12443), из-за которой [Health Check](./reference/ydb-sdk/health-check-api) не сообщал о проблемах в синхронизации времени.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/11658) редкая проблема, которая приводила к ошибкам при выполнении запроса на чтение.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/13501) редкая проблема, которая приводила к утечкам незакоммиченных изменений.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/13948) проблемы с согласованностью, связанные с кэшированием удаленных диапазонов.
 
 ### Версия 24.3.11.13
 

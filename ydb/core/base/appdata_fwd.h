@@ -147,6 +147,10 @@ namespace NPQ {
     class IPersQueueMirrorReaderFactory;
 }
 
+namespace NSchemeShard {
+    class IOperationFactory;
+}
+
 class TFormatFactory;
 
 struct TAppData {
@@ -167,6 +171,7 @@ struct TAppData {
     const NDataShard::IExportFactory *DataShardExportFactory = nullptr;
     const TFormatFactory* FormatFactory = nullptr;
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
+    const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 

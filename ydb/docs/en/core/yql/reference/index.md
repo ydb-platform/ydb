@@ -12,7 +12,7 @@
 This documentation section contains the YQL reference that includes the sections:
 
 - [Data types](types/index.md) with a description of data types used in YQL
-- [Syntax](syntax/index.md) with a full list of YQL commands
+- [Syntax](syntax/) with a full list of YQL commands
 - [Built-in functions](builtins/index.md) with a description of the available built-in functions
 
 You can also take a tutorial to get familiar with the basic YQL commands, in the [YQL tutorial](../../dev/yql-tutorial/index.md) section.

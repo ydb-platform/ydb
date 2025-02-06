@@ -31,6 +31,9 @@ namespace NMiniKQL {
 
 namespace {
 
+bool HasMemoryForProcessing() {
+    return !TlsAllocState->IsMemoryYellowZoneEnabled();
+
 constexpr bool InlineAggState = false;
 
 #ifdef USE_STD_UNORDERED
@@ -1221,7 +1224,7 @@ public:
 
     };
 
-    static constexpr ui64 NumberOfSpillingBuckets_ = 10;
+    static constexpr ui64 NumberOfSpillingBuckets_ = 12;
     static constexpr ui64 BucketSizeLimit_ = 1_MB;
     std::deque<TSpillingBucket> SpillingBuckets_;
 

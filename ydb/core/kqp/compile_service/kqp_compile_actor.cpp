@@ -632,7 +632,6 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableKqpDataQueryStreamLookup = serviceConfig.GetEnableKqpDataQueryStreamLookup();
     kqpConfig.EnableKqpScanQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
     kqpConfig.EnableKqpDataQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
-    kqpConfig.EnablePreparedDdl = serviceConfig.GetEnablePreparedDdl();
     kqpConfig.EnableSequences = serviceConfig.GetEnableSequences();
     kqpConfig.EnableColumnsWithDefault = serviceConfig.GetEnableColumnsWithDefault();
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());

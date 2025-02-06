@@ -4,16 +4,16 @@
 
 #include <ydb/apps/etcd_proxy/proto/rpc.grpc.pb.h>
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
-#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
-#include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/mind/local.h>
-#include <ydb/core/protos/local.pb.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
-namespace NKikimr::NGRpcService {
+namespace NEtcd {
+
+using namespace NKikimr::NGRpcService;
+using namespace NActors;
+
+namespace {
 
 using TEvRangeKVRequest = TGrpcRequestOperationCall<etcdserverpb::RangeRequest, etcdserverpb::RangeResponse>;
 using TEvPutKVRequest = TGrpcRequestOperationCall<etcdserverpb::PutRequest, etcdserverpb::PutResponse>;
@@ -25,11 +25,6 @@ using TEvLeaseGrantRequest = TGrpcRequestOperationCall<etcdserverpb::LeaseGrantR
 using TEvLeaseRevokeRequest = TGrpcRequestOperationCall<etcdserverpb::LeaseRevokeRequest, etcdserverpb::LeaseRevokeResponse>;
 using TEvLeaseTimeToLiveRequest = TGrpcRequestOperationCall<etcdserverpb::LeaseTimeToLiveRequest, etcdserverpb::LeaseTimeToLiveResponse>;
 using TEvLeaseLeasesRequest = TGrpcRequestOperationCall<etcdserverpb::LeaseLeasesRequest, etcdserverpb::LeaseLeasesResponse>;
-
-using namespace NActors;
-using namespace Ydb;
-
-namespace {
 
 std::string GetNameWithIndex(const std::string_view& name, const size_t* counter) {
     auto param = std::string(1U, '$') += name;
@@ -537,257 +532,34 @@ struct TTxn : public TOperation {
     }
 };
 
-template <typename TDerived>
 class TBaseEtcdRequest {
 protected:
     virtual bool ParseGrpcRequest() = 0;
     virtual void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) = 0;
     virtual void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) = 0;
 
+    void FillHeader(etcdserverpb::ResponseHeader& header) const {
+        header.set_revision(Revision);
+        header.set_cluster_id(0ULL);
+        header.set_member_id(0ULL);
+        header.set_raft_term(0ULL);
+    }
+
     i64 Revision;
-};
-
-template <typename TDerived, typename TRequest, bool IsOperation>
-class TEtcdRequestWithOperationParamsActor : public TActorBootstrapped<TDerived> {
-private:
-    typedef TActorBootstrapped<TDerived> TBase;
-    typedef typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type TRequestBase;
-public:
-    enum EWakeupTag {
-        WakeupTagTimeout = 10,
-        WakeupTagCancel = 11,
-        WakeupTagGetConfig = 21,
-        WakeupTagClientLost = 22,
-    };
-
-    TEtcdRequestWithOperationParamsActor(TRequestBase* request)
-        : Request_(request)
-    {
-    }
-
-    const typename TRequest::TRequest* GetProtoRequest() const {
-        return TRequest::GetProtoRequest(Request_);
-    }
-
-    Ydb::Operations::OperationParams::OperationMode GetOperationMode() const {
-        return GetProtoRequest()->operation_params().operation_mode();
-    }
-
-    void Bootstrap(const TActorContext &ctx) {
-        HasCancel_ = static_cast<TDerived*>(this)->HasCancelOperation();
-
-        if (OperationTimeout_) {
-            OperationTimeoutTimer = CreateLongTimer(ctx, OperationTimeout_,
-                new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagTimeout)),
-                AppData(ctx)->UserPoolId);
-        }
-
-        if (HasCancel_ && CancelAfter_) {
-            CancelAfterTimer = CreateLongTimer(ctx, CancelAfter_,
-                new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagCancel)),
-                AppData(ctx)->UserPoolId);
-        }
-
-        auto selfId = ctx.SelfID;
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
-        auto clientLostCb = [selfId, actorSystem]() {
-            actorSystem->Send(selfId, new TRpcServices::TEvForgetOperation());
-        };
-
-        Request_->SetFinishAction(std::move(clientLostCb));
-    }
-
-    bool HasCancelOperation() {
-        return false;
-    }
-
-    TRequestBase& Request() const {
-        return *Request_;
-    }
-
-protected:
-    TDuration GetOperationTimeout() {
-        return OperationTimeout_;
-    }
-
-    TDuration GetCancelAfter() {
-        return CancelAfter_;
-    }
-
-    void DestroyTimers() {
-        auto& ctx = TlsActivationContext->AsActorContext();
-        if (OperationTimeoutTimer) {
-            ctx.Send(OperationTimeoutTimer, new TEvents::TEvPoisonPill);
-        }
-        if (CancelAfterTimer) {
-            ctx.Send(CancelAfterTimer, new TEvents::TEvPoisonPill);
-        }
-    }
-
-    void PassAway() override {
-        DestroyTimers();
-        TBase::PassAway();
-    }
-
-    TRequest* RequestPtr() {
-        return static_cast<TRequest*>(Request_.get());
-    }
-
-protected:
-    std::shared_ptr<TRequestBase> Request_;
-
-    TActorId OperationTimeoutTimer;
-    TActorId CancelAfterTimer;
-    TDuration OperationTimeout_;
-    TDuration CancelAfter_;
-    bool HasCancel_ = false;
-    bool ReportCostInfo_ = false;
-};
-
-template <typename TDerived, typename TRequest>
-class TEtcdOperationRequestActor : public TEtcdRequestWithOperationParamsActor<TDerived, TRequest, true> {
-private:
-    typedef TEtcdRequestWithOperationParamsActor<TDerived, TRequest, true> TBase;
-
-public:
-
-    TEtcdOperationRequestActor(IRequestOpCtx* request)
-        : TBase(request)
-        , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
-                "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END)
-    {}
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::DEFERRABLE_RPC;
-    }
-
-    void OnCancelOperation(const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-    }
-
-    void OnForgetOperation(const TActorContext& ctx) {
-        // No client is waiting for the reply, but we have to issue fake reply
-        // anyway before dying to make Grpc happy.
-        NYql::TIssues issues;
-        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-            "Closing Grpc request, client should not see this message."));
-        Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
-    }
-
-    void OnOperationTimeout(const TActorContext& ctx) {
-        NYql::TIssues issues;
-        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-            "Operation timeout."));
-        Reply(Ydb::StatusIds::TIMEOUT, issues, ctx);
-    }
-
-protected:
-    void StateFuncBase(TAutoPtr<IEventHandle>& ev) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvWakeup, HandleWakeup);
-            HFunc(TRpcServices::TEvForgetOperation, HandleForget);
-            hFunc(TEvSubscribeGrpcCancel, HandleSubscribeiGrpcCancel);
-        }
-    }
-
-    using TBase::Request_;
-
-    void Reply(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
-    {
-        NYql::TIssues issues;
-        IssuesFromMessage(message, issues);
-        Request_->RaiseIssues(issues);
-        Request_->ReplyWithYdbStatus(status);
-        NWilson::EndSpanWithStatus(Span_, status);
-        this->Die(ctx);
-    }
-
-    void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
-        Request_->RaiseIssues(issues);
-        Request_->ReplyWithYdbStatus(status);
-        NWilson::EndSpanWithStatus(Span_, status);
-        this->Die(ctx);
-    }
-
-    void Reply(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
-        Request_->ReplyWithYdbStatus(status);
-        NWilson::EndSpanWithStatus(Span_, status);
-        this->Die(ctx);
-    }
-
-    void Reply(Ydb::StatusIds::StatusCode status, typename TRequest::TResponse& resp, const TActorContext& ctx) {
-        Request_->Reply(&resp);
-        NWilson::EndSpanWithStatus(Span_, status);
-        this->Die(ctx);
-    }
-
-    template<typename TResult>
-    void ReplyWithResult(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message,
-        const TResult& result,
-        const TActorContext& ctx)
-    {
-        Request_->SendResult(result, status, message);
-        NWilson::EndSpanWithStatus(Span_, status);
-        this->Die(ctx);
-    }
-
-    template<typename TResult>
-    void ReplyWithResult(Ydb::StatusIds::StatusCode status,
-                         const TResult& result,
-                         const TActorContext& ctx) {
-        Request_->SendResult(result, status);
-        NWilson::EndSpanWithStatus(Span_, status);
-        this->Die(ctx);
-    }
-
-    void ReplyOperation(Ydb::Operations::Operation& operation)
-    {
-        Request_->SendOperation(operation);
-        NWilson::EndSpanWithStatus(Span_, operation.status());
-        this->PassAway();
-    }
-protected:
-    void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
-        switch (ev->Get()->Tag) {
-            case TBase::WakeupTagTimeout:
-                static_cast<TDerived*>(this)->OnOperationTimeout(ctx);
-                break;
-            case TBase::WakeupTagCancel:
-                static_cast<TDerived*>(this)->OnCancelOperation(ctx);
-                break;
-            default:
-                break;
-        }
-    }
-
-    void HandleForget(TRpcServices::TEvForgetOperation::TPtr&, const TActorContext &ctx) {
-        static_cast<TDerived*>(this)->OnForgetOperation(ctx);
-    }
-private:
-    void HandleSubscribeiGrpcCancel(TEvSubscribeGrpcCancel::TPtr& ev) {
-        auto as = TActivationContext::ActorSystem();
-        PassSubscription(ev->Get(), Request_.get(), as);
-    }
-
-protected:
-    NWilson::TSpan Span_;
 };
 
 template <typename TDerived, typename TRequest>
 class TEtcdRequestGrpc
-    : public TEtcdOperationRequestActor<TDerived, TRequest>
-    , public TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest>>
+    : public TActorBootstrapped<TEtcdRequestGrpc<TDerived, TRequest>>
+    , public TBaseEtcdRequest
 {
+    friend class TBaseEtcdRequest;
 public:
-    using TBase = TEtcdOperationRequestActor<TDerived, TRequest>;
-    using TBase::TBase;
+    TEtcdRequestGrpc(IRequestNoOpCtx* request)
+        : Request_(request)
+    {}
 
-    friend class TBaseEtcdRequest<TEtcdRequestGrpc<TDerived, TRequest>>;
-
-    void Bootstrap(const TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
+    void Bootstrap(const TActorContext&) {
         this->ParseGrpcRequest();
         this->Become(&TEtcdRequestGrpc::StateFunc);
         SendDatabaseRequest();
@@ -812,8 +584,6 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(NEtcd::TEvQueryResult, Handle);
             hFunc(NEtcd::TEvQueryError, Handle);
-        default:
-            return TBase::StateFuncBase(ev);
         }
     }
 
@@ -824,6 +594,17 @@ private:
     void Handle(NEtcd::TEvQueryError::TPtr &ev) {
         Cerr << __func__ << ' ' << ev->Get()->Issues.ToString() << Endl;
     }
+protected:
+    const typename TRequest::TRequest* GetProtoRequest() const {
+        return TRequest::GetProtoRequest(Request_);
+    }
+
+    void Reply(typename TRequest::TResponse& resp, const TActorContext& ctx) {
+        this->Request_->Reply(&resp);
+        this->Die(ctx);
+    }
+
+    const std::shared_ptr<IRequestNoOpCtx> Request_;
 };
 
 class TRangeRequest
@@ -841,14 +622,10 @@ private:
         return Range.MakeQueryWithParams(sql, params);
     }
 
-    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext&) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
         auto response = Range.MakeResponse(results);
-        const auto header = response.mutable_header();
-        header->set_revision(Revision);
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
-        return this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        FillHeader(*response.mutable_header());
+        return this->Reply(response, ctx.AsActorContext());
     }
 
     TRange Range;
@@ -877,12 +654,8 @@ private:
         };
 
         auto response = Put.MakeResponse(results, notifier);
-        const auto header = response.mutable_header();
-        header->set_revision(Revision);
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
-        return this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        FillHeader(*response.mutable_header());
+        return this->Reply(response, ctx.AsActorContext());
     }
 
     TPut Put;
@@ -911,12 +684,8 @@ private:
         };
 
         auto response = DeleteRange.MakeResponse(results, notifier);
-        const auto header = response.mutable_header();
-        header->set_revision(Revision);
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
-        return this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        FillHeader(*response.mutable_header());
+        return this->Reply(response, ctx.AsActorContext());
     }
 
     TDeleteRange DeleteRange;
@@ -946,12 +715,8 @@ private:
         };
 
         auto response = Txn.MakeResponse(results, notifier);
-        const auto header = response.mutable_header();
-        header->set_revision(Revision);
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
-        return this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        FillHeader(*response.mutable_header());
+        return this->Reply(response, ctx.AsActorContext());
     }
 
     TTxn Txn;
@@ -975,14 +740,10 @@ private:
         sql << "delete from `verhaal` where `modified` < " << AddParam("Revision", params, KeyRevision) << ';' << Endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets&, const TActivationContext&) final {
+    void ReplyWith(const NYdb::TResultSets&, const TActivationContext& ctx) final {
         etcdserverpb::CompactionResponse response;
-        const auto header = response.mutable_header();
-        header->set_revision(Revision);
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
-        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        FillHeader(*response.mutable_header());
+        return this->Reply(response, ctx.AsActorContext());
     }
 
     i64 KeyRevision;
@@ -1008,16 +769,12 @@ private:
         sql << '\t' << "values (" << AddParam("Lease", params, Lease) << ',' << AddParam("TimeToLive", params, TTL) << ",CurrentUtcDatetime(),CurrentUtcDatetime());" << Endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets&, const TActivationContext&) final {
+    void ReplyWith(const NYdb::TResultSets&, const TActivationContext& ctx) final {
         etcdserverpb::LeaseGrantResponse response;
-        const auto header = response.mutable_header();
-        header->set_revision(Revision);
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
+        FillHeader(*response.mutable_header());
         response.set_id(Lease);
         response.set_ttl(TTL);
-        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        return this->Reply(response, ctx.AsActorContext());
     }
 
     i64 Lease, TTL;
@@ -1069,12 +826,8 @@ private:
         }
 
         etcdserverpb::LeaseRevokeResponse response;
-        const auto header = response.mutable_header();
-        header->set_revision(Revision);
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
-        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        FillHeader(*response.mutable_header());
+        return this->Reply(response, ctx.AsActorContext());
     }
 
     i64 Lease;
@@ -1104,13 +857,9 @@ private:
         }
     }
 
-    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext&) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
         etcdserverpb::LeaseTimeToLiveResponse response;
-        const auto header = response.mutable_header();
-        header->set_revision(Revision);
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
+        FillHeader(*response.mutable_header());
 
         response.set_id(Lease);
         auto parser = NYdb::TResultSetParser(results.front());
@@ -1124,7 +873,7 @@ private:
             }
         }
 
-        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        return this->Reply(response, ctx.AsActorContext());
     }
 
     i64 Lease = 0LL;
@@ -1146,58 +895,54 @@ private:
         sql << "select `id` from `leases`;" << Endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext&) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActivationContext& ctx) final {
         etcdserverpb::LeaseLeasesResponse response;
-        const auto header = response.mutable_header();
-        header->set_revision(Revision);
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
+        FillHeader(*response.mutable_header());
 
         for (auto parser = NYdb::TResultSetParser(results.back()); parser.TryNextRow();) {
             response.add_leases()->set_id(NYdb::TValueParser(parser.GetValue(0)).GetInt64());
         }
 
-        this->Reply(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
+        return this->Reply(response, ctx.AsActorContext());
     }
 };
 
 }
 
-NActors::IActor* MakeRange(IRequestOpCtx* p) {
+NActors::IActor* MakeRange(IRequestNoOpCtx* p) {
     return new TRangeRequest(p);
 }
 
-NActors::IActor* MakePut(IRequestOpCtx* p) {
+NActors::IActor* MakePut(IRequestNoOpCtx* p) {
     return new TPutRequest(p);
 }
 
-NActors::IActor* MakeDeleteRange(IRequestOpCtx* p) {
+NActors::IActor* MakeDeleteRange(IRequestNoOpCtx* p) {
     return new TDeleteRangeRequest(p);
 }
 
-NActors::IActor* MakeTxn(IRequestOpCtx* p) {
+NActors::IActor* MakeTxn(IRequestNoOpCtx* p) {
     return new TTxnRequest(p);
 }
 
-NActors::IActor* MakeCompact(IRequestOpCtx* p) {
+NActors::IActor* MakeCompact(IRequestNoOpCtx* p) {
     return new TCompactRequest(p);
 }
 
-NActors::IActor* MakeLeaseGrant(IRequestOpCtx* p) {
+NActors::IActor* MakeLeaseGrant(IRequestNoOpCtx* p) {
     return new TLeaseGrantRequest(p);
 }
 
-NActors::IActor* MakeLeaseRevoke(IRequestOpCtx* p) {
+NActors::IActor* MakeLeaseRevoke(IRequestNoOpCtx* p) {
     return new TLeaseRevokeRequest(p);
 }
 
-NActors::IActor* MakeLeaseTimeToLive(IRequestOpCtx* p) {
+NActors::IActor* MakeLeaseTimeToLive(IRequestNoOpCtx* p) {
     return new TLeaseTimeToLiveRequest(p);
 }
 
-NActors::IActor* MakeLeaseLeases(IRequestOpCtx* p) {
+NActors::IActor* MakeLeaseLeases(IRequestNoOpCtx* p) {
     return new TLeaseLeasesRequest(p);
 }
 
-} // namespace NKikimr::NGRpcService
+} // namespace NEtcd

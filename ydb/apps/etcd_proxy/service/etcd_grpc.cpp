@@ -11,54 +11,14 @@ namespace NKikimr::NGRpcService {
 
 namespace {
 
-template <typename TDerived>
-class TEtcdResponseSenderImpl : public IRequestOpCtx {
-public:
-    // IRequestOpCtx
-    //
-    void SendOperation(const Ydb::Operations::Operation& operation) override {
-        auto self = Derived();
-        if (operation.ready()) {
-            self->FinishRequest();
-        }
-        auto resp = self->CreateResponseMessage();
-        self->Reply(resp, operation.status());
-    }
-
-    void SendResult(const google::protobuf::Message&,
-        Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>&) override
-    {
-        auto self = Derived();
-        self->FinishRequest();
-        auto resp = self->CreateResponseMessage();
-        self->Reply(resp, status);
-    }
-
-    void SendResult(const google::protobuf::Message&, Ydb::StatusIds::StatusCode status) override {
-        auto self = Derived();
-        self->FinishRequest();
-        auto resp = self->CreateResponseMessage();
-        self->Reply(resp, status);
-    }
-
-private:
-    TDerived* Derived() noexcept {
-        return static_cast<TDerived*>(this);
-    }
-};
-
-template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
+template <ui32 TRpcId, typename TReq, typename TResp, typename TDerived>
 class TEtcdRequestWrapperImpl
-    : public std::conditional_t<IsOperation,
-        TEtcdResponseSenderImpl<TEtcdRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>,
-        IRequestNoOpCtx>
+    : public IRequestNoOpCtx
     , public std::conditional_t<TRpcId == TRpcServices::EvGrpcRuntimeRequest,
         TEvProxyRuntimeEvent,
         TEvProxyLegacyEvent<TRpcId, TDerived>>
 {
     friend class TProtoResponseHelper;
-    friend class TEtcdResponseSenderImpl<TEtcdRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>;
 
 public:
     using TRequest = TReq;
@@ -404,28 +364,14 @@ private:
     TMaybe<TString> TraceId;
 };
 
-template <typename TReq, typename TResp, bool IsOperation>
-class TEtcdRequestCall
-    : public std::conditional_t<TProtoHasValidate<TReq>::Value,
-        TGRpcRequestValidationWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TEtcdRequestCall<TReq, TResp, IsOperation>>,
-        TEtcdRequestWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TEtcdRequestCall<TReq, TResp, IsOperation>>>
+template <typename TReq, typename TRes>
+class TEtcdRequestCall : public TEtcdRequestWrapperImpl<TRpcServices::EvGrpcRuntimeRequest, TReq, TRes, TEtcdRequestCall<TReq, TRes>>
 {
-    using TRequestIface = typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type;
-
 public:
-    static constexpr bool IsOp = IsOperation;
+    using TBase = TEtcdRequestWrapperImpl<TRpcServices::EvGrpcRuntimeRequest, TReq, TRes, TEtcdRequestCall<TReq, TRes>>;
 
-    using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
-        TGRpcRequestValidationWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TEtcdRequestCall<TReq, TResp, IsOperation>>,
-        TEtcdRequestWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TEtcdRequestCall<TReq, TResp, IsOperation>>>;
-
-    TEtcdRequestCall(NYdbGrpc::IRequestContextBase* ctx, TRequestAuxSettings auxSettings = {})
+    TEtcdRequestCall(NYdbGrpc::IRequestContextBase* ctx)
         : TBase(ctx)
-        , AuxSettings(std::move(auxSettings))
     {}
 
     void Pass(const IFacilityProvider&) override {
@@ -433,37 +379,21 @@ public:
     }
 
     TRateLimiterMode GetRlMode() const override {
-        return AuxSettings.RlMode;
+        return TRateLimiterMode::Off;
     }
 
-    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult& schemeData, ICheckerIface* iface) override {
-        if (!AuxSettings.CustomAttributeProcessor) {
-            return false;
-        } else {
-            AuxSettings.CustomAttributeProcessor(schemeData, iface);
-            return true;
-        }
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
+        Y_ABORT("Unimplemented!");
     }
 
     NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
-        return {
-            .RequestType = AuxSettings.RequestType,
-            .Database = TBase::GetDatabaseName(),
-        };
+        return {};
     }
 
-    // IRequestCtxBaseMtSafe
-    //
     bool IsAuditable() const override {
-        return (AuxSettings.AuditMode == TAuditMode::Auditable) && !this->IsInternalCall();
+        return false;
     }
-
-private:
-    const TRequestAuxSettings AuxSettings;
 };
-
-template <typename TReq, typename TResp>
-using TEtcdRequestOperationCall = TEtcdRequestCall<TReq, TResp, true>;
 
 }
 
@@ -483,7 +413,7 @@ void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         this, this->GetService(), CQ,                                                       \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                      \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                \
-            ActorSystem->Register(Make##methodName(new TEtcdRequestOperationCall<              \
+            ActorSystem->Register(NEtcd::Make##methodName(new TEtcdRequestCall<                \
                 etcdserverpb::Y_CAT(secondName, Request),                                       \
                 etcdserverpb::Y_CAT(secondName, Response)>(reqCtx)                               \
             ));                                                                                   \
@@ -544,7 +474,7 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         this, this->GetService(), CQ,                                                       \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                      \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                \
-            ActorSystem->Register(Make##methodName(new TEtcdRequestOperationCall<              \
+            ActorSystem->Register(NEtcd::Make##methodName(new TEtcdRequestCall<                \
                 etcdserverpb::Y_CAT(methodName, Request),                                       \
                 etcdserverpb::Y_CAT(methodName, Response)>(reqCtx)                               \
             ));                                                                                   \

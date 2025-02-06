@@ -387,7 +387,15 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             THashMap<TActorId, TVector<ui64>> acks;
             for (const auto& tx : ev->Get()->Record.GetTransactions()) {
                 ui64 txId = tx.GetTxId();
+                // For compatibility mediator must send some AckTo
+                Y_ABORT_UNLESS(tx.HasAckTo());
                 TActorId owner = ActorIdFromProto(tx.GetAckTo());
+                // Yet mediator should specify an invalid AckTo, so acks from
+                // older tablets are sent to no actor and are ignored
+                Y_ABORT_UNLESS(!owner);
+                // We just simulate the behavior of older tablet versions that
+                // send acks unconditionally. Some tests validate no acks are
+                // reaching queues too soon.
                 acks[owner].push_back(txId);
             }
             for (auto& pr : acks) {
@@ -853,10 +861,10 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             {1, {tablet1}},
         });
 
-        // Our queue must receive an ack
+        // Our queue should not receive acks until plan step is accepted
         {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue1);
-            UNIT_ASSERT(ev);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue1, TDuration::MilliSeconds(1));
+            UNIT_ASSERT(!ev);
         }
 
         // Mediator's ack must be blocked
@@ -874,6 +882,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         // Unblock the mediator ack
         blockedAccept.Unblock();
 
+        // The reconnected queue should receive an ack
         {
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue2);
             UNIT_ASSERT(ev);
@@ -885,6 +894,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             {1, {tablet1}},
         });
 
+        // The reconnected queue should receive an additional ack
         {
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue3);
             UNIT_ASSERT(ev);
@@ -1175,10 +1185,15 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates.back(), TWatchUpdate(1010));
 
-        for (int i = 0; i < 2; ++i) {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue2);
+        // The reconnected queue should receive exactly one ack per tablet from mediator
+        for (int i = 0; ; ++i) {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue2, TDuration::MilliSeconds(1));
+            if (i == 2) {
+                UNIT_ASSERT(!ev);
+                break;
+            }
             UNIT_ASSERT(ev);
-            Cerr << "... ack from " << ev->Get()->Record.GetTabletId() << Endl;
+            Cerr << "... ack for tablet " << ev->Get()->Record.GetTabletId() << Endl;
         }
     }
 
@@ -1225,11 +1240,15 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates.back(), TWatchUpdate(1010));
 
-        // We should receive acks from tablets, plus additional acks from mediator
-        for (int i = 0; i < 4; ++i) {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue1);
+        // The reconnected queue should receive exactly one ack per tablet from mediator
+        for (int i = 0; ; ++i) {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue1, TDuration::MilliSeconds(1));
+            if (i == 2) {
+                UNIT_ASSERT(!ev);
+                break;
+            }
             UNIT_ASSERT(ev);
-            Cerr << "... ack from " << ev->Get()->Record.GetTabletId() << Endl;
+            Cerr << "... ack for tablet " << ev->Get()->Record.GetTabletId() << Endl;
         }
     }
 

@@ -112,7 +112,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             x->SetTxId(tx.TxId);
             if (tx.Moderator)
                 x->SetModerator(tx.Moderator);
-            ActorIdToProto(tx.AckTo, x->MutableAckTo());
+            ActorIdToProto(TActorId(), x->MutableAckTo());
             LOG_DEBUG(ctx, NKikimrServices::TX_MEDIATOR_PRIVATE, "Send from %" PRIu64 " to tablet %" PRIu64 ", step# %"
                 PRIu64 ", txid# %" PRIu64 ", marker M5" PRIu64, Mediator, tabletId, tabletStep->StepRef->Step, tx.TxId);
         }

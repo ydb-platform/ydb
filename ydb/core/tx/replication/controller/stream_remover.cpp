@@ -35,8 +35,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendDropChangefeeds(StreamName)));
             break;
-        case TReplication::ETargetKind::Topic:
-            // TODO
+        case TReplication::ETargetKind::Transfer:
+            // TODO drop consumer
             break;
         }
 

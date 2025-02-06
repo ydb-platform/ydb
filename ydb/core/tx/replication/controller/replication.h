@@ -33,7 +33,7 @@ public:
     enum class ETargetKind: ui8 {
         Table,
         IndexTable,
-        Topic
+        Transfer
     };
 
     enum class EDstState: ui8 {

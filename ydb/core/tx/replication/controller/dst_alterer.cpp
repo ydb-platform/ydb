@@ -48,7 +48,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
                 NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
             break;
-        case TReplication::ETargetKind::Topic:
+        case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
 

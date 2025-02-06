@@ -50,9 +50,10 @@ class TReplication::TImpl: public TLagProvider {
             return new TTargetTable(self, id, std::forward<Args>(args)...);
         case ETargetKind::IndexTable:
             return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
-        case ETargetKind::Topic:
+        case ETargetKind::Transfer:
+            auto target = std::make_unique<TTargetTable>(self, id, std::forward<Args>(args)...);
             // TODO
-            return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
+            return target.release();
         }
     }
 
@@ -140,7 +141,7 @@ public:
                 switch (target->GetKind()) {
                 case ETargetKind::Table:
                 case ETargetKind::IndexTable:
-                case ETargetKind::Topic:
+                case ETargetKind::Transfer:
                     TargetTablePaths.push_back(target->GetDstPath());
                     break;
                 }

@@ -173,7 +173,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             LOG_D("Describe topic succeeded"
                 << ": path# " << path.first);
 
-            const auto& target = ToAdd.emplace_back(path.first, path.second, TReplication::ETargetKind::Topic);
+            const auto& target = ToAdd.emplace_back(path.first, path.second, TReplication::ETargetKind::Transfer);
             LOG_I("Add target"
                 << ": srcPath# " << target.SrcPath
                 << ", dstPath# " << target.DstPath

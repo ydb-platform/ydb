@@ -303,20 +303,20 @@ inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
 
 inline bool HasAppData() {
     return !!NActors::TlsActivationContext
-        && NActors::TlsActivationContext->ExecutorThread.ActorSystem
-        && NActors::TlsActivationContext->ExecutorThread.ActorSystem->AppData<TAppData>();
+        && NActors::TActivationContext::ActorSystem()
+        && NActors::TActivationContext::ActorSystem()->AppData<TAppData>();
 }
 
 inline TAppData& AppDataVerified() {
     Y_ABORT_UNLESS(HasAppData());
-    auto& actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
+    NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
     TAppData* const x = actorSystem->AppData<TAppData>();
     Y_ABORT_UNLESS(x->Magic == TAppData::MagicTag);
     return *x;
 }
 
 inline TAppData* AppData() {
-    return AppData(NActors::TlsActivationContext->ExecutorThread.ActorSystem);
+    return AppData(NActors::TActivationContext::ActorSystem());
 }
 
 inline TAppData* AppData(const NActors::TActorContext &ctx) {

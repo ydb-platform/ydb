@@ -1118,7 +1118,7 @@ void TResourceBrokerActor::Bootstrap(const TActorContext &ctx)
     if (mon) {
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
         mon->RegisterActorPage(actorsMonPage, "rb", "Resource broker",
-                               false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+                               false, ctx.ActorSystem(), ctx.SelfID);
     }
 
     ResourceBroker = MakeIntrusive<TResourceBroker>(std::move(BootstrapConfig), std::move(BootstrapCounters), ctx.ActorSystem());

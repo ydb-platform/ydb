@@ -61,7 +61,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, Subscription->Subscriber.TabletId, pipeConfig);
-        Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        Pipe = ctx.Register(pipe);
     }
 
     void SendNotifyRequest(const TActorContext &ctx)
@@ -390,7 +390,7 @@ void TConfigsProvider::Bootstrap(const TActorContext &ctx)
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(actorsMonPage, "console_configs_provider", "Console Configs Provider", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+        mon->RegisterActorPage(actorsMonPage, "console_configs_provider", "Console Configs Provider", false, TActivationContext::ActorSystem(), SelfId());
     }
 
     Become(&TThis::StateWork);

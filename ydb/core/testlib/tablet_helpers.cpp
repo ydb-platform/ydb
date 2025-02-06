@@ -1501,7 +1501,7 @@ namespace NKikimr {
             TBlobStorageGroupType::EErasureSpecies erasure) {
             TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
                 TMailboxType::Simple, 0)));
-            return ctx.ExecutorThread.RegisterActor(CreateBootstrapper(
+            return ctx.Register(CreateBootstrapper(
                 CreateTestTabletInfo(State->NextTabletId, tabletType, erasure), bi.Get()));
         }
 

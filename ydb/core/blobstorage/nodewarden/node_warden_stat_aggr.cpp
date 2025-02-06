@@ -42,7 +42,7 @@ void TNodeWarden::StartAggregator(const TActorId& vdiskServiceId, ui32 groupId) 
         const TActorId groupStatAggregatorId = MakeGroupStatAggregatorId(vdiskServiceId);
         const TActorId actorId = Register(CreateGroupStatAggregatorActor(groupId, vdiskServiceId),
             TMailboxType::Revolving, AppData()->SystemPoolId);
-        TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(groupStatAggregatorId, actorId);
+        TActivationContext::ActorSystem()->RegisterLocalService(groupStatAggregatorId, actorId);
     }
 }
 

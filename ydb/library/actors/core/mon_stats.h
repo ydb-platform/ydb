@@ -91,13 +91,13 @@ namespace NActors {
         ui64 EmptyMailboxActivation = 0;
         ui64 CpuUs = 0; // microseconds thread was executing on CPU (accounts for preemtion)
         ui64 SafeElapsedTicks = 0;
+        ui64 SafeParkedTicks = 0;
         ui64 WorstActivationTimeUs = 0;
 
         TActivationTime CurrentActivationTime;
 
         NHPTimer::STime ElapsedTicks = 0;
         NHPTimer::STime ParkedTicks = 0;
-        NHPTimer::STime BlockedTicks = 0;
         TLogHistogram ActivationTimeHistogram;
         TLogHistogram EventDeliveryTimeHistogram;
         TLogHistogram EventProcessingCountHistogram;

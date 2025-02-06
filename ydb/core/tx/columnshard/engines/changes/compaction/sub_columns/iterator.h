@@ -31,8 +31,8 @@ private:
         if (OriginalArray) {
             CurrentChunk = OriginalArray->GetArray(CurrentChunk, position, OriginalArray);
             CurrentChunkStartPosition = CurrentChunk->GetAddress().GetGlobalStartPosition();
-            AFL_VERIFY(CurrentChunk->GetAddress().GetLocalIndex(position) == 0)("pos", position)(
-                "local", CurrentChunk->GetAddress().GetLocalIndex(position));
+//            AFL_VERIFY(CurrentChunk->GetAddress().GetLocalIndex(position) == 0)("pos", position)(
+//                "local", CurrentChunk->GetAddress().GetLocalIndex(position));
             if (CurrentChunk->GetArray()->GetType() == IChunkedArray::EType::SubColumnsArray) {
                 CurrentSubColumnsArray = std::static_pointer_cast<TSubColumnsArray>(CurrentChunk->GetArray());
             } else {

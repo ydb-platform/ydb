@@ -2,14 +2,12 @@
 
 ## Version 24.3 {#24-3}
 
-### Version 24.3.15.4
+### Version 24.3.15.5 {#24-3-15-5}
 
-Release date: February 3, 2024
+Release date: February 7, 2024
 
 #### Functionality
 
-* [Added](https://github.com/ydb-platform/ydb/pull/11276) support for restart without loss of cluster availability in [a minimal fault-tolerant configuration of a cluster](./concepts/topology#reduced) used the the 3 nodes variant of mirror-3-dc.
-* [Added](https://github.com/ydb-platform/ydb/pull/13218) new UDF Roaring Bitmap functions: AndNotWithBinary, FromUint32List, RunOptimize.
 * Added the ability to register a [dynamic node](./concepts/glossary#dynamic) using a certificate. In the [Node Broker](./reference/configuration/#node-broker-config), the system tablet responsible for registering dynamic nodes in the cluster, the flag `AuthorizeByCertificate` has been added to enable certificate-based registration.
 * [Added](https://github.com/ydb-platform/ydb/pull/11775) priorities for authentication ticket through a [third-party IAM provider](./security/authentication#iam), with the highest priority given to requests from new users.
 * [Added](https://github.com/ydb-platform/ydb/pull/13748) the ability to configure the coordinator plan resolution using [the dynamically updatable setting](./maintenance/manual/dynamic-config#dynamic-kinds) `immediate_controls_config`.
@@ -32,6 +30,7 @@ Release date: February 3, 2024
 * [Fixed](https://github.com/ydb-platform/ydb/pull/12448) an issue where Health Check did not report time synchronization issues.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/11658) a rare issue that caused errors during read queries.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/13501) uncommitted changes leak and clean them up on startup.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/13948) consistency issues related to caching deleted ranges.
 
 ### Version 24.3.11.13
 

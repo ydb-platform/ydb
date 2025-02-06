@@ -54,7 +54,7 @@ Released on December 4, 2024. To update to version **2.17.0**, select the [Downl
 
 ### Features
 
-* **_(Requires server v25.1+)_** Added `ydb debug ping` command for performance and connectivity debugging
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added `ydb debug ping` command for performance and connectivity debugging
 
 ### Performance
 

@@ -18,4 +18,6 @@ struct TSharedStuff {
 
 TString DecrementKey(TString key);
 
+constexpr bool NotifyWatchtower = true;
+
 }

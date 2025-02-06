@@ -176,7 +176,6 @@ struct TRange : public TOperation {
     }
 };
 
-constexpr bool NotifyWatchtower = true;
 using TNotifier = std::function<void(std::string&&, NEtcd::TData&&, NEtcd::TData&&)>;
 
 struct TPut : public TOperation {
@@ -321,7 +320,6 @@ struct TDeleteRange : public TOperation {
         }
 
         if (GetPrevious) {
-
             for (auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]); parser.TryNextRow();) {
                 const auto kvs = response.add_prev_kvs();
                 kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
@@ -332,6 +330,7 @@ struct TDeleteRange : public TOperation {
                 kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
             }
         }
+
         if (NotifyWatchtower && notifier) {
             for (auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]); parser.TryNextRow();) {
                 NEtcd::TData oldData;
@@ -814,7 +813,8 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         if (NotifyWatchtower) {
-            for (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow();) {
+            i64 deleted = 0ULL;
+            for (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow(); ++deleted) {
                 NEtcd::TData oldData;
                 oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
                 oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
@@ -824,6 +824,11 @@ private:
                 auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
 
                 ctx.Send(NEtcd::TSharedStuff::Get()->Watchtower, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData)));
+            }
+
+            if (!deleted) {
+                auto expected = Revision + 1U;
+                NEtcd::TSharedStuff::Get()->Revision.compare_exchange_strong(expected, Revision);
             }
         }
 

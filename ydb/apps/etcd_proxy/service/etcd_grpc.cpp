@@ -496,7 +496,7 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Lease::AsyncService::RequestLeaseKeepAlive,
         [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-            ActorSystem->Send(NEtcd::TSharedStuff::Get()->Watchtower, new NEtcd::TEvLeaseKeepAliveRequest(context.Release()));
+            ActorSystem->Send(NEtcd::TSharedStuff::Get()->LeasingOffice, new NEtcd::TEvLeaseKeepAliveRequest(context.Release()));
         },
         *ActorSystem, "Lease", getCounterBlock("etcd", "Watch", true), nullptr
     );

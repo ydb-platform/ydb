@@ -1314,6 +1314,72 @@ TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, b
     return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(values), scoped);
 }
 
+class TAlterDatabaseNode final : public TAstListNode {
+public:
+    TAlterDatabaseNode(
+        TPosition pos,
+        const TString& service,
+        const TDeferredAtom& cluster,
+        const TAlterDatabaseParameters& params,
+        TScopedStatePtr scoped
+    )
+    : TAstListNode(pos)
+    , Params(params)
+    , Scoped(scoped)
+    , Cluster(cluster)
+    , Service(service)
+    {
+        scoped->UseCluster(service, cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx);
+
+        auto options = Y(Q(Y(Q("mode"), Q("alterDatabase"))));
+
+        options = L(options, Q(Y(Q("dbPath"), Q(Params.DbPath))));
+
+        if (Params.Owner.has_value()) {
+            options = L(options, Q(Y(Q("owner"), Q(Params.Owner.value().Build()))));
+        }
+
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", Q(options))),
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+            )));
+
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+
+private:
+    const TAlterDatabaseParameters Params;
+    TScopedStatePtr Scoped;
+    TDeferredAtom Cluster;
+    TString Service;
+};
+
+TNodePtr BuildAlterDatabase(
+    TPosition pos,
+    const TString& service,
+    const TDeferredAtom& cluster,
+    const TAlterDatabaseParameters& params,
+    TScopedStatePtr scoped
+) {
+    return new TAlterDatabaseNode(
+        pos,
+        service,
+        cluster,
+        params,
+        scoped
+    );
+}
+
+
 class TAlterTableNode final : public TAstListNode {
 public:
     TAlterTableNode(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped)

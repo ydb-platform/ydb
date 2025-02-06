@@ -863,6 +863,11 @@ private:
         ExprLineIndent = 0;
     }
 
+    void VisitAlterDatabase(const TRule_alter_database_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_alter_database_stmt::GetDescriptor(), msg);
+    }
+
     void VisitCreateTable(const TRule_create_table_stmt& msg) {
         NewLine();
         Visit(msg.GetToken1());
@@ -3015,6 +3020,7 @@ TStaticData::TStaticData()
         {TRule_backup_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBackup)},
         {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
         {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
+        {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},

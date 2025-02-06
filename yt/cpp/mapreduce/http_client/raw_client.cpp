@@ -244,7 +244,9 @@ void THttpRawClient::Concatenate(
     THttpHeader header("POST", "concatenate");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForConcatenate(transactionId, Context_.Config->Prefix, sourcePaths, destinationPath, options));
-    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+    TRequestConfig config;
+    config.IsHeavy = true;
+    RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config)->GetResponse();
 }
 
 TTransactionId THttpRawClient::StartTransaction(

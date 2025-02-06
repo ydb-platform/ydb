@@ -182,14 +182,8 @@ namespace NYql {
                 return TStatus::Error;
             }
 
-            const auto tableNameNode = tableNode->Child(TGenTable::idx_Name);
-            if (!TCoAtom::Match(tableNameNode)) {
-                ctx.AddError(TIssue(ctx.GetPosition(tableNameNode->Pos()),
-                                    TStringBuilder() << "Expected TCoAtom"));
-                return TStatus::Error;
-            }
-
-            TString tableName{tableNameNode->Content()};
+            TGenTable table(tableNode);
+            const auto tableName = table.Name().StringValue();
 
             // Extract table metadata
             auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));

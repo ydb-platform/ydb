@@ -18,12 +18,12 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
     for (ui32 i = 0; i < arr->length(); ++i) {
         const auto view = arr->GetView(i);
         if (view.size() && !arr->IsNull(i)) {
-            NBinaryJson::TBinaryJson bJson(view.data(), view.size());
+            //        NBinaryJson::TBinaryJson bJson(view.data(), view.size());
             //        auto bJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(view.data(), view.size()));
             //        const NBinaryJson::TBinaryJson* bJsonParsed = std::get_if<NBinaryJson::TBinaryJson>(&bJson);
             //        AFL_VERIFY(bJsonParsed)("error", *std::get_if<TString>(&bJson))("json", TStringBuf(view.data(), view.size()));
-            const NBinaryJson::TBinaryJson* bJsonParsed = &bJson;
-            auto reader = NBinaryJson::TBinaryJsonReader::Make(*bJsonParsed);
+            //        const NBinaryJson::TBinaryJson* bJsonParsed = &bJson;
+            auto reader = NBinaryJson::TBinaryJsonReader::Make(TStringBuf(view.data(), view.size()));
             auto cursor = reader->GetRootCursor();
             if (cursor.GetType() != NBinaryJson::EContainerType::Object) {
                 return TConclusionStatus::Fail("incorrect json data");

@@ -171,9 +171,27 @@ namespace NYql {
                 }
             }
 
+            // Determine cluster name
             TString clusterName{input->Child(TGenReadTable::idx_DataSource)->Child(1)->Content()};
-            TString tableName{input->Child(TGenReadTable::idx_Table)->Content()};
 
+            // Determine table name
+            const auto tableNode = input->Child(TGenReadTable::idx_Table);
+            if (!TGenTable::Match(tableNode)) {
+                ctx.AddError(TIssue(ctx.GetPosition(tableNode->Pos()),
+                                    TStringBuilder() << "Expected " << TGenTable::CallableName()));
+                return TStatus::Error;
+            }
+
+            const auto tableNameNode = tableNode->Child(TGenTable::idx_Name);
+            if (!TCoAtom::Match(tableNameNode)) {
+                ctx.AddError(TIssue(ctx.GetPosition(tableNameNode->Pos()),
+                                    TStringBuilder() << "Expected TCoAtom"));
+                return TStatus::Error;
+            }
+
+            TString tableName{tableNameNode->Content()};
+
+            // Extract table metadata
             auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));
             if (issue.has_value()) {
                 ctx.AddError(issue.value());

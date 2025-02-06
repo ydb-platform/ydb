@@ -1,6 +1,7 @@
 Версия |  Дата выпуска | Скачать | Список изменений
 :--- | :--- | :--- | :---
 **v24.3**
+v.24.3.15.5   | 06.02.25 | [Бинарный файл](https://binaries.ydb.tech/release/24.3.15.5/ydbd-24.3.15.5-linux-amd64.tar.gz) | [См. список](../../../changelog-server.md#24-3-15-5)
 v.24.3.11.13  | 24.12.24 | [Бинарный файл](https://binaries.ydb.tech/release/24.3.11.13/ydbd-24.3.11.13-linux-amd64.tar.gz) | [См. список](../../../changelog-server.md#24-3)
 **v24.2**
 v.24.2.7  | 20.08.24 | [Бинарный файл](https://binaries.ydb.tech/release/24.2.7/ydbd-24.2.7-linux-amd64.tar.gz) | [См. список](../../../changelog-server.md#24-2)

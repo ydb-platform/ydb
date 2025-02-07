@@ -323,12 +323,14 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         } else if (SchemeQueryResult) {
             OnSchemeQueryPreparation(txc);
         } else if (AllocateResult) {
+            Cerr << "DoExecute:OnAllocateResult&&" << Endl;
             OnAllocateResult(txc, ctx);
         } else if (ModifyResult) {
             OnModifyResult(txc, ctx);
         } else if (CreateIndexResult) {
             OnCreateIndexResult(txc, ctx);
         } else if (CompletedTxId) {
+            Cerr << "DoExecute:OnNotifyResult&&" << Endl;
             OnNotifyResult(txc, ctx);
         } else {
             Resume(txc, ctx);
@@ -510,7 +512,7 @@ private:
     void CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
-
+        Cerr << "CreateChangefeed13232" << Endl;
         item.SubState = ESubState::Proposed;
 
         LOG_I("TImport::TTxProgress: CreateChangefeed propose"
@@ -521,6 +523,7 @@ private:
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
         auto propose = CreateChangefeedPropose(Self, txId, item);
+        if (!propose) Cerr << "NO CHNGF PROPOSE" << Endl;
         Send(Self->SelfId(), std::move(propose));
     }
 
@@ -972,6 +975,7 @@ private:
 
             switch (item.State) {
             case EState::CreateSchemeObject:
+            Cerr << "CreateSchemeObject!!!" << Endl;
                 if (item.PreparedCreationQuery) {
                     ExecutePreparedQuery(txc, importInfo, i, txId);
                     itemIdx = i;
@@ -1001,6 +1005,7 @@ private:
                 break;
             
             case EState::CreateChangefeed:
+                Cerr << "OnAllocateResult:CreateChangefeed" << Endl;
                 CreateChangefeed(importInfo, i, txId);
                 itemIdx = i;
                 break;
@@ -1200,29 +1205,32 @@ private:
 
         switch (item.State) {
         case EState::CreateSchemeObject:
+            Cerr << "CreateSchemeObject11" << Endl;
             if (IsCreatedByQuery(item)) {
-                item.State = EState::Done;
+                item.State = EState::CreateChangefeed;
                 break;
             }
-            item.State = EState::Transferring;
+            item.State = EState::CreateChangefeed;
             AllocateTxId(importInfo, itemIdx);
             break;
 
         case EState::Transferring:
+        Cerr << "Transfering232" << Endl;
             if (const auto issue = GetIssues(item.DstPathId, txId)) {
                 item.Issue = *issue;
                 Cancel(importInfo, itemIdx, "issues during restore");
             } else {
                 if (item.NextIndexIdx < item.Scheme.indexes_size()) {
-                    item.State = EState::BuildIndexes;
+                    item.State = EState::CreateChangefeed;
                     AllocateTxId(importInfo, itemIdx);
                 } else {
-                    item.State = EState::Done;
+                    item.State = EState::CreateChangefeed;
                 }
             }
             break;
 
         case EState::BuildIndexes:
+        Cerr << "BuildIndexes123232" << Endl;
             if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
                 item.Issue = *issue;
                 Cancel(importInfo, itemIdx, "issues during index building");
@@ -1230,12 +1238,14 @@ private:
                 if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
                     AllocateTxId(importInfo, itemIdx);
                 } else {
-                    item.State = AppData()->FeatureFlags.GetEnableChangefeedsImport() ? EState::CreateChangefeed : EState::Done;
+                    // item.State = AppData()->FeatureFlags.GetEnableChangefeedsImport() ? EState::CreateChangefeed;
+                    item.State = EState::CreateChangefeed;
                 }
             }
             break;
         
         case EState::CreateChangefeed:
+            Cerr << "CreateChangefeed12" << Endl << "NextChangefeedIdx: " << item.NextChangefeedIdx;
             if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
                 AllocateTxId(importInfo, itemIdx);
             } else {

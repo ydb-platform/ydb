@@ -632,8 +632,6 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableKqpDataQueryStreamLookup = serviceConfig.GetEnableKqpDataQueryStreamLookup();
     kqpConfig.EnableKqpScanQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
     kqpConfig.EnableKqpDataQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
-    kqpConfig.EnableSequences = serviceConfig.GetEnableSequences();
-    kqpConfig.EnableColumnsWithDefault = serviceConfig.GetEnableColumnsWithDefault();
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
     kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
     kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
@@ -644,6 +642,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableOlapSink = serviceConfig.GetEnableOlapSink();
     kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();
     kqpConfig.EnableHtapTx = serviceConfig.GetEnableHtapTx();
+    kqpConfig.EnableStreamWrite = serviceConfig.GetEnableStreamWrite();
     kqpConfig.BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
     kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();

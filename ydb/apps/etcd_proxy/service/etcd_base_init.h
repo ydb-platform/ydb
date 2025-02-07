@@ -1,12 +1,12 @@
 #pragma once
 
-#include <util/generic/string.h>
+#include <string>
 
 namespace NEtcd {
 
-TString GetCreateTablesSQL();
+std::string GetCreateTablesSQL();
 
-TString GetLastRevisionSQL();
+std::string GetLastRevisionSQL();
 
 }
 

@@ -4,11 +4,11 @@
 
 namespace NEtcd {
 
-TString GetCreateTablesSQL() {
+std::string GetCreateTablesSQL() {
     return NResource::Find("create.sql"sv);
 }
 
-TString GetLastRevisionSQL() {
+std::string GetLastRevisionSQL() {
     return "select nvl(max(`modified`), 0L) + 1L from `verhaal`; select nvl(max(`id`), 0L) + 1L from `leases`;";
 }
 

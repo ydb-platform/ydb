@@ -1,6 +1,5 @@
 #include "../etcd_base_init.h"
 #include "../etcd_shared.h"
-#include "../etcd_watch.h"
 #include "../etcd_grpc.h"
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
@@ -8,7 +7,6 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
@@ -17,11 +15,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/logger/backend.h>
-
-#include <grpcpp/client_context.h>
-#include <grpcpp/create_channel.h>
-
-#include <util/string/builder.h>
 
 namespace NEtcd {
 
@@ -93,12 +86,6 @@ public:
         return PortManager;
     }
 
-    void ResetSchemeCache(TString path, ui32 nodeIndex = 0) {
-        TTestActorRuntime* runtime = Server_->GetRuntime();
-        Tests::TClient annoyingClient(*ServerSettings);
-        annoyingClient.RefreshPathCache(runtime, path, nodeIndex);
-    }
-
     TTestActorRuntime* GetRuntime() {
         return Server_->GetRuntime();
     }
@@ -119,9 +106,7 @@ void MakeTables(auto &channel) {
     const auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
     Ydb::Query::ExecuteQueryRequest request;
     request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
-    TStringBuilder sql;
-    sql << "PRAGMA TablePathPrefix='/Root';" << Endl << NEtcd::GetCreateTablesSQL();
-    request.mutable_query_content()->set_text(sql);
+    request.mutable_query_content()->set_text(std::string("PRAGMA TablePathPrefix='/Root';\n") + NEtcd::GetCreateTablesSQL());
 
     grpc::ClientContext executeCtx;
     Ydb::Query::ExecuteQueryResponsePart response;
@@ -298,7 +283,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 UNIT_ASSERT(putResponse.has_prev_kv());
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().key(), "key");
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().value(), "value0");
-                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().version(), 1L);
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().version(), 1LL);
             }
             {
                 grpc::ClientContext writeCtx;
@@ -312,10 +297,10 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 UNIT_ASSERT(putResponse.has_prev_kv());
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().key(), "key");
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().value(), "value1");
-                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().version(), 2L);
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().version(), 2LL);
             }
 
-            UNIT_ASSERT_VALUES_EQUAL(Delete("key", etcd), 1L);
+            UNIT_ASSERT_VALUES_EQUAL(Delete("key", etcd), 1LL);
 
             {
                 grpc::ClientContext writeCtx;
@@ -340,7 +325,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 UNIT_ASSERT(putResponse.has_prev_kv());
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().key(), "key");
                 UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().value(), "value3");
-                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().version(), 1L);
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().version(), 1LL);
             }
         });
     }
@@ -363,11 +348,11 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 deleteRangeRequest.set_prev_kv(true);
                 etcdserverpb::DeleteRangeResponse deleteRangeResponse;
                 etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
-                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 1L);
-                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 1L);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 1LL);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 1U);
                 UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs(0).key(), "key2");
                 UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs(0).value(), "value2");
-                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs(0).version(), 1L);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs(0).version(), 1LL);
             }
 
             {
@@ -378,8 +363,8 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 deleteRangeRequest.set_prev_kv(true);
                 etcdserverpb::DeleteRangeResponse deleteRangeResponse;
                 etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
-                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 3L);
-                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 3L);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 3LL);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 3U);
 
                 std::unordered_map<std::string, std::string> map(deleteRangeResponse.prev_kvs().size());
                 for (const auto& kvs : deleteRangeResponse.prev_kvs())
@@ -398,8 +383,8 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 deleteRangeRequest.set_prev_kv(true);
                 etcdserverpb::DeleteRangeResponse deleteRangeResponse;
                 etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
-                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 4L);
-                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 4L);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 4LL);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 4U);
 
                 std::unordered_map<std::string, std::string> map(deleteRangeResponse.prev_kvs().size());
                 for (const auto& kvs : deleteRangeResponse.prev_kvs())
@@ -557,7 +542,6 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
 
     Y_UNIT_TEST(Leases) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub>&, const std::unique_ptr<etcdserverpb::Lease::Stub> &lease) {
-
             UNIT_ASSERT(Leases(lease).empty());
 
             const i64 one = Grant(97LL, lease), two = Grant(17LL, lease);

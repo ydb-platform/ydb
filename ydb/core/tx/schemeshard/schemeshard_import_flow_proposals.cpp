@@ -244,7 +244,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     auto& record = propose->Record;
     auto& modifyScheme = *record.AddTransaction();
     auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
-    cdcStream.SetTableName(item.DstPathName); //?
+    Cerr << "TableName: " << item.DstPathName << Endl;
+    cdcStream.SetTableName("movies_chfd"); //?
 
     TString error;
     Ydb::StatusIds::StatusCode status;

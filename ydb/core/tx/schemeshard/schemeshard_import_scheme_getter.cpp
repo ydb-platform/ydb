@@ -60,6 +60,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void HeadObject(const TString& key) {
+        Cerr << "HeadObject: " << key << Endl;
         auto request = Model::HeadObjectRequest()
             .WithKey(key);
 
@@ -137,6 +138,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void HandleChangefeed(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        Cerr << "Head HandleChangefeed " << IndexDownloadedChangefeed << Endl;
         const auto& result = ev->Get()->Result;
 
         LOG_D("HandleChangefeed TEvExternalStorage::TEvHeadObjectResponse"
@@ -148,10 +150,12 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         const auto contentLength = result.GetResult().GetContentLength();
+        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsKeys.size());
         GetObject(ChangefeedDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]), std::make_pair(0, contentLength - 1));
     }
 
     void HandleTopic(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        Cerr << "Head HandleTopic " << IndexDownloadedChangefeed << Endl;
         const auto& result = ev->Get()->Result;
 
         LOG_D("HandleTopic TEvExternalStorage::TEvHeadObjectResponse"
@@ -163,10 +167,12 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         const auto contentLength = result.GetResult().GetContentLength();
+        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsKeys.size());
         GetObject(TopicDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]), std::make_pair(0, contentLength - 1));
     }
 
     void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
+        Cerr << "GetObject: " << key << Endl;
         auto request = Model::GetObjectRequest()
             .WithKey(key)
             .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
@@ -313,6 +319,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void HandleChangefeed(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        Cerr << "Get HandleChangefeed " << IndexDownloadedChangefeed << Endl;
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
@@ -335,9 +342,11 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &changefeed)) {
             return Reply(false, "Cannot parse сhangefeed");
         }
-        *(*item.Changefeeds.MutableChangefeeds())[IndexDownloadedChangefeed].MutableChangefeed() = std::move(changefeed);
+        Cerr << "An attempt to save changefeed (description)" << IndexDownloadedChangefeed + 1 << "/" << item.Changefeeds.ChangefeedsSize() << Endl;
+        *item.Changefeeds.MutableChangefeeds()->Add()->MutableChangefeed() = std::move(changefeed);
 
         auto nextStep = [this]() {
+            Become(&TThis::StateDownloadTopics);
             HeadObject(TopicDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));
         };
 
@@ -349,6 +358,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void HandleTopic(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        Cerr << "Get HandleTopic " << IndexDownloadedChangefeed << Endl;
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
@@ -371,12 +381,14 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &topic)) {
             return Reply(false, "Cannot parse topic");
         }
-        *(*item.Changefeeds.MutableChangefeeds())[IndexDownloadedChangefeed].MutableTopic() = std::move(topic);
+        Cerr << "An attempt to save changefeed (topic)" << IndexDownloadedChangefeed + 1 << "/" << item.Changefeeds.ChangefeedsSize();
+        *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableTopic() = std::move(topic);
 
         auto nextStep = [this]() {
-            if (++IndexDownloadedChangefeed == ChangefeedsKeys.size()) {
+            if (++IndexDownloadedChangefeed >= ChangefeedsKeys.size()) {
                 Reply();
             } else {
+                Become(&TThis::StateDownloadChangefeeds);
                 HeadObject(ChangefeedDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));
             }
         };
@@ -416,6 +428,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         if (!ChangefeedsKeys.empty()) {
+            Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsKeys.size());
             HeadObject(ChangefeedDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));
         } else {
             Reply();
@@ -470,6 +483,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
     void ListChangefeeds() {
         CreateClient();
+        Cerr << "ListChangefeeds" << Endl;
         ListObjects(ImportInfo->Settings.items(ItemIdx).source_prefix());
     }
 

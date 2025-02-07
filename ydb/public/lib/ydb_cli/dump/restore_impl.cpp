@@ -12,6 +12,8 @@
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <library/cpp/threading/future/core/future.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
@@ -31,6 +33,7 @@ using namespace NOperation;
 using namespace NScheme;
 using namespace NTable;
 using namespace NTopic;
+using namespace NThreading;
 
 extern const char DOC_API_TABLE_VERSION_ATTR[] = "__document_api_version";
 extern const char DOC_API_REQUEST_TYPE[] = "_document_api_request";
@@ -124,12 +127,22 @@ TVector<TFsPath> CollectDataFiles(const TFsPath& fsPath) {
     return dataFiles;
 }
 
-TRestoreResult CombineResults(const TVector<TRestoreResult>& results) {
-    for (auto result : results) {
-        if (!result.IsSuccess()) {
-            return result;
+TRestoreResult CombineResults(const TVector<TFuture<TRestoreResult>>& results) {
+    try {
+        for (auto result : results) {
+            auto status = result.ExtractValueSync();
+            if (!status.IsSuccess()) {
+                return status;
+            }
         }
+    } catch (NStatusHelpers::TYdbErrorException& e) {
+        return e.ExtractStatus();
+    } catch (const std::exception& e) {
+        return Result<TRestoreResult>(EStatus::INTERNAL_ERROR,
+            TStringBuilder() << "Caught exception: " << e.what()
+        );
     }
+
     return Result<TRestoreResult>();
 }
 
@@ -265,7 +278,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
         if (result.GetStatus() != EStatus::SCHEME_ERROR) {
             LOG_E("Error finding db base path: " << result.GetIssues().ToOneLineString());
-            return Result<TRestoreResult>(EStatus::SCHEME_ERROR, "Can not find existing path");
+            return Result<TRestoreResult>(dbBasePath, EStatus::SCHEME_ERROR, "Can not find existing path");
         }
 
         dbBasePath = dbBasePath.Parent();
@@ -276,7 +289,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     auto oldDirectoryList = RecursiveList(SchemeClient, dbBasePath);
     if (const auto& status = oldDirectoryList.Status; !status.IsSuccess()) {
         LOG_E("Error listing db base path: " << dbBasePath.GetPath().Quote() << ": " << status.GetIssues().ToOneLineString());
-        return Result<TRestoreResult>(EStatus::SCHEME_ERROR, "Can not list existing directory");
+        return Result<TRestoreResult>(dbBasePath, EStatus::SCHEME_ERROR, "Can not list existing directory");
     }
 
     THashSet<TString> oldEntries;
@@ -777,66 +790,71 @@ TRestoreResult TRestoreClient::RestoreData(
 
     THolder<NPrivate::IDataWriter> writer = CreateDataWriter(dbPath, settings, desc, accumulators);
 
-    TVector<TRestoreResult> accumulatorWorkersResults(accumulators.size(), Result<TRestoreResult>());
+    TVector<TFuture<TRestoreResult>> accumulatorResults(Reserve(accumulators.size()));
     TThreadPool accumulatorWorkers(TThreadPool::TParams().SetBlocking(true));
     accumulatorWorkers.Start(accumulators.size(), accumulators.size());
 
     const ui32 dataFilesPerAccumulator = dataFilesCount / accumulators.size();
     const ui32 dataFilesPerAccumulatorRemainder = dataFilesCount % accumulators.size();
+
     for (ui32 i = 0; i < accumulators.size(); ++i) {
         auto* accumulator = accumulators[i].Get();
+        auto promise = NewPromise<TRestoreResult>();
+        accumulatorResults.emplace_back(promise);
 
-        ui32 dataFileIdStart = dataFilesPerAccumulator * i + std::min(i, dataFilesPerAccumulatorRemainder);
-        ui32 dataFileIdEnd = dataFilesPerAccumulator * (i + 1) + std::min(i + 1, dataFilesPerAccumulatorRemainder);
-        auto func = [&, i, dataFileIdStart, dataFileIdEnd, accumulator]() {
-            for (size_t id = dataFileIdStart; id < dataFileIdEnd; ++id) {
-                const TFsPath& dataFile = dataFiles[id];
+        ui32 idStart = dataFilesPerAccumulator * i + std::min(i, dataFilesPerAccumulatorRemainder);
+        ui32 idEnd = dataFilesPerAccumulator * (i + 1) + std::min(i + 1, dataFilesPerAccumulatorRemainder);
 
-                LOG_D("Read data from " << dataFile.GetPath().Quote());
+        auto func = [&, idStart, idEnd, accumulator, result = std::move(promise)]() mutable {
+            try {
+                for (size_t id = idStart; id < idEnd; ++id) {
+                    const TFsPath& dataFile = dataFiles[id];
 
-                TFileInput input(dataFile, settings.FileBufferSize_);
-                TString line;
-                ui64 lineNo = 0;
+                    LOG_D("Read data from " << dataFile.GetPath().Quote());
 
-                while (input.ReadLine(line)) {
-                    auto l = NPrivate::TLine(std::move(line), dataFile.GetPath(), ++lineNo);
+                    TFileInput input(dataFile, settings.FileBufferSize_);
+                    TString line;
+                    ui64 lineNo = 0;
 
-                    for (auto status = accumulator->Check(l); status != NPrivate::IDataAccumulator::OK; status = accumulator->Check(l)) {
-                        if (status == NPrivate::IDataAccumulator::ERROR) {
-                            accumulatorWorkersResults[i] = Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR,
-                                TStringBuilder() << "Invalid data: " << l.GetLocation());
-                            return;
+                    while (input.ReadLine(line)) {
+                        auto l = NPrivate::TLine(std::move(line), dataFile.GetPath(), ++lineNo);
+
+                        for (auto status = accumulator->Check(l); status != NPrivate::IDataAccumulator::OK; status = accumulator->Check(l)) {
+                            if (status == NPrivate::IDataAccumulator::ERROR) {
+                                return result.SetValue(Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR,
+                                    TStringBuilder() << "Invalid data: " << l.GetLocation()));
+                            }
+
+                            if (!accumulator->Ready(true)) {
+                                LOG_E("Error reading data from " << dataFile.GetPath().Quote());
+                                return result.SetValue(Result<TRestoreResult>(dbPath, EStatus::INTERNAL_ERROR, "Data is not ready"));
+                            }
+
+                            if (!writer->Push(accumulator->GetData(true))) {
+                                LOG_E("Error writing data to " << dbPath.Quote() << ", file: " << dataFile.GetPath().Quote());
+                                return result.SetValue(Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #1"));
+                            }
                         }
 
-                        if (!accumulator->Ready(true)) {
-                            LOG_E("Error reading data from " << dataFile.GetPath().Quote());
-                            accumulatorWorkersResults[i] = Result<TRestoreResult>(dbPath, EStatus::INTERNAL_ERROR, "Data is not ready");
-                            return;
-                        }
-
-                        if (!writer->Push(accumulator->GetData(true))) {
-                            LOG_E("Error writing data to " << dbPath.Quote() << ", file: " << dataFile.GetPath().Quote());
-                            accumulatorWorkersResults[i] = Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #1");
-                            return;
-                        }
-                    }
-
-                    accumulator->Feed(std::move(l));
-                    if (accumulator->Ready()) {
-                        if (!writer->Push(accumulator->GetData())) {
-                            LOG_E("Error writing data to " << dbPath.Quote() << ", file: " << dataFile.GetPath().Quote());
-                            accumulatorWorkersResults[i] = Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #2");
-                            return;
+                        accumulator->Feed(std::move(l));
+                        if (accumulator->Ready()) {
+                            if (!writer->Push(accumulator->GetData())) {
+                                LOG_E("Error writing data to " << dbPath.Quote() << ", file: " << dataFile.GetPath().Quote());
+                                return result.SetValue(Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #2"));
+                            }
                         }
                     }
                 }
-            }
 
-            while (accumulator->Ready(true)) {
-                if (!writer->Push(accumulator->GetData(true))) {
-                    accumulatorWorkersResults[i] = Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #3");
-                    return;
+                while (accumulator->Ready(true)) {
+                    if (!writer->Push(accumulator->GetData(true))) {
+                        return result.SetValue(Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #3"));
+                    }
                 }
+
+                result.SetValue(Result<TRestoreResult>());
+            } catch (...) {
+                result.SetException(std::current_exception());
             }
         };
 
@@ -846,7 +864,7 @@ TRestoreResult TRestoreClient::RestoreData(
     }
 
     accumulatorWorkers.Stop();
-    if (auto res = CombineResults(accumulatorWorkersResults); !res.IsSuccess()) {
+    if (auto res = CombineResults(accumulatorResults); !res.IsSuccess()) {
         return res;
     }
 

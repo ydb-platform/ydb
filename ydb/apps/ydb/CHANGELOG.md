@@ -1,3 +1,4 @@
+* Fixed a bug where some errors could be ignored when restoring from a local backup.
 * Added `ydb workload log import generator` command.
 * Queries in `ydb workload run` command are now executed in random order.
 * Include topics in local backups (`ydb tools dump` and `ydb tools restore`). In this release, only the settings of the topics are retained; messages are not included in the backup.

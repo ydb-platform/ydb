@@ -34,12 +34,20 @@ namespace NYql {
             std::optional<NConnector::NApi::TDescribeTableResponse> Response;
         };
 
-        using TDescribeTableMap =
+        using TDescribeTableResults =
             std::unordered_map<TGenericState::TTableAddress, TTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
+
+        // Table metadata loading is performed in serveral steps.
+        enum EPhase {
+            EUnspecified = 0,
+            EDescribeTable = 1,
+            EListSpits = 2
+        };
 
     public:
         TGenericLoadTableMetadataTransformer(TGenericState::TPtr state)
-            : State_(std::move(state))
+            : Phase_(EUnspecified),
+              State_(std::move(state))
         {
         }
 
@@ -50,13 +58,14 @@ namespace NYql {
                 return TStatus::Ok;
             }
 
-            std::unordered_set<TDescribeTableMap::key_type, TDescribeTableMap::hasher> pendingTables;
+            std::unordered_set<TDescribeTableResults::key_type, TDescribeTableResults::hasher> pendingTables;
             const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
                 if (const auto maybeRead = TMaybeNode<TGenRead>(node)) {
                     return maybeRead.Cast().DataSource().Category().Value() == GenericProviderName;
                 }
                 return false;
             });
+
             if (!reads.empty()) {
                 for (const auto& r : reads) {
                     const TGenRead read(r);
@@ -86,41 +95,15 @@ namespace NYql {
                 }
             }
 
+            // We are ready for step #1 - call Connector's method DescribeTable 
+            Phase_ = EDescribeTable;
+
             std::vector<NThreading::TFuture<void>> handles;
             handles.reserve(pendingTables.size());
-            Results_.reserve(pendingTables.size());
+            DescribeTableResults_.reserve(pendingTables.size());
 
-            for (const auto& item : pendingTables) {
-                const auto& clusterName = item.first;
-                const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(clusterName);
-                YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "cluster not found: " << clusterName);
-
-                NConnector::NApi::TDescribeTableRequest request;
-                FillDescribeTableRequest(request, it->second, item.second);
-
-                auto promise = NThreading::NewPromise();
-                handles.emplace_back(promise.GetFuture());
-
-                // preserve data source instance for the further usage
-                auto emplaceIt = Results_.emplace(std::make_pair(item, std::make_shared<TTableDescription>()));
-                auto desc = emplaceIt.first->second;
-                desc->DataSourceInstance = request.data_source_instance();
-
-                Y_ENSURE(State_->GenericClient);
-                State_->GenericClient->DescribeTable(request).Subscribe(
-                    [desc = std::move(desc), promise = std::move(promise)](const NConnector::TDescribeTableAsyncResult& f1) mutable {
-                        NConnector::TDescribeTableAsyncResult f2(f1);
-                        auto result = f2.ExtractValueSync();
-
-                        // Check only transport errors;
-                        // logic errors will be checked later in DoApplyAsyncChanges
-                        if (result.Status.Ok()) {
-                            desc->Response = std::move(result.Response);
-                            promise.SetValue();
-                        } else {
-                            promise.SetException(result.Status.ToDebugString());
-                        }
-                    });
+            for (const auto& tableAddress : pendingTables) {
+                RunDescribeTableRequest(tableAddress, handles);
             }
 
             if (handles.empty()) {
@@ -130,7 +113,46 @@ namespace NYql {
             AsyncFuture_ = NThreading::WaitExceptionOrAll(handles);
             return TStatus::Async;
         }
+    
+    private:
+        void RunDescribeTableRequest(
+            const TGenericState::TTableAddress& tableAddress,
+            std::vector<NThreading::TFuture<void>>& handles
+        ) {
+            const auto& clusterName = tableAddress.first;
+            const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(clusterName);
+            YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "cluster not found: " << clusterName);
 
+            NConnector::NApi::TDescribeTableRequest request;
+            FillDescribeTableRequest(request, it->second, tableAddress.second);
+
+            auto promise = NThreading::NewPromise();
+            handles.emplace_back(promise.GetFuture());
+
+            // preserve data source instance for the further usage
+            auto emplaceIt = DescribeTableResults_.emplace(std::make_pair(tableAddress, std::make_shared<TTableDescription>()));
+            auto desc = emplaceIt.first->second;
+            desc->DataSourceInstance = request.data_source_instance();
+
+            Y_ENSURE(State_->GenericClient);
+            State_->GenericClient->DescribeTable(request).Subscribe(
+                [desc = std::move(desc), promise = std::move(promise)](const NConnector::TDescribeTableAsyncResult& f1) mutable {
+                    NConnector::TDescribeTableAsyncResult f2(f1);
+                    auto result = f2.ExtractValueSync();
+
+                    // Check only transport errors;
+                    // logic errors will be checked later in DoApplyAsyncChanges
+                    if (result.Status.Ok()) {
+                        desc->Response = std::move(result.Response);
+                        promise.SetValue();
+                    } else {
+                        promise.SetException(result.Status.ToDebugString());
+                    }
+                }
+            );
+        }
+
+    public:
         NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode&) final {
             return AsyncFuture_;
         }
@@ -162,7 +184,7 @@ namespace NYql {
         }
 
         void Rewind() final {
-            Results_.clear();
+            DescribeTableResults_.clear();
             AsyncFuture_ = {};
         }
 
@@ -177,9 +199,9 @@ namespace NYql {
             const auto& keyArg = TExprBase(genRead.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
             const auto tableName = TString(keyArg.Tail().Head().Content());
 
-            const auto it = Results_.find(TGenericState::TTableAddress(clusterName, tableName));
+            const auto it = DescribeTableResults_.find(TGenericState::TTableAddress(clusterName, tableName));
 
-            if (it == Results_.cend()) {
+            if (it == DescribeTableResults_.cend()) {
                 TIssues issues;
                 issues.AddIssue(TIssue(ctx.GetPosition(genRead.Pos()), TStringBuilder()
                                 << "Not found result for " << clusterName << '.' << tableName));
@@ -425,9 +447,9 @@ namespace NYql {
         }
 
     private:
+        EPhase Phase_;
         const TGenericState::TPtr State_;
-
-        TDescribeTableMap Results_;
+        TDescribeTableResults DescribeTableResults_;
         NThreading::TFuture<void> AsyncFuture_;
     };
 

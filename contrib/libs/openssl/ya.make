@@ -37,13 +37,14 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PROVIDES(openssl)
 
-PEERDIR(
-    contrib/libs/openssl/crypto
-)
+SRCDIR(contrib/libs/openssl/crypto)
+INCLUDE(crypto/ya.make.inc)
 
 ADDINCL(
     contrib/libs/openssl
 )
+
+CFLAGS(-DOPENSSL_BUILD=1)
 
 IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE_REPLACE_OPENSSL)
 
@@ -236,7 +237,7 @@ SRCS(
     ssl/tls_srp.c
 )
 
-IF (NOT IOS_ARMV7 AND NOT LINUX_ARMV7)
+IF (NOT IOS_ARMV7 AND NOT LINUX_ARMV7 AND NOT ANDROID_ARMV7)
     CFLAGS(
         -DVPAES_ASM
     )

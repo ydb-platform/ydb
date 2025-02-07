@@ -47,6 +47,8 @@ SRCS(
     yql_yt_dq_optimize.cpp
     yql_yt_dq_hybrid.cpp
     yql_yt_wide_flow.cpp
+    yql_yt_ytflow_integration.cpp
+    yql_yt_ytflow_optimize.cpp
 
     phy_opt/yql_yt_phy_opt.cpp
     phy_opt/yql_yt_phy_opt_content.cpp
@@ -119,6 +121,9 @@ PEERDIR(
     yt/yql/providers/yt/opt
     yt/yql/providers/yt/gateway/qplayer
     yt/yql/providers/yt/proto
+    yt/yql/providers/ytflow/expr_nodes
+    yt/yql/providers/ytflow/integration/interface
+    yt/yql/providers/ytflow/integration/proto
 )
 
 YQL_LAST_ABI_VERSION()

@@ -26,6 +26,7 @@ struct TSuspendOperationOptions
     : public TTimeoutOptions
 {
     bool AbortRunningJobs = false;
+    std::optional<TString> Reason;
 };
 
 struct TResumeOperationOptions
@@ -318,6 +319,7 @@ struct TOperation
     NYson::TYsonString RuntimeParameters;
 
     std::optional<bool> Suspended;
+    std::optional<TString> SuspendReason;
 
     NYson::TYsonString Events;
     NYson::TYsonString Result;

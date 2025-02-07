@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/misc/finally.h>
 
+#include <library/cpp/yt/misc/unaligned.h>
+
 #include <contrib/libs/zstd/include/zstd.h>
 
 namespace NYT::NLogging {
@@ -47,7 +49,7 @@ static std::optional<i64> FindSyncTag(const char* buf, size_t size, i64 offset)
             continue;
         }
 
-        ui64 tagOffset = *reinterpret_cast<const ui64*>(tag + sizeof(ZstdSyncTag));
+        ui64 tagOffset = UnalignedLoad(reinterpret_cast<const ui64*>(tag + sizeof(ZstdSyncTag)));
         ui64 tagOffsetExpected = offset + (tag - buf);
 
         if (tagOffset == tagOffsetExpected) {

@@ -577,8 +577,10 @@ private:
     void SendDatabaseRequest() {
         TStringBuilder sql;
         NYdb::TParamsBuilder params;
+        sql << "-- " << TRequest::TRequest::descriptor()->name() << " >>>>" << Endl;
         this->MakeQueryWithParams(sql, params);
-        Cerr << Endl << TRequest::TRequest::descriptor()->name() << ':' << Endl << sql << Endl;
+        sql << "-- " << TRequest::TRequest::descriptor()->name() << " <<<<" << Endl;
+        Cerr << Endl << sql << Endl;
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
         NEtcd::TSharedStuff::Get()->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {

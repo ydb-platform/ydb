@@ -4465,7 +4465,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Changefeeds>()) {
-                        item.Changefeeds = std::move(rowset.GetValue<Schema::ImportItems::Changefeeds>());
+                        item.Changefeeds = rowset.GetValue<Schema::ImportItems::Changefeeds>();
                     }
 
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());

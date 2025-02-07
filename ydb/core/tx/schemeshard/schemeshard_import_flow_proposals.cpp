@@ -7,6 +7,7 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
+    
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,

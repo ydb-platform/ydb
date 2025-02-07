@@ -519,8 +519,7 @@ private:
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
-        auto propose = CreateChangefeedPropose(Self, txId, item);
-        Send(Self->SelfId(), std::move(propose));
+        Send(Self->SelfId(), CreateChangefeedPropose(Self, txId, item));
     }
 
     void AllocateTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {

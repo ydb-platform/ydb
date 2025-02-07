@@ -5,7 +5,7 @@ Creates a [group](../../../concepts/glossary.md#access-group) with the specified
 ## Syntax
 
 ```yql
-CREATE GROUP group_name [ WITH user_name [ , user_name [ ... ]] [ , ] ]
+CREATE GROUP group_name [ WITH USER user_name [ , user_name [ ... ]] [ , ] ]
 ```
 
 ### Parameters

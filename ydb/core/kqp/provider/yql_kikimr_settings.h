@@ -158,8 +158,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpDataQueryStreamLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnableKqpDataQueryStreamIdxLookupJoin = false;
-    bool EnableSequences = false;
-    bool EnableColumnsWithDefault = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
     NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode IndexAutoChooserMode;
     bool EnableAstCache = false;

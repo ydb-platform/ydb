@@ -18,7 +18,7 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 class TColumnElements {
 private:
     YDB_READONLY_DEF(TStringBuf, KeyName);
-    YDB_READONLY_DEF(std::vector<TStringBuf>, Values);
+    YDB_READONLY_DEF(std::deque<TStringBuf>, Values);
     std::vector<TString> ValuesStorage;
     YDB_READONLY_DEF(std::vector<ui32>, RecordIndexes);
     YDB_READONLY(ui32, DataSize, 0);

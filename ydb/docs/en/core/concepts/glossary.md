@@ -421,7 +421,7 @@ A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} 
 
 ### Tablet types {#tablet-types}
 
-[Tablets](#tablet) can be considered a framework for building reliable components operating in a distributed system. Many {{ ydb-short-name }} components implemented using this framework, listed below.
+[Tablets](#tablet) can be considered a framework for building reliable components operating in a distributed system. {{ ydb-short-name }} has multiple components implemented using this framework, listed below.
 
 #### Scheme shard {#scheme-shard}
 

@@ -64,8 +64,7 @@ private:
     }
 
 public:
-    TRemapColumns() {
-    }
+    TRemapColumns() = default;
 
     TOthersData::TFinishContext BuildRemapInfo(const std::vector<TDictStats::TRTStatsValue>& statsByKeyIndex, const TSettings& settings, const ui32 recordsCount) const;
 

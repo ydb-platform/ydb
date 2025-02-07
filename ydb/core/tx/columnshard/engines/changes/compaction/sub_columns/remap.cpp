@@ -25,7 +25,7 @@ TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(
 
 void TRemapColumns::StartSourceChunk(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats) {
     if (RemapInfo.size() <= sourceIdx) {
-        RemapInfo.resize(sourceIdx);
+        RemapInfo.resize((sourceIdx + 1) * 2);
     }
     RemapInfo[sourceIdx].clear();
     auto& remapSourceInfo = RemapInfo[sourceIdx];

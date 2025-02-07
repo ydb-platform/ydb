@@ -169,7 +169,7 @@ YTProf поддерживает теги. Теги позволяют фильт
   #include <tcmalloc/malloc_extension.h>
 
   int main() {
-    NBacktrace::SetAbslStackUnwinder();
+    NYT::NBacktrace::SetAbslStackUnwinder();
     tcmalloc::MallocExtension::SetProfileSamplingRate(2_MB);
 
     ...

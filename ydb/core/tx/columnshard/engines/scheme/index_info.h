@@ -266,7 +266,7 @@ public:
     std::optional<ui32> GetColumnIndexOptional(const ui32 id) const;
     ui32 GetColumnIndexVerified(const ui32 id) const {
         auto result = GetColumnIndexOptional(id);
-        AFL_VERIFY(result);
+        AFL_VERIFY(result)("id", id)("indexes", JoinSeq(",", SchemaColumnIdsWithSpecials));
         return *result;
     }
     std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId) const;

@@ -23,7 +23,7 @@ bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
 
 ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
     auto id = GetColumnIdOptional(name);
-    Y_ABORT_UNLESS(!!id, "undefined column %s", name.data());
+    AFL_VERIFY(!!id, name);
     return *id;
 }
 
@@ -50,7 +50,7 @@ std::optional<ui32> TIndexInfo::GetColumnIndexOptional(const std::string& name) 
 TString TIndexInfo::GetColumnName(const ui32 id, bool required) const {
     const auto& f = GetColumnFeaturesOptional(id);
     if (!f) {
-        AFL_VERIFY(!required)("column_id", id);
+        AFL_VERIFY(!required)("id", id)("indexes", JoinSeq(",", SchemaColumnIdsWithSpecials));
         return "";
     } else {
         return f->GetColumnName();

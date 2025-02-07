@@ -132,11 +132,14 @@ TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSetti
 }
 
 TOthersData TOthersData::BuildEmpty() {
-    auto records = std::make_shared<TGeneralContainer>(0);
-    for (auto&& f : GetSchema()->fields()) {
-        records->AddField(f, NArrow::TThreadSimpleArraysCache::GetNull(f->type(), 0)).Validate();
-    }
-    return TOthersData(TDictStats::BuildEmpty(), records);
+    static TOthersData result = []() {
+        auto records = std::make_shared<TGeneralContainer>(0);
+        for (auto&& f : TOthersData::GetSchema()->fields()) {
+            records->AddField(f, NArrow::TThreadSimpleArraysCache::GetNull(f->type(), 0)).Validate();
+        }
+        return TOthersData(TDictStats::BuildEmpty(), records);
+    }();
+    return result;
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

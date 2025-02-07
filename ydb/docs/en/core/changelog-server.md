@@ -8,7 +8,7 @@ Release date: February 6, 2025.
 
 #### Functionality
 
-* [Added](https://github.com/ydb-platform/ydb/pull/13251) support for restart without loss of cluster availability in [a minimal fault-tolerant configuration of a cluster](./concepts/topology#reduced) used the the 3 nodes variant of mirror-3-dc.
+* [Added](https://github.com/ydb-platform/ydb/pull/13251) support for restart without downtime in [a minimal fault-tolerant configuration of a cluster](./concepts/topology.md#reduced) that uses the three-node variant of `mirror-3-dc`.
 * [Added](https://github.com/ydb-platform/ydb/pull/13220) new UDF Roaring Bitmap functions: AndNotWithBinary, FromUint32List, RunOptimize.
 
 ### Version 24.3.11.13 {#24-3-11-13}

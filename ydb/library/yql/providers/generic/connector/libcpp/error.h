@@ -29,7 +29,7 @@ namespace NYql::NConnector {
         return ok;
     }
 
-    TIssues ErrorToIssues(const NApi::TError& error);
+    TIssues ErrorToIssues(const NApi::TError& error, TString prefix = "");
 
     NDqProto::StatusIds::StatusCode ErrorToDqStatus(const NApi::TError& error);
 

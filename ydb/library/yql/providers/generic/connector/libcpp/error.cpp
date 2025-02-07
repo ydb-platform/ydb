@@ -12,12 +12,12 @@ namespace NYql::NConnector {
         return error;
     }
 
-    TIssues ErrorToIssues(const NApi::TError& error) {
+    TIssues ErrorToIssues(const NApi::TError& error, TString prefix) {
         TIssues issues;
         issues.Reserve(error.get_arr_issues().size() + 1);
 
         // add high-level error
-        issues.AddIssue(TIssue(error.message()));
+        issues.AddIssue(TIssue(TStringBuilder() << prefix << error.message()));
 
         // convert detailed errors
         for (auto& subIssue : error.get_arr_issues()) {

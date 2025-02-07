@@ -166,9 +166,14 @@ namespace NYql {
                 const auto& response = it->second->Response;
 
                 if (!NConnector::IsSuccess(*response)) {
-                    const auto& error = response->error();
-                    NConnector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
-                                                TStringBuilder() << "Loading metadata for table: " << clusterName << '.' << tableName);
+                    auto issues = NConnector::ErrorToIssues( response->error(),
+                        TStringBuilder() << "Loading metadata for table: " << clusterName << '.' << tableName
+                    );
+
+                    for (const auto& issue : issues) {
+                        ctx.AddError(issue);
+                    }
+
                     hasErrors = true;
                     break;
                 }
@@ -177,39 +182,20 @@ namespace NYql {
                 tableMeta.Schema = response->schema();
                 tableMeta.DataSourceInstance = it->second->DataSourceInstance;
 
-                const auto& parse = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
-                if (!parse) {
+                auto parseResult = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
+
+                if (parseResult.second) {
+                    ctx.AddError(*parseResult.second);
                     hasErrors = true;
                     break;
                 }
 
-                tableMeta.ItemType = parse;
+                tableMeta.ItemType = parseResult.first;
+
                 if (const auto ins = replaces.emplace(read.Raw(), TExprNode::TPtr()); ins.second) {
-                    // clang-format off
-                    auto row = Build<TCoArgument>(ctx, read.Pos())
-                        .Name("row")
-                        .Done();
-
-                    auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
-                        .Args({row})
-                        .Body<TCoBool>()
-                            .Literal().Build("true")
-                            .Build()
-                        .Done().Ptr();
-
-                    auto table = Build<TGenTable>(ctx, read.Pos())
-                        .Name().Value(tableName).Build()
-                        .Splits<TCoVoid>().Build().Done();
-
-                    ins.first->second = Build<TGenReadTable>(ctx, read.Pos())
-                        .World(read.World())
-                        .DataSource(read.DataSource())
-                        .Table(table)
-                        .Columns<TCoVoid>().Build()
-                        .FilterPredicate(emptyPredicate)
-                    .Done().Ptr();
-                    // clang-format on
+                    ins.first->second = MakeTableMetaNode(ctx, read, tableName);
                 }
+
                 State_->AddTable(clusterName, tableName, std::move(tableMeta));
             }
 
@@ -226,14 +212,24 @@ namespace NYql {
         }
 
     private:
-        const TStructExprType* ParseTableMeta(const NConnector::NApi::TSchema& schema, const std::string_view& cluster,
-                                              const std::string_view& table, TExprContext& ctx, TVector<TString>& columnOrder) try {
+        // void HandleDescribeTableResponse(const TIntrusivePtr<TExprNode>& read) {
+        // }
+
+        std::pair<const TStructExprType*, std::optional<TIssue>> ParseTableMeta(
+            const NConnector::NApi::TSchema& schema, 
+            const std::string_view& cluster,
+            const std::string_view& table,
+            TExprContext& ctx,
+            TVector<TString>& columnOrder
+        ) try {
             TVector<const TItemExprType*> items;
 
             auto columns = schema.columns();
             if (columns.empty()) {
-                ctx.AddError(TIssue({}, TStringBuilder() << "Table " << cluster << '.' << table << " doesn't exist."));
-                return nullptr;
+                return std::make_pair(
+                    nullptr,
+                    TIssue({}, TStringBuilder() << "Table " << cluster << '.' << table << " doesn't exist.")
+                );
             }
 
             for (auto i = 0; i < columns.size(); i++) {
@@ -245,11 +241,44 @@ namespace NYql {
                 items.emplace_back(ctx.MakeType<TItemExprType>(columns.Get(i).name(), typeAnnotation));
                 columnOrder.emplace_back(columns.Get(i).name());
             }
-            // FIXME: handle on Connector's side?
-            return ctx.MakeType<TStructExprType>(items);
+
+            return std::make_pair(ctx.MakeType<TStructExprType>(items), std::nullopt);
         } catch (std::exception&) {
-            ctx.AddError(TIssue({}, TStringBuilder() << "Failed to parse table metadata: " << CurrentExceptionMessage()));
-            return nullptr;
+            return std::make_pair(
+                nullptr, 
+                TIssue({}, TStringBuilder() << "Failed to parse table metadata: " << CurrentExceptionMessage())
+            );
+        }
+
+        TExprNode::TPtr MakeTableMetaNode(
+            TExprContext& ctx,
+            const TGenRead& read,
+            const TString& tableName 
+        ) {
+            // clang-format off
+            auto row = Build<TCoArgument>(ctx, read.Pos())
+                .Name("row")
+                .Done();
+
+            auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
+                .Args({row})
+                .Body<TCoBool>()
+                    .Literal().Build("true")
+                    .Build()
+                .Done().Ptr();
+
+            auto table = Build<TGenTable>(ctx, read.Pos())
+                .Name().Value(tableName).Build()
+                .Splits<TCoVoid>().Build().Done();
+
+            return Build<TGenReadTable>(ctx, read.Pos())
+                .World(read.World())
+                .DataSource(read.DataSource())
+                .Table(table)
+                .Columns<TCoVoid>().Build()
+                .FilterPredicate(emptyPredicate)
+            .Done().Ptr();
+            // clang-format on
         }
 
         void FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,

@@ -11,6 +11,7 @@
 #include <ydb-cpp-sdk/client/topic/client.h>
 #include <ydb-cpp-sdk/client/value/value.h>
 #include <ydb/public/api/protos/draft/ydb_view.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>

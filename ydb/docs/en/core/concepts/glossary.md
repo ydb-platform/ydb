@@ -421,7 +421,7 @@ A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} 
 
 ### Tablet types {#tablet-types}
 
-[Tablets](#tablet) can be considered a framework for building reliable components operating in a distributed system. {{ ydb-short-name }} has multiple components implemented using this framework, listed below.
+[Tablets](#tablet) can be considered a framework for building reliable components operating in a distributed system. Many {{ ydb-short-name }} components implemented using this framework, listed below.
 
 #### Scheme shard {#scheme-shard}
 
@@ -459,7 +459,7 @@ The **Mediator** is a system tablet that distributes the transactions planned by
 
 #### Hive {#hive}
 
-A **Hive** is a system tablet responsible for launching and managing other tablets. Its responsibilities include moving tablets between nodes in case of [node](#node) failure or overload.
+A **Hive** is a system tablet responsible for launching and managing other tablets. Its responsibilities include moving tablets between nodes in case of [node](#node) failure or overload. You can learn more about Hive in a [dedicated article](../contributor/hive.md).
 
 #### Cluster management system {#cms}
 

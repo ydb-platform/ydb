@@ -74,7 +74,7 @@ struct TFakeDatabaseResolver: public IDatabaseAsyncResolver {
 };
 
 struct TFakeGenericClient: public NConnector::IClient {
-    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request) {
+    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request) override {
         UNIT_ASSERT_VALUES_EQUAL(request.table(), "test_table");
         NConnector::TResult<NConnector::NApi::TDescribeTableResponse> result;
         auto& resp = result.Response.emplace();
@@ -123,7 +123,7 @@ struct TFakeGenericClient: public NConnector::IClient {
         return NThreading::MakeFuture<NConnector::TDescribeTableAsyncResult::value_type>(std::move(result));
     }
 
-    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request) {
+    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request) override {
         Y_UNUSED(request);
         try {
             throw std::runtime_error("ListSplits unimplemented");
@@ -132,7 +132,7 @@ struct TFakeGenericClient: public NConnector::IClient {
         }
     }
 
-    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request) {
+    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request) override {
         Y_UNUSED(request);
         try {
             throw std::runtime_error("ReadSplits unimplemented");
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
             R"ast(
                 (Coalesce
                     (!= (Member $row '"col_optional_uint64") (Member $row '"col_uint32"))
-                    (Bool '"true")
+                    (Bool '"false")
                 )
                 )ast",
             R"proto(
@@ -383,6 +383,46 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     }
                     right_value {
                         column: "col_uint32"
+                    }
+                }
+            )proto");
+    }
+
+    Y_UNIT_TEST(TrueCoalesce) {
+        AssertFilter(
+            // Note that R"ast()ast" is empty string!
+            R"ast(
+                (Coalesce
+                    (!= (Member $row '"col_optional_uint64") (Member $row '"col_uint32"))
+                    (Bool '"true")
+                )
+                )ast",
+            R"proto(
+                coalesce {
+                    operands {
+                        comparison {
+                            operation: NE
+                            left_value {
+                                column: "col_optional_uint64"
+                            }
+                            right_value {
+                                column: "col_uint32"
+                            }
+                        }
+                    }
+                    operands {
+                        bool_expression {
+                            value {
+                                typed_value {
+                                    type {
+                                        type_id: BOOL
+                                    }
+                                    value {
+                                        bool_value: true
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             )proto");
@@ -421,7 +461,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                         (< (Unwrap (/ (Int64 '42) (Member $row '"col_int64"))) (Int64 '10))
                         (>= (Member $row '"col_uint32") (- (Uint32 '15) (Uint32 '1)))
                     )
-                    (Bool '"true")
+                    (Bool '"false")
                 )
                 )ast",
             R"proto(
@@ -515,7 +555,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                         (< (Unwrap (/ (Int64 '42) (Member $row '"col_int64"))) (Int64 '10))
                         (>= (Member $row '"col_uint32") (Uint32 '15))
                     )
-                    (Bool '"true")
+                    (Bool '"false")
                 )
                 )ast",
             R"proto(
@@ -600,7 +640,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                         (Member $row '"col_utf8")
                         (Member $row '"col_optional_utf8")
                     )
-                    (Bool '"true")
+                    (Bool '"false")
                 )
                 )ast");
     }

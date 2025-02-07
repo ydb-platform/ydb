@@ -155,7 +155,7 @@ void TDictStats::TBuilder::Add(
 TDictStats TDictStats::TBuilder::Finish() {
     AFL_VERIFY(Builders.size());
     auto arrays = NArrow::Finish(std::move(Builders));
-    return TDictStats(arrow::RecordBatch::Make(GetStatsSchema(), RecordsCount, arrays));
+    return TDictStats(arrow::RecordBatch::Make(GetStatsSchema(), RecordsCount, std::move(arrays)));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

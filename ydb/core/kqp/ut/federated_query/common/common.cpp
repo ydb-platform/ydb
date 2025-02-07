@@ -41,7 +41,6 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (!appConfig) {
             appConfig.emplace();
         }
-        appConfig->MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
         auto settings = TKikimrSettings();
 

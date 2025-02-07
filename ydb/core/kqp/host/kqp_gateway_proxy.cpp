@@ -550,10 +550,6 @@ static TFuture<TResult> PrepareSuccess() {
 }
 
 bool IsDdlPrepareAllowed(TKikimrSessionContext& sessionCtx) {
-    if (!sessionCtx.Config().EnablePreparedDdl) {
-        return false;
-    }
-
     auto queryType = sessionCtx.Query().Type;
     if (queryType != EKikimrQueryType::Query && queryType != EKikimrQueryType::Script) {
         return false;
@@ -2617,7 +2613,7 @@ public:
 
             auto& config = *op.MutableConfig();
 
-            
+
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
                 const auto parseResult = NYdb::ParseConnectionString(*connectionString);

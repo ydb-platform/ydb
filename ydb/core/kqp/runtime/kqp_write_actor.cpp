@@ -1292,13 +1292,23 @@ private:
     }
 
     void Process() {
-        if (GetFreeSpace() <= 0) {
+        const bool outOfMemory = GetFreeSpace() <= 0;
+        if (outOfMemory) {
             WaitingForTableActor = true;
         } else if (WaitingForTableActor) {
             ResumeExecution();
         }
 
-        if (Closed || GetFreeSpace() <= 0) {
+        if (outOfMemory && !Settings.GetEnableStreamWrite()) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                TStringBuilder() << "Stream write can't be used for this query.",
+                {});
+            return;
+        }
+
+        if (Closed || outOfMemory) {
             WriteTableActor->Flush();
         }
 
@@ -1421,6 +1431,7 @@ struct TWriteSettings {
     std::vector<ui32> WriteIndex;
     TTransactionSettings TransactionSettings;
     i64 Priority;
+    bool EnableStreamWrite;
     bool IsOlap;
 };
 
@@ -1560,6 +1571,7 @@ public:
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
 
+            EnableStreamWrite &= settings.EnableStreamWrite;
             auto cookie = writeInfo.WriteTableActor->Open(
                 settings.OperationType,
                 std::move(settings.KeyColumns),
@@ -1648,11 +1660,20 @@ public:
     }
 
     void ProcessWrite() {
-        const bool needToFlush = GetTotalFreeSpace() <= 0
+        const bool outOfMemory = GetTotalFreeSpace() <= 0;
+        const bool needToFlush = outOfMemory
             || State == EState::FLUSHING
             || State == EState::PREPARING
             || State == EState::COMMITTING
             || State == EState::ROLLINGBACK;
+
+        if (EnableStreamWrite && outOfMemory) {
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                TStringBuilder() << "Stream write queries aren't allowed.",
+                {});
+        }
 
         if (needToFlush) {
             CA_LOG_D("Flush data");
@@ -2539,6 +2560,7 @@ private:
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;
+    bool EnableStreamWrite = true;
 
     bool IsImmediateCommit = false;
     bool TxPlanned = false;
@@ -2682,6 +2704,7 @@ private:
                     .LockMode = Settings.GetLockMode(),
                 },
                 .Priority = Settings.GetPriority(),
+                .EnableStreamWrite = Settings.GetEnableStreamWrite(),
                 .IsOlap = Settings.GetIsOlap(),
             };
         }
@@ -2716,9 +2739,7 @@ private:
     }
 
     i64 GetFreeSpace() const final {
-        return MessageSettings.MaxForwardedSize - DataSize > 0
-            ? MessageSettings.MaxForwardedSize - DataSize
-            : std::numeric_limits<i64>::min();
+        return MessageSettings.MaxForwardedSize - DataSize;
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {

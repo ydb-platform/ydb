@@ -298,6 +298,7 @@ private:
         bool enableOlapSink = TableServiceConfig.GetEnableOlapSink();
         bool enableOltpSink = TableServiceConfig.GetEnableOltpSink();
         bool enableHtapTx = TableServiceConfig.GetEnableHtapTx();
+        bool enableStreamWrite = TableServiceConfig.GetEnableStreamWrite();
         bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
         auto blockChannelsMode = TableServiceConfig.GetBlockChannelsMode();
 
@@ -330,6 +331,7 @@ private:
             TableServiceConfig.GetEnableSequences() != enableSequences ||
             TableServiceConfig.GetEnableColumnsWithDefault() != enableColumnsWithDefault ||
             TableServiceConfig.GetAllowOlapDataQuery() != allowOlapDataQuery ||
+            TableServiceConfig.GetEnableStreamWrite() != enableStreamWrite ||
             TableServiceConfig.GetEnableOlapSink() != enableOlapSink ||
             TableServiceConfig.GetEnableOltpSink() != enableOltpSink ||
             TableServiceConfig.GetEnableHtapTx() != enableHtapTx ||

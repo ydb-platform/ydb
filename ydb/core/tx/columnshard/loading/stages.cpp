@@ -173,13 +173,8 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         return false;
     }
 
-    std::optional<ui64> subDomainLocalPathId;
-    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainLocalPathId, subDomainLocalPathId)) {
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainLocalPathId, Self->SubDomainPathId)) {
         return false;
-    }
-
-    if (subDomainLocalPathId.has_value()) {
-        Self->SubDomainPathId = *subDomainLocalPathId;
     }
 
     ui64 outOfSpace = 0;

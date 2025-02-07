@@ -84,7 +84,7 @@ void TColumnShard::StartWatchingSubDomainPathId() {
 void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("notify_subdomain", msg->PathId);
-    if (SubDomainPathId && msg->PathId.LocalPathId == *SubDomainPathId) {
+    if (msg->PathId.LocalPathId == *SubDomainPathId) {
         const bool outOfSpace = msg->Result->GetPathDescription()
             .GetDomainDescription()
             .GetDomainState()

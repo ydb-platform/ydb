@@ -7,7 +7,7 @@ namespace NKikimr::NReplication::NController {
 class TTargetTableBase: public TTargetWithStream {
 public:
     explicit TTargetTableBase(TReplication* replication, ETargetKind finalKind,
-        ui64 id, const TString& srcPath, const IConfig::TPtr& config);
+        ui64 id, const IConfig::TPtr& config);
 
     TString GetStreamPath() const override;
 
@@ -21,13 +21,13 @@ public:
     struct TTableConfig : public TConfigBase {
         using TPtr = std::shared_ptr<TTableConfig>;
 
-        TTableConfig(const TString& dstPath)
-            : TConfigBase(ETargetKind::Table, dstPath)
+        TTableConfig(const TString& srcPath, const TString& dstPath)
+            : TConfigBase(ETargetKind::Table, srcPath, dstPath)
         {}        
     };
 
     explicit TTargetTable(TReplication* replication,
-        ui64 id, const TString& srcPath, const IConfig::TPtr& config);
+        ui64 id, const IConfig::TPtr& config);
 
 protected:
     TString BuildStreamPath() const override;
@@ -38,13 +38,13 @@ public:
     struct TIndexTableConfig : public TConfigBase {
         using TPtr = std::shared_ptr<TIndexTableConfig>;
 
-        TIndexTableConfig(const TString& dstPath)
-            : TConfigBase(ETargetKind::IndexTable, dstPath)
+        TIndexTableConfig(const TString& srcPath, const TString& dstPath)
+            : TConfigBase(ETargetKind::IndexTable, srcPath, dstPath)
         {}        
     };
 
     explicit TTargetIndexTable(TReplication* replication,
-        ui64 id, const TString& srcPath, const IConfig::TPtr& config);
+        ui64 id, const IConfig::TPtr& config);
 
 protected:
     TString BuildStreamPath() const override;
@@ -55,7 +55,7 @@ public:
     struct TTransferConfig : public TConfigBase {
         using TPtr = std::shared_ptr<TTransferConfig>;
 
-        TTransferConfig(const TString& dstPath, const TString& transformLambda);
+        TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda);
 
         const TString& GetTransformLambda() const;
 
@@ -64,7 +64,7 @@ public:
     };
 
     explicit TTargetTransfer(TReplication* replication,
-        ui64 id, const TString& srcPath, const IConfig::TPtr& config);
+        ui64 id, const IConfig::TPtr& config);
 
 
 protected:

@@ -44,11 +44,10 @@ struct TEvPrivate {
 
     struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
         struct TAddEntry {
-            TString SrcPath;
             TReplication::ETargetKind Kind;
             TReplication::ITarget::IConfig::TPtr Config;
 
-            explicit TAddEntry(const TString& srcPath, TReplication::ETargetKind kind, const TReplication::ITarget::IConfig::TPtr& config);
+            explicit TAddEntry(TReplication::ETargetKind kind, const TReplication::ITarget::IConfig::TPtr& config);
         };
 
         struct TFailedEntry {

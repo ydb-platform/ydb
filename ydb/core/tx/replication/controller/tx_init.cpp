@@ -92,19 +92,19 @@ class TController::TTxInit: public TTxBase {
             TReplication::ITarget::IConfig::TPtr config;
             switch(kind) {
                 case TReplication::ETargetKind::Table:
-                    config = std::make_shared<TTargetTable::TTableConfig>(dstPath);
+                    config = std::make_shared<TTargetTable::TTableConfig>(srcPath, dstPath);
                     break;
 
                 case TReplication::ETargetKind::IndexTable:
-                    config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(dstPath);
+                    config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath);
                     break;
 
                 case TReplication::ETargetKind::Transfer:
-                    config = std::make_shared<TTargetTransfer::TTransferConfig>(dstPath, transformLambda);
+                    config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, transformLambda);
                     break;
             }
 
-            auto* target = replication->AddTarget(tid, kind, srcPath, config);
+            auto* target = replication->AddTarget(tid, kind, config);
             Y_ABORT_UNLESS(target);
 
             target->SetDstState(dstState);

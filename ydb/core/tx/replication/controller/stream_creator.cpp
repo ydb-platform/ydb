@@ -173,8 +173,6 @@ public:
             const TActorId& proxy,
             ui64 rid,
             ui64 tid,
-            TReplication::ETargetKind kind,
-            const TString& srcPath,
             const TReplication::ITarget::IConfig::TPtr& config,
             const TString& streamName,
             const TDuration& retentionPeriod,
@@ -184,8 +182,8 @@ public:
         , YdbProxy(proxy)
         , ReplicationId(rid)
         , TargetId(tid)
-        , Kind(kind)
-        , SrcPath(srcPath)
+        , Kind(config->GetKind())
+        , SrcPath(config->GetSrcPath())
         , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
             {"path", config->GetDstPath()},
             {"id", ToString(rid)},
@@ -227,19 +225,19 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         : std::nullopt;
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(),
-        target->GetSrcPath(), target->GetConfig(), target->GetStreamName(),
+        replication->GetId(), target->GetId(),
+        target->GetConfig(), target->GetStreamName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
         AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication());
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
-        TReplication::ETargetKind kind, const TString& srcPath, const TReplication::ITarget::IConfig::TPtr& config,
+        const TReplication::ITarget::IConfig::TPtr& config,
         const TString& streamName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning)
 {
-    return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, config,
+    return new TStreamCreator(parent, proxy, rid, tid, config,
         streamName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning);
 }
 

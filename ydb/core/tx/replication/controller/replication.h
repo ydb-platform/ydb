@@ -117,8 +117,8 @@ public:
     explicit TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config);
     explicit TReplication(ui64 id, const TPathId& pathId, const TString& config);
 
-    ui64 AddTarget(ETargetKind kind, const TString& srcPath, const ITarget::IConfig::TPtr& config);
-    ITarget* AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const ITarget::IConfig::TPtr& config);
+    ui64 AddTarget(ETargetKind kind, const ITarget::IConfig::TPtr& config);
+    ITarget* AddTarget(ui64 id, ETargetKind kind, const ITarget::IConfig::TPtr& config);
     const ITarget* FindTarget(ui64 id) const;
     ITarget* FindTarget(ui64 id);
     void RemoveTarget(ui64 id);

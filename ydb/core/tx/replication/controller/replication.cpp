@@ -261,12 +261,12 @@ TReplication::TReplication(ui64 id, const TPathId& pathId, const TString& config
 {
 }
 
-ui64 TReplication::AddTarget(ETargetKind kind, const TString& srcPath, const ITarget::IConfig::TPtr& config) {
-    return Impl->AddTarget(this, kind, srcPath, config);
+ui64 TReplication::AddTarget(ETargetKind kind, const ITarget::IConfig::TPtr& config) {
+    return Impl->AddTarget(this, kind, config);
 }
 
-TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const ITarget::IConfig::TPtr& config) {
-    Impl->AddTarget(this, id, kind, srcPath, config);
+TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const ITarget::IConfig::TPtr& config) {
+    Impl->AddTarget(this, id, kind, config);
     return Impl->FindTarget(id);
 }
 

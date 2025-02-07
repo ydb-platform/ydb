@@ -26,19 +26,20 @@ public:
     struct TConfigBase : public IConfig {
         using TPtr = std::shared_ptr<TConfigBase>;
 
-        TConfigBase(ETargetKind kind, const TString& dstPath);
+        TConfigBase(ETargetKind kind, const TString& srcPath, const TString& dstPath);
 
         ETargetKind GetKind() const override;
-        const TString& GetSrcPath() const override { return DstPath; } // TODO
+        const TString& GetSrcPath() const override;
         const TString& GetDstPath() const override;
 
     private:
         const ETargetKind Kind;
+        const TString SrcPath;
         const TString DstPath;
     };
 
     explicit TTargetBase(TReplication* replication, ETargetKind kind,
-        ui64 id, const TString& srcPath, const IConfig::TPtr& config);
+        ui64 id, const IConfig::TPtr& config);
 
     ui64 GetId() const override;
     ETargetKind GetKind() const override;
@@ -74,7 +75,6 @@ private:
     TReplication* const Replication;
     const ui64 Id;
     const ETargetKind Kind;
-    const TString SrcPath;
     const IConfig::TPtr Config;
 
     EDstState DstState = EDstState::Creating;

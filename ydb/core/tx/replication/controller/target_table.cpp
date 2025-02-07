@@ -99,8 +99,8 @@ private:
 }; // TTableWorkerRegistar
 
 TTargetTableBase::TTargetTableBase(TReplication* replication, ETargetKind finalKind,
-        ui64 id, const TString& srcPath, const IConfig::TPtr& config)
-    : TTargetWithStream(replication, finalKind, id, srcPath, config)
+        ui64 id, const IConfig::TPtr& config)
+    : TTargetWithStream(replication, finalKind, id, config)
 {
 }
 
@@ -112,8 +112,8 @@ IActor* TTargetTableBase::CreateWorkerRegistar(const TActorContext& ctx) const {
         replication->GetId(), GetId(), BuildStreamPath(), GetDstPathId(), GetConfig());
 }
 
-TTargetTable::TTargetTable(TReplication* replication, ui64 id, const TString& srcPath, const IConfig::TPtr& config)
-    : TTargetTableBase(replication, ETargetKind::Table, id, srcPath, config)
+TTargetTable::TTargetTable(TReplication* replication, ui64 id, const IConfig::TPtr& config)
+    : TTargetTableBase(replication, ETargetKind::Table, id, config)
 {
 }
 
@@ -125,8 +125,8 @@ TString TTargetTableBase::GetStreamPath() const {
     return BuildStreamPath();
 }
 
-TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const TString& srcPath, const IConfig::TPtr& config)
-    : TTargetTableBase(replication, ETargetKind::IndexTable, id, srcPath, config)
+TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const IConfig::TPtr& config)
+    : TTargetTableBase(replication, ETargetKind::IndexTable, id, config)
 {
 }
 
@@ -134,8 +134,8 @@ TString TTargetIndexTable::BuildStreamPath() const {
     return CanonizePath(ChildPath(SplitPath(GetSrcPath()), {"indexImplTable", GetStreamName()}));
 }
 
-TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const TString& srcPath, const IConfig::TPtr& config)
-    : TTargetTableBase(replication, ETargetKind::Transfer, id, srcPath, config)
+TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConfig::TPtr& config)
+    : TTargetTableBase(replication, ETargetKind::Transfer, id, config)
 {
 }
 
@@ -143,8 +143,8 @@ TString TTargetTransfer::BuildStreamPath() const {
     return CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName()));
 }
 
-TTargetTransfer::TTransferConfig::TTransferConfig(const TString& dstPath, const TString& transformLambda)
-    : TConfigBase(ETargetKind::Transfer, dstPath)
+TTargetTransfer::TTransferConfig::TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda)
+    : TConfigBase(ETargetKind::Transfer, srcPath, dstPath)
     , TransformLambda(transformLambda)
 {
 }

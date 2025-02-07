@@ -13,8 +13,9 @@ using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
-TTargetBase::TConfigBase::TConfigBase(ETargetKind kind, const TString& dstPath)
+TTargetBase::TConfigBase::TConfigBase(ETargetKind kind, const TString& srcPath, const TString& dstPath)
     : Kind(kind)
+    , SrcPath(srcPath)
     , DstPath(dstPath) {
 }
 
@@ -22,16 +23,19 @@ ETargetKind TTargetBase::TConfigBase::GetKind() const {
     return Kind;
 }
 
+const TString& TTargetBase::TConfigBase::GetSrcPath() const {
+    return SrcPath;
+}
+
 const TString& TTargetBase::TConfigBase::GetDstPath() const {
     return DstPath;
 }
 
 TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
-        ui64 id, const TString& srcPath, const IConfig::TPtr& config)
+        ui64 id, const IConfig::TPtr& config)
     : Replication(replication)
     , Id(id)
     , Kind(kind)
-    , SrcPath(srcPath)
     , Config(config)
 {
     Y_ABORT_UNLESS(kind == config->GetKind());
@@ -50,7 +54,7 @@ const TReplication::ITarget::IConfig::TPtr& TTargetBase::GetConfig() const {
 }
 
 const TString& TTargetBase::GetSrcPath() const {
-    return SrcPath;
+    return Config->GetSrcPath();
 }
 
 const TString& TTargetBase::GetDstPath() const {

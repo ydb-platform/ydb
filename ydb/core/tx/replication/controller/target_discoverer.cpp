@@ -109,10 +109,10 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             LOG_D("Describe table succeeded"
                 << ": path# " << path.first);
 
-            const auto& target = ToAdd.emplace_back(path.first, TReplication::ETargetKind::Table,
-                std::make_shared<TTargetTable::TTableConfig>(path.second));
+            const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
+                std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
             LOG_I("Add target"
-                << ": srcPath# " << target.SrcPath
+                << ": srcPath# " << target.Config->GetSrcPath()
                 << ", dstPath# " << target.Config->GetDstPath()
                 << ", kind# " << target.Kind);
 
@@ -126,11 +126,13 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 }
 
                 const auto& target = ToAdd.emplace_back(
-                    CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
                     TReplication::ETargetKind::IndexTable,
-                    std::make_shared<TTargetIndexTable::TIndexTableConfig>(CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))));
+                    std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                        CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
+                        CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))
+                    ));
                 LOG_I("Add target"
-                    << ": srcPath# " << target.SrcPath
+                    << ": srcPath# " << target.Config->GetSrcPath()
                     << ", dstPath# " << target.Config->GetDstPath()
                     << ", kind# " << target.Kind);
             }
@@ -175,10 +177,13 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             LOG_D("Describe topic succeeded"
                 << ": path# " << path.first);
 
-            const auto& target = ToAdd.emplace_back(path.first, TReplication::ETargetKind::Transfer,
-                std::make_shared<TTargetTransfer::TTransferConfig>(path.second, "/* TODO TransferLambda*/"));
+            Y_ABORT_UNLESS((int)*it < Config.GetTransferSpecific().GetTargets().size());
+            const auto& targetConf = Config.GetTransferSpecific().GetTargets().at(*it);
+
+            const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
+                std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, targetConf.GetTransformLambda()));
             LOG_I("Add target"
-                << ": srcPath# " << target.SrcPath
+                << ": srcPath# " << target.Config->GetSrcPath()
                 << ", dstPath# " << target.Config->GetDstPath()
                 << ", kind# " << target.Kind);
         } else {
@@ -346,6 +351,8 @@ public:
             for (const auto& target : Config.GetTransferSpecific().GetTargets()) {
                 Paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
             }
+        } else {
+            Y_ABORT("Unsupported");
         }
     }
 

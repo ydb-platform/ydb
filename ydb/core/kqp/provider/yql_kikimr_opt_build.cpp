@@ -394,6 +394,18 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
 
     auto cluster = dataSink.Cluster();
 
+    if (auto maybeAlterDatabase = node.Maybe<TKiAlterDatabase>()) {
+        auto alterDatabase = maybeAlterDatabase.Cast();
+        if (!checkDataSink(alterDatabase.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        auto result = ExploreTx(alterDatabase.World(), ctx, dataSink, txRes, tablesData, types);
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::AlterDatabase, alterDatabase.Pos(), ctx));
+        return result;
+    }
+
     if (auto maybeRead = node.Maybe<TKiReadTable>()) {
         auto read = maybeRead.Cast();
         if (!checkDataSource(read.DataSource())) {

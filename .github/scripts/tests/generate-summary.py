@@ -37,6 +37,7 @@ class TestResult:
     elapsed: float
     count_of_passed: int
     owners: str
+    status_description: str
 
     @property
     def status_display(self):
@@ -67,15 +68,23 @@ class TestResult:
     @classmethod
     def from_junit(cls, testcase):
         classname, name = testcase.get("classname"), testcase.get("name")
-
+        status_description = None
         if testcase.find("failure") is not None:
             status = TestStatus.FAIL
+            if testcase.find("failure").text is not None:
+                status_description = testcase.find("failure").text
         elif testcase.find("error") is not None:
             status = TestStatus.ERROR
+            if testcase.find("error").text is not None:
+                status_description = testcase.find("error").text
         elif get_property_value(testcase, "mute") is not None:
             status = TestStatus.MUTE
+            if testcase.find("skipped").text is not None:
+                status_description = testcase.find("skipped").text
         elif testcase.find("skipped") is not None:
             status = TestStatus.SKIP
+            if testcase.find("skipped").text is not None:
+                status_description = testcase.find("skipped").text
         else:
             status = TestStatus.PASS
 
@@ -96,7 +105,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed, 0,'')
+        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description)
 
 
 class TestSummaryLine:
@@ -433,7 +442,6 @@ def main():
     else:
         overall_status = "success"
 
-    color, text = get_comment_text(summary, args.summary_links, is_last_retry=bool(args.is_last_retry), is_test_result_ignored=args.is_test_result_ignored)
 
     with open(args.comment_color_file, "w") as f:
         f.write(color)

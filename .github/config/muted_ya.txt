@@ -62,12 +62,8 @@ ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryWithResourcePoolClassifier
 ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*]+chunk+chunk
 ydb/core/kqp/ut/spilling KqpScanSpilling.SelfJoinQueryService
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOlap
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltp
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltpNoSink
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOlap
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltp
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltpNoSink
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.*Olap*
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.*Oltp*
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/mind/hive/ut THiveTest.TestReassignUseRelativeSpace
 ydb/core/persqueue/ut [*/*] chunk chunk

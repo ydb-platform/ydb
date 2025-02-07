@@ -43,10 +43,8 @@ public:
         State_->Gateway->AddCluster(cluster);
 
         State_->Configuration->AddValidCluster(name);
-        if (token) {
-            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
-            State_->Configuration->ClusterConfigs[name] = cluster;
-        }
+        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        State_->Configuration->ClusterConfigs[name] = cluster;
     }
 
     const THashMap<TString, TString>* GetClusterTokens() override {

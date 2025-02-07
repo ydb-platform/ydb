@@ -899,6 +899,12 @@ public:
         return tablePromise.GetFuture();
     }
 
+    TFuture<TGenericResult> AlterDatabase(const TString& cluster, const NYql::TAlterDatabaseSettings& settings) override {
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        return NotImplemented<TGenericResult>();
+    }
+
     TFuture<TGenericResult> CreateColumnTable(NYql::TKikimrTableMetadataPtr metadata,
             bool createDir, bool existingOk) override {
         Y_UNUSED(metadata);

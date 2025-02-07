@@ -36,6 +36,8 @@ struct TKikimrData {
     TMap<TString, NKikimr::NUdf::EDataSlot> SystemColumns;
 
     TKikimrData() {
+        DataSourceNames.insert(TKiAlterDatabase::CallableName());
+
         DataSourceNames.insert(TKiReadTable::CallableName());
         DataSourceNames.insert(TKiReadTableScheme::CallableName());
         DataSourceNames.insert(TKiReadTableList::CallableName());
@@ -113,6 +115,7 @@ struct TKikimrData {
         DataOps = ModifyOps | ReadOps;
 
         SchemeOps =
+            TYdbOperation::AlterDatabase |
             TYdbOperation::CreateTable |
             TYdbOperation::DropTable |
             TYdbOperation::AlterTable |

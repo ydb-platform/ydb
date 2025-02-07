@@ -2006,7 +2006,7 @@ bool TSqlQuery::DeclareStatement(const TRule_declare_stmt& stmt) {
 }
 
 bool TSqlQuery::ExportStatement(const TRule_export_stmt& stmt) {
-    if (Mode != NSQLTranslation::ESqlMode::LIBRARY || !TopLevel) {
+    if ((!Ctx.Settings.AlwaysAllowExports && Mode != NSQLTranslation::ESqlMode::LIBRARY) || !TopLevel) {
         Error() << "EXPORT statement should be used only in a library on the top level";
         return false;
     }

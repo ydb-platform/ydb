@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(4.6.0)
+VERSION(4.7.0)
 
-ORIGINAL_SOURCE(https://gitlab.com/api/v4/projects/libtiff%2Flibtiff/repository/archive.tar.gz?sha=v4.6.0)
+ORIGINAL_SOURCE(https://gitlab.com/api/v4/projects/libtiff%2Flibtiff/repository/archive.tar.gz?sha=v4.7.0)
 
 PEERDIR(
     contrib/libs/libjpeg-turbo
@@ -33,6 +33,11 @@ ADDINCL(
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()
+
+CFLAGS(
+    -DALLOW_TIFF_NON_EXT_ALLOC_FUNCTIONS
+    -DTIFF_DO_NOT_USE_NON_EXT_ALLOC_FUNCTIONS
+)
 
 SRCS(
     tif_aux.c

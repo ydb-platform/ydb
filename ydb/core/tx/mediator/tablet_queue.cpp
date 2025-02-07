@@ -112,7 +112,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             x->SetTxId(tx.TxId);
             if (tx.Moderator)
                 x->SetModerator(tx.Moderator);
-            ActorIdToProto(tx.AckTo, x->MutableAckTo());
+            ActorIdToProto(TActorId(), x->MutableAckTo());
             LOG_DEBUG(ctx, NKikimrServices::TX_MEDIATOR_PRIVATE, "Send from %" PRIu64 " to tablet %" PRIu64 ", step# %"
                 PRIu64 ", txid# %" PRIu64 ", marker M5" PRIu64, Mediator, tabletId, tabletStep->StepRef->Step, tx.TxId);
         }
@@ -169,7 +169,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             for (const TActorId& x : TimecastWatches) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
                     << " Mediator# " << Mediator << " SEND to# " << x.ToString() << " " << evx.ToString());
-                ctx.ExecutorThread.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, x, ctx.SelfID, data, 0));
+                ctx.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, x, ctx.SelfID, data, 0));
             }
         }
     }
@@ -390,7 +390,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " SEND to# " << source.ToString() << " " << evx.ToString());
         const ui32 sendFlags = IEventHandle::FlagTrackDelivery;
-        ctx.ExecutorThread.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, source, ctx.SelfID, data, 0));
+        ctx.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, source, ctx.SelfID, data, 0));
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
@@ -485,7 +485,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             ev->Rewrite(TEvInterconnect::EvForward, watcher->SessionId);
         }
 
-        ctx.ExecutorThread.Send(ev.release());
+        ctx.Send(ev.release());
     }
 
     void SendGranularLatestStepUpdate(const TActorContext& ctx) {

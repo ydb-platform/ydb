@@ -237,7 +237,6 @@ public:
         , FunctionRegistry(functionRegistry)
         , HttpGateway(std::move(httpGateway))
     {
-        Config->EnablePreparedDdl = true;
         Config->EnableAntlr4Parser = enableAntlr4Parser;
     }
 

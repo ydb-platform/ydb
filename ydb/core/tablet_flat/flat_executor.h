@@ -671,6 +671,7 @@ public:
 
     const TExecutorStats& GetStats() const override;
     NMetrics::TResourceMetrics* GetResourceMetrics() const override;
+    TExecutorCounters* GetCounters() override;
 
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) override;
 

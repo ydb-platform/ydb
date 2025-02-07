@@ -703,15 +703,7 @@ namespace NActors {
         {
         }
 
-        void Bootstrap() {
-            auto sender = SelfId();
-            const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* {
-                auto ev = new TEvSessionBufferSizeRequest();
-                return new IEventHandle(recp, sender, ev, IEventHandle::FlagTrackDelivery);
-            };
-            RepliesNumber = TlsActivationContext->ExecutorThread.ActorSystem->BroadcastToProxies(eventFabric);
-            Become(&TInterconnectSessionKiller::StateFunc);
-        }
+        void Bootstrap();
 
         STRICT_STFUNC(StateFunc,
             hFunc(TEvSessionBufferSizeResponse, ProcessResponse)

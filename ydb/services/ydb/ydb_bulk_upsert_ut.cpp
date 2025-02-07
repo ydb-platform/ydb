@@ -972,6 +972,63 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         }
     }
 
+    Y_UNIT_TEST(DecimalPK) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key_Decimal22", TDecimalType(22, 9))
+                .AddNullableColumn("Key_Decimal35", TDecimalType(35, 10))
+                .AddNullableColumn("Value_Decimal22", TDecimalType(22, 9))
+                .AddNullableColumn("Value_Decimal35", TDecimalType(35, 10));
+
+            tableBuilder.SetPrimaryKeyColumns({"Key_Decimal22", "Key_Decimal35"});
+            auto result = session.CreateTable("/Root/Decimal", tableBuilder.Build()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            Cerr << result.GetIssues().ToString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key_Decimal22").Decimal(TDecimalValue("1.1", 22, 9))
+                        .AddMember("Key_Decimal35").Decimal(TDecimalValue("555555555555555.55", 35, 10))
+                        .AddMember("Value_Decimal22").Decimal(TDecimalValue("2.2", 22, 9))
+                        .AddMember("Value_Decimal35").Decimal(TDecimalValue("666666666666666.66", 35, 10))
+                    .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert("/Root/Decimal", rows.Build()).GetValueSync();
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+
+        {
+            auto res = session.ExecuteDataQuery(
+                "SELECT Value_Decimal22 = Decimal('2.2', 22, 9) AND Value_Decimal35 = Decimal('666666666666666.66', 35, 10) AS res FROM `/Root/Decimal` WHERE Key_Decimal22 = Decimal('1.1', 22, 9) AND Key_Decimal35 = Decimal('555555555555555.55', 35, 10)",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+
+            auto rs = NYdb::TResultSetParser(res.GetResultSet(0));
+            UNIT_ASSERT(rs.TryNextRow());
+            std::optional<bool> value = rs.ColumnParser("res").GetOptionalBool();
+            UNIT_ASSERT(*value);
+        }
+    }    
+
     void Index(NYdb::NTable::EIndexType indexType, bool enableBulkUpsertToAsyncIndexedTables = false) {
         auto server = TKikimrWithGrpcAndRootSchema({}, {}, {}, false, nullptr, [=](auto& settings) {
             settings.SetEnableBulkUpsertToAsyncIndexedTables(enableBulkUpsertToAsyncIndexedTables);

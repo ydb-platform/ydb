@@ -9,6 +9,11 @@
             "uri": "file://test.test_IsCategory_/results.txt"
         }
     ],
+    "test.test[LevensteinDistanceCodePoints]": [
+        {
+            "uri": "file://test.test_LevensteinDistanceCodePoints_/results.txt"
+        }
+    ],
     "test.test[List]": [
         {
             "uri": "file://test.test_List_/results.txt"
@@ -22,6 +27,11 @@
     "test.test[Replace]": [
         {
             "uri": "file://test.test_Replace_/results.txt"
+        }
+    ],
+    "test.test[SplitToListNoCrash]": [
+        {
+            "uri": "file://test.test_SplitToListNoCrash_/results.txt"
         }
     ],
     "test.test[Strip]": [

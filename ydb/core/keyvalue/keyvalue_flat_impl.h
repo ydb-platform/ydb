@@ -589,7 +589,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                     << " Dequeue, event type# " << (ui32)ev->GetTypeRewrite()
                     << " event# " << ev->ToString());
-            ctx.ExecutorThread.Send(ev.Release());
+            ctx.Send(ev.Release());
             InitialEventsQueue.pop_front();
         }
         State.OnInitQueueEmpty(ctx);

@@ -593,7 +593,7 @@ public:
         }
         // invoke all accumulated callbacks with fully filled response messages
         for (auto& item : callbacks) {
-            (*std::get<0>(item))(TlsActivationContext->ExecutorThread.ActorSystem, *std::get<1>(item));
+            (*std::get<0>(item))(TActivationContext::ActorSystem(), *std::get<1>(item));
         }
         // send the results
         for (auto& msg : results) {

@@ -253,9 +253,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
 
-        if os.getenv('YDB_TABLE_ENABLE_PREPARED_DDL', 'false').lower() == 'true':
-            self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
-
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
 
@@ -393,7 +390,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
 
         if pg_compatible_expirement:
-            self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True

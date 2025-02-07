@@ -1343,7 +1343,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(OlapCreateAsSelect_Simple) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto settings = TKikimrSettings()
@@ -1509,7 +1508,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto settings = TKikimrSettings()
@@ -1562,7 +1560,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(OltpCreateAsSelect_Disable) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(false);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto settings = TKikimrSettings()
@@ -1609,7 +1606,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(OlapCreateAsSelect_Complex) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto settings = TKikimrSettings()

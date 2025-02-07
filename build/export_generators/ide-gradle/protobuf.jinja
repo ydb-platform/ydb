@@ -1,7 +1,5 @@
 {#- empty string #}
 protobuf {
-    generatedFilesBaseDir = "$buildDir/generated/sources/proto"
-
     protoc {
         // Download from repositories
         artifact = "com.google.protobuf:protoc:{%- if target.proto_compiler_version -%}{{ target.proto_compiler_version }}{%- else -%}3.22.5{%- endif -%}"
@@ -18,16 +16,21 @@ protobuf {
         }
 {%-     endif %}
     }
+{%- endif %}
+
+{%- if target.proto_kotlin or target.proto_grpc %}
 
     generateProtoTasks {
         all().forEach {
+{%-     if target.proto_grpc %}
             it.plugins {
                 id("grpc")
-{%-     if target.proto_kotlin_grpc %}
+{%-         if target.proto_kotlin_grpc %}
                 id("grpckt")
-{%-     endif %}
+{%-         endif %}
             }
-{%-     if target.proto_kotlin_grpc %}
+{%-     endif %}
+{%-     if target.proto_kotlin or target.proto_kotlin_grpc %}
             it.builtins {
                 create("kotlin")
             }

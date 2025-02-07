@@ -189,7 +189,7 @@ public:
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
             Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr);
         Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, QueryState->RequestEv->GetDatabaseId(), std::move(loader),
-            ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig);
+            ctx.ActorSystem(), ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
@@ -712,7 +712,7 @@ private:
     void ContinueQueryProcess(const TActorContext &ctx) {
         Y_ABORT_UNLESS(QueryState);
 
-        TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        TActorSystem* actorSystem = ctx.ActorSystem();
         TActorId selfId = ctx.SelfID;
         ui32 queryId = QueryId;
 
@@ -728,7 +728,7 @@ private:
     void ContinueCleanup(const TActorContext &ctx) {
         Y_ABORT_UNLESS(CleanupState);
 
-        TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        TActorSystem* actorSystem = ctx.ActorSystem();
         TActorId selfId = ctx.SelfID;
         ui32 queryId = QueryId;
 

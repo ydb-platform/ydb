@@ -44,20 +44,6 @@ namespace NYql::NConnector {
         }
     }
 
-    void ErrorToExprCtx(const NApi::TError& error, TExprContext& ctx, const TPosition& position, const TString& summary) {
-        // add high-level error
-        TStringBuilder ss;
-        ss << summary << ": status=" << Ydb::StatusIds_StatusCode_Name(error.status()) << ", message=" << error.message();
-        ctx.AddError(TIssue(position, ss));
-
-        // convert detailed errors
-        TIssues issues;
-        IssuesFromMessage(error.get_arr_issues(), issues);
-        for (const auto& issue : issues) {
-            ctx.AddError(issue);
-        }
-    }
-
     NApi::TError ErrorFromGRPCStatus(const NYdbGrpc::TGrpcStatus& status) {
         NApi::TError result;
 

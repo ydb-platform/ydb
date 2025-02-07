@@ -146,61 +146,16 @@ namespace NYql {
             });
 
             TNodeOnNodeOwnedMap replaces(reads.size());
-            bool hasErrors = false;
 
             for (const auto& r : reads) {
-                const TGenRead read(r);
-                const auto clusterName = read.DataSource().Cluster().StringValue();
-                const auto& keyArg = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
-                const auto tableName = TString(keyArg.Tail().Head().Content());
-
-                const auto it = Results_.find(TGenericState::TTableAddress(clusterName, tableName));
-
-                if (it == Results_.cend()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder()
-                                                                         << "Not found result for " << clusterName << '.' << tableName));
-                    hasErrors = true;
-                    break;
-                }
-
-                const auto& response = it->second->Response;
-
-                if (!NConnector::IsSuccess(*response)) {
-                    auto issues = NConnector::ErrorToIssues( response->error(),
-                        TStringBuilder() << "Loading metadata for table: " << clusterName << '.' << tableName
-                    );
-
-                    for (const auto& issue : issues) {
+                auto issues = HandleDescribeTableResponse(r, ctx, replaces);
+                if (issues) {
+                    for (const auto& issue : *issues) {
                         ctx.AddError(issue);
                     }
 
-                    hasErrors = true;
-                    break;
+                    return TStatus::Error;
                 }
-
-                TGenericState::TTableMeta tableMeta;
-                tableMeta.Schema = response->schema();
-                tableMeta.DataSourceInstance = it->second->DataSourceInstance;
-
-                auto parseResult = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
-
-                if (parseResult.second) {
-                    ctx.AddError(*parseResult.second);
-                    hasErrors = true;
-                    break;
-                }
-
-                tableMeta.ItemType = parseResult.first;
-
-                if (const auto ins = replaces.emplace(read.Raw(), TExprNode::TPtr()); ins.second) {
-                    ins.first->second = MakeTableMetaNode(ctx, read, tableName);
-                }
-
-                State_->AddTable(clusterName, tableName, std::move(tableMeta));
-            }
-
-            if (hasErrors) {
-                return TStatus::Error;
             }
 
             return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
@@ -212,8 +167,54 @@ namespace NYql {
         }
 
     private:
-        // void HandleDescribeTableResponse(const TIntrusivePtr<TExprNode>& read) {
-        // }
+        std::optional<TIssues> HandleDescribeTableResponse(
+            const TIntrusivePtr<TExprNode>& read,
+            TExprContext& ctx,
+            TNodeOnNodeOwnedMap& replaces
+        ) {
+            const TGenRead genRead(read);
+            const auto clusterName = genRead.DataSource().Cluster().StringValue();
+            const auto& keyArg = TExprBase(genRead.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
+            const auto tableName = TString(keyArg.Tail().Head().Content());
+
+            const auto it = Results_.find(TGenericState::TTableAddress(clusterName, tableName));
+
+            if (it == Results_.cend()) {
+                TIssues issues;
+                issues.AddIssue(TIssue(ctx.GetPosition(genRead.Pos()), TStringBuilder()
+                                << "Not found result for " << clusterName << '.' << tableName));
+                return issues;
+            }
+
+            const auto& response = it->second->Response;
+
+            if (!NConnector::IsSuccess(*response)) {
+                return NConnector::ErrorToIssues( 
+                    response->error(),
+                    TStringBuilder() << "Loading metadata for table: " << clusterName << '.' << tableName
+                );
+            }
+
+            TGenericState::TTableMeta tableMeta;
+            tableMeta.Schema = response->schema();
+            tableMeta.DataSourceInstance = it->second->DataSourceInstance;
+
+            auto parseResult = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
+            if (parseResult.second) {
+                TIssues issues;
+                issues.AddIssue(std::move(*parseResult.second));
+                return issues;
+            }
+
+            tableMeta.ItemType = parseResult.first;
+
+            if (const auto ins = replaces.emplace(genRead.Raw(), TExprNode::TPtr()); ins.second) {
+                ins.first->second = MakeTableMetaNode(ctx, genRead, tableName);
+            }
+
+            State_->AddTable(clusterName, tableName, std::move(tableMeta));
+            return std::nullopt;
+        }
 
         std::pair<const TStructExprType*, std::optional<TIssue>> ParseTableMeta(
             const NConnector::NApi::TSchema& schema, 

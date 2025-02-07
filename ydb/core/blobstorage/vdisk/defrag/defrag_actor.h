@@ -25,6 +25,7 @@ namespace NKikimr {
         const TActorId HugeKeeperId;
         NMonGroup::TDefragGroup DefragMonGroup;
         bool RunDefragBySchedule;
+        const bool AddHeader;
 
         // free up to this number of chunks in one quantum
         ui32 MaxChunksToDefrag = 1u;
@@ -60,6 +61,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateDefragActor(
             const std::shared_ptr<TDefragCtx> &dCtx,
-            const TIntrusivePtr<TBlobStorageGroupInfo> &info);
+            const TIntrusivePtr<TBlobStorageGroupInfo> &info,
+            ui32 minHugeBlobInBytes);
 
 } // NKikimr

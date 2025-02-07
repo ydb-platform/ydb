@@ -69,7 +69,7 @@ namespace NKikimr {
                 key = rec.Key;
                 memRec = rec.MemRec;
             } else {
-                memRec.Merge(rec.MemRec, key);
+                memRec.Merge(rec.MemRec, key, false, {});
             }
         }
         squeezed.emplace_back(key, memRec);

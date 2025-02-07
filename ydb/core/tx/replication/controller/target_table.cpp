@@ -30,7 +30,7 @@ class TTableWorkerRegistar: public TActorBootstrapped<TTableWorkerRegistar> {
             }
 
             auto ev = MakeRunWorkerEv(
-                ReplicationId, TargetId, partition.GetPartitionId(),
+                ReplicationId, TargetId, DstProperties, partition.GetPartitionId(),
                 ConnectionParams, ConsistencySettings, SrcStreamPath, DstPathId);
             Send(Parent, std::move(ev));
         }
@@ -56,7 +56,8 @@ public:
             ui64 rid,
             ui64 tid,
             const TString& srcStreamPath,
-            const TPathId& dstPathId)
+            const TPathId& dstPathId,
+            const TReplication::ITarget::IProperties::TPtr& dstProperties)
         : Parent(parent)
         , YdbProxy(proxy)
         , ConnectionParams(connectionParams)
@@ -66,6 +67,7 @@ public:
         , SrcStreamPath(srcStreamPath)
         , DstPathId(dstPathId)
         , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId)
+        , DstProperties(dstProperties)
     {
     }
 
@@ -92,12 +94,13 @@ private:
     const TString SrcStreamPath;
     const TPathId DstPathId;
     const TActorLogPrefix LogPrefix;
+    const TReplication::ITarget::IProperties::TPtr DstProperties;
 
 }; // TTableWorkerRegistar
 
 TTargetTableBase::TTargetTableBase(TReplication* replication, ETargetKind finalKind,
-        ui64 id, const TString& srcPath, const TString& dstPath)
-    : TTargetWithStream(replication, finalKind, id, srcPath, dstPath)
+        ui64 id, const TString& srcPath, const IProperties::TPtr& dstProperties)
+    : TTargetWithStream(replication, finalKind, id, srcPath, dstProperties)
 {
 }
 
@@ -106,11 +109,11 @@ IActor* TTargetTableBase::CreateWorkerRegistar(const TActorContext& ctx) const {
     const auto& config = replication->GetConfig();
     return new TTableWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
         config.GetSrcConnectionParams(), config.GetConsistencySettings(),
-        replication->GetId(), GetId(), BuildStreamPath(), GetDstPathId());
+        replication->GetId(), GetId(), BuildStreamPath(), GetDstPathId(), GetProperties());
 }
 
-TTargetTable::TTargetTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
-    : TTargetTableBase(replication, ETargetKind::Table, id, srcPath, dstPath)
+TTargetTable::TTargetTable(TReplication* replication, ui64 id, const TString& srcPath, const IProperties::TPtr& dstProperties)
+    : TTargetTableBase(replication, ETargetKind::Table, id, srcPath, dstProperties)
 {
 }
 
@@ -122,13 +125,32 @@ TString TTargetTableBase::GetStreamPath() const {
     return BuildStreamPath();
 }
 
-TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
-    : TTargetTableBase(replication, ETargetKind::IndexTable, id, srcPath, dstPath)
+TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const TString& srcPath, const IProperties::TPtr& dstProperties)
+    : TTargetTableBase(replication, ETargetKind::IndexTable, id, srcPath, dstProperties)
 {
 }
 
 TString TTargetIndexTable::BuildStreamPath() const {
     return CanonizePath(ChildPath(SplitPath(GetSrcPath()), {"indexImplTable", GetStreamName()}));
+}
+
+TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const TString& srcPath, const IProperties::TPtr& dstProperties)
+    : TTargetTableBase(replication, ETargetKind::Transfer, id, srcPath, dstProperties)
+{
+}
+
+TString TTargetTransfer::BuildStreamPath() const {
+    return CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName()));
+}
+
+TTargetTransfer::TTransferProperties::TTransferProperties(const TString& dstPath, const TString& transformLambda)
+    : TPropertiesBase(ETargetKind::Transfer, dstPath)
+    , TransformLambda(transformLambda)
+{
+}
+
+const TString& TTargetTransfer::TTransferProperties::GetTransformLambda() const {
+    return TransformLambda;
 }
 
 }

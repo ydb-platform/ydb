@@ -5,10 +5,10 @@
 namespace NKikimr::NReplication::NController {
 
 TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry::TAddEntry(
-        const TString& srcPath, const TString& dstPath, TReplication::ETargetKind kind)
+        const TString& srcPath, TReplication::ETargetKind kind, const TReplication::ITarget::IProperties::TPtr& dstProperties)
     : SrcPath(srcPath)
-    , DstPath(dstPath)
     , Kind(kind)
+    , DstProperties(dstProperties)
 {
 }
 

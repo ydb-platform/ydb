@@ -8,6 +8,6 @@
 namespace NKikimr::NReplication::NController {
 
 IActor* CreateTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
-    TVector<std::pair<TString, TString>>&& specificPaths, NKikimrReplication::EReplicationType type);
+    const NKikimrReplication::TReplicationConfig& config);
 
 }

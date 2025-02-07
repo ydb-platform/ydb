@@ -9,6 +9,19 @@
 
 namespace NKikimr::NReplication::NController {
 
+NKikimrReplication::TReplicationConfig CreateConfig(const TVector<std::pair<TString, TString>>& paths) {
+    NKikimrReplication::TReplicationConfig config;
+
+    auto& specific = *config.MutableSpecific();
+    for (const auto& [src, dst] : paths) {
+        auto& t = *specific.AddTargets();
+        t.SetSrcPath(src);
+        t.SetDstPath(dst);
+    }
+
+    return config;
+}
+
 Y_UNIT_TEST_SUITE(TargetDiscoverer) {
     using namespace NTestHelpers;
 
@@ -31,10 +44,9 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.CreateTable("/Root", *MakeTableDescription(DummyTable()));
 
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
-            TVector<std::pair<TString, TString>>{
+            CreateConfig(TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
-            },
-            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
+            })
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
@@ -43,7 +55,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         const auto& toAdd = ev->Get()->ToAdd;
         UNIT_ASSERT_VALUES_EQUAL(toAdd.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).SrcPath, "/Root/Table");
-        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).DstPath, "/Root/Replicated/Table");
+        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).DstProperties->GetDstPath(), "/Root/Replicated/Table");
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Kind, TReplication::ETargetKind::Table);
     }
 
@@ -55,10 +67,9 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
              "Index", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
 
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
-            TVector<std::pair<TString, TString>>{
+            CreateConfig(TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
-            },
-            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
+            })
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
@@ -67,7 +78,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         const auto& toAdd = ev->Get()->ToAdd;
         UNIT_ASSERT_VALUES_EQUAL(toAdd.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(1).SrcPath, "/Root/Table/Index");
-        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(1).DstPath, "/Root/Replicated/Table/Index/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(1).DstProperties->GetDstPath(), "/Root/Replicated/Table/Index/indexImplTable");
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(1).Kind, TReplication::ETargetKind::IndexTable);
     }
 
@@ -76,10 +87,9 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
-            TVector<std::pair<TString, TString>>{
+            CreateConfig(TVector<std::pair<TString, TString>>{
                 {"/Root/Table", "/Root/ReplicatedTable"},
-            },
-            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
+            })
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
@@ -99,10 +109,9 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.CreateTable("/Root/Dir", *MakeTableDescription(DummyTable()));
 
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
-            TVector<std::pair<TString, TString>>{
+            CreateConfig(TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
-            },
-            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
+            })
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
@@ -111,7 +120,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         const auto& toAdd = ev->Get()->ToAdd;
         UNIT_ASSERT_VALUES_EQUAL(toAdd.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).SrcPath, "/Root/Dir/Table");
-        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).DstPath, "/Root/Replicated/Dir/Table");
+        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).DstProperties->GetDstPath(), "/Root/Replicated/Dir/Table");
     }
 
     Y_UNIT_TEST(SystemObjects) {
@@ -123,10 +132,9 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.CreateTable("/Root/export-100500", *MakeTableDescription(DummyTable()));
 
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
-            TVector<std::pair<TString, TString>>{
+            CreateConfig(TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
-            },
-            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
+            })
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
@@ -151,10 +159,9 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
             env.GetEndpoint(), env.GetDatabase(), false /* ssl */, staticCreds));
 
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, ydbProxy,
-            TVector<std::pair<TString, TString>>{
+            CreateConfig(TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
-            },
-            NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION
+            })
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());

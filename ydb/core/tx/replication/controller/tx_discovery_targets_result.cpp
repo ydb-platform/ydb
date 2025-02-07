@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "target_table.h"
 #include "util.h"
 
 #include <util/string/join.h>
@@ -43,11 +44,20 @@ public:
 
         if (Ev->Get()->IsSuccess()) {
             for (const auto& target : Ev->Get()->ToAdd) {
-                const auto tid = Replication->AddTarget(target.Kind, target.SrcPath, target.DstPath);
+                const auto tid = Replication->AddTarget(target.Kind, target.SrcPath, target.DstProperties);
+                TString transformLambda;
+                {
+                    auto p = std::dynamic_pointer_cast<TTargetTransfer::TTransferProperties>(target.DstProperties);
+                    if (p) {
+                        transformLambda = p->GetTransformLambda();
+                    }
+                }
+
                 db.Table<Schema::Targets>().Key(rid, tid).Update(
                     NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
                     NIceDb::TUpdate<Schema::Targets::SrcPath>(target.SrcPath),
-                    NIceDb::TUpdate<Schema::Targets::DstPath>(target.DstPath)
+                    NIceDb::TUpdate<Schema::Targets::DstPath>(target.DstProperties->GetDstPath()),
+                    NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda)
                 );
 
                 CLOG_N(ctx, "Add target"
@@ -55,7 +65,7 @@ public:
                     << ", tid# " << tid
                     << ", kind# " << target.Kind
                     << ", srcPath# " << target.SrcPath
-                    << ", dstPath# " << target.DstPath);
+                    << ", dstPath# " << target.DstProperties->GetDstPath());
             }
         } else {
             const auto error = JoinSeq(", ", Ev->Get()->Failed);

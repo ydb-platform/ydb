@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "target_table.h"
 
 namespace NKikimr::NReplication::NController {
 
@@ -83,11 +84,27 @@ class TController::TTxInit: public TTxBase {
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
             );
+            const auto transformLambda = rowset.GetValue<Schema::Targets::TransformLambda>();
 
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
 
-            auto* target = replication->AddTarget(tid, kind, srcPath, dstPath);
+            TReplication::ITarget::IProperties::TPtr properties;
+            switch(kind) {
+                case TReplication::ETargetKind::Table:
+                    properties = std::make_shared<TTargetTable::TTableProperties>(dstPath);
+                    break;
+
+                case TReplication::ETargetKind::IndexTable:
+                    properties = std::make_shared<TTargetIndexTable::TIndexTableProperties>(dstPath);
+                    break;
+
+                case TReplication::ETargetKind::Transfer:
+                    properties = std::make_shared<TTargetTransfer::TTransferProperties>(dstPath, transformLambda);
+                    break;
+            }
+
+            auto* target = replication->AddTarget(tid, kind, srcPath, properties);
             Y_ABORT_UNLESS(target);
 
             target->SetDstState(dstState);

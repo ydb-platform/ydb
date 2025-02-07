@@ -1,5 +1,5 @@
 #include "event_util.h"
-#include "target_with_stream.h"
+#include "target_table.h"
 
 namespace NKikimr::NReplication::NController {
 
@@ -11,6 +11,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     return MakeRunWorkerEv(
         replication->GetId(),
         target.GetId(),
+        target.GetProperties(),
         workerId,
         replication->GetConfig().GetSrcConnectionParams(),
         replication->GetConfig().GetConsistencySettings(),
@@ -21,6 +22,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         ui64 replicationId,
         ui64 targetId,
+        const TReplication::ITarget::IProperties::TPtr& dstProperties,
         ui64 workerId,
         const NKikimrReplication::TConnectionParams& connectionParams,
         const NKikimrReplication::TConsistencySettings& consistencySettings,
@@ -41,8 +43,21 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     readerSettings.SetTopicPartitionId(workerId);
     readerSettings.SetConsumerName(ReplicationConsumerName);
 
-    auto& writerSettings = *record.MutableCommand()->MutableLocalTableWriter();
-    dstPathId.ToProto(writerSettings.MutablePathId());
+    switch(dstProperties->GetKind()) {
+        case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable: {
+            auto& writerSettings = *record.MutableCommand()->MutableLocalTableWriter();
+            dstPathId.ToProto(writerSettings.MutablePathId());
+            break;
+        }
+        case TReplication::ETargetKind::Transfer: {
+            auto p = std::dynamic_pointer_cast<TTargetTransfer::TTransferProperties>(dstProperties);
+            auto& writerSettings = *record.MutableCommand()->MutableTransferWriter();
+            dstPathId.ToProto(writerSettings.MutablePathId());
+            writerSettings.SetTransformLambda(p->GetTransformLambda());
+            break;
+        }
+    }
 
     record.MutableCommand()->MutableConsistencySettings()->CopyFrom(consistencySettings);
 

@@ -1,6 +1,7 @@
 #include "logging.h"
 #include "private_events.h"
 #include "target_discoverer.h"
+#include "target_table.h"
 #include "util.h"
 
 #include <ydb/core/base/path.h>
@@ -42,18 +43,18 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             switch (entry.Type) {
             case NYdb::NScheme::ESchemeEntryType::SubDomain:
             case NYdb::NScheme::ESchemeEntryType::Directory:
-                if (Type == NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION) {
+                if (IsReplication()) {
                     Pending.erase(it);
                     return ListDirectory(path);
                 }
                 break;
             case NYdb::NScheme::ESchemeEntryType::Table:
-                if (Type == NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION) {
+                if (IsReplication()) {
                     return DescribeTable(ev->Cookie);
                 }
                 break;
             case NYdb::NScheme::ESchemeEntryType::Topic:
-                if (Type == NKikimrReplication::EReplicationType::REPLICATION_TYPE_TRANSFER) {
+                if (IsTransfer()) {
                     return DescribeTopic(ev->Cookie);
                 }
             default:
@@ -108,10 +109,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             LOG_D("Describe table succeeded"
                 << ": path# " << path.first);
 
-            const auto& target = ToAdd.emplace_back(path.first, path.second, TReplication::ETargetKind::Table);
+            const auto& target = ToAdd.emplace_back(path.first, TReplication::ETargetKind::Table,
+                std::make_shared<TTargetTable::TTableProperties>(path.second));
             LOG_I("Add target"
                 << ": srcPath# " << target.SrcPath
-                << ", dstPath# " << target.DstPath
+                << ", dstPath# " << target.DstProperties->GetDstPath()
                 << ", kind# " << target.Kind);
 
             for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
@@ -125,11 +127,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
                 const auto& target = ToAdd.emplace_back(
                     CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
-                    CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"})),
-                    TReplication::ETargetKind::IndexTable);
+                    TReplication::ETargetKind::IndexTable,
+                    std::make_shared<TTargetIndexTable::TIndexTableProperties>(CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))));
                 LOG_I("Add target"
                     << ": srcPath# " << target.SrcPath
-                    << ", dstPath# " << target.DstPath
+                    << ", dstPath# " << target.DstProperties->GetDstPath()
                     << ", kind# " << target.Kind);
             }
         } else {
@@ -173,10 +175,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             LOG_D("Describe topic succeeded"
                 << ": path# " << path.first);
 
-            const auto& target = ToAdd.emplace_back(path.first, path.second, TReplication::ETargetKind::Transfer);
+            const auto& target = ToAdd.emplace_back(path.first, TReplication::ETargetKind::Transfer,
+                std::make_shared<TTargetTransfer::TTransferProperties>(path.second, "/* TODO TransferLambda*/"));
             LOG_I("Add target"
                 << ": srcPath# " << target.SrcPath
-                << ", dstPath# " << target.DstPath
+                << ", dstPath# " << target.DstProperties->GetDstPath()
                 << ", kind# " << target.Kind);
         } else {
             LOG_E("Describe topic failed"
@@ -314,19 +317,36 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         ListingRetries.clear();
     }
 
+    bool IsReplication() const {
+        return Config.HasSpecific();
+    }
+
+    bool IsTransfer() const {
+        return Config.HasTransferSpecific();
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::REPLICATION_CONTROLLER_TARGET_DISCOVERER;
     }
 
-    explicit TTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy, TVector<std::pair<TString, TString>>&& paths, const NKikimrReplication::EReplicationType type)
+    explicit TTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
+        const NKikimrReplication::TReplicationConfig& config)
         : Parent(parent)
         , ReplicationId(rid)
         , YdbProxy(proxy)
-        , Paths(std::move(paths))
-        , Type(type)
+        , Config(config)
         , LogPrefix("TargetDiscoverer", ReplicationId)
     {
+        if (Config.HasSpecific()) {
+            for (const auto& target : Config.GetSpecific().GetTargets()) {
+                Paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
+            }
+        } else if (Config.HasTransferSpecific()) {
+            for (const auto& target : Config.GetTransferSpecific().GetTargets()) {
+                Paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
+            }
+        }
     }
 
     void Bootstrap() {
@@ -352,8 +372,8 @@ private:
     const TActorId Parent;
     const ui64 ReplicationId;
     const TActorId YdbProxy;
+    const NKikimrReplication::TReplicationConfig Config;
     TVector<std::pair<TString, TString>> Paths;
-    const NKikimrReplication::EReplicationType Type;
     const TActorLogPrefix LogPrefix;
 
     ui64 NextListingId = 1;
@@ -368,9 +388,9 @@ private:
 }; // TTargetDiscoverer
 
 IActor* CreateTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
-    TVector<std::pair<TString, TString>>&& specificPaths, NKikimrReplication::EReplicationType type)
+    const NKikimrReplication::TReplicationConfig& config)
 {
-    return new TTargetDiscoverer(parent, rid, proxy, std::move(specificPaths), type);
+    return new TTargetDiscoverer(parent, rid, proxy, config);
 }
 
 }

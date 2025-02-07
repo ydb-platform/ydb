@@ -1,6 +1,7 @@
 #include "controller_impl.h"
 #include "logging.h"
 #include "private_events.h"
+#include "target_base.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -205,7 +206,11 @@ public:
             auto& item = *Result->Record.AddTargets();
             item.SetId(target->GetId());
             item.SetSrcPath(target->GetSrcPath());
-            item.SetDstPath(target->GetDstPath());
+
+            auto properties = std::dynamic_pointer_cast<TTargetBase::TPropertiesBase>(target->GetProperties());
+            if (properties) {
+                item.SetDstPath(properties->GetDstPath());
+            }
             if (target->GetStreamName()) {
                 item.SetSrcStreamName(target->GetStreamName());
             }

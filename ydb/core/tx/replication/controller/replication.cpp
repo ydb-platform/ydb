@@ -51,9 +51,7 @@ class TReplication::TImpl: public TLagProvider {
         case ETargetKind::IndexTable:
             return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
         case ETargetKind::Transfer:
-            auto target = std::make_unique<TTargetTable>(self, id, std::forward<Args>(args)...);
-            // TODO
-            return target.release();
+            return new TTargetTransfer(self, id, std::forward<Args>(args)...);
         }
     }
 
@@ -66,27 +64,10 @@ class TReplication::TImpl: public TLagProvider {
             case NKikimrReplication::TReplicationConfig::kEverything:
                 return ErrorState("Not implemented");
 
-            case NKikimrReplication::TReplicationConfig::kSpecific: {
-                TVector<std::pair<TString, TString>> paths;
-                for (const auto& target : Config.GetSpecific().GetTargets()) {
-                    paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
-                }
-
-                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths),
-                    NKikimrReplication::EReplicationType::REPLICATION_TYPE_REPLICATION));
+            case NKikimrReplication::TReplicationConfig::kSpecific:
+            case NKikimrReplication::TReplicationConfig::kTransferSpecific:
+                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, Config));
                 break;
-            }
-
-            case NKikimrReplication::TReplicationConfig::kTransferSpecific: {
-                TVector<std::pair<TString, TString>> paths;
-                for (const auto& target : Config.GetTransferSpecific().GetTargets()) {
-                    paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
-                }
-
-                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths),
-                    NKikimrReplication::EReplicationType::REPLICATION_TYPE_TRANSFER));
-                break;
-            }
 
             default:
                 return ErrorState(TStringBuilder() << "Unexpected targets: " << Config.GetTargetCase());
@@ -141,9 +122,12 @@ public:
                 switch (target->GetKind()) {
                 case ETargetKind::Table:
                 case ETargetKind::IndexTable:
-                case ETargetKind::Transfer:
-                    TargetTablePaths.push_back(target->GetDstPath());
+                case ETargetKind::Transfer: {
+                    auto p = std::dynamic_pointer_cast<TTargetBase::TPropertiesBase>(target->GetProperties());
+                    Y_VERIFY(p);
+                    TargetTablePaths.push_back(p->GetDstPath());
                     break;
+                }
                 }
             }
         }
@@ -279,12 +263,12 @@ TReplication::TReplication(ui64 id, const TPathId& pathId, const TString& config
 {
 }
 
-ui64 TReplication::AddTarget(ETargetKind kind, const TString& srcPath, const TString& dstPath) {
-    return Impl->AddTarget(this, kind, srcPath, dstPath);
+ui64 TReplication::AddTarget(ETargetKind kind, const TString& srcPath, const ITarget::IProperties::TPtr& dstProperties) {
+    return Impl->AddTarget(this, kind, srcPath, dstProperties);
 }
 
-TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const TString& dstPath) {
-    Impl->AddTarget(this, id, kind, srcPath, dstPath);
+TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const ITarget::IProperties::TPtr& dstProperties) {
+    Impl->AddTarget(this, id, kind, srcPath, dstProperties);
     return Impl->FindTarget(id);
 }
 

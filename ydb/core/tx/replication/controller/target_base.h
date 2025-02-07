@@ -23,12 +23,26 @@ protected:
     void RemoveWorkers(const TActorContext& ctx);
 
 public:
+    struct TPropertiesBase : public IProperties {
+        using TPtr = std::shared_ptr<TPropertiesBase>;
+
+        TPropertiesBase(ETargetKind kind, const TString& dstPath);
+
+        ETargetKind GetKind() const override;
+        const TString& GetDstPath() const override;
+
+    private:
+        const ETargetKind Kind;
+        const TString DstPath;
+    };
+
     explicit TTargetBase(TReplication* replication, ETargetKind kind,
-        ui64 id, const TString& srcPath, const TString& dstPath);
+        ui64 id, const TString& srcPath, const IProperties::TPtr& dstProperties);
 
     ui64 GetId() const override;
     ETargetKind GetKind() const override;
 
+    const IProperties::TPtr& GetProperties() const override;
     const TString& GetSrcPath() const override;
     const TString& GetDstPath() const override;
 
@@ -60,7 +74,7 @@ private:
     const ui64 Id;
     const ETargetKind Kind;
     const TString SrcPath;
-    const TString DstPath;
+    const IProperties::TPtr DstProperties;
 
     EDstState DstState = EDstState::Creating;
     TPathId DstPathId;

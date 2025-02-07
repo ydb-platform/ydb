@@ -34,14 +34,24 @@ namespace NYql {
             std::optional<NConnector::NApi::TDescribeTableResponse> Response;
         };
 
-        using TDescribeTableResults =
+        using TDescribeTableResultMap =
             std::unordered_map<TGenericState::TTableAddress, TTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
+
+        struct TTableSplits {
+            using TPtr = std::shared_ptr<TTableSplits>;
+
+            std::vector<NConnector::NApi::TSplit> Splits;
+
+            TIssues Issues;
+        };
+
+        using TListSplitsResultMap = std::unordered_map<TGenericState::TTableAddress, TTableSplits::TPtr, THash<TGenericState::TTableAddress>>;
 
         // Table metadata loading is performed in serveral steps.
         enum EPhase {
             EUnspecified = 0,
             EDescribeTable = 1,
-            EListSpits = 2
+            EListSplits = 2
         };
 
     public:
@@ -58,7 +68,7 @@ namespace NYql {
                 return TStatus::Ok;
             }
 
-            std::unordered_set<TDescribeTableResults::key_type, TDescribeTableResults::hasher> pendingTables;
+            std::unordered_set<TDescribeTableResultMap::key_type, TDescribeTableResultMap::hasher> pendingTables;
             const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
                 if (const auto maybeRead = TMaybeNode<TGenRead>(node)) {
                     return maybeRead.Cast().DataSource().Category().Value() == GenericProviderName;
@@ -169,15 +179,86 @@ namespace NYql {
 
             TNodeOnNodeOwnedMap replaces(reads.size());
 
-            for (const auto& r : reads) {
-                TIssues issues = HandleDescribeTableResponse(r, ctx, replaces);
-                if (issues) {
-                    for (const auto& issue : issues) {
-                        ctx.AddError(issue);
+            switch (Phase_) {
+                case EDescribeTable:
+                {
+                    // Handle all the DescribeTable responses
+                    for (const auto& r: reads) {
+                        TIssues issues = HandleDescribeTableResponse(r, ctx, replaces);
+                        if (issues) {
+                            for (const auto& issue : issues) {
+                                ctx.AddError(issue);
+                            }
+
+                            return TStatus::Error;
+                        }
                     }
 
-                    return TStatus::Error;
+                    std::vector<NThreading::TFuture<void>> handles;
+                    handles.reserve(DescribeTableResults_.size());
+                    ListSplitsResults_.reserve(DescribeTableResults_.size());
+                    auto position = ctx.GetPosition(input->Pos());
+
+                    for (const auto& [tableAddress, description]: DescribeTableResults_) {
+                        auto promise = NThreading::NewPromise();
+                        handles.emplace_back(promise.GetFuture());
+
+                        NConnector::NApi::TListSplitsRequest request;
+                        auto select = request.add_selects();
+                        select->mutable_data_source_instance()->CopyFrom(description->DataSourceInstance); 
+                        select->mutable_from()->set_table(tableAddress.second);
+
+                        auto tableSplits = std::make_shared<TTableSplits>();
+                        ListSplitsResults_[tableAddress] = tableSplits;
+
+                        auto result = State_->GenericClient->ListSplits(request).Subscribe(
+                            [position, tableSplits, promise = std::move(promise)](const NConnector::TListSplitsStreamIteratorAsyncResult& f1) mutable {
+                                NConnector::TListSplitsStreamIteratorAsyncResult f2(f1);
+                                auto result = f2.ExtractValueSync();
+
+                                if (!result.Status.Ok()) {
+                                    tableSplits->Issues.AddIssue(TIssue(position, result.Status.ToDebugString()));
+                                    promise.SetValue();
+                                    return; 
+                                }
+
+                                auto& it = result.Iterator;
+                                while(true) {
+                                    auto result = it->ReadNext().GetValueSync();
+                                    if (!result.Status.Ok()) {
+                                        tableSplits->Issues.AddIssue(TIssue(position, result.Status.ToDebugString()));
+                                        promise.SetValue();
+                                        return; 
+                                    }
+
+                                    Y_ENSURE(result.Response);
+
+                                    if (!NConnector::IsSuccess(*result.Response)) {
+                                        tableSplits->Issues.AddIssues(NConnector::ErrorToIssues(result.Response->error()));
+                                        promise.SetValue();
+                                        return;
+                                    }
+
+                                    std::transform(
+                                        std::make_move_iterator(result.Response->splits().begin()),
+                                        std::make_move_iterator(result.Response->splits().end()),
+                                        std::back_inserter(tableSplits->Splits),
+                                        [](auto&& split) { return std::move(split); }
+                                    );
+                                    promise.SetValue();
+                                }
+                            }
+                        );
+                    }
+
+                    Phase_ = EListSplits;
+                    AsyncFuture_ = NThreading::WaitExceptionOrAll(handles);
+                    return TStatus::Async;
                 }
+                case EListSplits:
+                default:
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Unexpected phase"));
+                    return TStatus::Error;
             }
 
             return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
@@ -447,9 +528,13 @@ namespace NYql {
         }
 
     private:
-        EPhase Phase_;
+        EPhase Phase_; // The current phase of metadata loading process.
+
         const TGenericState::TPtr State_;
-        TDescribeTableResults DescribeTableResults_;
+
+        TDescribeTableResultMap DescribeTableResults_;
+        TListSplitsResultMap ListSplitsResults_;
+
         NThreading::TFuture<void> AsyncFuture_;
     };
 

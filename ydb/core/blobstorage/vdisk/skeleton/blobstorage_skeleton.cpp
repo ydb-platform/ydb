@@ -1499,7 +1499,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSync::TPtr &ev, const TActorContext &ctx) {
-            ctx.Send(ev->Forward(Db->SyncLogID));
+            if (!Config->BaseInfo.DonorMode) {
+                ctx.Send(ev->Forward(Db->SyncLogID));
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -1677,6 +1679,10 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr &ev, const TActorContext &ctx) {
+            if (Config->BaseInfo.DonorMode) {
+                return; // this is a race; donor disk can't answer TEvVSyncFull queries
+            }
+
             // run handler in the same mailbox
             TInstant now = TAppData::TimeProvider->Now();
 

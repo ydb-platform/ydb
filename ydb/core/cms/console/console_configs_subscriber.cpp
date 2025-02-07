@@ -48,7 +48,7 @@ public:
             const NKikimrConfig::TAppConfig &currentConfig,
             bool processYaml,
             ui64 version,
-            const TString &yamlConfig,
+            const TString &mainYamlConfig,
             const TMap<ui64, TString> &volatileYamlConfigs,
             const std::optional<TNodeInfo> explicitNodeInfo)
         : OwnerId(ownerId)
@@ -60,11 +60,11 @@ public:
         , CurrentConfig(currentConfig)
         , ServeYaml(processYaml)
         , Version(version)
-        , YamlConfig(yamlConfig)
+        , MainYamlConfig(mainYamlConfig)
         , VolatileYamlConfigs(volatileYamlConfigs)
     {
-        if (ServeYaml && !YamlConfig.empty()) {
-            YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
+        if (ServeYaml && !MainYamlConfig.empty()) {
+            MainYamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
             for (auto &[id, config] : VolatileYamlConfigs) {
                 VolatileYamlConfigHashes[id] = THash<TString>()(config);
             }
@@ -220,10 +220,13 @@ public:
         bool notChanged = true;
 
         if (ServeYaml) {
-            if (!(rec.HasYamlConfigNotChanged() && rec.GetYamlConfigNotChanged())) {
-                if (rec.HasYamlConfig()) {
-                    YamlConfig = rec.GetYamlConfig();
-                    YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
+            if (!(rec.HasDatabaseYamlConfigNotChanged() && rec.GetDatabaseYamlConfigNotChanged())) {
+                notChanged = false;
+            }
+            if (!(rec.HasMainYamlConfigNotChanged() && rec.GetMainYamlConfigNotChanged())) {
+                if (rec.HasMainYamlConfig()) {
+                    MainYamlConfig = rec.GetMainYamlConfig();
+                    MainYamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
                 }
 
                 notChanged = false;
@@ -283,9 +286,10 @@ public:
                      Generation,
                      CurrentConfig,
                      changes,
-                     YamlConfig,
+                     MainYamlConfig,
                      VolatileYamlConfigs,
-                     CurrentDynConfig),
+                     CurrentDynConfig,
+                     rec.HasDatabaseYamlConfig() ? TMaybe<TString>(rec.GetDatabaseYamlConfig()) : TMaybe<TString>{}),
                 IEventHandle::FlagTrackDelivery, Cookie);
 
             FirstUpdateSent = true;
@@ -370,8 +374,8 @@ private:
             request->Record.MutableKnownVersion()->CopyFrom(CurrentConfig.GetVersion());
 
         if (ServeYaml) {
-            if (!YamlConfig.empty()) {
-                request->Record.SetYamlVersion(YamlConfigVersion);
+            if (!MainYamlConfig.empty()) {
+                request->Record.SetMainYamlVersion(MainYamlConfigVersion);
                 for (auto &[id, hash] : VolatileYamlConfigHashes) {
                     auto *item = request->Record.AddVolatileYamlVersion();
                     item->SetId(id);
@@ -413,9 +417,9 @@ private:
 
     bool ServeYaml = false;
     ui64 Version;
-    TString YamlConfig;
+    TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
-    ui64 YamlConfigVersion = 0;
+    ui64 MainYamlConfigVersion = 0;
     TMap<ui64, ui64> VolatileYamlConfigHashes;
 
     TString Tenant;

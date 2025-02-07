@@ -5,7 +5,7 @@ namespace NKikimr {
 namespace NKeyValue {
 
 void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "PrepareCollectIfNeeded KeyValue# " << TabletId << " Marker# KV61");
+    ALOG_TRACE(NKikimrServices::KEYVALUE, "PrepareCollectIfNeeded KeyValue# " << TabletId << " Marker# KV61");
 
     if (CmdTrimLeakedBlobsUids || IsCollectEventSent || Trash.empty()) { // can't start GC right now
         return;
@@ -53,13 +53,13 @@ void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
     StartCollectingIfPossible(ctx);
 }
 
-bool TKeyValueState::RemoveCollectedTrash(ISimpleDb &db, const TActorContext &ctx) {
+bool TKeyValueState::RemoveCollectedTrash(ISimpleDb &db) {
     if (auto& trash = CollectOperation->TrashGoingToCollect) {
         ui32 collected = 0;
 
         for (ui32 maxItemsToStore = 200'000; trash && maxItemsToStore; trash.pop_back(), --maxItemsToStore) {
             const TLogoBlobID& id = trash.back();
-            THelpers::DbEraseTrash(id, db, ctx);
+            THelpers::DbEraseTrash(id, db);
             ui32 num = Trash.erase(id);
             Y_ABORT_UNLESS(num == 1);
             TotalTrashSize -= id.BlobSize();
@@ -76,20 +76,19 @@ bool TKeyValueState::RemoveCollectedTrash(ISimpleDb &db, const TActorContext &ct
     return true;
 }
 
-void TKeyValueState::UpdateStoredState(ISimpleDb &db, const TActorContext &ctx,
-        const NKeyValue::THelpers::TGenerationStep &genStep)
+void TKeyValueState::UpdateStoredState(ISimpleDb &db, const NKeyValue::THelpers::TGenerationStep &genStep)
 {
     StoredState.SetCollectGeneration(std::get<0>(genStep));
     StoredState.SetCollectStep(std::get<1>(genStep));
-    THelpers::DbUpdateState(StoredState, db, ctx);
+    THelpers::DbUpdateState(StoredState, db);
 }
 
-void TKeyValueState::CompleteGCExecute(ISimpleDb &db, const TActorContext &ctx) {
-    if (RemoveCollectedTrash(db, ctx)) {
+void TKeyValueState::CompleteGCExecute(ISimpleDb &db, const TActorContext &/*ctx*/) {
+    if (RemoveCollectedTrash(db)) {
         const ui32 collectGeneration = CollectOperation->Header.GetCollectGeneration();
         const ui32 collectStep = CollectOperation->Header.GetCollectStep();
         auto collectGenStep = THelpers::TGenerationStep(collectGeneration, collectStep);
-        UpdateStoredState(db, ctx, collectGenStep);
+        UpdateStoredState(db, collectGenStep);
     } else {
         RepeatGCTX = true;
     }
@@ -132,7 +131,7 @@ void TKeyValueState::StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &kee
 }
 
 void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "StartCollectingIfPossible KeyValue# " << TabletId
+    ALOG_TRACE(NKikimrServices::KEYVALUE, "StartCollectingIfPossible KeyValue# " << TabletId
             << " IsCollectEventSent# " << IsCollectEventSent << " Marker# KV64");
 
     // there is nothing to collect yet, or the event was already sent
@@ -191,7 +190,7 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
 
     Y_ABORT_UNLESS(trashGoingToCollect);
 
-    LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "StartCollectingIfPossible KeyValue# " << TabletId
+    ALOG_TRACE(NKikimrServices::KEYVALUE, "StartCollectingIfPossible KeyValue# " << TabletId
             << "Flags Keep.Size# " << keep.size() << " DoNotKeep.Size# " << doNotKeep.size() << " Marker# KV65");
 
     StartGC(ctx, keep, doNotKeep, trashGoingToCollect);

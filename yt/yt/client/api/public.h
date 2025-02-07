@@ -43,8 +43,6 @@ DEFINE_ENUM(EUserWorkloadCategory,
     (Realtime)
 );
 
-DEFINE_ENUM_UNKNOWN_VALUE(EUserWorkloadCategory, Batch);
-
 YT_DEFINE_ERROR_ENUM(
     ((TooManyConcurrentRequests)                         (1900))
     ((JobArchiveUnavailable)                             (1910))

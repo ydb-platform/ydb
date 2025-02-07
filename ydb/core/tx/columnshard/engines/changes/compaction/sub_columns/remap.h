@@ -73,41 +73,7 @@ public:
         ResultColumnStats = &resultColumnStats;
     }
 
-    void StartSourceChunk(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats) {
-        if (RemapInfo.size() <= sourceIdx) {
-            RemapInfo.resize(sourceIdx);
-        }
-        RemapInfo[sourceIdx].clear();
-        auto& remapSourceInfo = RemapInfo[sourceIdx];
-        remapSourceInfo.resize(2);
-        auto& remapSourceInfoColumns = remapSourceInfo[1];
-        auto& remapSourceInfoOthers = remapSourceInfo[0];
-        AFL_VERIFY(ResultColumnStats);
-        for (ui32 i = 0; i < sourceColumnStats.GetColumnsCount(); ++i) {
-            if (remapSourceInfoColumns.size() <= i) {
-                remapSourceInfoColumns.resize((i + 1) * 2);
-            }
-            AFL_VERIFY(!remapSourceInfoColumns[i]);
-            if (auto commonKeyIndex = ResultColumnStats->GetKeyIndexOptional(sourceColumnStats.GetColumnName(i))) {
-                remapSourceInfoColumns[i] = TRemapInfo(*commonKeyIndex, true);
-            } else {
-                commonKeyIndex = RegisterNewOtherIndex(sourceColumnStats.GetColumnName(i));
-                remapSourceInfoColumns[i] = TRemapInfo(*commonKeyIndex, false);
-            }
-        }
-        for (ui32 i = 0; i < sourceOtherStats.GetColumnsCount(); ++i) {
-            if (remapSourceInfoOthers.size() <= i) {
-                remapSourceInfoOthers.resize((i + 1) * 2);
-            }
-            AFL_VERIFY(!remapSourceInfoOthers[i]);
-            if (auto commonKeyIndex = ResultColumnStats->GetKeyIndexOptional(sourceOtherStats.GetColumnName(i))) {
-                remapSourceInfoOthers[i] = TRemapInfo(*commonKeyIndex, true);
-            } else {
-                commonKeyIndex = RegisterNewOtherIndex(sourceOtherStats.GetColumnName(i));
-                remapSourceInfoOthers[i] = TRemapInfo(*commonKeyIndex, false);
-            }
-        }
-    }
+    void StartSourceChunk(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats);
 
     TRemapInfo RemapIndex(const ui32 sourceIdx, const ui32 sourceKeyIndex, const bool isColumnKey) const {
         AFL_VERIFY(sourceIdx < RemapInfo.size());

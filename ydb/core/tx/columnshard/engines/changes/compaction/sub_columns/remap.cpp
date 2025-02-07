@@ -23,4 +23,40 @@ TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(
     return TOthersData::TFinishContext(builder.Finish(), remap);
 }
 
+void TRemapColumns::StartSourceChunk(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats) {
+    if (RemapInfo.size() <= sourceIdx) {
+        RemapInfo.resize(sourceIdx);
+    }
+    RemapInfo[sourceIdx].clear();
+    auto& remapSourceInfo = RemapInfo[sourceIdx];
+    remapSourceInfo.resize(2);
+    auto& remapSourceInfoColumns = remapSourceInfo[1];
+    AFL_VERIFY(ResultColumnStats);
+    for (ui32 i = 0; i < sourceColumnStats.GetColumnsCount(); ++i) {
+        if (remapSourceInfoColumns.size() <= i) {
+            remapSourceInfoColumns.resize((i + 1) * 2);
+        }
+        AFL_VERIFY(!remapSourceInfoColumns[i]);
+        if (auto commonKeyIndex = ResultColumnStats->GetKeyIndexOptional(sourceColumnStats.GetColumnName(i))) {
+            remapSourceInfoColumns[i] = TRemapInfo(*commonKeyIndex, true);
+        } else {
+            commonKeyIndex = RegisterNewOtherIndex(sourceColumnStats.GetColumnName(i));
+            remapSourceInfoColumns[i] = TRemapInfo(*commonKeyIndex, false);
+        }
+    }
+    auto& remapSourceInfoOthers = remapSourceInfo[0];
+    for (ui32 i = 0; i < sourceOtherStats.GetColumnsCount(); ++i) {
+        if (remapSourceInfoOthers.size() <= i) {
+            remapSourceInfoOthers.resize((i + 1) * 2);
+        }
+        AFL_VERIFY(!remapSourceInfoOthers[i]);
+        if (auto commonKeyIndex = ResultColumnStats->GetKeyIndexOptional(sourceOtherStats.GetColumnName(i))) {
+            remapSourceInfoOthers[i] = TRemapInfo(*commonKeyIndex, true);
+        } else {
+            commonKeyIndex = RegisterNewOtherIndex(sourceOtherStats.GetColumnName(i));
+            remapSourceInfoOthers[i] = TRemapInfo(*commonKeyIndex, false);
+        }
+    }
+}
+
 }   // namespace NKikimr::NOlap::NCompaction::NSubColumns

@@ -1169,6 +1169,9 @@ private:
 
     void OnNotifyResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(CompletedTxId);
+
+        AppData()->FeatureFlags.SetEnableChangefeedsImport(true);
+
         LOG_D("TImport::TTxProgress: OnNotifyResult"
             << ": txId# " << CompletedTxId);
 
@@ -1205,32 +1208,32 @@ private:
 
         switch (item.State) {
         case EState::CreateSchemeObject:
-            Cerr << "CreateSchemeObject11" << Endl;
             if (IsCreatedByQuery(item)) {
-                item.State = EState::CreateChangefeed;
+                item.State = EState::Done;
                 break;
             }
-            item.State = EState::CreateChangefeed;
+            item.State = EState::Transferring;
             AllocateTxId(importInfo, itemIdx);
             break;
 
         case EState::Transferring:
-        Cerr << "Transfering232" << Endl;
             if (const auto issue = GetIssues(item.DstPathId, txId)) {
                 item.Issue = *issue;
                 Cancel(importInfo, itemIdx, "issues during restore");
             } else {
                 if (item.NextIndexIdx < item.Scheme.indexes_size()) {
-                    item.State = EState::CreateChangefeed;
+                    item.State = EState::BuildIndexes;
+                    AllocateTxId(importInfo, itemIdx);
+                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size()) {
+                    item.State = AppData()->FeatureFlags.GetEnableChangefeedsImport() ? EState::CreateChangefeed : EState::Done;
                     AllocateTxId(importInfo, itemIdx);
                 } else {
-                    item.State = EState::CreateChangefeed;
+                    item.State = EState::Done;
                 }
             }
             break;
 
         case EState::BuildIndexes:
-        Cerr << "BuildIndexes123232" << Endl;
             if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
                 item.Issue = *issue;
                 Cancel(importInfo, itemIdx, "issues during index building");
@@ -1238,14 +1241,12 @@ private:
                 if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
                     AllocateTxId(importInfo, itemIdx);
                 } else {
-                    // item.State = AppData()->FeatureFlags.GetEnableChangefeedsImport() ? EState::CreateChangefeed;
-                    item.State = EState::CreateChangefeed;
+                    item.State = AppData()->FeatureFlags.GetEnableChangefeedsImport() ? EState::CreateChangefeed : EState::Done;
                 }
             }
             break;
         
         case EState::CreateChangefeed:
-            Cerr << "CreateChangefeed12" << Endl << "NextChangefeedIdx: " << item.NextChangefeedIdx;
             if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
                 AllocateTxId(importInfo, itemIdx);
             } else {

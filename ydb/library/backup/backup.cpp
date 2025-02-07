@@ -1140,17 +1140,13 @@ void CheckedCreateBackupFolder(const TFsPath& folderPath) {
 // relDbPath - relative path to directory/table to be backuped
 // folderPath - relative path to folder in local filesystem where backup will be stored
 void BackupFolder(const TDriver& driver, const TString& database, const TString& relDbPath, TFsPath folderPath,
-        const TVector<TRegExMatch>& exclusionPatterns, bool schemaOnly, bool useConsistentCopyTable,
-        bool avoidCopy, bool savePartialResult, bool preservePoolKinds, bool ordered, bool checkFolder) {
-    
+        const TVector<TRegExMatch>& exclusionPatterns,
+        bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool savePartialResult, bool preservePoolKinds, bool ordered) {
     TString temporalBackupPostfix = CreateTemporalBackupName();
-
-    if (checkFolder) {
-        if (!folderPath) {
-            folderPath = temporalBackupPostfix;
-        }
-        CheckedCreateBackupFolder(folderPath);
+    if (!folderPath) {
+        folderPath = temporalBackupPostfix;
     }
+    CheckedCreateBackupFolder(folderPath);
 
     TString dbPrefix = JoinDatabasePath(database, relDbPath);
     LOG_I("Backup " << dbPrefix.Quote() << " to " << folderPath.GetPath().Quote());

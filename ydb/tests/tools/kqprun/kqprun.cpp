@@ -456,6 +456,7 @@ public:
 protected:
     void RegisterOptions(NLastGetopt::TOpts& options) override {
         options.SetTitle("KqpRun -- tool to execute queries by using kikimr provider (instead of dq provider in DQrun tool)");
+        options.AddHelpOption('h');
         options.SetFreeArgsNum(0);
 
         // Inputs

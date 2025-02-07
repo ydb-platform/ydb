@@ -10,8 +10,6 @@
 namespace NKikimrRun {
 
 void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettings& settings) {
-    options.AddHelpOption('h');
-
     options.AddLongOption("log-file", "File with execution logs (writes in stderr if empty)")
         .RequiredArgument("file")
         .StoreResult(&settings.LogOutputFile)

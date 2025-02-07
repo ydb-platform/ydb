@@ -92,6 +92,7 @@ class TMain : public TMainBase {
 protected:
     void RegisterOptions(NLastGetopt::TOpts& options) override {
         options.SetTitle("FqRun -- tool to execute stream queries through FQ proxy");
+        options.AddHelpOption('h');
         options.SetFreeArgsNum(0);
 
         // Inputs

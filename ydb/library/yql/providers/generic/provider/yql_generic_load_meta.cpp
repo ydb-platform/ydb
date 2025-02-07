@@ -199,10 +199,8 @@ namespace NYql {
             tableMeta.Schema = response->schema();
             tableMeta.DataSourceInstance = it->second->DataSourceInstance;
 
-            auto issue = ParseTableMeta(ctx, clusterName, tableName, tableMeta);
-            if (issue) {
-                TIssues issues;
-                issues.AddIssue(std::move(*issue));
+            auto issues = ParseTableMeta(ctx, ctx.GetPosition(read->Pos()), clusterName, tableName, tableMeta);
+            if (issues) {
                 return issues;
             }
 
@@ -214,8 +212,9 @@ namespace NYql {
             return TIssues{};
         }
 
-        std::optional<TIssue> ParseTableMeta(
+        TIssues ParseTableMeta(
             TExprContext& ctx,
+            const TPosition& pos,
             const std::string_view& cluster,
             const std::string_view& table,
             TGenericState::TTableMeta& tableMeta
@@ -224,7 +223,8 @@ namespace NYql {
 
             auto columns = tableMeta.Schema.columns();
             if (columns.empty()) {
-                return TIssue({}, TStringBuilder() << "Table " << cluster << '.' << table << " doesn't exist.");
+                TIssues issues;
+                issues.AddIssue(TIssue(pos, TStringBuilder() << "Table " << cluster << '.' << table << " doesn't exist."));
             }
 
             for (auto i = 0; i < columns.size(); i++) {
@@ -238,9 +238,11 @@ namespace NYql {
             }
 
             tableMeta.ItemType = ctx.MakeType<TStructExprType>(items);
-            return std::nullopt;
+            return TIssues{};
         } catch (std::exception&) {
-            return TIssue({}, TStringBuilder() << "Failed to parse table metadata: " << CurrentExceptionMessage());
+            TIssues issues;
+            issues.AddIssue(TIssue(pos, TStringBuilder() << "Failed to parse table metadata: " << CurrentExceptionMessage()));
+            return issues;
         }
 
         TExprNode::TPtr MakeTableMetaNode(

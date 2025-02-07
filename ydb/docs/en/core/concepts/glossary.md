@@ -467,7 +467,7 @@ The **cluster management system** or **CMS** is a system tablet responsible for 
 
 #### Node Broker {#node-broker}
 
-The **Node Broker** is a system tablet that registers [dynamic nodes](#dynamic) in the cluster.
+The **Node Broker** is a system tablet that registers [dynamic nodes](#dynamic-node) in the cluster.
 
 ### Slot {#slot}
 

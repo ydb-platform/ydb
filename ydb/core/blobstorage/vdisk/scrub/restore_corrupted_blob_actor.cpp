@@ -51,7 +51,7 @@ namespace NKikimr {
             }
 
             void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/,
-                    ui64 /*circaLsn*/) {
+                    ui64 /*circaLsn*/, const void* /*sst*/) {
                 const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
                 if ((local & Item->Needed).Empty()) {
                     return; // no useful parts here
@@ -88,7 +88,7 @@ namespace NKikimr {
                     }
                 } else {
                     // process possible on-disk huge blob stored in fresh segment
-                    AddFromSegment(memRec, nullptr, key, Max<ui64>());
+                    AddFromSegment(memRec, nullptr, key, Max<ui64>(), nullptr);
                 }
             }
         };

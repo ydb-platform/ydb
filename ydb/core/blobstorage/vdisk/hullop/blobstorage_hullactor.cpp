@@ -25,25 +25,15 @@ namespace NKikimr {
             return bool(FullCompactionAttrs);
         }
 
-        void FullCompactionTask(
-                ui64 fullCompactionLsn,
-                TInstant now,
-                EHullDbType type,
-                ui64 requestId,
-                const TActorId &recipient)
+        void FullCompactionTask(ui64 fullCompactionLsn, TInstant now, EHullDbType type, ui64 requestId,
+                const TActorId &recipient, THashSet<ui64> tablesToCompact)
         {
-            FullCompactionAttrs.emplace(fullCompactionLsn, now);
+            FullCompactionAttrs.emplace(fullCompactionLsn, now, std::move(tablesToCompact));
             Requests.push_back({type, requestId, recipient});
         }
 
-        void Compacted(
-                const TActorContext &ctx,
-                const std::pair<std::optional<NHullComp::TFullCompactionAttrs>, bool> &info)
-        {
-            if (!Enabled())
-                return;
-
-            if (FullCompactionAttrs == info.first && info.second) {
+        void Compacted(const TActorContext& ctx, const std::pair<std::optional<NHullComp::TFullCompactionAttrs>, bool>& info) {
+            if (Enabled() && FullCompactionAttrs == info.first && info.second) {
                 // full compaction finished
                 for (const auto &x : Requests) {
                     ctx.Send(x.Recipient, new TEvHullCompactResult(x.Type, x.RequestId));
@@ -53,18 +43,11 @@ namespace NKikimr {
             }
         }
 
-        template<typename TRTCtx>
-        bool ForceFreshCompaction(const TRTCtx& rtCtx) const {
-            return Enabled() && !rtCtx->LevelIndex->IsWrittenToSstBeforeLsn(FullCompactionAttrs->FullCompactionLsn);
-        }
-
         // returns FullCompactionAttrs for Level Compaction Selector
         // if Fresh segment before FullCompactionAttrs->FullCompationLsn has not been written to sst yet,
-        // there is no profit in starting LevelCompaction, so we return std::optional<ui64>()
+        // there is no profit in starting LevelCompaction, so we return nullopt
         template <class TRTCtx>
-        std::optional<NHullComp::TFullCompactionAttrs> GetFullCompactionAttrsForLevelCompactionSelector(
-                const TRTCtx &rtCtx)
-        {
+        std::optional<NHullComp::TFullCompactionAttrs> GetFullCompactionAttrsForLevelCompactionSelector(const TRTCtx &rtCtx) {
             return Enabled() && rtCtx->LevelIndex->IsWrittenToSstBeforeLsn(FullCompactionAttrs->FullCompactionLsn)
                 ? FullCompactionAttrs
                 : std::nullopt;
@@ -173,7 +156,7 @@ namespace NKikimr {
         NMonGroup::TLsmAllLevelsStat LevelStat;
         TFullCompactionState FullCompactionState;
         bool CompactionScheduled = false;
-        TInstant NextCompactionWakeup;
+        TMonotonic NextCompactionWakeup;
         bool AllowGarbageCollection = false;
         THugeBlobCtxPtr HugeBlobCtx;
         ui32 MinHugeBlobInBytes;
@@ -191,11 +174,9 @@ namespace NKikimr {
         // RunLevelCompactionSelector runs TSelectorActor which selects what to compact.
         // returns true, if selector has been started, false otherwise
         bool RunLevelCompactionSelector(const TActorContext &ctx) {
-            // if compaction is in progress, return
-            if (RTCtx->LevelIndex->GetCompState() != TLevelIndexBase::StateNoComp
-                || !Config->LevelCompaction
-                || Config->BaseInfo.DonorMode) {
-
+            // if compaction is in progress or disabled, return
+            if (RTCtx->LevelIndex->GetCompState() != TLevelIndexBase::StateNoComp || !Config->LevelCompaction ||
+                    Config->BaseInfo.DonorMode) {
                 return false;
             }
 
@@ -214,7 +195,7 @@ namespace NKikimr {
         }
 
         void ScheduleCompactionWakeup(const TActorContext& ctx) {
-            NextCompactionWakeup = ctx.Now() + Config->HullCompSchedulingInterval;
+            NextCompactionWakeup = ctx.Monotonic() + Config->HullCompSchedulingInterval;
             if (!CompactionScheduled) {
                 ctx.Schedule(NextCompactionWakeup, new TEvents::TEvWakeup);
                 CompactionScheduled = true;
@@ -224,20 +205,21 @@ namespace NKikimr {
         void HandleWakeup(const TActorContext& ctx) {
             Y_ABORT_UNLESS(CompactionScheduled);
             CompactionScheduled = false;
-            if (ctx.Now() >= NextCompactionWakeup) {
+            if (ctx.Monotonic() >= NextCompactionWakeup) {
                 ScheduleCompaction(ctx);
             } else {
                 ScheduleCompactionWakeup(ctx);
             }
         }
 
-        void ScheduleCompaction(const TActorContext &ctx) {
+        bool ScheduleCompaction(const TActorContext &ctx, bool level = true) {
             // schedule fresh if required
-            CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, HugeBlobCtx, MinHugeBlobInBytes, RTCtx, ctx,
-                FullCompactionState.ForceFreshCompaction(RTCtx), AllowGarbageCollection);
-            if (!Config->BaseInfo.ReadOnly && !RunLevelCompactionSelector(ctx)) {
+            const bool res = CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, HugeBlobCtx, MinHugeBlobInBytes, RTCtx,
+                ctx, !RTCtx->LevelIndex->IsWrittenToSstBeforeLsn(ForceFreshCompactLsn), AllowGarbageCollection);
+            if (level && !Config->BaseInfo.ReadOnly && !RunLevelCompactionSelector(ctx)) {
                 ScheduleCompactionWakeup(ctx);
             }
+            return res;
         }
 
         void RunLevelCompaction(const TActorContext &ctx, TVector<TOrderedLevelSegmentsPtr> &vec) {
@@ -567,13 +549,7 @@ namespace NKikimr {
                     break;
                 case THullCommitFinished::CommitFresh:
                     ProcessFreshOnlyCompactQ(ctx);
-                    // to avoid deadlock with emerg queue
-                    if (FullCompactionState.Enabled()) {
-                        ScheduleCompaction(ctx);
-                    } else {
-                        CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, HugeBlobCtx, MinHugeBlobInBytes, RTCtx,
-                            ctx, FullCompactionState.ForceFreshCompaction(RTCtx), AllowGarbageCollection);
-                    }
+                    ScheduleCompaction(ctx, FullCompactionState.Enabled());
                     break;
                 case THullCommitFinished::CommitAdvanceLsn:
                     AdvanceCommitInProgress = false;
@@ -595,9 +571,7 @@ namespace NKikimr {
             const ui64 freeUpToLsn = ev->Get()->FreeUpToLsn;
             RTCtx->SetFreeUpToLsn(freeUpToLsn);
             // we check if we need to start fresh compaction, FreeUpToLsn influence our decision
-            const bool freshCompStarted = CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, HugeBlobCtx,
-                MinHugeBlobInBytes, RTCtx, ctx, FullCompactionState.ForceFreshCompaction(RTCtx),
-                AllowGarbageCollection);
+            const bool freshCompStarted = ScheduleCompaction(ctx, false);
             // just for valid info output to the log
             bool moveEntryPointStarted = false;
             if (!freshCompStarted && !AdvanceCommitInProgress) {
@@ -636,6 +610,7 @@ namespace NKikimr {
         }
 
         std::deque<std::pair<ui64, TEvHullCompact::TPtr>> FreshOnlyCompactQ;
+        ui64 ForceFreshCompactLsn = 0; // latest fresh-only compaction LSN
 
         void Handle(TEvHullCompact::TPtr &ev, const TActorContext &ctx) {
             const ui64 confirmedLsn = RTCtx->LsnMngr->GetConfirmedLsnForHull();
@@ -645,24 +620,24 @@ namespace NKikimr {
                 (CompState, TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState())));
             Y_ABORT_UNLESS(TKeyToEHullDbType<TKey>() == msg->Type);
 
+            Y_ABORT_UNLESS(ForceFreshCompactLsn <= confirmedLsn);
+            ForceFreshCompactLsn = confirmedLsn;
+
             switch (msg->Mode) {
                 using E = decltype(msg->Mode);
 
                 case E::FULL:
-                    FullCompactionState.FullCompactionTask(confirmedLsn, ctx.Now(), msg->Type, msg->RequestId, ev->Sender);
+                    FullCompactionState.FullCompactionTask(confirmedLsn, ctx.Now(), msg->Type, msg->RequestId, ev->Sender,
+                        std::move(msg->TablesToCompact));
+                    ScheduleCompaction(ctx);
                     break;
 
                 case E::FRESH_ONLY:
-                    Y_ABORT_UNLESS(FreshOnlyCompactQ.empty() || FreshOnlyCompactQ.back().first <= confirmedLsn);
                     FreshOnlyCompactQ.emplace_back(confirmedLsn, ev);
-                    CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, HugeBlobCtx, MinHugeBlobInBytes, RTCtx, ctx,
-                        true, AllowGarbageCollection); // ask for forced fresh compaction
+                    ProcessFreshOnlyCompactQ(ctx);
+                    ScheduleCompaction(ctx, false);
                     break;
             }
-
-            RTCtx->SetFreeUpToLsn(confirmedLsn);
-            ScheduleCompaction(ctx);
-            ProcessFreshOnlyCompactQ(ctx);
         }
 
         void ProcessFreshOnlyCompactQ(const TActorContext& ctx) {

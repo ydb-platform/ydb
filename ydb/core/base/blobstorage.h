@@ -747,6 +747,11 @@ struct TEvBlobStorage {
         EvPreShredCompactVDisk,
         EvShredVDisk,
         EvMarkDirty,
+        EvHullShredDefrag,
+        EvHullShredDefragResult,
+        EvHugeShredNotify,
+        EvHugeShredNotifyResult,
+        EvNotifyChunksDeleted,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

@@ -4,7 +4,7 @@
 
 namespace NEtcd {
 
-NActors::IActor* CreateEtcdWatchtower(TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+NActors::IActor* BuildWatchtower(TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
 }
 

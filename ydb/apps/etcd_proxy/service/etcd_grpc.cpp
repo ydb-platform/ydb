@@ -6,7 +6,9 @@
 
 #include <ydb/library/grpc/server/grpc_method_setup.h>
 
-namespace NKikimr::NGRpcService {
+namespace NEtcd {
+
+using namespace NKikimr::NGRpcService;
 
 namespace {
 
@@ -251,11 +253,11 @@ public:
         RespHook = std::move(hook);
     }
 
-    void SetRlPath(TMaybe<NRpcService::TRlPath>&& path) override {
+    void SetRlPath(TMaybe<NKikimr::NRpcService::TRlPath>&& path) override {
         RlPath = std::move(path);
     }
 
-    TMaybe<NRpcService::TRlPath> GetRlPath() const override {
+    TMaybe<NKikimr::NRpcService::TRlPath> GetRlPath() const override {
         return RlPath;
     }
 
@@ -348,7 +350,7 @@ private:
     Ydb::QuotaExceeded* QuotaExceeded = nullptr;
     ui64 Ru = 0;
     TRespHook RespHook;
-    TMaybe<NRpcService::TRlPath> RlPath;
+    TMaybe<NKikimr::NRpcService::TRlPath> RlPath;
     IGRpcProxyCounters::TPtr Counters;
     std::function<TFinishWrapper(std::function<void()>&&)> FinishWrapper = &GetStdFinishWrapper;
 
@@ -356,7 +358,7 @@ private:
     TAuditLogHook AuditLogHook;
     bool RequestFinished = false;
     bool IsTracingDecided_ = false;
-    TULIDGenerator UlidGen;
+    NKikimr::TULIDGenerator UlidGen;
     TMaybe<TString> TraceId;
 };
 
@@ -382,7 +384,7 @@ public:
         Y_ABORT("Unimplemented!");
     }
 
-    NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
+    NKikimr::NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
         return {};
     }
 
@@ -398,18 +400,18 @@ TEtcdKVService::TEtcdKVService(NActors::TActorSystem* actorSystem, TIntrusivePtr
 {}
 
 void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
+    auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
 #define SETUP_ETCD_KV_METHOD(methodName, secondName)                                  \
-    MakeIntrusive<NGRpcService::TGRpcRequest<                                          \
+    MakeIntrusive<NKikimr::NGRpcService::TGRpcRequest<                                          \
         etcdserverpb::Y_CAT(secondName, Request),                                       \
         etcdserverpb::Y_CAT(secondName, Response),                                       \
         TEtcdKVService>>                                                                  \
     (                                                                                      \
         this, this->GetService(), CQ,                                                       \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                      \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                \
-            ActorSystem->Register(NEtcd::Make##methodName(new TEtcdRequestCall<                \
+            NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                \
+            ActorSystem->Register(Make##methodName(new TEtcdRequestCall<                       \
                 etcdserverpb::Y_CAT(secondName, Request),                                       \
                 etcdserverpb::Y_CAT(secondName, Response)>(reqCtx)                               \
             ));                                                                                   \
@@ -438,7 +440,7 @@ TEtcdWatchService::TEtcdWatchService(NActors::TActorSystem* actorSystem, TIntrus
 void TEtcdWatchService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr) {
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
-    using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
+    using TStreamGRpcRequest = NKikimr::NGRpcServer::TGRpcStreamingRequest<
                 etcdserverpb::WatchRequest,
                 etcdserverpb::WatchResponse,
                 TEtcdWatchService,
@@ -446,7 +448,7 @@ void TEtcdWatchService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr) {
 
     TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Watch::AsyncService::RequestWatch,
         [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-            ActorSystem->Send(NEtcd::TSharedStuff::Get()->Watchtower, new NEtcd::TEvWatchRequest(context.Release()));
+            ActorSystem->Send(TSharedStuff::Get()->Watchtower, new TEvWatchRequest(context.Release()));
         },
         *ActorSystem, "Lease/LeaseKeepAlive", getCounterBlock("etcd", "LeaseKeepAlive", true), nullptr
     );
@@ -462,15 +464,15 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
 #define SETUP_ETCD_LEASE_METHOD(methodName)                                           \
-    MakeIntrusive<NGRpcService::TGRpcRequest<                                          \
+    MakeIntrusive<NKikimr::NGRpcService::TGRpcRequest<                                          \
         etcdserverpb::Y_CAT(methodName, Request),                                       \
         etcdserverpb::Y_CAT(methodName, Response),                                       \
         TEtcdLeaseService>>                                                               \
     (                                                                                      \
         this, this->GetService(), CQ,                                                       \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                      \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                \
-            ActorSystem->Register(NEtcd::Make##methodName(new TEtcdRequestCall<                \
+            NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                \
+            ActorSystem->Register(Make##methodName(new TEtcdRequestCall<                       \
                 etcdserverpb::Y_CAT(methodName, Request),                                       \
                 etcdserverpb::Y_CAT(methodName, Response)>(reqCtx)                               \
             ));                                                                                   \
@@ -488,7 +490,7 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     #undef SETUP_ETCD_LEASE_METHOD
 
-    using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
+    using TStreamGRpcRequest = NKikimr::NGRpcServer::TGRpcStreamingRequest<
                 etcdserverpb::LeaseKeepAliveRequest,
                 etcdserverpb::LeaseKeepAliveResponse,
                 TEtcdLeaseService,
@@ -496,10 +498,10 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Lease::AsyncService::RequestLeaseKeepAlive,
         [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-            ActorSystem->Send(NEtcd::TSharedStuff::Get()->LeasingOffice, new NEtcd::TEvLeaseKeepAliveRequest(context.Release()));
+            ActorSystem->Send(TSharedStuff::Get()->Watchtower, new TEvLeaseKeepAliveRequest(context.Release()));
         },
         *ActorSystem, "Lease", getCounterBlock("etcd", "Watch", true), nullptr
     );
 }
 
-} // namespace NKikimr::NGRpcService
+} // namespace NEtcd

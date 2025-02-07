@@ -5,7 +5,6 @@ SRCS(
     etcd_grpc.cpp
     etcd_impl.cpp
     etcd_shared.cpp
-    etcd_lease.cpp
     etcd_watch.cpp
 )
 

@@ -5,7 +5,7 @@
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/actors/core/actorsystem.h>
 
-namespace NKikimr::NGRpcService {
+namespace NEtcd {
 
 template<class TService>
 class TEtcdServiceBase
@@ -52,4 +52,4 @@ private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) final;
 };
 
-} // namespace NKikimr::NGRpcService
+} // namespace NEtcd

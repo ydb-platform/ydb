@@ -23,13 +23,16 @@
 
 #include <util/string/builder.h>
 
-namespace NKikimr::NGRpcService {
+namespace NEtcd {
+
+using namespace NActors;
+using namespace NKikimr;
 
 namespace {
 
-class TBasicKikimrWithGrpcAndRootSchema {
+class TYdbWithGrpcAndRootSchema {
 public:
-    TBasicKikimrWithGrpcAndRootSchema(NKikimrConfig::TAppConfig appConfig = {}, TAutoPtr<TLogBackend> logBackend = {})
+    TYdbWithGrpcAndRootSchema(NKikimrConfig::TAppConfig appConfig = {}, TAutoPtr<TLogBackend> logBackend = {})
     {
         const auto port = PortManager.GetPort(2134);
         const auto grpc = PortManager.GetPort(2135);
@@ -39,9 +42,8 @@ public:
         ServerSettings->SetDomainName("Root");
 
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
-        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdKVService>("kv");
-        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdWatchService>("watch");
-        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TEtcdLeaseService>("lease");
+        ServerSettings->RegisterGrpcService<TEtcdKVService>("kv");
+        ServerSettings->RegisterGrpcService<TEtcdLeaseService>("lease");
         ServerSettings->Verbose = true;
 
         Server_.Reset(new Tests::TServer(*ServerSettings));
@@ -70,9 +72,7 @@ public:
         grpcOption.SetPort(grpc);
         Server_->EnableGRpc(grpcOption);
 
-        Tests::TClient annoyingClient(*ServerSettings);
-
-        annoyingClient.InitRootScheme("Root");
+        Tests::TClient(*ServerSettings).InitRootScheme("Root");
 
         GRpcPort_ = grpc;
 
@@ -115,8 +115,6 @@ private:
     ui16 GRpcPort_;
 };
 
-using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema;
-
 void MakeTables(auto &channel) {
     const auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
     Ydb::Query::ExecuteQueryRequest request;
@@ -135,7 +133,7 @@ void MakeTables(auto &channel) {
 
 void MakeSimpleTest(std::function<void(const std::unique_ptr<etcdserverpb::KV::Stub>&)> etcd)
 {
-    TKikimrWithGrpcAndRootSchema server;
+    TYdbWithGrpcAndRootSchema server;
     const auto grpc = server.GetPort();
     const auto channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
 
@@ -147,7 +145,7 @@ void MakeSimpleTest(std::function<void(const std::unique_ptr<etcdserverpb::KV::S
 
 void MakeSimpleTest(std::function<void(const std::unique_ptr<etcdserverpb::KV::Stub>&, const std::unique_ptr<etcdserverpb::Lease::Stub>&)> etcd)
 {
-    TKikimrWithGrpcAndRootSchema server;
+    TYdbWithGrpcAndRootSchema server;
     const auto grpc = server.GetPort();
     const auto channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
 
@@ -209,7 +207,7 @@ std::unordered_multiset<i64> Leases(const std::unique_ptr<etcdserverpb::Lease::S
 
 }
 
-Y_UNIT_TEST_SUITE(EtcdKV) {
+Y_UNIT_TEST_SUITE(Etcd_KV) {
     Y_UNIT_TEST(SimpleWriteReadDelete) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
             Write("key0", "value0", etcd);
@@ -265,9 +263,9 @@ Y_UNIT_TEST_SUITE(EtcdKV) {
         });
     }
 
-} // Y_UNIT_TEST_SUITE(EtcdKV)
+} // Y_UNIT_TEST_SUITE(Etcd_KV)
 
-Y_UNIT_TEST_SUITE(EtcdLease) {
+Y_UNIT_TEST_SUITE(Etcd_Lease) {
     Y_UNIT_TEST(SimpleGrantAndRevoke) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd, const std::unique_ptr<etcdserverpb::Lease::Stub> &lease) {
             const auto leaseId = Grant(101LL, lease);
@@ -432,7 +430,7 @@ Y_UNIT_TEST_SUITE(EtcdLease) {
             }
         });
     }
-} // Y_UNIT_TEST_SUITE(EtcdLease)
+} // Y_UNIT_TEST_SUITE(Etcd_Lease)
 
-} // NKikimr::NGRpcService
+} // NEtcd
 

@@ -11,7 +11,6 @@
 #include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
 #include <ydb/apps/etcd_proxy/service/etcd_shared.h>
 #include <ydb/apps/etcd_proxy/service/etcd_watch.h>
-#include <ydb/apps/etcd_proxy/service/etcd_lease.h>
 #include <ydb/apps/etcd_proxy/service/etcd_grpc.h>
 #include <ydb/core/grpc_services/base/base.h>
 
@@ -86,13 +85,12 @@ int TProxy::StartServer() {
     NYdbGrpc::TServerOptions opts;
     opts.SetPort(ListeningPort);
 
-    ActorSystem->Register(NEtcd::CreateEtcdWatchtower(Counters));
-    ActorSystem->Register(NEtcd::CreateEtcdLeasingOffice(Counters));
+    const auto watchtower = ActorSystem->Register(NEtcd::BuildWatchtower(Counters));
 
     GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts, Counters);
-    GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdKVService(ActorSystem.get(), Counters));
-    GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdWatchService(ActorSystem.get(), Counters));
-    GRpcServer->AddService(new NKikimr::NGRpcService::TEtcdLeaseService(ActorSystem.get(), Counters));
+    GRpcServer->AddService(new NEtcd::TEtcdKVService(ActorSystem.get(), Counters, watchtower));
+    GRpcServer->AddService(new NEtcd::TEtcdWatchService(ActorSystem.get(), Counters, watchtower));
+    GRpcServer->AddService(new NEtcd::TEtcdLeaseService(ActorSystem.get(), Counters, watchtower));
     GRpcServer->Start();
     Cout << "Etcd service over " << Database << " on " << Endpoint << " was started." << Endl;
     return 0;

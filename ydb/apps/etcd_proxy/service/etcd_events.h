@@ -23,32 +23,32 @@ enum class EWatchKind : ui8 {
     OnChanges = OnUpdates | OnDeletions
 };
 
-enum EEv : ui32 {
-    EvBegin = 5000,
-    EvQueryResult,
-    EvQueryError,
+enum Ev : ui32 {
+    Begin = 5000,
+    QueryResult,
+    QueryError,
 
-    EvWatch,
-    EvLeaseKeepAlive,
+    Watch,
+    LeaseKeepAlive,
 
-    EvSubscribe,
-    EvChange,
-    EvEnd
+    Subscribe,
+    Change,
+    End
 };
 
-struct TEvQueryResult : public NActors::TEventLocal<TEvQueryResult, EvQueryResult> {
+struct TEvQueryResult : public NActors::TEventLocal<TEvQueryResult, Ev::QueryResult> {
     TEvQueryResult(const NYdb::TResultSets& result): Results(result) {}
 
     const NYdb::TResultSets Results;
 };
 
-struct TEvQueryError : public NActors::TEventLocal<TEvQueryError, EvQueryError> {
+struct TEvQueryError : public NActors::TEventLocal<TEvQueryError, Ev::QueryError> {
     TEvQueryError(const NYdb::NIssue::TIssues& issues): Issues(issues) {}
 
     const NYdb::NIssue::TIssues Issues;
 };
 
-struct TEvSubscribe : public NActors::TEventLocal<TEvSubscribe, EvSubscribe> {
+struct TEvSubscribe : public NActors::TEventLocal<TEvSubscribe, Ev::Subscribe> {
     const std::string Key, RangeEnd;
     const EWatchKind Kind;
     bool WithPrevious = false;
@@ -58,7 +58,7 @@ struct TEvSubscribe : public NActors::TEventLocal<TEvSubscribe, EvSubscribe> {
     {}
 };
 
-struct TEvChange : public NActors::TEventLocal<TEvChange, EvChange> {
+struct TEvChange : public NActors::TEventLocal<TEvChange, Ev::Change> {
     TEvChange(std::string&& key, TData&& oldData, TData&& newData = {})
         : Key(std::move(key)), OldData(std::move(oldData)), NewData(std::move(newData))
     {}
@@ -71,7 +71,7 @@ struct TEvChange : public NActors::TEventLocal<TEvChange, EvChange> {
     const TData OldData, NewData;
 };
 
-template <EEv TRpcId, typename TReq, typename TRes>
+template <Ev TRpcId, typename TReq, typename TRes>
 class TEtcdRequestStreamWrapper
     : public NActors::TEventLocal<TEtcdRequestStreamWrapper<TRpcId, TReq, TRes>, TRpcId>
 {
@@ -89,7 +89,7 @@ private:
     const TIntrusivePtr<IStreamCtx> Ctx_;
 };
 
-using TEvWatchRequest = TEtcdRequestStreamWrapper<NEtcd::EvWatch, etcdserverpb::WatchRequest, etcdserverpb::WatchResponse>;
-using TEvLeaseKeepAliveRequest = TEtcdRequestStreamWrapper<NEtcd::EvLeaseKeepAlive, etcdserverpb::LeaseKeepAliveRequest, etcdserverpb::LeaseKeepAliveResponse>;
+using TEvWatchRequest = TEtcdRequestStreamWrapper<Ev::Watch, etcdserverpb::WatchRequest, etcdserverpb::WatchResponse>;
+using TEvLeaseKeepAliveRequest = TEtcdRequestStreamWrapper<Ev::LeaseKeepAlive, etcdserverpb::LeaseKeepAliveRequest, etcdserverpb::LeaseKeepAliveResponse>;
 
 } // namespace NEtcd

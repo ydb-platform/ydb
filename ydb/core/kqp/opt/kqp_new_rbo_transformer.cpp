@@ -80,10 +80,12 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Done().Ptr());
     }
 
-    return Build<TKqpOpMap>(ctx, node->Pos())
-            .Input(resultExpr)
-            .MapElements()
-                .Add(resultElements)
+    return Build<TKqpOpRoot>(ctx, node->Pos())
+            .Input<TKqpOpMap>()
+                .Input(resultExpr)
+                .MapElements()
+                    .Add(resultElements)
+                .Build()
             .Build()
             .Done().Ptr();
 }

@@ -513,6 +513,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch21.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
     }
 
+    Y_UNIT_TEST(TPCH21_1) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch21_1.sql", "stats/tpch1000s.json", false, true);
+    }
+
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS16, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds16.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);       
     }

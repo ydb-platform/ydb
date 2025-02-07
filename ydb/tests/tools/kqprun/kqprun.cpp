@@ -135,8 +135,8 @@ struct TExecutionOptions {
 
 private:
     void ValidateOptionsSizes(const TRunnerOptions& runnerOptions) const {
-        const auto checker = [numberQueries = ScriptQueries.size()](size_t checkSize, const TString& optionName, bool useInShcemeQuery = false) {
-            if (checkSize > std::max(numberQueries, static_cast<size_t>(useInShcemeQuery ? 1 : 0))) {
+        const auto checker = [numberQueries = ScriptQueries.size()](size_t checkSize, const TString& optionName, bool useInSchemeQuery = false) {
+            if (checkSize > std::max(numberQueries, static_cast<size_t>(useInSchemeQuery ? 1 : 0))) {
                 ythrow yexception() << "Too many " << optionName << ". Specified " << checkSize << ", when number of script queries is " << numberQueries;
             }
         };

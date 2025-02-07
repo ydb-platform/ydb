@@ -196,9 +196,10 @@ struct Schema : NIceDb::Schema {
         struct Location : Column<9, NScheme::NTypeIds::String> { using Type = NActorsInterconnect::TNodeLocation; };
         struct Name : Column<10, NScheme::NTypeIds::String> {};
         struct BecomeUpOnRestart : Column<11, NScheme::NTypeIds::Bool> {};
+        struct DrainSeqNo : Column<12, NScheme::NTypeIds::Uint64> { static constexpr bool Default = 0; };
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, Local, Down, Freeze, ServicedDomains, Statistics, Drain, DrainInitiators, Location, Name, BecomeUpOnRestart>;
+        using TColumns = TableColumns<ID, Local, Down, Freeze, ServicedDomains, Statistics, Drain, DrainInitiators, Location, Name, BecomeUpOnRestart, DrainSeqNo>;
     };
 
     struct TabletCategory : Table<6> {

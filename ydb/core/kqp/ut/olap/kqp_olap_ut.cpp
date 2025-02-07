@@ -232,9 +232,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 "ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`)",
                 NYdb::NQuery::TTxControl::BeginTx().CommitTx()
             ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            //ALTER OBJECT is not supported via QueryService. When supported, this unit test must be revised
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Prepare operations for TABLE objects are not supported", result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Error: ALTER OBJECT is disabled for column tables", result.GetIssues().ToString());
 
             //1.2 Check that ALTER TABLE is still working for column tables
             {
@@ -2809,6 +2808,34 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[120000u;]])");
         }
 
+    }
+
+    Y_UNIT_TEST(CompactionPlannerQueryService) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+        {
+            auto alterQuery =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                  {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 1, "portions_count_available" : 3}, 
+                               {"class_name" : "Zero"}]}`);
+                )";
+            auto result = session.ExecuteQuery(alterQuery, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 300000000, 1000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 300100000, 1000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(csController->GetCompactionStartedCounter().Val(), 0);
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 300200000, 1000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        UNIT_ASSERT_GT(csController->GetCompactionStartedCounter().Val(), 0);
     }
 
     Y_UNIT_TEST(MetadataMemoryManager) {

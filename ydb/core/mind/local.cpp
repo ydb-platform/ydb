@@ -1099,7 +1099,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         RunningTenants.at(tenant).Locals.push_back(actorId);
 
         TActorId localRegistrarServiceId = MakeLocalRegistrarID(ctx.SelfID.NodeId(), hiveId);
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(localRegistrarServiceId, actorId);
+        ctx.ActorSystem()->RegisterLocalService(localRegistrarServiceId, actorId);
     }
 
     void RegisterAsDomain(const TRegistrationInfo &info,

@@ -82,12 +82,23 @@
               .withAuthProvider(authProvider)
               .build());
 
-      TableClient tableClient = TableClient.newClient(transport).build();
+      QueryClient queryClient = QueryClient.newClient(transport).build();
 
-      doWork(tableClient);
+      doWork(queryClient);
 
-      tableClient.close();
+      queryClient.close();
       transport.close();
+  }
+  ```
+
+- JDBC
+
+  ```java
+  public void work() {
+      // Подключение без дополнительных опций будет осуществляться с анонимной аутентификацией
+      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
+        doWork(connection);
+      }
   }
   ```
 

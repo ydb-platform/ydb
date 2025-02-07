@@ -128,6 +128,15 @@ TExprNode::TPtr RebuildArgumentsOnlyLambdaForBlocks(const TExprNode& lambda, TEx
 
 TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
     const auto& input = node->Head();
     if (input.IsCallable("ToFlow") && input.Head().IsCallable("WideFromBlocks")) {
         const auto& wideFromBlocks = input.Head();
@@ -162,6 +171,15 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
 
 TExprNode::TPtr OptimizeWideFromBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
     const auto& input = node->Head();
     if (input.IsCallable("FromFlow") && input.Head().IsCallable("WideToBlocks")) {
         const auto& wideToBlocks = input.Head();
@@ -3269,10 +3287,64 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
+TExprNode::TPtr MakeWideTableSource(const TExprNode& tableSource, TExprContext& ctx, TVector<TString>* narrowMapColumns = nullptr) {
+    // TODO check wide limit
+    if (tableSource.GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
+        return nullptr;
+    }
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Generate WideTableSource";
+    auto structType = tableSource.GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<TString> columns;
+    for (const auto& item : structType->GetItems()) {
+        columns.push_back(TString(item->GetName()));
+    }
+
+    auto innerFlow = ctx.NewCallable(tableSource.Pos(), "ToFlow", { tableSource.HeadPtr() });
+    auto expandMap = MakeExpandMap(tableSource.Pos(), columns, innerFlow, ctx);
+    auto source = ctx.NewCallable(tableSource.Pos(), "WideTableSource", { expandMap });
+    if (narrowMapColumns) {
+        *narrowMapColumns = columns;
+        return source;
+    } else {
+        return MakeNarrowMap(tableSource.Pos(), columns, source, ctx);
+    }
+}
+
+TExprNode::TPtr OptimizeExtend(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (node->ChildrenSize() > 0 && AllOf(node->Children(), [](const auto& x) { return x->IsCallable("TableSource");})) {
+        TExprNodeList wideChildren;
+        bool allWide = true;
+        TVector<TString> columns;
+        for (const auto& x : node->Children()) {
+            if (auto wide = MakeWideTableSource(*x, ctx, &columns)) {
+                wideChildren.push_back(wide);
+            } else {
+                allWide = false;
+                break;
+            }
+        }
+
+        if (allWide) {
+            return ctx.NewCallable(node->Pos(), "Collect", {
+                MakeNarrowMap(node->Pos(), columns, ctx.NewCallable(node->Pos(), "Extend", std::move(wideChildren)), ctx)
+            });
+        }
+    }
+
+    return node;
+}
+
 TExprNode::TPtr OptimizeSkip(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable({"Map", "OrderedMap", "ExpandMap", "WideMap", "NarrowMap"})) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
         return ctx.SwapWithHead(*node);
+    }
+
+    if (node->Head().IsCallable("TableSource")) {
+        if (auto wide = MakeWideTableSource(node->Head(), ctx)) {
+            return ctx.NewCallable(node->Pos(), "Collect", { ctx.ChangeChild(*node, 0, std::move(wide)) });
+        }
     }
 
     return node;
@@ -4766,6 +4838,12 @@ TExprNode::TPtr OptimizeTopOrSort(const TExprNode::TPtr& node, TExprContext& ctx
         }
     }
 
+    if (node->Head().IsCallable("TableSource")) {
+        if (auto wide = MakeWideTableSource(node->Head(), ctx)) {
+            return ctx.NewCallable(node->Pos(), "Collect", { ctx.ChangeChild(*node, 0, std::move(wide)) });
+        }
+    }
+
     return node;
 }
 
@@ -6190,6 +6268,15 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
 
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to blocks, extra nodes: " << newNodes
                                   << ", extra columns: " << rewritePositions.size();
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
     auto ret = ctx.Builder(node->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
@@ -6230,6 +6317,14 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
     if (!CollectBlockRewrites(multiInputType, keepInputColumns, lambda, newNodes, rewritePositions, blockLambda, restLambda, ctx, types)) {
         return node;
     }
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
 
     auto blockMapped = ctx.Builder(node->Pos())
         .Callable("WideMap")
@@ -6351,6 +6446,15 @@ TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprConte
 
     TStringBuf newName = node->Content() == "Skip" ? "WideSkipBlocks" : "WideTakeBlocks";
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
     return ctx.Builder(node->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
@@ -6400,6 +6504,15 @@ TExprNode::TPtr OptimizeTopOrSortBlocks(const TExprNode::TPtr& node, TExprContex
     TString newName = node->Content() + TString("Blocks");
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
     auto children = node->ChildrenList();
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
     children[0] = ctx.NewCallable(node->Pos(), "WideToBlocks", { children[0] });
     return ctx.Builder(node->Pos())
         .Callable("ToFlow")
@@ -6614,6 +6727,14 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
         } else if (input.IsCallable("WideToBlocks")) {
+            // Static assert to ensure backward compatible change: if the
+            // constant below is true, both input and output types of
+            // WideToBlocks callable have to be WideStream; otherwise,
+            // both input and output types have to be WideFlow.
+            // FIXME: When all spots using WideToBlocks are adjusted
+            // to work with WideStream, drop the assertion below.
+            static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
             auto actualUnused = unused;
             if (actualUnused.back() + 1U == node->Tail().Head().ChildrenSize())
                 actualUnused.pop_back();
@@ -8320,6 +8441,17 @@ TExprNode::TPtr DropToFlowDeps(const TExprNode::TPtr& node, TExprContext& ctx) {
     return ctx.ChangeChildren(*node, std::move(children));
 }
 
+TExprNode::TPtr OptimizeFromFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    const auto& input = node->Head();
+    if (input.IsCallable("ToFlow")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop FromFlow over ToFlow";
+        return ctx.NewCallable(node->Pos(), "ToStream", input.ChildrenList());
+    }
+
+    return node;
+}
+
 TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->ChildrenSize() == 1 && node->Head().IsCallable("FromFlow")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop ToFlow over FromFlow";
@@ -8327,20 +8459,16 @@ TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
 
-    if (node->Head().IsCallable("TableSource")) {
-        if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
-            // TODO check wide limit
-            YQL_CLOG(DEBUG, CorePeepHole) << "Generate WideTableSource";
-            auto structType = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-            TVector<TString> columns;
-            for (const auto& item : structType->GetItems()) {
-                columns.push_back(TString(item->GetName()));
-            }
+    if (node->ChildrenSize() == 1 && node->Head().IsCallable("TableSource")) {
+        if (auto wide = MakeWideTableSource(node->Head(), ctx)) {
+            return wide;
+        }
+    }
 
-            auto innerFlow = ctx.NewCallable(node->Pos(), "ToFlow", { node->Head().HeadPtr() });
-            auto expandMap = MakeExpandMap(node->Pos(), columns, innerFlow, ctx);
-            auto source = ctx.NewCallable(node->Pos(), "WideTableSource", { expandMap });
-            return MakeNarrowMap(node->Pos(), columns, source, ctx);
+    if (node->ChildrenSize() == 1 && node->Head().IsCallable("Iterator")
+        && node->Head().ChildrenSize() == 1 && node->Head().Head().IsCallable("TableSource")) {
+        if (auto wide = MakeWideTableSource(node->Head().Head(), ctx)) {
+            return wide;
         }
     }
 
@@ -8582,6 +8710,7 @@ struct TPeepHoleRules {
     };
 
     const TPeepHoleOptimizerMap FinalStageRules = {
+        {"Extend", &OptimizeExtend},
         {"Take", &OptimizeTake},
         {"Skip", &OptimizeSkip},
         {"GroupByKey", &PeepHoleConvertGroupBySingleKey},
@@ -8640,6 +8769,7 @@ struct TPeepHoleRules {
         {"TopSort", &OptimizeTopOrSort<true, true>},
         {"Sort", &OptimizeTopOrSort<true, false>},
         {"ToFlow", &OptimizeToFlow},
+        {"FromFlow", &OptimizeFromFlow},
         {"Coalesce", &OptimizeCoalesce},
     };
 

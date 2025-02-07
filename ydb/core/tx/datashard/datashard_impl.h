@@ -3395,7 +3395,7 @@ protected:
             ev->Record.MutableTableStats()->SetLocksWholeShard(TabletCounters->Cumulative()[COUNTER_LOCKS_WHOLE_SHARD].Get());
             ev->Record.MutableTableStats()->SetLocksBroken(TabletCounters->Cumulative()[COUNTER_LOCKS_BROKEN].Get());
 
-            ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+            ev->Record.SetNodeId(ctx.SelfID.NodeId());
             ev->Record.SetStartTime(StartTime().MilliSeconds());
 
             if (DstSplitDescription)

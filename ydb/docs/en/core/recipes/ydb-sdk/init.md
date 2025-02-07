@@ -99,6 +99,30 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
 
   {% endcut %}
 
+- Java
+
+  ```java
+  public void work() {
+      GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+              .build());
+      // Do work with the transport
+      doWork(transport);
+      transport.close();
+  }
+  ```
+
+- JDBC Driver
+
+  ```java
+  public void work() {
+      // JDBC Driver must be in the classpath for automatic detection
+      Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
+      // Do work with the connection
+      doWork(connection);
+      connection.close();
+  }
+  ```
+
 - C# (.NET)
 
   ```C#

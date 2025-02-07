@@ -123,9 +123,10 @@ namespace NKikimr {
             }
 
             LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
-                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %s type# %s msg# %s",
+                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %s type# %s msg# %s RemovedHugeBlobs# %s",
                             Ctx->PDiskCtx->PDiskIdString.data(), LsnSeg.ToString().data(),
-                            THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data()));
+                            THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data(),
+                            Metadata.RemovedHugeBlobs.ToString().data()));
 
             ctx.Send(Ctx->LoggerId, CommitMsg.release());
         }
@@ -165,6 +166,10 @@ namespace NKikimr {
 
             // advance LSN
             LevelIndex->CurEntryPointLsn = LsnSeg.Last;
+
+            if (CommitRecord.DeleteChunks) {
+                ctx.Send(Ctx->SkeletonId, new TEvNotifyChunksDeleted(LsnSeg.Last, CommitRecord.DeleteChunks));
+            }
 
             Finish(ctx);
         }

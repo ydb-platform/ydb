@@ -31,7 +31,6 @@ class Handler:
 
 
 class Server(aiosmtpd.controller.Controller):
-
     """
     Small SMTP test server.
 
@@ -96,16 +95,7 @@ class Server(aiosmtpd.controller.Controller):
 
     @property
     def accepting(self):
-        try:
-            return self.server.is_serving()
-        except AttributeError:
-            # asyncio.base_events.Server.is_serving() only exists in Python 3.6
-            # and up. For Python 3.5, asyncio.base_events.BaseEventLoop.is_running()
-            # is a close approximation; it should mostly return the same value
-            # except for brief periods when the server is starting up or shutting
-            # down. Once we drop support for Python 3.5, this branch becomes
-            # unnecessary.
-            return self.loop.is_running()
+        return self.server.is_serving()
 
     # for aiosmtpd <1.4
     if not hasattr(aiosmtpd.controller.Controller, "_trigger_server"):

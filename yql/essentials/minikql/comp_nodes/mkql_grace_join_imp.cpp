@@ -363,12 +363,12 @@ bool TTable::TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind /
             bucketForPreallocation.JoinSlots.reserve(nSlots*slotSize);
         } catch (TMemoryLimitExceededException) {
             for (ui64 i = 0; i < bucket; ++i) {
-                GraceJoin::TTableBucket * b1 = &JoinTable1->TableBuckets[i];
-                b1->JoinSlots.resize(0);
-                b1->JoinSlots.shrink_to_fit();
-                GraceJoin::TTableBucket * b2 = &JoinTable2->TableBuckets[i];
-                b2->JoinSlots.resize(0);
-                b2->JoinSlots.shrink_to_fit();
+                auto& b1 = t1.TableBuckets[i];
+                b1.JoinSlots.resize(0);
+                b1.JoinSlots.shrink_to_fit();
+                auto& b2 = t2.TableBuckets[i];
+                b2.JoinSlots.resize(0);
+                b2.JoinSlots.shrink_to_fit();
             }
             return false;
         }

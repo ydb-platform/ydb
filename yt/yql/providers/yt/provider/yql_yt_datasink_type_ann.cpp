@@ -454,7 +454,7 @@ private:
             return TStatus::Error;
         }
 
-        if (meta->IsDynamic) {
+        if (meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow) {
             ctx.AddError(TIssue(pos, TStringBuilder() <<
                 "Modification of dynamic table " << outTableInfo.Name.Quote() << " is not supported"));
             return TStatus::Error;
@@ -590,6 +590,7 @@ private:
                 TYtTableMetaInfo::TPtr nextMetadata = (nextDescription.Meta = MakeIntrusive<TYtTableMetaInfo>());
                 nextMetadata->DoesExist = true;
                 nextMetadata->YqlCompatibleScheme = true;
+                nextMetadata->IsDynamic = meta->IsDynamic;
 
                 TYqlRowSpecInfo::TPtr nextRowSpec = (nextDescription.RowSpec = MakeIntrusive<TYqlRowSpecInfo>());
                 if (replaceMeta) {

@@ -32,7 +32,16 @@ Release date: February 6, 2025
 * [Fixed](https://github.com/ydb-platform/ydb/pull/13501) an uncommitted changes leak and cleaned them up on startup.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/13948) consistency issues related to caching deleted ranges.
 
-### Version 24.3.11.13
+### Version 24.3.11.14 {#24-3-11-14}
+
+Release date: January 9, 2025.
+
+#### Functionality
+
+* [Added](https://github.com/ydb-platform/ydb/pull/13251) support for restart without downtime in [a minimal fault-tolerant configuration of a cluster](./concepts/topology.md#reduced) that uses the three-node variant of `mirror-3-dc`.
+* [Added](https://github.com/ydb-platform/ydb/pull/13220) new UDF Roaring Bitmap functions: AndNotWithBinary, FromUint32List, RunOptimize.
+
+### Version 24.3.11.13 {#24-3-11-13}
 
 Release date: December 24, 2024.
 

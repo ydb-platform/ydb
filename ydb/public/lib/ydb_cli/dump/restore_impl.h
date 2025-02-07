@@ -2,6 +2,7 @@
 
 #include "dump.h"
 
+#include <ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb-cpp-sdk/client/import/import.h>
 #include <ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb-cpp-sdk/client/query/client.h>
@@ -128,6 +129,8 @@ class TRestoreClient {
     TRestoreResult RestoreEmptyDir(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreView(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool isAlreadyExisting);
+    TRestoreResult RestoreTopic(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
+    TRestoreResult RestoreCoordinationNode(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
 
     TRestoreResult CheckSchema(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc);
@@ -153,6 +156,7 @@ private:
     NScheme::TSchemeClient SchemeClient;
     NTable::TTableClient TableClient;
     NTopic::TTopicClient TopicClient;
+    NCoordination::TClient CoordinationNodeClient;
     NQuery::TQueryClient QueryClient;
     std::shared_ptr<TLog> Log;
 

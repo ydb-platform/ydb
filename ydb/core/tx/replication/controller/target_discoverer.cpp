@@ -57,6 +57,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 if (IsTransfer()) {
                     return DescribeTopic(ev->Cookie);
                 }
+                break;
             default:
                 break;
             }

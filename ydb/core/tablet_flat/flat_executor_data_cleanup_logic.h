@@ -55,7 +55,7 @@ private:
     TExecutorGCLogic* const GcLogic;
 
     ui64 CurrentDataCleanupGeneration = 0;
-    std::optional<ui64> NextDataCleanupGeneration;
+    ui64 NextDataCleanupGeneration = 0;
     EDataCleanupState State = EDataCleanupState::Idle;
     THashMap<ui32, TCleanupTableInfo> CompactingTables; // tracks statuses of compaction
 

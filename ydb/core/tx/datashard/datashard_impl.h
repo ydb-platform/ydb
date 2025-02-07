@@ -2977,7 +2977,7 @@ private:
     // from the front
     THashMap<ui32, TCompactionWaiterList> CompactionWaiters;
 
-    TVector<TActorId> DataCleanupWaiters;
+    TMap<ui64, TActorId> DataCleanupWaiters;
 
     struct TCompactBorrowedWaiter : public TThrRefBase {
         TCompactBorrowedWaiter(TActorId actorId, TLocalPathId requestedTable)

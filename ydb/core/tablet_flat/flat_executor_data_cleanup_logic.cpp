@@ -35,7 +35,7 @@ bool TDataCleanupLogic::TryStartCleanup(ui64 dataCleanupGeneration, const TActor
         }
         default: { // DataCleanup in progress
             if (dataCleanupGeneration > CurrentDataCleanupGeneration) {
-                NextDataCleanupGeneration = Max(dataCleanupGeneration, NextDataCleanupGeneration.value_or(0));
+                NextDataCleanupGeneration = Max(dataCleanupGeneration, NextDataCleanupGeneration);
                 if (auto logl = Logger->Log(ELnLev::Info)) {
                     logl << "TDataCleanupLogic: schedule next DataCleanup for tablet with id " << Owner->TabletID()
                         << ", current DataCleanup generation: " << CurrentDataCleanupGeneration
@@ -192,7 +192,7 @@ bool TDataCleanupLogic::NeedGC() {
 void TDataCleanupLogic::CompleteDataCleanup(const TActorContext& ctx) {
     State = EDataCleanupState::Idle;
     if (NextDataCleanupGeneration) {
-        Executor->CleanupData(*std::exchange(NextDataCleanupGeneration, std::nullopt));
+        Executor->CleanupData(std::exchange(NextDataCleanupGeneration, 0));
     } else {
         // report complete only if all planned cleanups completed
         Owner->DataCleanupComplete(CurrentDataCleanupGeneration, ctx);

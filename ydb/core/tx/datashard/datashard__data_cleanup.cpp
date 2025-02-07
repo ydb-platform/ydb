@@ -5,6 +5,7 @@ namespace NKikimr::NDataShard {
 class TDataShard::TTxDataCleanup : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvForceDataCleanup::TPtr Ev;
+    std::unique_ptr<TEvDataShard::TEvForceDataCleanupResult> Response;
 
 public:
     TTxDataCleanup(TDataShard* ds, TEvDataShard::TEvForceDataCleanup::TPtr ev)
@@ -22,40 +23,43 @@ public:
                 "DataCleanup tx at non-ready tablet " << Self->TabletID()
                 << " state " << Self->State
                 << ", requested from " << Ev->Sender);
-            auto response = MakeHolder<TEvDataShard::TEvForceDataCleanupResult>(
+            Response = std::make_unique<TEvDataShard::TEvForceDataCleanupResult>(
                 record.GetDataCleanupGeneration(),
                 Self->TabletID(),
                 NKikimrTxDataShard::TEvForceDataCleanupResult::FAILED);
-            ctx.Send(Ev->Sender, std::move(response));
             return true;
         }
 
         NIceDb::TNiceDb db(txc.DB);
         ui64 lastGen = 0;
-        auto hasLastGen = Self->SysGetUi64(db, Schema::Sys_DataCleanupGeneration, lastGen);
+        if (!Self->SysGetUi64(db, Schema::Sys_DataCleanupGeneration, lastGen)) {
+            return false;
+        }
 
-        if (hasLastGen && lastGen >= record.GetDataCleanupGeneration()) {
+        if (lastGen >= record.GetDataCleanupGeneration()) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "DataCleanup of tablet# " << Self->TabletID()
                 << " for requested generation " << record.GetDataCleanupGeneration()
                 << ", requested from# " << Ev->Sender
                 << " already completed"
                 << ", last persisted DataCleanup generation: " << lastGen);
-            auto response = MakeHolder<TEvDataShard::TEvForceDataCleanupResult>(
+            Response = std::make_unique<TEvDataShard::TEvForceDataCleanupResult>(
                 lastGen,
                 Self->TabletID(),
                 NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
-            ctx.Send(Ev->Sender, std::move(response));
             return true;
         }
 
-        Self->Executor()->CleanupData(record.GetDataCleanupGeneration());
-        Self->DataCleanupWaiters.emplace_back(Ev->Sender);
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_UNUSED(ctx);
+        if (Response) {
+            ctx.Send(Ev->Sender, std::move(Response));
+        } else {
+            Self->Executor()->CleanupData(Ev->Get()->Record.GetDataCleanupGeneration());
+            Self->DataCleanupWaiters.insert({Ev->Get()->Record.GetDataCleanupGeneration(), Ev->Sender});
+        }
     }
 };
 
@@ -79,15 +83,15 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        // requested generations of all DataCleanupWaiters less or equal to dataCleanupGeneration
-        for (const auto& waiter : Self->DataCleanupWaiters) {
+        auto waiterIt = Self->DataCleanupWaiters.begin();
+        while (waiterIt != Self->DataCleanupWaiters.end() && waiterIt->first <= DataCleanupGeneration) {
             auto response = MakeHolder<TEvDataShard::TEvForceDataCleanupResult>(
                 DataCleanupGeneration,
                 Self->TabletID(),
                 NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
-            ctx.Send(waiter, std::move(response));
+            ctx.Send(waiterIt->second, std::move(response));
+            waiterIt = Self->DataCleanupWaiters.erase(waiterIt);
         }
-        Self->DataCleanupWaiters.clear();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "Updated last DataCleanupof tablet# "<< Self->TabletID()
             << ", last persisted DataCleanup generation: " << DataCleanupGeneration);

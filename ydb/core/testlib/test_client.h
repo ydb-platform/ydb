@@ -253,16 +253,16 @@ namespace Tests {
             return *this;
         }
 
-        // Add additional grpc services
-        template <typename TService>
+        template <typename TService, typename...TParams>
         TServerSettings& RegisterGrpcService(
             const TString& name,
-            std::optional<NActors::TActorId> proxyId = std::nullopt
+            std::optional<NActors::TActorId> proxyId = std::nullopt,
+            TParams...params
         ) {
             if (!GrpcServiceFactory) {
                 GrpcServiceFactory = std::make_shared<TGrpcServiceFactory>();
             }
-            GrpcServiceFactory->Register<TService>(name, true, proxyId);
+            GrpcServiceFactory->Register<TService>(name, true, proxyId, params...);
             return *this;
         }
 

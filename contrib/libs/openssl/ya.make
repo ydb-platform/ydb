@@ -37,6 +37,8 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PROVIDES(openssl)
 
+NO_LTO()
+
 SRCDIR(contrib/libs/openssl/crypto)
 INCLUDE(crypto/ya.make.inc)
 

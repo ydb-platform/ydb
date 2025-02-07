@@ -761,11 +761,6 @@ protected:
             .DefaultValue(10)
             .StoreMappedResultT<ui64>(&RunnerOptions.YdbSettings.HealthCheckTimeout, &TDuration::Seconds<ui64>);
 
-        options.AddLongOption("domain", "Test cluster domain name")
-            .RequiredArgument("name")
-            .DefaultValue(RunnerOptions.YdbSettings.DomainName)
-            .StoreResult(&RunnerOptions.YdbSettings.DomainName);
-
         const auto addTenant = [this](const TString& type, TStorageMeta::TTenant::EType protoType, const NLastGetopt::TOptsParser* option) {
             TStringBuf tenant;
             TStringBuf nodesCountStr;

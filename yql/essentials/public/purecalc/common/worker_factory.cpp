@@ -104,7 +104,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     } else {
         ExprRoot_ = Compile(options.Query, options.TranslationMode_,
             options.ModuleResolver, options.SyntaxVersion_, options.Modules,
-            options.InputSpec, options.OutputSpec, processorMode);
+            options.InputSpec, options.OutputSpec, options.UseAntlr4, processorMode);
 
         RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
 
@@ -135,6 +135,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     const THashMap<TString, TString>& modules,
     const TInputSpecBase& inputSpec,
     const TOutputSpecBase& outputSpec,
+    bool useAntlr4,
     EProcessorMode processorMode
 ) {
     if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
@@ -179,6 +180,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         settings.EmitReadsForExists = true;
+        settings.Antlr4Parser = useAntlr4;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;
         settings.ClusterMapping[settings.DefaultCluster] = PurecalcDefaultService;

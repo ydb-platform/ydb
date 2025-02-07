@@ -3263,7 +3263,7 @@ public:
     }
 };
 
-class TTxMonEvent_StopTablet : public TTransactionBase<THive> {
+class TTxMonEvent_StopTablet : public TTransactionBase<THive>, TLoggedMonTransaction {
 public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
@@ -3272,6 +3272,7 @@ public:
 
     TTxMonEvent_StopTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
         , Event(ev->Release())
         , Source(source)
     {
@@ -3281,7 +3282,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
 
-    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             TActorId waitActorId;
@@ -3292,6 +3293,11 @@ public:
                 Self->SubActors.emplace_back(waitActor);
             }
             Self->Execute(Self->CreateStopTablet(TabletId, waitActorId));
+            NIceDb::TNiceDb db(txc.DB);
+            NJson::TJsonValue jsonOperation;
+            jsonOperation["Tablet"] = TabletId;
+            jsonOperation["Stop"] = true;
+            WriteOperation(db, jsonOperation);
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
@@ -3304,7 +3310,7 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
-class TTxMonEvent_StopDomain : public TTransactionBase<THive> {
+class TTxMonEvent_StopDomain : public TTransactionBase<THive>, TLoggedMonTransaction {
 public:
     THolder<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
@@ -3313,6 +3319,7 @@ public:
 
     TTxMonEvent_StopDomain(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
         , Event(ev->Release())
         , Source(source)
     {
@@ -3332,10 +3339,18 @@ public:
             domain->Stopped = Stop;
             for (const auto& [tabletId, tablet] : Self->Tablets) {
                 if (tablet.NodeFilter.ObjectDomain == DomainId) {
-                    StopTenantTabletsQueue.push(tabletId);
+                    if (Stop) {
+                        Self->StopTenantTabletsQueue.push(tabletId);
+                    } else {
+                        Self->ResumeTenantTabletsQueue.push(tabletId);
+                    }
                 }
             }
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
+            NJson::TJsonValue jsonOperation;
+            jsonOperation["SubDomain"] = TStringBuilder() << DomainId;
+            jsonOperation["Stop"] = Stop;
+            WriteOperation(db, jsonOperation);
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"OK\"}"));
         } else {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Domain not found\"}"));
         }
@@ -3343,7 +3358,11 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        
+        if (Stop) {
+            Self->ProcessPendingStopTablet();
+        } else {
+            Self->ProcessPendingResumeTablet();
+        }
     }
 };
 
@@ -3389,7 +3408,7 @@ public:
 };
 
 
-class TTxMonEvent_ResumeTablet : public TTransactionBase<THive> {
+class TTxMonEvent_ResumeTablet : public TTransactionBase<THive>, TLoggedMonTransaction {
 public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
@@ -3398,6 +3417,7 @@ public:
 
     TTxMonEvent_ResumeTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
         , Event(ev->Release())
         , Source(source)
     {
@@ -3407,7 +3427,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
 
-    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             TActorId waitActorId;
@@ -3418,6 +3438,11 @@ public:
                 Self->SubActors.emplace_back(waitActor);
             }
             Self->Execute(Self->CreateResumeTablet(TabletId, waitActorId));
+            NIceDb::TNiceDb db(txc.DB);
+            NJson::TJsonValue jsonOperation;
+            jsonOperation["Tablet"] = TabletId;
+            jsonOperation["Stop"] = false;
+            WriteOperation(db, jsonOperation);
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }

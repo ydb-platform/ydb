@@ -2896,6 +2896,20 @@ void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects)
     }
 }
 
+void THive::ProcessPendingStopTablet() {
+    if (!StopTenantTabletsQueue.empty()) {
+        Execute(CreateStopTabletByTenant(StopTenantTabletsQueue.front()));
+        StopTenantTabletsQueue.pop();
+    }
+}
+
+void THive::ProcessPendingResumeTablet() {
+    if (!ResumeTenantTabletsQueue.empty()) {
+        Execute(CreateResumeTabletByTenant(ResumeTenantTabletsQueue.front()));
+        ResumeTenantTabletsQueue.pop();
+    }
+}
+
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)

@@ -13,7 +13,7 @@ bool TRequestedConstuctor::DoDeserializeFromProto(const NKikimrArrowAccessorProt
     return Settings.DeserializeFromRequestedProto(proto.GetSubColumns().GetSettings());
 }
 
-NKikimr::TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) {
+TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) {
     if (auto columnsLimit = features.Extract<ui32>("COLUMNS_LIMIT")) {
         Settings.SetColumnsLimit(*columnsLimit);
     }
@@ -22,6 +22,12 @@ NKikimr::TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::
     }
     if (auto memLimit = features.Extract<ui32>("MEM_LIMIT_CHUNK")) {
         Settings.SetChunkMemoryLimit(*memLimit);
+    }
+    if (auto othersFraction = features.Extract<double>("OTHERS_ALLOWED_FRACTION")) {
+        if (*othersFraction < 0 || 1 < *othersFraction) {
+            return TConclusionStatus::Fail("others fraction have to be in [0, 1] interval");
+        }
+        Settings.SetOthersAllowedFraction(*othersFraction);
     }
     return TConclusionStatus::Success();
 }

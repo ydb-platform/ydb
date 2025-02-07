@@ -27,15 +27,20 @@ void TColumnElements::BuildPlainAccessor(const ui32 recordsCount) {
 
 std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     std::map<ui64, std::vector<TColumnElements*>> elementsBySize;
+    ui64 sumSize = 0;
     for (auto&& i : Elements) {
         elementsBySize[i.second.GetDataSize()].emplace_back(&i.second);
+        sumSize += i.second.GetDataSize();
     }
     ui32 columnAccessorsCount = 0;
     std::vector<TColumnElements*> columnElements;
     std::vector<TColumnElements*> otherElements;
+    ui64 columnsSize = 0;
     for (auto rIt = elementsBySize.rbegin(); rIt != elementsBySize.rend(); ++rIt) {
         for (auto&& i : rIt->second) {
-            if (columnAccessorsCount < Settings.GetColumnsLimit()) {
+            AFL_VERIFY(sumSize > columnsSize);
+            if (columnAccessorsCount < Settings.GetColumnsLimit() && (1.0 * (sumSize - columnsSize) / sumSize > Settings.GetOthersAllowedFraction())) {
+                columnsSize += rIt->first;
                 columnElements.emplace_back(i);
                 ++columnAccessorsCount;
             } else {

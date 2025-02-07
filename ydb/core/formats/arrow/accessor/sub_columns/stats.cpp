@@ -10,14 +10,19 @@
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 TSplittedColumns TDictStats::SplitByVolume(const TSettings& settings, const ui32 recordsCount) const {
     std::map<ui64, std::vector<TRTStats>> bySize;
+    ui64 sumSize = 0;
     for (ui32 i = 0; i < GetColumnsCount(); ++i) {
         bySize[GetColumnSize(i)].emplace_back(GetRTStats(i));
+        sumSize += GetColumnSize(i);
     }
     std::vector<TRTStats> columnStats;
     std::vector<TRTStats> otherStats;
+    ui64 columnsSize = 0;
     for (auto it = bySize.rbegin(); it != bySize.rend(); ++it) {
         for (auto&& i : it->second) {
-            if (columnStats.size() < settings.GetColumnsLimit()) {
+            if (columnStats.size() < settings.GetColumnsLimit() &&
+                (1.0 * (sumSize - columnsSize) / sumSize > settings.GetOthersAllowedFraction())) {
+                columnsSize += it->first;
                 columnStats.emplace_back(std::move(i));
             } else {
                 otherStats.emplace_back(std::move(i));

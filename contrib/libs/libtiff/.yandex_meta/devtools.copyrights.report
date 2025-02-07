@@ -391,7 +391,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        tif_lzw.c [1439:1440]
+        tif_lzw.c [1437:1438]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ef9e24bc2ee738c92b1a0aae6c46127d
 BELONGS ya.make

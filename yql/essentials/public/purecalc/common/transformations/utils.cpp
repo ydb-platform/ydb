@@ -74,6 +74,15 @@ TExprNode::TPtr NYql::NPureCalc::NodeToBlocks(
 ) {
     const auto items = structType->GetItems();
     Y_ENSURE(items.size() > 0);
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
     return ctx.Builder(pos)
         .Lambda()
             .Param("stream")

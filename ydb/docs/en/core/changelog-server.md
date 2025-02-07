@@ -2,9 +2,20 @@
 
 ## Version 24.3 {#24-3}
 
+### Version 24.3.11.14 {#24-3-11-14}
+
+Release date: February 6, 2025.
+
+#### Functionality
+
+* [Added](https://github.com/ydb-platform/ydb/pull/13251) support for restart without downtime in [a minimal fault-tolerant configuration of a cluster](./concepts/topology.md#reduced) that uses the three-node variant of `mirror-3-dc`.
+* [Added](https://github.com/ydb-platform/ydb/pull/13220) new UDF Roaring Bitmap functions: AndNotWithBinary, FromUint32List, RunOptimize.
+
+### Version 24.3.11.13 {#24-3-11-13}
+
 Release date: December 24, 2024.
 
-### Functionality
+#### Functionality
 
 * Introduced [query tracing](./reference/observability/tracing/setup), a tool that allows you to view the detailed path of a request through a distributed system.
 * Added support for [asynchronous replication](./concepts/async-replication), that allows synchronizing data between YDB databases in near real time. It can also be used for data migration between databases with minimal downtime for applications interacting with these databases.
@@ -31,7 +42,7 @@ Release date: December 24, 2024.
 * **_(Experimental)_** Initial version of the workload manager was implemented. It allows to create resource pools with CPU, memory and active queries count limits. Resource classifiers were implemented to assign queries to specific resource pool.
 * **_(Experimental)_** Implemented [automatic index selection](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries, which can be enabled via the `index_auto_choose_mode setting` in `table_service_config` in [dynamic configuration](./maintenance/manual/dynamic-config#updating-dynamic-configuration).
 
-### YDB UI
+#### YDB UI
 
 * Added support for creating and [viewing information on](https://github.com/ydb-platform/ydb-embedded-ui/issues/782) asynchronous replication instances.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/issues/929) an indicator for auto-increment columns.
@@ -50,14 +61,14 @@ Release date: December 24, 2024.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/889) a display of the current UI version.
 * [Added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1229) a tab  with information about the status of settings for enabling experimental functionality.
 
-### Performance
+#### Performance
 
 * [Accelerated](https://github.com/ydb-platform/ydb/pull/7589) recovery of tables with secondary indexes from backups up to 20% according to our tests.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/9721) Interconnect throughput.
 * Improved the performance of CDC topics with thousands of partitions.
 * Enhanced the Hive tablet balancing algorithm.
 
-### Bug fixes
+#### Bug fixes
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/6850) an issue that caused databases with a large number of tables or partitions to become non-functional during restoration from a backup. Now, if database size limits are exceeded, the restoration operation will fail, but the database will remain operational.
 * [Implemented](https://github.com/ydb-platform/ydb/pull/11532) a mechanism to forcibly trigger background [compaction](./concepts/glossary#compaction) when discrepancies between the data schema and stored data are detected in [DataShard](./concepts/glossary#data-shard). This resolves a rare issue with delays in schema changes.

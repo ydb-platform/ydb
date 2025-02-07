@@ -863,6 +863,11 @@ private:
         ExprLineIndent = 0;
     }
 
+    void VisitAlterDatabase(const TRule_alter_database_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_alter_database_stmt::GetDescriptor(), msg);
+    }
+
     void VisitCreateTable(const TRule_create_table_stmt& msg) {
         NewLine();
         Visit(msg.GetToken1());
@@ -2671,10 +2676,11 @@ private:
     }
 
     void VisitNeqSubexpr(const TRule_neq_subexpr& msg) {
-        VisitNeqSubexprImpl(msg, false);
+        bool pushedIndent = false;
+        VisitNeqSubexprImpl(msg, pushedIndent, true);
     }
 
-    void VisitNeqSubexprImpl(const TRule_neq_subexpr& msg, bool pushedIndent) {
+    void VisitNeqSubexprImpl(const TRule_neq_subexpr& msg, bool& pushedIndent, bool top) {
         auto getExpr = [](const TRule_neq_subexpr::TBlock2& b) -> const TRule_bit_subexpr& { return b.GetRule_bit_subexpr2(); };
         auto getOp = [](const TRule_neq_subexpr::TBlock2& b) -> const TRule_neq_subexpr::TBlock2::TBlock1& { return b.GetBlock1(); };
         VisitBinaryOp(msg.GetRule_bit_subexpr1(), getOp, getExpr, msg.GetBlock2().begin(), msg.GetBlock2().end());
@@ -2706,9 +2712,10 @@ private:
                     }
                 }
 
-                VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent);
-                if (pushedIndent) {
+                VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent, false);
+                if (pushedIndent && top) {
                     PopCurrentIndent();
+                    pushedIndent = false;
                 }
 
                 break;
@@ -3013,6 +3020,7 @@ TStaticData::TStaticData()
         {TRule_backup_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBackup)},
         {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
         {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
+        {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},

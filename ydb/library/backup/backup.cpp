@@ -610,6 +610,32 @@ void BackupTopic(TDriver driver, const TString& dbPath, const TFsPath& fsBackupF
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
+namespace {
+
+NCoordination::TNodeDescription DescribeCoordinationNode(TDriver driver, const TString& path) {
+    NCoordination::TClient client(driver);
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeNode(path).ExtractValueSync();
+    });
+    VerifyStatus(status, "describe coordination node to build a backup");
+    return status.ExtractResult();
+}
+
+}
+
+void BackupCoordinationNode(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup coordination node " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto nodeDescription = DescribeCoordinationNode(driver, dbPath);
+
+    Ydb::Coordination::CreateNodeRequest creationRequest;
+    nodeDescription.SerializeTo(creationRequest);
+
+    WriteProtoToFile(creationRequest, fsBackupFolder, NDump::NFiles::CreateCoordinationNode());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
 void CreateClusterDirectory(const TDriver& driver, const TString& path, bool rootBackupDir = false) {
     if (rootBackupDir) {
         LOG_I("Create temporary directory " << path.Quote());
@@ -699,6 +725,9 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
             }
             if (dbIt.IsTopic()) {
                 BackupTopic(driver, dbIt.GetFullPath(), childFolderPath);
+            }
+            if (dbIt.IsCoordinationNode()) {
+                BackupCoordinationNode(driver, dbIt.GetFullPath(), childFolderPath);
             }
             dbIt.Next();
         }

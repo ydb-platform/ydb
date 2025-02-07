@@ -128,6 +128,15 @@ TExprNode::TPtr RebuildArgumentsOnlyLambdaForBlocks(const TExprNode& lambda, TEx
 
 TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
     const auto& input = node->Head();
     if (input.IsCallable("ToFlow") && input.Head().IsCallable("WideFromBlocks")) {
         const auto& wideFromBlocks = input.Head();
@@ -162,6 +171,15 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
 
 TExprNode::TPtr OptimizeWideFromBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
     const auto& input = node->Head();
     if (input.IsCallable("FromFlow") && input.Head().IsCallable("WideToBlocks")) {
         const auto& wideToBlocks = input.Head();
@@ -6250,6 +6268,15 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
 
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to blocks, extra nodes: " << newNodes
                                   << ", extra columns: " << rewritePositions.size();
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
     auto ret = ctx.Builder(node->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
@@ -6290,6 +6317,14 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
     if (!CollectBlockRewrites(multiInputType, keepInputColumns, lambda, newNodes, rewritePositions, blockLambda, restLambda, ctx, types)) {
         return node;
     }
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
 
     auto blockMapped = ctx.Builder(node->Pos())
         .Callable("WideMap")
@@ -6411,6 +6446,15 @@ TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprConte
 
     TStringBuf newName = node->Content() == "Skip" ? "WideSkipBlocks" : "WideTakeBlocks";
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
     return ctx.Builder(node->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
@@ -6460,6 +6504,15 @@ TExprNode::TPtr OptimizeTopOrSortBlocks(const TExprNode::TPtr& node, TExprContex
     TString newName = node->Content() + TString("Blocks");
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
     auto children = node->ChildrenList();
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // WideToBlocks callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using WideToBlocks are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
     children[0] = ctx.NewCallable(node->Pos(), "WideToBlocks", { children[0] });
     return ctx.Builder(node->Pos())
         .Callable("ToFlow")
@@ -6674,6 +6727,14 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
         } else if (input.IsCallable("WideToBlocks")) {
+            // Static assert to ensure backward compatible change: if the
+            // constant below is true, both input and output types of
+            // WideToBlocks callable have to be WideStream; otherwise,
+            // both input and output types have to be WideFlow.
+            // FIXME: When all spots using WideToBlocks are adjusted
+            // to work with WideStream, drop the assertion below.
+            static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
             auto actualUnused = unused;
             if (actualUnused.back() + 1U == node->Tail().Head().ChildrenSize())
                 actualUnused.pop_back();

@@ -725,7 +725,7 @@ private:
     template <typename TTokenRecord>
     bool CanInitLoginToken(const TString& key, TTokenRecord& record) {
         if (UseLoginProvider && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Login)) {
-            TString database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
+            TString database = (Config.GetDomainLoginOnly() || record.Database.empty()) ? DomainName : record.Database;
             auto itLoginProvider = LoginProviders.find(database);
             if (itLoginProvider != LoginProviders.end()) {
                 NLogin::TLoginProvider& loginProvider(itLoginProvider->second);
@@ -1870,7 +1870,7 @@ protected:
         if (record.IsExternalAuthEnabled()) {
             return RefreshTicketViaExternalAuthProvider(key, record);
         }
-        const TString& database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
+        const TString& database = (Config.GetDomainLoginOnly() || record.Database.empty()) ? DomainName : record.Database;
         auto itLoginProvider = LoginProviders.find(database);
         if (itLoginProvider == LoginProviders.end()) {
             return false;

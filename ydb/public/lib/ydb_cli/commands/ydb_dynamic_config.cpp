@@ -64,7 +64,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
     ui64 version = 0;
 
     if (cfg) {
-        auto metadata = NYamlConfig::GetMetadata(cfg);
+        auto metadata = NYamlConfig::GetMainMetadata(cfg);
         version = metadata.Version.value();
 
         if (StripMetadata) {
@@ -138,7 +138,7 @@ void TCommandConfigReplace::Parse(TConfig& config) {
     DynamicConfig = configStr;
 
     if (!IgnoreCheck) {
-        NYamlConfig::GetMetadata(configStr);
+        NYamlConfig::GetMainMetadata(configStr);
         auto tree = NFyaml::TDocument::Parse(configStr);
         const auto resolved = NYamlConfig::ResolveAll(tree);
         Y_UNUSED(resolved); // we can't check it better without ydbd

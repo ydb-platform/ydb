@@ -6,13 +6,14 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb-cpp-sdk/client/export/export.h>
 #include <ydb-cpp-sdk/client/import/import.h>
 #include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/value/value.h>
-#include <ydb-cpp-sdk/client/query/client.h>
 
 #include <ydb/library/backup/backup.h>
 
@@ -172,9 +173,42 @@ auto CreateMinPartitionsChecker(ui32 expectedMinPartitions, const TString& debug
 auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType) {
     return [=](const TTableDescription& tableDescription) {
         for (const auto& indexDesc : tableDescription.GetIndexDescriptions()) {
-            if (indexDesc.GetIndexName() == indexName && indexDesc.GetIndexType() == indexType) {
+            if (indexDesc.GetIndexName() != indexName) {
+                continue;
+            }
+            if (indexDesc.GetIndexType() != indexType) {
+                continue;
+            }
+            if (indexDesc.GetIndexColumns().size() != 1) {
+                continue;
+            }
+            if (indexDesc.GetDataColumns().size() != 0) {
+                continue;
+            }
+            if (indexDesc.GetIndexColumns()[0] != "Value") {
+                continue;
+            }
+            if (indexType != NYdb::NTable::EIndexType::GlobalVectorKMeansTree) {
                 return true;
             }
+            auto* settings = std::get_if<TKMeansTreeSettings>(&indexDesc.GetIndexSettings());
+            UNIT_ASSERT(settings);
+            if (settings->Settings.Metric != NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct) {
+                continue;
+            }
+            if (settings->Settings.VectorType != NYdb::NTable::TVectorIndexSettings::EVectorType::Float) {
+                continue;
+            }
+            if (settings->Settings.VectorDimension != 768) {
+                continue;
+            }
+            if (settings->Levels != 2) {
+                continue;
+            }
+            if (settings->Clusters != 80) {
+                continue;
+            }
+            return true;
         }
         return false;
     };
@@ -485,16 +519,27 @@ void TestRestoreTableWithIndex(
     const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, TSession& session,
     TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
-    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+    TString query;
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+        query = Sprintf(R"(CREATE TABLE `%s` (
+            Key Uint32,
+            Value String,
+            PRIMARY KEY (Key),
+            INDEX %s GLOBAL USING vector_kmeans_tree
+                ON (Value)
+                WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+        );)", table, index);
+    } else {
+        query = Sprintf(R"(
             CREATE TABLE `%s` (
                 Key Uint32,
                 Value Uint32,
                 PRIMARY KEY (Key),
                 INDEX %s %s ON (Value)
             );
-        )",
-        table, index, ConvertIndexTypeToSQL(indexType)
-    ));
+        )", table, index, ConvertIndexTypeToSQL(indexType));
+    }
+    ExecuteDataDefinitionQuery(session, query);
 
     backup();
 
@@ -701,6 +746,56 @@ void TestTopicSettingsArePreserved(
     checkDescription(DescribeTopic(topicClient, topic), DEBUG_HINT);
 }
 
+void CreateCoordinationNode(
+    NCoordination::TClient& client, const std::string& path, const NCoordination::TCreateNodeSettings& settings)
+{
+    const auto result = client.CreateNode(path, settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+NCoordination::TNodeDescription DescribeCoordinationNode(NCoordination::TClient& client, const std::string& path) {
+    const auto result = client.DescribeNode(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return result.GetResult();
+}
+
+void DropCoordinationNode(NCoordination::TClient& client, const std::string& path) {
+    const auto result = client.DropNode(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void TestCoordinationNodeSettingsArePreserved(
+    const std::string& path,
+    NCoordination::TClient& nodeClient,
+    TBackupFunction&& backup,
+    TRestoreFunction&& restore
+) {
+    const auto settings = NCoordination::TCreateNodeSettings()
+        .SelfCheckPeriod(TDuration::Seconds(2))
+        .SessionGracePeriod(TDuration::Seconds(30))
+        .ReadConsistencyMode(NCoordination::EConsistencyMode::STRICT_MODE)
+        .AttachConsistencyMode(NCoordination::EConsistencyMode::STRICT_MODE)
+        .RateLimiterCountersMode(NCoordination::ERateLimiterCountersMode::DETAILED);
+
+    CreateCoordinationNode(nodeClient, path, settings);
+
+    const auto checkDescription = [&](const NCoordination::TNodeDescription& description, const TString& debugHint) {
+        UNIT_ASSERT_VALUES_EQUAL_C(*description.GetSelfCheckPeriod(), *settings.SelfCheckPeriod_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(*description.GetSessionGracePeriod(), *settings.SessionGracePeriod_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetReadConsistencyMode(), settings.ReadConsistencyMode_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetAttachConsistencyMode(), settings.AttachConsistencyMode_, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetRateLimiterCountersMode(), settings.RateLimiterCountersMode_, debugHint);
+    };
+    checkDescription(DescribeCoordinationNode(nodeClient, path), DEBUG_HINT);
+
+    backup();
+
+    DropCoordinationNode(nodeClient, path);
+
+    restore();
+    checkDescription(DescribeCoordinationNode(nodeClient, path), DEBUG_HINT);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -781,6 +876,88 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
+    }
+
+    Y_UNIT_TEST(ImportDataShouldHandleErrors) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* dbPath = "/Root";
+        constexpr const char* table = "/Root/table";
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )",
+            table
+        ));
+        ExecuteDataModificationQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (Key, Value)
+                VALUES (1, "one");
+            )",
+            table
+        ));
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Dump(dbPath, pathToBackup, NDump::TDumpSettings().Database(dbPath));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto opts = NDump::TRestoreSettings().Mode(NDump::TRestoreSettings::EMode::ImportData);
+        using TYdbErrorException = V3::NStatusHelpers::TYdbErrorException;
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Utf8,
+                    Value Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )", table
+        ));
+        UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
+            [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::BAD_REQUEST; });
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )", table
+        ));
+        UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
+            [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::BAD_REQUEST; });
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX Idx GLOBAL SYNC ON (Value)
+                );
+            )", table
+        ));
+        UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
+            [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::SCHEME_ERROR; });
     }
 
     // TO DO: test index impl table split boundaries restoration from a backup
@@ -877,7 +1054,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+        TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
+
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
@@ -969,6 +1149,23 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    void TestKesusBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NCoordination::TClient nodeClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        const std::string kesus = "/Root/kesus";
+
+        TestCoordinationNodeSettingsArePreserved(
+            kesus,
+            nodeClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
@@ -1006,7 +1203,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeResourcePool:
                 break; // https://github.com/ydb-platform/ydb/issues/10440
             case EPathTypeKesus:
-                break; // https://github.com/ydb-platform/ydb/issues/10444
+                TestKesusBackupRestore();
+                break;
             case EPathTypeColumnStore:
             case EPathTypeColumnTable:
                 break; // https://github.com/ydb-platform/ydb/issues/10459
@@ -1030,12 +1228,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
+            case EIndexTypeGlobalVectorKmeansTree:
                 TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeGlobalUnique:
                 break; // https://github.com/ydb-platform/ydb/issues/10468
-            case EIndexTypeGlobalVectorKmeansTree:
-                break; // https://github.com/ydb-platform/ydb/issues/10469
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -1072,7 +1269,12 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     public:
         TS3TestEnv()
-            : Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())))
+            : Server([&] {
+                    NKikimrConfig::TAppConfig appConfig;
+                    appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+                    return appConfig;
+                }())
+            , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())))
             , TableClient(Driver)
             , TableSession(TableClient.CreateSession().ExtractValueSync().GetSession())
             , QueryClient(Driver)
@@ -1507,12 +1709,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
+            case EIndexTypeGlobalVectorKmeansTree:
                 TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeGlobalUnique:
                 break; // https://github.com/ydb-platform/ydb/issues/10468
-            case EIndexTypeGlobalVectorKmeansTree:
-                break; // https://github.com/ydb-platform/ydb/issues/10469
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

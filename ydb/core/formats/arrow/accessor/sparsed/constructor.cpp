@@ -36,7 +36,7 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
 }
 
 TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
-    NArrow::NAccessor::TSparsedArray sparsed(*columnData, externalInfo.GetDefaultValue());
+    std::shared_ptr<TSparsedArray> sparsed = std::static_pointer_cast<TSparsedArray>(columnData);
     return externalInfo.GetDefaultSerializer()->SerializePayload(sparsed.GetRecordBatchVerified());
 }
 

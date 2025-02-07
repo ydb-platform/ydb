@@ -87,7 +87,7 @@ TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::Recor
     // Build payload. Compression if set up performed here.
     TStatusValidator::Validate(arrow::ipc::GetRecordBatchPayload(*batch, Options, &payload));
 #ifndef NDEBUG
-//    TStatusValidator::Validate(batch->ValidateFull());
+    TStatusValidator::Validate(batch->ValidateFull());
 #endif
 
     int32_t metadata_length = 0;

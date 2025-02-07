@@ -33,6 +33,7 @@ target_sources(vdisk-hulldb-compstrat PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_balance.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_defs.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_delsst.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_explicit.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_lazy.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_promote.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_ratio.h

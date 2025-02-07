@@ -43,6 +43,7 @@ target_sources(blobstorage-vdisk-skeleton PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_logic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_tracker.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_overload_handler.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_shred.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vmultiput_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vmovedpatch_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vpatch_actor.cpp
@@ -65,6 +66,7 @@ target_sources(blobstorage-vdisk-skeleton PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_logic.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_tracker.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_overload_handler.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_shred.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vmultiput_actor.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vmovedpatch_actor.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vpatch_actor.h

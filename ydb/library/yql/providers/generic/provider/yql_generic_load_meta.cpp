@@ -34,7 +34,7 @@ namespace NYql {
             std::optional<NConnector::NApi::TDescribeTableResponse> Response;
         };
 
-        using TMapType =
+        using TDescribeTableMap =
             std::unordered_map<TGenericState::TTableAddress, TTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
 
     public:
@@ -50,7 +50,7 @@ namespace NYql {
                 return TStatus::Ok;
             }
 
-            std::unordered_set<TMapType::key_type, TMapType::hasher> pendingTables;
+            std::unordered_set<TDescribeTableMap::key_type, TDescribeTableMap::hasher> pendingTables;
             const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
                 if (const auto maybeRead = TMaybeNode<TGenRead>(node)) {
                     return maybeRead.Cast().DataSource().Category().Value() == GenericProviderName;
@@ -199,14 +199,12 @@ namespace NYql {
             tableMeta.Schema = response->schema();
             tableMeta.DataSourceInstance = it->second->DataSourceInstance;
 
-            auto parseResult = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
-            if (parseResult.second) {
+            auto issue = ParseTableMeta(ctx, clusterName, tableName, tableMeta);
+            if (issue) {
                 TIssues issues;
-                issues.AddIssue(std::move(*parseResult.second));
+                issues.AddIssue(std::move(*issue));
                 return issues;
             }
-
-            tableMeta.ItemType = parseResult.first;
 
             if (const auto ins = replaces.emplace(genRead.Raw(), TExprNode::TPtr()); ins.second) {
                 ins.first->second = MakeTableMetaNode(ctx, genRead, tableName);
@@ -216,21 +214,17 @@ namespace NYql {
             return std::nullopt;
         }
 
-        std::pair<const TStructExprType*, std::optional<TIssue>> ParseTableMeta(
-            const NConnector::NApi::TSchema& schema, 
+        std::optional<TIssue> ParseTableMeta(
+            TExprContext& ctx,
             const std::string_view& cluster,
             const std::string_view& table,
-            TExprContext& ctx,
-            TVector<TString>& columnOrder
+            TGenericState::TTableMeta& tableMeta
         ) try {
             TVector<const TItemExprType*> items;
 
-            auto columns = schema.columns();
+            auto columns = tableMeta.Schema.columns();
             if (columns.empty()) {
-                return std::make_pair(
-                    nullptr,
-                    TIssue({}, TStringBuilder() << "Table " << cluster << '.' << table << " doesn't exist.")
-                );
+                return TIssue({}, TStringBuilder() << "Table " << cluster << '.' << table << " doesn't exist.");
             }
 
             for (auto i = 0; i < columns.size(); i++) {
@@ -240,15 +234,13 @@ namespace NYql {
 
                 // Create items from graph
                 items.emplace_back(ctx.MakeType<TItemExprType>(columns.Get(i).name(), typeAnnotation));
-                columnOrder.emplace_back(columns.Get(i).name());
+                tableMeta.ColumnOrder.emplace_back(columns.Get(i).name());
             }
 
-            return std::make_pair(ctx.MakeType<TStructExprType>(items), std::nullopt);
+            tableMeta.ItemType = ctx.MakeType<TStructExprType>(items);
+            return std::nullopt;
         } catch (std::exception&) {
-            return std::make_pair(
-                nullptr, 
-                TIssue({}, TStringBuilder() << "Failed to parse table metadata: " << CurrentExceptionMessage())
-            );
+            return TIssue({}, TStringBuilder() << "Failed to parse table metadata: " << CurrentExceptionMessage());
         }
 
         TExprNode::TPtr MakeTableMetaNode(
@@ -432,7 +424,7 @@ namespace NYql {
     private:
         const TGenericState::TPtr State_;
 
-        TMapType Results_;
+        TDescribeTableMap Results_;
         NThreading::TFuture<void> AsyncFuture_;
     };
 

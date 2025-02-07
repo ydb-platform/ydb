@@ -25,14 +25,17 @@ enum class EWatchKind : ui8 {
 
 enum Ev : ui32 {
     Begin = 5000,
-    QueryResult,
-    QueryError,
 
+    SimpleRequest,
     Watch,
     LeaseKeepAlive,
 
+    QueryResult,
+    QueryError,
+
     Subscribe,
     Change,
+
     End
 };
 

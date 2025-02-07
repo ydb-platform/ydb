@@ -12,7 +12,7 @@ using namespace NKikimr::NGRpcService;
 
 namespace {
 
-template <ui32 TRpcId, typename TReq, typename TResp, typename TDerived>
+template <ui32 TRpcId, typename TReq, typename TRes, typename TDerived>
 class TEtcdRequestWrapperImpl
     : public IRequestNoOpCtx
     , public TEvProxyRuntimeEvent
@@ -20,19 +20,14 @@ class TEtcdRequestWrapperImpl
 friend class TProtoResponseHelper;
 public:
     using TRequest = TReq;
-    using TResponse = TResp;
+    using TResonse = TRes;
 
     using TFinishWrapper = std::function<void(const NYdbGrpc::IRequestContextBase::TAsyncFinishResult&)>;
 
     TEtcdRequestWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
         : Ctx_(ctx)
-        , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
-    {
-        if (!TraceId) {
-            TraceId = UlidGen.Next().ToString();
-        }
-    }
-
+    {}
+private:
     const TMaybe<TString> GetYdbToken() const override {
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
@@ -46,8 +41,7 @@ public:
     }
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
-        auto& s = Ctx_->GetAuthState();
-        s.State = state;
+        Ctx_->GetAuthState().State = state;
     }
 
     const NYdbGrpc::TAuthState& GetAuthState() const override {
@@ -62,8 +56,8 @@ public:
         Ctx_->ReplyUnauthenticated(MakeAuthError(in, IssueManager));
     }
 
-    void SetInternalToken(const TIntrusiveConstPtr<NACLib::TUserToken>& token) override {
-        InternalToken_ = token;
+    void SetInternalToken(const TIntrusiveConstPtr<NACLib::TUserToken>&) override {
+        Y_ABORT("unimplemented");
     }
 
     void AddServerHint(const TString& hint) override {
@@ -71,20 +65,17 @@ public:
     }
 
     void SetRuHeader(ui64 ru) override {
-        Ru = ru;
         Ctx_->AddTrailingMetadata(NYdb::YDB_CONSUMED_UNITS_HEADER, IntToString<10>(ru));
     }
 
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
-        return InternalToken_;
+        static const TIntrusiveConstPtr<NACLib::TUserToken> stub;
+        return stub;
     }
 
     const TString& GetSerializedToken() const override {
-        if (InternalToken_) {
-            return InternalToken_->GetSerializedToken();
-        }
-
-        return EmptySerializedTokenMessage_;
+        static const TString stub;
+        return stub;
     }
 
     const TMaybe<TString> GetPeerMetaValues(const TString& key) const override {
@@ -99,15 +90,10 @@ public:
         return Ctx_->FindClientCert();
     }
 
-    void SetDiskQuotaExceeded(bool disk) override {
-        if (!QuotaExceeded) {
-            QuotaExceeded = google::protobuf::Arena::CreateMessage<Ydb::QuotaExceeded>(GetArena());
-        }
-        QuotaExceeded->set_disk(disk);
-    }
+    void SetDiskQuotaExceeded(bool) override {}
 
     bool GetDiskQuotaExceeded() const override {
-        return QuotaExceeded ? QuotaExceeded->disk() : false;
+        return false;
     }
 
     bool Validate(TString&) override {
@@ -127,7 +113,7 @@ public:
     }
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
-        TResponse* resp = CreateResponseMessage();
+        TResonse* resp = CreateResponseMessage();
         FinishRequest();
         Reply(resp, status);
         if (Ctx_->IsStreamCall()) {
@@ -155,11 +141,11 @@ public:
     }
 
     TMaybe<TString> GetTraceId() const override {
-        return TraceId;
+        return {};
     }
 
     NWilson::TTraceId GetWilsonTraceId() const override {
-        return Span_.GetTraceId();
+        return {};
     }
 
     const TMaybe<TString> GetSdkBuildInfo() const {
@@ -192,10 +178,7 @@ public:
         Ctx_->Reply(&data, status, flag);
     }
 
-    void SetCostInfo(float consumed_units) override {
-        CostInfo = google::protobuf::Arena::CreateMessage<Ydb::CostInfo>(GetArena());
-        CostInfo->set_consumed_units(consumed_units);
-    }
+    void SetCostInfo(float) override {}
 
     const TString& GetRequestName() const override {
         return TRequest::descriptor()->name();
@@ -231,9 +214,8 @@ public:
         return Ctx_->IsClientLost();
     }
 
-    void FinishStream(ui32 status) override {
+    void FinishStream(ui32) override {
         // End Of Request for streaming requests
-        AuditLogRequestEnd(status);
         Ctx_->FinishStreamingOk();
     }
 
@@ -249,16 +231,16 @@ public:
         return Ctx_->GetRequest();
     }
 
-    void SetRespHook(TRespHook&& hook) override {
-        RespHook = std::move(hook);
-    }
+    void SetRespHook(TRespHook&&) override {}
 
-    void SetRlPath(TMaybe<NKikimr::NRpcService::TRlPath>&& path) override {
-        RlPath = std::move(path);
-    }
+    void SetRlPath(TMaybe<NKikimr::NRpcService::TRlPath>&&) override {}
 
     TMaybe<NKikimr::NRpcService::TRlPath> GetRlPath() const override {
-        return RlPath;
+        return {};
+    }
+
+    TRateLimiterMode GetRlMode() const override {
+        return TRateLimiterMode::Off;
     }
 
     void Pass(const IFacilityProvider&) override {
@@ -269,31 +251,22 @@ public:
         AuditLogHook = std::move(hook);
     }
 
-    // IRequestCtx
-    //
-    void FinishRequest() override {
-        RequestFinished = true;
-    }
+    void FinishRequest() override {}
 
-    // IRequestCtxBase
-    //
     void AddAuditLogPart(const TStringBuf& name, const TString& value) override {
         AuditLogParts.emplace_back(name, value);
     }
+
     const TAuditLogParts& GetAuditLogParts() const override {
         return AuditLogParts;
     }
 
-    void StartTracing(NWilson::TSpan&& span) override {
-        Span_ = std::move(span);
-    }
+    void StartTracing(NWilson::TSpan&& ) override {}
 
-    void FinishSpan() override {
-        Span_.End();
-    }
+    void FinishSpan() override {}
 
     bool* IsTracingDecided() override {
-        return &IsTracingDecided_;
+        return nullptr;
     }
 
     void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "") {
@@ -304,30 +277,12 @@ public:
         return Ctx_->GetEndpointId();
     }
 
-private:
     void Reply(NProtoBuf::Message *resp, ui32 status) override {
-        // End Of Request for non streaming requests
-        if (RequestFinished) {
-            AuditLogRequestEnd(status);
-        }
-        if (RespHook) {
-            TRespHook hook = std::move(RespHook);
-            return hook(MakeIntrusive<TRespHookCtx>(Ctx_, resp, GetRequestName(), Ru, status));
-        }
         return Ctx_->Reply(resp, status);
     }
 
-    void AuditLogRequestEnd(ui32 status) {
-        if (AuditLogHook) {
-            AuditLogHook(status, GetAuditLogParts());
-            // Drop hook to avoid double logging in case when operation implemention
-            // invokes both FinishRequest() (indirectly) and FinishStream()
-            AuditLogHook = nullptr;
-        }
-    }
-
-    TResponse* CreateResponseMessage() {
-        return google::protobuf::Arena::CreateMessage<TResponse>(Ctx_->GetArena());
+    TResonse* CreateResponseMessage() {
+        return google::protobuf::Arena::CreateMessage<TResonse>(Ctx_->GetArena());
     }
 
     static TFinishWrapper GetStdFinishWrapper(std::function<void()>&& cb) {
@@ -339,58 +294,25 @@ private:
         };
     }
 
-protected:
-    NWilson::TSpan Span_;
+    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
+        Y_ABORT("Unimplemented!");
+    }
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
-    TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
-    inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager;
-    Ydb::CostInfo* CostInfo = nullptr;
-    Ydb::QuotaExceeded* QuotaExceeded = nullptr;
-    ui64 Ru = 0;
-    TRespHook RespHook;
-    TMaybe<NKikimr::NRpcService::TRlPath> RlPath;
     IGRpcProxyCounters::TPtr Counters;
     std::function<TFinishWrapper(std::function<void()>&&)> FinishWrapper = &GetStdFinishWrapper;
 
     TAuditLogParts AuditLogParts;
     TAuditLogHook AuditLogHook;
-    bool RequestFinished = false;
-    bool IsTracingDecided_ = false;
-    NKikimr::TULIDGenerator UlidGen;
-    TMaybe<TString> TraceId;
 };
 
 template <typename TReq, typename TRes>
-class TEtcdRequestCall : public TEtcdRequestWrapperImpl<TRpcServices::EvGrpcRuntimeRequest, TReq, TRes, TEtcdRequestCall<TReq, TRes>>
+class TEtcdRequestCall : public TEtcdRequestWrapperImpl<Ev::SimpleRequest, TReq, TRes, TEtcdRequestCall<TReq, TRes>>
 {
 public:
-    using TBase = TEtcdRequestWrapperImpl<TRpcServices::EvGrpcRuntimeRequest, TReq, TRes, TEtcdRequestCall<TReq, TRes>>;
-
-    TEtcdRequestCall(NYdbGrpc::IRequestContextBase* ctx)
-        : TBase(ctx)
-    {}
-
-    void Pass(const IFacilityProvider&) override {
-        Y_ABORT("Unimplemented!");
-    }
-
-    TRateLimiterMode GetRlMode() const override {
-        return TRateLimiterMode::Off;
-    }
-
-    bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {
-        Y_ABORT("Unimplemented!");
-    }
-
-    NKikimr::NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
-        return {};
-    }
-
-    bool IsAuditable() const override {
-        return false;
-    }
+    using TBase = TEtcdRequestWrapperImpl<Ev::SimpleRequest, TReq, TRes, TEtcdRequestCall<TReq, TRes>>;
+    using TBase::TBase;
 };
 
 }
@@ -403,14 +325,14 @@ void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
 #define SETUP_ETCD_KV_METHOD(methodName, secondName)                                  \
-    MakeIntrusive<NKikimr::NGRpcService::TGRpcRequest<                                          \
+    MakeIntrusive<NKikimr::NGRpcService::TGRpcRequest<                                 \
         etcdserverpb::Y_CAT(secondName, Request),                                       \
         etcdserverpb::Y_CAT(secondName, Response),                                       \
         TEtcdKVService>>                                                                  \
     (                                                                                      \
         this, this->GetService(), CQ,                                                       \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                      \
-            NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                \
+            NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());       \
             ActorSystem->Register(Make##methodName(new TEtcdRequestCall<                       \
                 etcdserverpb::Y_CAT(secondName, Request),                                       \
                 etcdserverpb::Y_CAT(secondName, Response)>(reqCtx)                               \
@@ -464,14 +386,14 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
 #define SETUP_ETCD_LEASE_METHOD(methodName)                                           \
-    MakeIntrusive<NKikimr::NGRpcService::TGRpcRequest<                                          \
+    MakeIntrusive<NKikimr::NGRpcService::TGRpcRequest<                                 \
         etcdserverpb::Y_CAT(methodName, Request),                                       \
         etcdserverpb::Y_CAT(methodName, Response),                                       \
         TEtcdLeaseService>>                                                               \
     (                                                                                      \
         this, this->GetService(), CQ,                                                       \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                      \
-            NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                \
+            NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());       \
             ActorSystem->Register(Make##methodName(new TEtcdRequestCall<                       \
                 etcdserverpb::Y_CAT(methodName, Request),                                       \
                 etcdserverpb::Y_CAT(methodName, Response)>(reqCtx)                               \

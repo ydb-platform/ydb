@@ -11,7 +11,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     return MakeRunWorkerEv(
         replication->GetId(),
         target.GetId(),
-        target.GetProperties(),
+        target.GetConfig(),
         workerId,
         replication->GetConfig().GetSrcConnectionParams(),
         replication->GetConfig().GetConsistencySettings(),
@@ -22,7 +22,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         ui64 replicationId,
         ui64 targetId,
-        const TReplication::ITarget::IProperties::TPtr& dstProperties,
+        const TReplication::ITarget::IConfig::TPtr& config,
         ui64 workerId,
         const NKikimrReplication::TConnectionParams& connectionParams,
         const NKikimrReplication::TConsistencySettings& consistencySettings,
@@ -43,7 +43,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     readerSettings.SetTopicPartitionId(workerId);
     readerSettings.SetConsumerName(ReplicationConsumerName);
 
-    switch(dstProperties->GetKind()) {
+    switch(config->GetKind()) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable: {
             auto& writerSettings = *record.MutableCommand()->MutableLocalTableWriter();
@@ -51,7 +51,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
             break;
         }
         case TReplication::ETargetKind::Transfer: {
-            auto p = std::dynamic_pointer_cast<TTargetTransfer::TTransferProperties>(dstProperties);
+            auto p = std::dynamic_pointer_cast<TTargetTransfer::TTransferConfig>(config);
             auto& writerSettings = *record.MutableCommand()->MutableTransferWriter();
             dstPathId.ToProto(writerSettings.MutablePathId());
             writerSettings.SetTransformLambda(p->GetTransformLambda());

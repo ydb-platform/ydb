@@ -206,11 +206,8 @@ public:
             auto& item = *Result->Record.AddTargets();
             item.SetId(target->GetId());
             item.SetSrcPath(target->GetSrcPath());
+            item.SetDstPath(target->GetDstPath());
 
-            auto properties = std::dynamic_pointer_cast<TTargetBase::TPropertiesBase>(target->GetProperties());
-            if (properties) {
-                item.SetDstPath(properties->GetDstPath());
-            }
             if (target->GetStreamName()) {
                 item.SetSrcStreamName(target->GetStreamName());
             }

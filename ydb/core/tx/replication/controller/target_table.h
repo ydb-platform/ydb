@@ -7,7 +7,7 @@ namespace NKikimr::NReplication::NController {
 class TTargetTableBase: public TTargetWithStream {
 public:
     explicit TTargetTableBase(TReplication* replication, ETargetKind finalKind,
-        ui64 id, const TString& srcPath, const IProperties::TPtr& dstProperties);
+        ui64 id, const TString& srcPath, const IConfig::TPtr& config);
 
     TString GetStreamPath() const override;
 
@@ -18,16 +18,16 @@ protected:
 
 class TTargetTable: public TTargetTableBase {
 public:
-    struct TTableProperties : public TPropertiesBase {
-        using TPtr = std::shared_ptr<TTableProperties>;
+    struct TTableConfig : public TConfigBase {
+        using TPtr = std::shared_ptr<TTableConfig>;
 
-        TTableProperties(const TString& dstPath)
-            : TPropertiesBase(ETargetKind::Table, dstPath)
+        TTableConfig(const TString& dstPath)
+            : TConfigBase(ETargetKind::Table, dstPath)
         {}        
     };
 
     explicit TTargetTable(TReplication* replication,
-        ui64 id, const TString& srcPath, const IProperties::TPtr& dstProperties);
+        ui64 id, const TString& srcPath, const IConfig::TPtr& config);
 
 protected:
     TString BuildStreamPath() const override;
@@ -35,16 +35,16 @@ protected:
 
 class TTargetIndexTable: public TTargetTableBase {
 public:
-    struct TIndexTableProperties : public TPropertiesBase {
-        using TPtr = std::shared_ptr<TIndexTableProperties>;
+    struct TIndexTableConfig : public TConfigBase {
+        using TPtr = std::shared_ptr<TIndexTableConfig>;
 
-        TIndexTableProperties(const TString& dstPath)
-            : TPropertiesBase(ETargetKind::IndexTable, dstPath)
+        TIndexTableConfig(const TString& dstPath)
+            : TConfigBase(ETargetKind::IndexTable, dstPath)
         {}        
     };
 
     explicit TTargetIndexTable(TReplication* replication,
-        ui64 id, const TString& srcPath, const IProperties::TPtr& dstProperties);
+        ui64 id, const TString& srcPath, const IConfig::TPtr& config);
 
 protected:
     TString BuildStreamPath() const override;
@@ -52,10 +52,10 @@ protected:
 
 class TTargetTransfer: public TTargetTableBase {
 public:
-    struct TTransferProperties : public TPropertiesBase {
-        using TPtr = std::shared_ptr<TTransferProperties>;
+    struct TTransferConfig : public TConfigBase {
+        using TPtr = std::shared_ptr<TTransferConfig>;
 
-        TTransferProperties(const TString& dstPath, const TString& transformLambda);
+        TTransferConfig(const TString& dstPath, const TString& transformLambda);
 
         const TString& GetTransformLambda() const;
 
@@ -64,7 +64,7 @@ public:
     };
 
     explicit TTargetTransfer(TReplication* replication,
-        ui64 id, const TString& srcPath, const IProperties::TPtr& dstProperties);
+        ui64 id, const TString& srcPath, const IConfig::TPtr& config);
 
 
 protected:

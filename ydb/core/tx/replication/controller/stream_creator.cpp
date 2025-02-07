@@ -175,7 +175,7 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TString& srcPath,
-            const TReplication::ITarget::IProperties::TPtr& dstProperties,
+            const TReplication::ITarget::IConfig::TPtr& config,
             const TString& streamName,
             const TDuration& retentionPeriod,
             const std::optional<TDuration>& resolvedTimestamps,
@@ -187,7 +187,7 @@ public:
         , Kind(kind)
         , SrcPath(srcPath)
         , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
-            {"path", dstProperties->GetDstPath()},
+            {"path", config->GetDstPath()},
             {"id", ToString(rid)},
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning},
         }))
@@ -228,18 +228,18 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(), target->GetKind(),
-        target->GetSrcPath(), target->GetProperties(), target->GetStreamName(),
+        target->GetSrcPath(), target->GetConfig(), target->GetStreamName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
         AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication());
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
-        TReplication::ETargetKind kind, const TString& srcPath, const TReplication::ITarget::IProperties::TPtr& dstProperties,
+        TReplication::ETargetKind kind, const TString& srcPath, const TReplication::ITarget::IConfig::TPtr& config,
         const TString& streamName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning)
 {
-    return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, dstProperties,
+    return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, config,
         streamName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning);
 }
 

@@ -44,10 +44,11 @@ public:
 
         if (Ev->Get()->IsSuccess()) {
             for (const auto& target : Ev->Get()->ToAdd) {
-                const auto tid = Replication->AddTarget(target.Kind, target.SrcPath, target.DstProperties);
+                const auto tid = Replication->AddTarget(target.Kind, target.SrcPath, target.Config);
+                
                 TString transformLambda;
                 {
-                    auto p = std::dynamic_pointer_cast<TTargetTransfer::TTransferProperties>(target.DstProperties);
+                    auto p = std::dynamic_pointer_cast<TTargetTransfer::TTransferConfig>(target.Config);
                     if (p) {
                         transformLambda = p->GetTransformLambda();
                     }
@@ -56,7 +57,7 @@ public:
                 db.Table<Schema::Targets>().Key(rid, tid).Update(
                     NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
                     NIceDb::TUpdate<Schema::Targets::SrcPath>(target.SrcPath),
-                    NIceDb::TUpdate<Schema::Targets::DstPath>(target.DstProperties->GetDstPath()),
+                    NIceDb::TUpdate<Schema::Targets::DstPath>(target.Config->GetDstPath()),
                     NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda)
                 );
 
@@ -65,7 +66,7 @@ public:
                     << ", tid# " << tid
                     << ", kind# " << target.Kind
                     << ", srcPath# " << target.SrcPath
-                    << ", dstPath# " << target.DstProperties->GetDstPath());
+                    << ", dstPath# " << target.Config->GetDstPath());
             }
         } else {
             const auto error = JoinSeq(", ", Ev->Get()->Failed);

@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
-            TReplication::ETargetKind::Table, "/Root/Table", std::make_shared<TTargetTable::TTableProperties>("/Root/Replica"),
+            TReplication::ETargetKind::Table, "/Root/Table", std::make_shared<TTargetTable::TTableConfig>("/Root/Replica"),
             "Stream", TDuration::Hours(1), resolvedTimestamps
         ));
         {

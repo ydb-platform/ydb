@@ -46,9 +46,9 @@ struct TEvPrivate {
         struct TAddEntry {
             TString SrcPath;
             TReplication::ETargetKind Kind;
-            TReplication::ITarget::IProperties::TPtr DstProperties;
+            TReplication::ITarget::IConfig::TPtr Config;
 
-            explicit TAddEntry(const TString& srcPath, TReplication::ETargetKind kind, const TReplication::ITarget::IProperties::TPtr& dstProperties);
+            explicit TAddEntry(const TString& srcPath, TReplication::ETargetKind kind, const TReplication::ITarget::IConfig::TPtr& config);
         };
 
         struct TFailedEntry {

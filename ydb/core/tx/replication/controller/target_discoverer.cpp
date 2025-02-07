@@ -110,10 +110,10 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ": path# " << path.first);
 
             const auto& target = ToAdd.emplace_back(path.first, TReplication::ETargetKind::Table,
-                std::make_shared<TTargetTable::TTableProperties>(path.second));
+                std::make_shared<TTargetTable::TTableConfig>(path.second));
             LOG_I("Add target"
                 << ": srcPath# " << target.SrcPath
-                << ", dstPath# " << target.DstProperties->GetDstPath()
+                << ", dstPath# " << target.Config->GetDstPath()
                 << ", kind# " << target.Kind);
 
             for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
@@ -128,10 +128,10 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 const auto& target = ToAdd.emplace_back(
                     CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
                     TReplication::ETargetKind::IndexTable,
-                    std::make_shared<TTargetIndexTable::TIndexTableProperties>(CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))));
+                    std::make_shared<TTargetIndexTable::TIndexTableConfig>(CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))));
                 LOG_I("Add target"
                     << ": srcPath# " << target.SrcPath
-                    << ", dstPath# " << target.DstProperties->GetDstPath()
+                    << ", dstPath# " << target.Config->GetDstPath()
                     << ", kind# " << target.Kind);
             }
         } else {
@@ -176,10 +176,10 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ": path# " << path.first);
 
             const auto& target = ToAdd.emplace_back(path.first, TReplication::ETargetKind::Transfer,
-                std::make_shared<TTargetTransfer::TTransferProperties>(path.second, "/* TODO TransferLambda*/"));
+                std::make_shared<TTargetTransfer::TTransferConfig>(path.second, "/* TODO TransferLambda*/"));
             LOG_I("Add target"
                 << ": srcPath# " << target.SrcPath
-                << ", dstPath# " << target.DstProperties->GetDstPath()
+                << ", dstPath# " << target.Config->GetDstPath()
                 << ", kind# " << target.Kind);
         } else {
             LOG_E("Describe topic failed"

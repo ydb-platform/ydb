@@ -13,28 +13,28 @@ using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
-TTargetBase::TPropertiesBase::TPropertiesBase(ETargetKind kind, const TString& dstPath)
+TTargetBase::TConfigBase::TConfigBase(ETargetKind kind, const TString& dstPath)
     : Kind(kind)
     , DstPath(dstPath) {
 }
 
-ETargetKind TTargetBase::TPropertiesBase::GetKind() const {
+ETargetKind TTargetBase::TConfigBase::GetKind() const {
     return Kind;
 }
 
-const TString& TTargetBase::TPropertiesBase::GetDstPath() const {
+const TString& TTargetBase::TConfigBase::GetDstPath() const {
     return DstPath;
 }
 
 TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
-        ui64 id, const TString& srcPath, const IProperties::TPtr& dstProperties)
+        ui64 id, const TString& srcPath, const IConfig::TPtr& config)
     : Replication(replication)
     , Id(id)
     , Kind(kind)
     , SrcPath(srcPath)
-    , DstProperties(dstProperties)
+    , Config(config)
 {
-    Y_ABORT_UNLESS(kind == dstProperties->GetKind());
+    Y_ABORT_UNLESS(kind == config->GetKind());
 }
 
 ui64 TTargetBase::GetId() const {
@@ -45,8 +45,8 @@ ETargetKind TTargetBase::GetKind() const {
     return Kind;
 }
 
-const TReplication::ITarget::IProperties::TPtr& TTargetBase::GetProperties() const {
-    return DstProperties;
+const TReplication::ITarget::IConfig::TPtr& TTargetBase::GetConfig() const {
+    return Config;
 }
 
 const TString& TTargetBase::GetSrcPath() const {
@@ -54,7 +54,7 @@ const TString& TTargetBase::GetSrcPath() const {
 }
 
 const TString& TTargetBase::GetDstPath() const {
-    return DstProperties->GetDstPath();
+    return Config->GetDstPath();
 }
 
 EDstState TTargetBase::GetDstState() const {

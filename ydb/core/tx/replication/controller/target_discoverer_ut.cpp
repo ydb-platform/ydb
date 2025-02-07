@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         const auto& toAdd = ev->Get()->ToAdd;
         UNIT_ASSERT_VALUES_EQUAL(toAdd.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).SrcPath, "/Root/Table");
-        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).DstProperties->GetDstPath(), "/Root/Replicated/Table");
+        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Config->GetDstPath(), "/Root/Replicated/Table");
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Kind, TReplication::ETargetKind::Table);
     }
 
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         const auto& toAdd = ev->Get()->ToAdd;
         UNIT_ASSERT_VALUES_EQUAL(toAdd.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(1).SrcPath, "/Root/Table/Index");
-        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(1).DstProperties->GetDstPath(), "/Root/Replicated/Table/Index/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(1).Config->GetDstPath(), "/Root/Replicated/Table/Index/indexImplTable");
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(1).Kind, TReplication::ETargetKind::IndexTable);
     }
 
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         const auto& toAdd = ev->Get()->ToAdd;
         UNIT_ASSERT_VALUES_EQUAL(toAdd.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).SrcPath, "/Root/Dir/Table");
-        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).DstProperties->GetDstPath(), "/Root/Replicated/Dir/Table");
+        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Config->GetDstPath(), "/Root/Replicated/Dir/Table");
     }
 
     Y_UNIT_TEST(SystemObjects) {

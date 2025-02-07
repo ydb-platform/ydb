@@ -89,22 +89,22 @@ class TController::TTxInit: public TTxBase {
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
 
-            TReplication::ITarget::IProperties::TPtr properties;
+            TReplication::ITarget::IConfig::TPtr config;
             switch(kind) {
                 case TReplication::ETargetKind::Table:
-                    properties = std::make_shared<TTargetTable::TTableProperties>(dstPath);
+                    config = std::make_shared<TTargetTable::TTableConfig>(dstPath);
                     break;
 
                 case TReplication::ETargetKind::IndexTable:
-                    properties = std::make_shared<TTargetIndexTable::TIndexTableProperties>(dstPath);
+                    config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(dstPath);
                     break;
 
                 case TReplication::ETargetKind::Transfer:
-                    properties = std::make_shared<TTargetTransfer::TTransferProperties>(dstPath, transformLambda);
+                    config = std::make_shared<TTargetTransfer::TTransferConfig>(dstPath, transformLambda);
                     break;
             }
 
-            auto* target = replication->AddTarget(tid, kind, srcPath, properties);
+            auto* target = replication->AddTarget(tid, kind, srcPath, config);
             Y_ABORT_UNLESS(target);
 
             target->SetDstState(dstState);

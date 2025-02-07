@@ -23,12 +23,13 @@ protected:
     void RemoveWorkers(const TActorContext& ctx);
 
 public:
-    struct TPropertiesBase : public IProperties {
-        using TPtr = std::shared_ptr<TPropertiesBase>;
+    struct TConfigBase : public IConfig {
+        using TPtr = std::shared_ptr<TConfigBase>;
 
-        TPropertiesBase(ETargetKind kind, const TString& dstPath);
+        TConfigBase(ETargetKind kind, const TString& dstPath);
 
         ETargetKind GetKind() const override;
+        const TString& GetSrcPath() const override { return DstPath; } // TODO
         const TString& GetDstPath() const override;
 
     private:
@@ -37,12 +38,12 @@ public:
     };
 
     explicit TTargetBase(TReplication* replication, ETargetKind kind,
-        ui64 id, const TString& srcPath, const IProperties::TPtr& dstProperties);
+        ui64 id, const TString& srcPath, const IConfig::TPtr& config);
 
     ui64 GetId() const override;
     ETargetKind GetKind() const override;
 
-    const IProperties::TPtr& GetProperties() const override;
+    const IConfig::TPtr& GetConfig() const override;
     const TString& GetSrcPath() const override;
     const TString& GetDstPath() const override;
 
@@ -74,7 +75,7 @@ private:
     const ui64 Id;
     const ETargetKind Kind;
     const TString SrcPath;
-    const IProperties::TPtr DstProperties;
+    const IConfig::TPtr Config;
 
     EDstState DstState = EDstState::Creating;
     TPathId DstPathId;

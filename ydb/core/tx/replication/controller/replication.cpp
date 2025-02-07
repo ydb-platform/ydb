@@ -123,9 +123,7 @@ public:
                 case ETargetKind::Table:
                 case ETargetKind::IndexTable:
                 case ETargetKind::Transfer: {
-                    auto p = std::dynamic_pointer_cast<TTargetBase::TPropertiesBase>(target->GetProperties());
-                    Y_VERIFY(p);
-                    TargetTablePaths.push_back(p->GetDstPath());
+                    TargetTablePaths.push_back(target->GetDstPath());
                     break;
                 }
                 }
@@ -263,12 +261,12 @@ TReplication::TReplication(ui64 id, const TPathId& pathId, const TString& config
 {
 }
 
-ui64 TReplication::AddTarget(ETargetKind kind, const TString& srcPath, const ITarget::IProperties::TPtr& dstProperties) {
-    return Impl->AddTarget(this, kind, srcPath, dstProperties);
+ui64 TReplication::AddTarget(ETargetKind kind, const TString& srcPath, const ITarget::IConfig::TPtr& config) {
+    return Impl->AddTarget(this, kind, srcPath, config);
 }
 
-TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const ITarget::IProperties::TPtr& dstProperties) {
-    Impl->AddTarget(this, id, kind, srcPath, dstProperties);
+TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const ITarget::IConfig::TPtr& config) {
+    Impl->AddTarget(this, id, kind, srcPath, config);
     return Impl->FindTarget(id);
 }
 

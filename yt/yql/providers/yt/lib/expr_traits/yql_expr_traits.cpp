@@ -70,6 +70,21 @@ namespace NYql {
                 if (memoryUsage && node.Child(0)->Content().StartsWith("UserSessions.")) {
                     (*memoryUsage)["UserSessions module"] = 512_MB; // Take into account only once
                 }
+
+                if (cpuUsage) {
+                    if (auto cpuSetting = GetSetting(*node.Child(7), "cpu")) {
+                        double usage = FromString<double>(cpuSetting->Child(1)->Content());
+                        if (auto prev = cpuUsage->FindPtr("Udf from settings arg")) {
+                            usage *= *prev;
+                        }
+                        (*cpuUsage)["Udf from settings arg"] = usage;
+                    }
+                }
+                if (memoryUsage) {
+                    if (auto extraMemSetting = GetSetting(*node.Child(7), "extraMem")) {
+                        (*memoryUsage)["Udf from settings arg"] += FromString<ui64>(extraMemSetting->Child(1)->Content());
+                    }
+                }
             }
 
             if (NNodes::TYtTableContent::Match(&node)) {

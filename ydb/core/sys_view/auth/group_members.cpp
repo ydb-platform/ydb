@@ -22,7 +22,7 @@ public:
     TGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), true)
+        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), true, false)
     {
     }
 
@@ -34,7 +34,9 @@ protected:
         TVector<std::pair<const TDomainInfo::TGroup*, const TString*>> memberships;
         for (const auto& group : entry.DomainInfo->Groups) {
             for (const auto& member : group.Members) {
-                memberships.emplace_back(&group, &member);
+                if (StringKeyIsInTableRange({group.Sid, member})) {
+                    memberships.emplace_back(&group, &member);
+                }
             }
         }
         SortBatch(memberships, [](const auto& left, const auto& right) {

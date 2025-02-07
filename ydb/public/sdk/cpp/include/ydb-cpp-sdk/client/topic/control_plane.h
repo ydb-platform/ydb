@@ -19,7 +19,7 @@ namespace NYdb::inline V3 {
 }
 
 namespace NYdb::inline V3::NTopic {
-    
+
 enum class EMeteringMode : uint32_t {
     Unspecified = 0,
     ReservedCapacity = 1,
@@ -187,6 +187,8 @@ public:
         , DownUtilizationPercent_(downUtilizationPercent)
         , UpUtilizationPercent_(upUtilizationPercent) {}
 
+    void SerializeTo(Ydb::Topic::AutoPartitioningSettings& proto) const;
+
     EAutoPartitioningStrategy GetStrategy() const;
     TDuration GetStabilizationWindow() const;
     ui32 GetDownUtilizationPercent() const;
@@ -227,6 +229,8 @@ public:
         , AutoPartitioningSettings_(autoPartitioning)
     {
     }
+
+    void SerializeTo(Ydb::Topic::PartitioningSettings& proto) const;
 
     uint64_t GetMinActivePartitions() const;
     uint64_t GetMaxActivePartitions() const;
@@ -437,8 +441,11 @@ struct TConsumerSettings {
 
     using TAttributes = std::map<std::string, std::string>;
 
-    TConsumerSettings(TSettings& parent): Parent_(parent) {}
+    TConsumerSettings(TSettings& parent) : Parent_(parent) {}
     TConsumerSettings(TSettings& parent, const std::string& name) : ConsumerName_(name), Parent_(parent) {}
+    TConsumerSettings(TSettings& parent, const Ydb::Topic::Consumer& proto);
+
+    void SerializeTo(Ydb::Topic::Consumer& proto) const;
 
     FLUENT_SETTING(std::string, ConsumerName);
     FLUENT_SETTING_DEFAULT(bool, Important, false);
@@ -525,6 +532,11 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
 
     using TSelf = TCreateTopicSettings;
     using TAttributes = std::map<std::string, std::string>;
+
+    TCreateTopicSettings() = default;
+    TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest& proto);
+
+    void SerializeTo(Ydb::Topic::CreateTopicRequest& proto) const;
 
     FLUENT_SETTING(TPartitioningSettings, PartitioningSettings);
 

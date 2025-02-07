@@ -81,7 +81,10 @@ TTransaction::TTransaction(
         PingPeriod_,
         /*sticky*/ stickyParameters.has_value(),
         StickyProxyAddress_);
+}
 
+void TTransaction::Initialize()
+{
     // TODO(babenko): don't run periodic pings if client explicitly disables them in options
     RunPeriodicPings();
 }
@@ -657,7 +660,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TTransaction::MultiLookupRows
 }
 
 TFuture<TSelectRowsResult> TTransaction::SelectRows(
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options)
 {
     ValidateActive();
@@ -667,7 +670,7 @@ TFuture<TSelectRowsResult> TTransaction::SelectRows(
 }
 
 TFuture<NYson::TYsonString> TTransaction::ExplainQuery(
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options)
 {
     ValidateActive();

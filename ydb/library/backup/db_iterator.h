@@ -133,6 +133,14 @@ public:
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::View;
     }
 
+    bool IsTopic() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Topic;
+    }
+
+    bool IsCoordinationNode() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::CoordinationNode;
+    }
+
     bool IsDir() const {
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Directory;
     }

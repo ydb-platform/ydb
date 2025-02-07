@@ -486,8 +486,15 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
 void TKikimrRunner::InitializeMonitoringLogin(const TKikimrRunConfig&)
 {
     if (Monitoring) {
-        Monitoring->RegisterHandler("/login", MakeWebLoginServiceId());
-        Monitoring->RegisterHandler("/logout", MakeWebLoginServiceId());
+        Monitoring->RegisterActorHandler({
+            .Path = "/login",
+            .Handler = MakeWebLoginServiceId(),
+            .UseAuth = false, // we don't require token for the login page - it's the page to get the token
+        });
+        Monitoring->RegisterActorHandler({
+            .Path = "/logout",
+            .Handler = MakeWebLoginServiceId(),
+        });
     }
 }
 
@@ -1072,6 +1079,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
     AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
+    AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()

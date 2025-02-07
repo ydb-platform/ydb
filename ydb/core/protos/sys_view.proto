@@ -219,7 +219,8 @@ message TVSlotInfo {
     optional string DiskSpace = 15;
     optional bool Replicated = 16;
     optional string State = 17;
-    // metrics ?
+    optional bool IsThrottling = 18;
+    optional uint32 ThrottlingRate = 19;
 }
 
 message TVSlotEntry {
@@ -629,5 +630,3 @@ message TEvSendTopPartitions {
     repeated TTopPartitionsInfo Partitions = 1;
     optional uint64 TimeUs = 2;
 }
-
-

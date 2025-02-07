@@ -464,9 +464,13 @@ namespace Tests {
         void InitRootScheme(const TString& root);
 
         // Flat DB operations
+        // Plain methods return request status that should be checked.
+        // `Test` prefixed methods check for the success internally.
         NMsgBusProxy::EResponseStatus WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout);
         NMsgBusProxy::EResponseStatus MkDir(const TString& parent, const TString& name, const TApplyIf& applyIf = {});
+        void TestMkDir(const TString& parent, const TString& name, const TApplyIf& applyIf = {});
         NMsgBusProxy::EResponseStatus RmDir(const TString& parent, const TString& name, const TApplyIf& applyIf = {});
+        void TestRmDir(const TString& parent, const TString& name, const TApplyIf& applyIf = {});
         NMsgBusProxy::EResponseStatus CreateSubdomain(const TString &parent, const TString &description);
         NMsgBusProxy::EResponseStatus CreateSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain);
         NMsgBusProxy::EResponseStatus CreateExtSubdomain(const TString &parent, const TString &description);
@@ -478,12 +482,6 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus DeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteUnsafe(const TString& parent, const TString &name);
-        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken = "");
-        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
-        NMsgBusProxy::EResponseStatus ModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken = "");
-        NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
-        NMsgBusProxy::EResponseStatus CreateGroup(const TString& parent, const TString& group);
-        NMsgBusProxy::EResponseStatus AddGroupMembership(const TString& parent, const TString& group, const TString& member);
 
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
@@ -533,22 +531,45 @@ namespace Tests {
         ui32 FlatQueryRaw(TTestActorRuntime* runtime, const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
 
         bool Compile(const TString &mkql, TString &compiled);
-        void SetSecurityToken(const TString& token) { SecurityToken = token; }
-        void ModifyOwner(const TString& parent, const TString& name, const TString& owner);
-        void ModifyACL(const TString& parent, const TString& name, const TString& acl);
         NKikimrScheme::TEvDescribeSchemeResult Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId = SchemeRoot);
         TString CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups = 1);
         NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
         void RemoveStoragePool(const TString& name);
 
-        void Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights);
-        void GrantConnect(const TString& subject);
+        void SetSecurityToken(const TString& token) { SecurityToken = token; }
 
+        // User operations
+        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken = "");
+        void TestCreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken = "");
+        NMsgBusProxy::EResponseStatus CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
+        void TestCreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken = "");
+        NMsgBusProxy::EResponseStatus ModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken = "");
+        void TestModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken = "");
+        NMsgBusProxy::EResponseStatus DeleteUser(const TString& parent, const TModifyUserOption& options, const TString& userToken = "");
+        void TestDeleteUser(const TString& parent, const TModifyUserOption& options, const TString& userToken = "");
+        NMsgBusProxy::EResponseStatus CreateGroup(const TString& parent, const TString& group);
+        void TestCreateGroup(const TString& parent, const TString& group);
+        NMsgBusProxy::EResponseStatus AddGroupMembership(const TString& parent, const TString& group, const TString& member);
+        void TestAddGroupMembership(const TString& parent, const TString& group, const TString& member);
+        NMsgBusProxy::EResponseStatus DeleteGroup(const TString& parent, const TString& group);
+        void TestDeleteGroup(const TString& parent, const TString& group);
+        NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
+
+        // ACL operations
+        NMsgBusProxy::EResponseStatus ModifyOwner(const TString& parent, const TString& name, const TString& owner);
+        void TestModifyOwner(const TString& parent, const TString& name, const TString& owner);
+        NMsgBusProxy::EResponseStatus ModifyACL(const TString& parent, const TString& name, const TString& acl);
+        void TestModifyACL(const TString& parent, const TString& name, const TString& acl);
+
+        NMsgBusProxy::EResponseStatus Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights);
+        void TestGrant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights);
+        NMsgBusProxy::EResponseStatus GrantConnect(const TString& subject);
+        void TestGrantConnect(const TString& subject);
+
+        // Helper functions
         TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                 const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
 
-
-        // Helper functions
         TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query);
         TString MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up);
         TString KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx);

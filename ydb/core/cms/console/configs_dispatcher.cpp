@@ -288,7 +288,7 @@ void TConfigsDispatcher::Bootstrap()
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(actorsMonPage, "configs_dispatcher", "Configs Dispatcher", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+        mon->RegisterActorPage(actorsMonPage, "configs_dispatcher", "Configs Dispatcher", false, TActivationContext::ActorSystem(), SelfId());
     }
     TIntrusivePtr<NMonitoring::TDynamicCounters> rootCounters = AppData()->Counters;
     TIntrusivePtr<NMonitoring::TDynamicCounters> authCounters = GetServiceCounters(rootCounters, "config");

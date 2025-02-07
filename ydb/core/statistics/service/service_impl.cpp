@@ -188,7 +188,7 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "statservice", "Statistics service",
-                false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                false, TActivationContext::ActorSystem(), SelfId());
         }
 
         Become(&TStatService::StateWork);

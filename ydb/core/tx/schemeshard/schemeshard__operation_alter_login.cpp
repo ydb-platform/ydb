@@ -288,6 +288,10 @@ public:
     }
 
     NLogin::TLoginProvider::TBasicResponse CanRemoveSid(TOperationContext& context, const TString sid, const TString& sidType) {
+        if (!AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
+            return {}; 
+        }
+
         auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
         for (auto pathId : subTree) {
             TPathElement::TPtr path = context.SS->PathsById.at(pathId);

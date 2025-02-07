@@ -842,6 +842,9 @@ private:
                 writerFactory->ValidateConfig(writerConfig);
                 EmplaceOrCrash(typeNameToWriterFactory, typedWriterConfig->Type, writerFactory);
             }
+            for (const auto& [_, category] : NameToCategory_) {
+                category->StructuredValidationSamplingRate.store(config->StructuredValidationSamplingRate, std::memory_order::relaxed);
+            }
         }
 
         NameToWriter_.clear();
@@ -872,9 +875,6 @@ private:
                     NotificationWatches_.push_back(std::move(watch));
                 }
             }
-        }
-        for (const auto& [_, category] : NameToCategory_) {
-            category->StructuredValidationSamplingRate.store(config->StructuredValidationSamplingRate, std::memory_order::relaxed);
         }
 
         ConfiguredFromEnv_.store(fromEnv);

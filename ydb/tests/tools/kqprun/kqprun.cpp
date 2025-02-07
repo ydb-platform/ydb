@@ -95,7 +95,7 @@ struct TExecutionOptions {
             .TraceId = DefaultTraceId,
             .PoolId = "",
             .UserSID = BUILTIN_ACL_ROOT,
-            .Database = "",
+            .Database = GetValue(0, Databases, TString()),
             .Timeout = TDuration::Zero()
         };
     }
@@ -135,15 +135,15 @@ struct TExecutionOptions {
 
 private:
     void ValidateOptionsSizes(const TRunnerOptions& runnerOptions) const {
-        const auto checker = [numberQueries = ScriptQueries.size()](size_t checkSize, const TString& optionName) {
-            if (checkSize > numberQueries) {
+        const auto checker = [numberQueries = ScriptQueries.size()](size_t checkSize, const TString& optionName, bool useInSchemeQuery = false) {
+            if (checkSize > std::max(numberQueries, static_cast<size_t>(useInSchemeQuery ? 1 : 0))) {
                 ythrow yexception() << "Too many " << optionName << ". Specified " << checkSize << ", when number of script queries is " << numberQueries;
             }
         };
 
         checker(ExecutionCases.size(), "execution cases");
         checker(ScriptQueryActions.size(), "script query actions");
-        checker(Databases.size(), "databases");
+        checker(Databases.size(), "databases", true);
         checker(TraceIds.size(), "trace ids");
         checker(PoolIds.size(), "pool ids");
         checker(UserSIDs.size(), "user SIDs");
@@ -257,7 +257,7 @@ private:
 
     static void ValidateStorageSettings(const TYdbSetupSettings& ydbSettings) {
         if (ydbSettings.DisableDiskMock) {
-            if (ydbSettings.NodeCount + ydbSettings.SharedTenants.size() + ydbSettings.DedicatedTenants.size() > 1) {
+            if (ydbSettings.NodeCount + ydbSettings.Tenants.size() > 1) {
                 ythrow yexception() << "Disable disk mock cannot be used for multi node clusters (already disabled)";
             } else if (ydbSettings.PDisksPath) {
                 ythrow yexception() << "Disable disk mock cannot be used with real PDisks (already disabled)";
@@ -752,10 +752,12 @@ protected:
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
 
-        options.AddLongOption("verbose", "Common verbose level (max level 2)")
+        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(TYdbSetupSettings::EVerbose::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(1)
-            .StoreResult(&RunnerOptions.YdbSettings.VerboseLevel);
+            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EVerbose::Info))
+            .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.VerboseLevel, [](ui8 value) {
+                return static_cast<TYdbSetupSettings::EVerbose>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EVerbose::Max)));
+            });
 
         TChoices<TAsyncQueriesSettings::EVerbose> verbose({
             {"each-query", TAsyncQueriesSettings::EVerbose::EachQuery},
@@ -857,29 +859,69 @@ protected:
             .NoArgument()
             .SetFlag(&EmulateYt);
 
-        options.AddLongOption('H', "health-check", "Level of health check before start (max level 2)")
+        options.AddLongOption('H', "health-check", TStringBuilder() << "Level of health check before start (max level " << static_cast<ui32>(TYdbSetupSettings::EHealthCheck::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(1)
-            .StoreResult(&RunnerOptions.YdbSettings.HealthCheckLevel);
+            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EHealthCheck::NodesCount))
+            .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.HealthCheckLevel, [](ui8 value) {
+                return static_cast<TYdbSetupSettings::EHealthCheck>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EHealthCheck::Max)));
+            });
+
+        options.AddLongOption("health-check-timeout", "Health check timeout in seconds")
+            .RequiredArgument("uint")
+            .DefaultValue(10)
+            .StoreMappedResultT<ui64>(&RunnerOptions.YdbSettings.HealthCheckTimeout, &TDuration::Seconds<ui64>);
 
         options.AddLongOption("domain", "Test cluster domain name")
             .RequiredArgument("name")
             .DefaultValue(RunnerOptions.YdbSettings.DomainName)
             .StoreResult(&RunnerOptions.YdbSettings.DomainName);
 
-        options.AddLongOption("dedicated", "Dedicated tenant path, relative inside domain")
-            .RequiredArgument("path")
-            .InsertTo(&RunnerOptions.YdbSettings.DedicatedTenants);
+        const auto addTenant = [this](const TString& type, TStorageMeta::TTenant::EType protoType, const NLastGetopt::TOptsParser* option) {
+            TStringBuf tenant;
+            TStringBuf nodesCountStr;
+            TStringBuf(option->CurVal()).Split(':', tenant, nodesCountStr);
+            if (tenant.empty()) {
+                ythrow yexception() << type << " tenant name should not be empty";
+            }
 
-        options.AddLongOption("shared", "Shared tenant path, relative inside domain")
+            TStorageMeta::TTenant tenantInfo;
+            tenantInfo.SetType(protoType);
+            tenantInfo.SetNodesCount(nodesCountStr ? FromString<ui32>(nodesCountStr) : 1);
+            if (tenantInfo.GetNodesCount() == 0) {
+                ythrow yexception() << type << " tenant should have at least one node";
+            }
+
+            if (!RunnerOptions.YdbSettings.Tenants.emplace(tenant, tenantInfo).second) {
+                ythrow yexception() << "Got duplicated tenant name: " << tenant;
+            }
+        };
+        options.AddLongOption("dedicated", "Dedicated tenant path, relative inside domain (for node count use dedicated-name:node-count)")
             .RequiredArgument("path")
-            .InsertTo(&RunnerOptions.YdbSettings.SharedTenants);
+            .Handler1(std::bind(addTenant, "Dedicated", TStorageMeta::TTenant::DEDICATED, std::placeholders::_1));
+
+        options.AddLongOption("shared", "Shared tenant path, relative inside domain (for node count use dedicated-name:node-count)")
+            .RequiredArgument("path")
+            .Handler1(std::bind(addTenant, "Shared", TStorageMeta::TTenant::SHARED, std::placeholders::_1));
 
         options.AddLongOption("serverless", "Serverless tenant path, relative inside domain (use string serverless-name@shared-name to specify shared database)")
             .RequiredArgument("path")
-            .InsertTo(&RunnerOptions.YdbSettings.ServerlessTenants);
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TStringBuf serverless;
+                TStringBuf shared;
+                TStringBuf(option->CurVal()).Split('@', serverless, shared);
+                if (serverless.empty()) {
+                    ythrow yexception() << "Serverless tenant name should not be empty";
+                }
 
-        options.AddLongOption("storage-size", "Domain storage size in gigabytes (32 GiB by default)")
+                TStorageMeta::TTenant tenantInfo;
+                tenantInfo.SetType(TStorageMeta::TTenant::SERVERLESS);
+                tenantInfo.SetSharedTenant(TString(shared));
+                if (!RunnerOptions.YdbSettings.Tenants.emplace(serverless, tenantInfo).second) {
+                    ythrow yexception() << "Got duplicated tenant name: " << serverless;
+                }
+            });
+
+        options.AddLongOption("storage-size", TStringBuilder() << "Domain storage size in gigabytes (" << NKikimr::NBlobDepot::FormatByteSize(DEFAULT_STORAGE_SIZE) << " by default)")
             .RequiredArgument("uint")
             .StoreMappedResultT<ui32>(&RunnerOptions.YdbSettings.DiskSize, [](ui32 diskSize) {
                 return static_cast<ui64>(diskSize) << 30;

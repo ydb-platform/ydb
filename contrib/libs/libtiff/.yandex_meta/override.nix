@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; rec {
-  version = "4.6.0";
+  version = "4.7.0";
 
   src = fetchFromGitLab {
     owner = "libtiff";
     repo = "libtiff";
     rev = "v${version}";
-    hash = "sha256-qCg5qjsPPynCHIg0JsPJldwVdcYkI68zYmyNAKUCoyw=";
+    hash = "sha256-SuK9/a6OUAumEe1kz1itFJGKxJzbmHkBVLMnyXhIwmQ=";
   };
 
   patches = [];

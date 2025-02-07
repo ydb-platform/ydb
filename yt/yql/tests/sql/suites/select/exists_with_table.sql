@@ -1,6 +1,6 @@
 use plato;
 
-$ex = EXISTS (
+$ex = NOT EXISTS (
     SELECT
         TRUE
     FROM Input

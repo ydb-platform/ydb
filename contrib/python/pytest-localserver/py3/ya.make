@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.8.1)
+VERSION(0.9.0.post0)
 
 LICENSE(MIT)
 
@@ -31,7 +31,8 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
-    pytest_localserver/server.pem
+    pytest_localserver/cert.crt
+    pytest_localserver/server.key
 )
 
 END()

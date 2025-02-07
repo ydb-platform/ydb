@@ -209,6 +209,7 @@ struct TListJobsOptions
     std::optional<bool> WithCompetitors;
     std::optional<bool> WithMonitoringDescriptor;
     std::optional<TString> TaskName;
+    std::optional<std::string> OperationIncarnation;
 
     std::optional<TInstant> FromTime;
     std::optional<TInstant> ToTime;
@@ -386,6 +387,7 @@ struct TJob
     std::optional<TString> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
     NYson::TYsonString ArchiveFeatures;
+    std::optional<std::string> OperationIncarnation;
 
     std::optional<bool> IsStale;
 

@@ -587,6 +587,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableVectorIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
+    app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);    
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);

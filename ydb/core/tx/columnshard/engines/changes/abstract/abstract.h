@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/composite.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/engines/changes/counters/changes.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
@@ -246,24 +247,16 @@ public:
     }
 };
 
-class TColumnEngineChanges {
-public:
-    enum class EStage : ui32 {
-        Created = 0,
-        Started,
-        Constructed,
-        Compiled,
-        Written,
-        Finished,
-        Aborted
-    };
-
+class TColumnEngineChanges: public TMoveOnly {
 private:
-    EStage Stage = EStage::Created;
+    NChanges::EStage Stage = NChanges::EStage::Created;
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
     std::shared_ptr<const TAtomicCounter> ActivityFlag;
+    std::shared_ptr<NChanges::TChangesCounters::TStageCounters> Counters;
+
+    void SetStage(const NChanges::EStage stage);
 
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
@@ -360,14 +353,16 @@ public:
     }
 
     TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
-        : BlobsAction(storagesManager, consumerId) {
+        : Counters(NChanges::TChangesCounters::GetStageCounters(consumerId))
+        , BlobsAction(storagesManager, consumerId) {
+        Counters->OnStageChanged(Stage, 0);
     }
 
     TConclusionStatus ConstructBlobs(TConstructionContext& context) noexcept;
     virtual ~TColumnEngineChanges();
 
     bool IsAborted() const {
-        return Stage == EStage::Aborted;
+        return Stage == NChanges::EStage::Aborted;
     }
 
     void StartEmergency();

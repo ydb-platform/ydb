@@ -107,7 +107,9 @@ namespace NKikimr {
                          OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0,
                          state,
                          replicated,
-                         outOfSpaceFlags));
+                         outOfSpaceFlags,
+                         OverloadHandler ? OverloadHandler->IsThrottling() : false,
+                         OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0));
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }
@@ -1353,7 +1355,7 @@ namespace NKikimr {
                 actorId = RunInBatchPool(ctx, CreateMonStreamActor(Hull->GetIndexSnapshot(), ev));
                 ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
-            ctx.ExecutorThread.ActorSystem->Send(ev->Forward(actorId));
+            ctx.Send(ev->Forward(actorId));
         }
 
         void Handle(TEvBlobStorage::TEvMonStreamActorDeathNote::TPtr& ev, const TActorContext& /*ctx*/) {
@@ -1497,7 +1499,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSync::TPtr &ev, const TActorContext &ctx) {
-            ctx.Send(ev->Forward(Db->SyncLogID));
+            if (!Config->BaseInfo.DonorMode) {
+                ctx.Send(ev->Forward(Db->SyncLogID));
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -1675,6 +1679,10 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr &ev, const TActorContext &ctx) {
+            if (Config->BaseInfo.DonorMode) {
+                return; // this is a race; donor disk can't answer TEvVSyncFull queries
+            }
+
             // run handler in the same mailbox
             TInstant now = TAppData::TimeProvider->Now();
 
@@ -1967,7 +1975,7 @@ namespace NKikimr {
                 // create Hull
                 Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, HugeBlobCtx, MinHugeBlobInBytes,
                     Db->SkeletonID, Config->BalancingEnableDelete, std::move(*ev->Get()->Uncond),
-                    ctx.ExecutorThread.ActorSystem, Config->BarrierValidation, Db->HugeKeeperID);
+                    TActivationContext::ActorSystem(), Config->BarrierValidation, Db->HugeKeeperID);
                 ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
                     Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
 

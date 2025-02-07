@@ -17,6 +17,10 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 
 {% include notitle [Table of contents](visualization/_includes/toc-table.md) %}
 
+## Orchestration {#orchestration}
+
+{% include notitle [Table of contents](orchestration/_includes/toc-table.md) %}
+
 ## Data ingestion {#ingestion}
 
 {% include notitle [Table of contents](ingestion/_includes/toc-table.md) %}

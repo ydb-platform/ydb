@@ -9,6 +9,8 @@
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
 
+#include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
+
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
@@ -48,9 +50,7 @@ struct TYdbSetupSettings {
 
     ui32 NodeCount = 1;
     TString DomainName = "Root";
-    std::unordered_set<TString> DedicatedTenants;
-    std::unordered_set<TString> SharedTenants;
-    std::unordered_set<TString> ServerlessTenants;
+    std::map<TString, TStorageMeta::TTenant> Tenants;
     TDuration HealthCheckTimeout = TDuration::Seconds(10);
     EHealthCheck HealthCheckLevel = EHealthCheck::NodesCount;
     bool SameSession = false;

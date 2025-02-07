@@ -91,6 +91,7 @@ using TAsyncListResourcesResult = NThreading::TFuture<TListResourcesResult>;
 struct TDescribeResourceResult : public TStatus {
     struct THierarchicalDrrProps {
         THierarchicalDrrProps(const Ydb::RateLimiter::HierarchicalDrrSettings&);
+        void SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings&) const;
 
         // Resource consumption speed limit.
         std::optional<double> GetMaxUnitsPerSecond() const {

@@ -40,6 +40,24 @@ TDescribeResourceResult::THierarchicalDrrProps::THierarchicalDrrProps(const Ydb:
     }
 }
 
+void TDescribeResourceResult::THierarchicalDrrProps::THierarchicalDrrProps::SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings& settings) const {
+    if (MaxUnitsPerSecond_) {
+        settings.set_max_units_per_second(*MaxUnitsPerSecond_);
+    }
+
+    if (MaxBurstSizeCoefficient_) {
+        settings.set_max_burst_size_coefficient(*MaxBurstSizeCoefficient_);
+    }
+
+    if (PrefetchCoefficient_) {
+        settings.set_prefetch_coefficient(*PrefetchCoefficient_);
+    }
+
+    if (PrefetchWatermark_) {
+        settings.set_prefetch_watermark(*PrefetchWatermark_);
+    }
+}
+
 class TRateLimiterClient::TImpl : public TClientImplCommon<TRateLimiterClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TCommonClientSettings& settings)

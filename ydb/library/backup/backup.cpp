@@ -3,6 +3,7 @@
 #include "util.h"
 
 #include <ydb/public/api/protos/draft/ydb_view.pb.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
@@ -13,6 +14,7 @@
 #include <ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb-cpp-sdk/client/result/result.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/topic/client.h>
@@ -507,7 +509,7 @@ NTopic::TTopicDescription DescribeTopic(TDriver driver, const TString& path) {
     const auto result = NConsoleClient::RetryFunction([&]() {
         return client.DescribeTopic(path).ExtractValueSync();
     });
-    VerifyStatus(result, "describe topic to build a backup");
+    VerifyStatus(result, "describe topic");
     return result.GetTopicDescription();
 }
 
@@ -557,7 +559,7 @@ NView::TViewDescription DescribeView(TDriver driver, const TString& path) {
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeView(path).ExtractValueSync();
     });
-    VerifyStatus(status, "describe view to build a backup");
+    VerifyStatus(status, "describe view");
     return status.GetViewDescription();
 }
 
@@ -617,8 +619,43 @@ NCoordination::TNodeDescription DescribeCoordinationNode(TDriver driver, const T
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeNode(path).ExtractValueSync();
     });
-    VerifyStatus(status, "describe coordination node to build a backup");
+    VerifyStatus(status, "describe coordination node");
     return status.ExtractResult();
+}
+
+std::vector<std::string> ListResources(NRateLimiter::TRateLimiterClient& client, const std::string& coordinationNodePath) {
+    const auto settings = NRateLimiter::TListResourcesSettings().Recursive(true);
+    const std::string AllRootResourcesTag = "";
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.ListResources(coordinationNodePath, AllRootResourcesTag, settings).ExtractValueSync();
+    });
+    VerifyStatus(status, "list coordination node's resources");
+    return status.GetResourcePaths();
+}
+
+NRateLimiter::TDescribeResourceResult::THierarchicalDrrProps DescribeResource(
+    NRateLimiter::TRateLimiterClient& client, const std::string& coordinationNodePath, const std::string& resourcePath)
+{
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeResource(coordinationNodePath, resourcePath).ExtractValueSync();
+    });
+    VerifyStatus(status, "describe coordination node's resource");
+    return status.GetHierarchicalDrrProps();
+}
+
+void BackupDependentResources(TDriver driver, const std::string& coordinationNodePath, const TFsPath& fsBackupFolder) {
+    NRateLimiter::TRateLimiterClient client(driver);
+    const auto resources = ListResources(client, coordinationNodePath);
+
+    for (const auto& resourcePath : resources) {
+        const auto properties = DescribeResource(client, coordinationNodePath, resourcePath);
+        Ydb::RateLimiter::CreateResourceRequest creationRequest;
+        properties.SerializeTo(*creationRequest.mutable_resource()->mutable_hierarchical_drr());
+
+        TFsPath childFolderPath = fsBackupFolder.Child(TString{resourcePath});
+        childFolderPath.MkDirs();
+        WriteProtoToFile(creationRequest, childFolderPath, NDump::NFiles::CreateResource());
+    }
 }
 
 }
@@ -633,6 +670,7 @@ void BackupCoordinationNode(TDriver driver, const TString& dbPath, const TFsPath
     nodeDescription.SerializeTo(creationRequest);
 
     WriteProtoToFile(creationRequest, fsBackupFolder, NDump::NFiles::CreateCoordinationNode());
+    BackupDependentResources(driver, dbPath, fsBackupFolder);
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 

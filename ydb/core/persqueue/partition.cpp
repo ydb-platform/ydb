@@ -1993,7 +1993,9 @@ void TPartition::RunPersist() {
         //haveChanges = true;
     }
 
-    TryAddDeleteHeadKeysToPersistRequest();
+    if (TryAddDeleteHeadKeysToPersistRequest()) {
+        haveChanges = true;
+    }
 
     if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
         WriteCycleStartTime = now;
@@ -2041,6 +2043,9 @@ void TPartition::RunPersist() {
         WriteInfosApplied.clear();
         //Done with counters.
 
+        DumpKeyValueRequest(PersistRequest->Record);
+        PQ_LOG_D("HaveWriteMsg=" << HaveWriteMsg);
+
         PersistRequestSpan.Attribute("bytes", static_cast<i64>(PersistRequest->Record.ByteSizeLong()));
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
         CurrentPersistRequestSpan = std::move(PersistRequestSpan);
@@ -2055,8 +2060,10 @@ void TPartition::RunPersist() {
     PersistRequest = nullptr;
 }
 
-void TPartition::TryAddDeleteHeadKeysToPersistRequest()
+bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
 {
+    bool haveChanges = !DeletedKeys.empty();
+
     while (!DeletedKeys.empty()) {
         auto& k = DeletedKeys.back();
 
@@ -2070,6 +2077,8 @@ void TPartition::TryAddDeleteHeadKeysToPersistRequest()
 
         DeletedKeys.pop_back();
     }
+
+    return haveChanges;
 }
 
 void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)

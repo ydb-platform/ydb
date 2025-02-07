@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
+            UNIT_ASSERT_C(false == HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                 [] (const auto& issue) {
                     return issue.GetMessage().contains("/Root/Test");
                 }), result.GetIssues().ToString());

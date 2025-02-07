@@ -5,6 +5,7 @@ import yatest.common
 
 import yql_utils
 
+
 class KqpRun(object):
     def __init__(self, config_file, scheme_file, udfs_dir=None):
         self.kqprun_binary = yql_utils.yql_binary_path('ydb/tests/tools/kqprun/kqprun')
@@ -51,7 +52,7 @@ class KqpRun(object):
         if var_templates is not None:
             for var_template in var_templates:
                 cmd += '--var-template %s ' % var_template
-        
+
         if tables is not None:
             for table in tables:
                 if table.format != 'yson':

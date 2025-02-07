@@ -238,6 +238,7 @@ public:
         , HttpGateway(std::move(httpGateway))
     {
         Config->EnableAntlr4Parser = enableAntlr4Parser;
+        Config->DefaultCostBasedOptimizationLevel = 2;
     }
 
     void Bootstrap() {

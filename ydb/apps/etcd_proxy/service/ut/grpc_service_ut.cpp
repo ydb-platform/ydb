@@ -156,7 +156,7 @@ void MakeSimpleTest(std::function<void(const std::unique_ptr<etcdserverpb::KV::S
     etcd(kv, lease);
 }
 
-void Write(const TString &key, const TString &value, const std::unique_ptr<etcdserverpb::KV::Stub> &stub, const i64 lease = 0LL)
+void Put(const std::string_view &key, const std::string_view &value, const std::unique_ptr<etcdserverpb::KV::Stub> &stub, const i64 lease = 0LL)
 {
     grpc::ClientContext writeCtx;
     etcdserverpb::PutRequest putRequest;
@@ -167,6 +167,21 @@ void Write(const TString &key, const TString &value, const std::unique_ptr<etcds
 
     etcdserverpb::PutResponse putResponse;
     stub->Put(&writeCtx, putRequest, &putResponse);
+    UNIT_ASSERT(!putResponse.has_prev_kv());
+}
+
+i64 Delete(const std::string_view &key, const std::unique_ptr<etcdserverpb::KV::Stub> &stub, const std::string_view &rangeEnd = {})
+{
+    grpc::ClientContext delCtx;
+    etcdserverpb::DeleteRangeRequest deleteRangeRequest;
+    deleteRangeRequest.set_key(key);
+    if (!rangeEnd.empty())
+        deleteRangeRequest.set_range_end(rangeEnd);
+
+    etcdserverpb::DeleteRangeResponse deleteRangeResponse;
+    stub->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
+    UNIT_ASSERT(deleteRangeResponse.prev_kvs().empty());
+    return deleteRangeResponse.deleted();
 }
 
 i64 Grant(const i64 ttl, const std::unique_ptr<etcdserverpb::Lease::Stub> &stub)
@@ -210,14 +225,14 @@ std::unordered_multiset<i64> Leases(const std::unique_ptr<etcdserverpb::Lease::S
 Y_UNIT_TEST_SUITE(Etcd_KV) {
     Y_UNIT_TEST(SimpleWriteReadDelete) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
-            Write("key0", "value0", etcd);
-            Write("key1", "value1", etcd);
-            Write("key2", "value2", etcd);
-            Write("key3", "value3", etcd);
-            Write("key4", "value4", etcd);
-            Write("key5", "value5", etcd);
-            Write("key6", "value6", etcd);
-            Write("key7", "value7", etcd);
+            Put("key0", "value0", etcd);
+            Put("key1", "value1", etcd);
+            Put("key2", "value2", etcd);
+            Put("key3", "value3", etcd);
+            Put("key4", "value4", etcd);
+            Put("key5", "value5", etcd);
+            Put("key6", "value6", etcd);
+            Put("key7", "value7", etcd);
 
             {
                 grpc::ClientContext readRangeCtx;
@@ -238,14 +253,9 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).value(), "value3");
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(3).value(), "value4");
             }
-            {
-                grpc::ClientContext delCtx;
-                etcdserverpb::DeleteRangeRequest deleteRangeRequest;
-                deleteRangeRequest.set_key("key2");
-                deleteRangeRequest.set_range_end("key4");
-                etcdserverpb::DeleteRangeResponse deleteRangeResponse;
-                etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
-            }
+
+            Delete("key2", etcd, "key4");
+
             {
                 grpc::ClientContext readRangeCtx;
                 etcdserverpb::RangeRequest rangeRequest;
@@ -263,6 +273,145 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
         });
     }
 
+    Y_UNIT_TEST(UpdateWithGetPrevious) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            {
+                grpc::ClientContext writeCtx;
+                etcdserverpb::PutRequest putRequest;
+                putRequest.set_key("key");
+                putRequest.set_value("value0");
+                putRequest.set_prev_kv(true);
+
+                etcdserverpb::PutResponse putResponse;
+                etcd->Put(&writeCtx, putRequest, &putResponse);
+                UNIT_ASSERT(!putResponse.has_prev_kv());
+            }
+            {
+                grpc::ClientContext writeCtx;
+                etcdserverpb::PutRequest putRequest;
+                putRequest.set_key("key");
+                putRequest.set_value("value1");
+                putRequest.set_prev_kv(true);
+
+                etcdserverpb::PutResponse putResponse;
+                etcd->Put(&writeCtx, putRequest, &putResponse);
+                UNIT_ASSERT(putResponse.has_prev_kv());
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().key(), "key");
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().value(), "value0");
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().version(), 1L);
+            }
+            {
+                grpc::ClientContext writeCtx;
+                etcdserverpb::PutRequest putRequest;
+                putRequest.set_key("key");
+                putRequest.set_value("value2");
+                putRequest.set_prev_kv(true);
+
+                etcdserverpb::PutResponse putResponse;
+                etcd->Put(&writeCtx, putRequest, &putResponse);
+                UNIT_ASSERT(putResponse.has_prev_kv());
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().key(), "key");
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().value(), "value1");
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().version(), 2L);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(Delete("key", etcd), 1L);
+
+            {
+                grpc::ClientContext writeCtx;
+                etcdserverpb::PutRequest putRequest;
+                putRequest.set_key("key");
+                putRequest.set_value("value3");
+                putRequest.set_prev_kv(true);
+
+                etcdserverpb::PutResponse putResponse;
+                etcd->Put(&writeCtx, putRequest, &putResponse);
+                UNIT_ASSERT(!putResponse.has_prev_kv());
+            }
+            {
+                grpc::ClientContext writeCtx;
+                etcdserverpb::PutRequest putRequest;
+                putRequest.set_key("key");
+                putRequest.set_value("value4");
+                putRequest.set_prev_kv(true);
+
+                etcdserverpb::PutResponse putResponse;
+                etcd->Put(&writeCtx, putRequest, &putResponse);
+                UNIT_ASSERT(putResponse.has_prev_kv());
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().key(), "key");
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().value(), "value3");
+                UNIT_ASSERT_VALUES_EQUAL(putResponse.prev_kv().version(), 1L);
+            }
+        });
+    }
+
+    Y_UNIT_TEST(DeleteWithGetPrevious) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            Put("key0", "value0", etcd);
+            Put("key1", "value1", etcd);
+            Put("key2", "value2", etcd);
+            Put("key3", "value3", etcd);
+            Put("key4", "value4", etcd);
+            Put("key5", "value5", etcd);
+            Put("key6", "value6", etcd);
+            Put("key7", "value7", etcd);
+
+            {
+                grpc::ClientContext delCtx;
+                etcdserverpb::DeleteRangeRequest deleteRangeRequest;
+                deleteRangeRequest.set_key("key2");
+                deleteRangeRequest.set_prev_kv(true);
+                etcdserverpb::DeleteRangeResponse deleteRangeResponse;
+                etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 1L);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 1L);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs(0).key(), "key2");
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs(0).value(), "value2");
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs(0).version(), 1L);
+            }
+
+            {
+                grpc::ClientContext delCtx;
+                etcdserverpb::DeleteRangeRequest deleteRangeRequest;
+                deleteRangeRequest.set_key("key4");
+                deleteRangeRequest.set_range_end("key7");
+                deleteRangeRequest.set_prev_kv(true);
+                etcdserverpb::DeleteRangeResponse deleteRangeResponse;
+                etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 3L);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 3L);
+
+                std::unordered_map<std::string, std::string> map(deleteRangeResponse.prev_kvs().size());
+                for (const auto& kvs : deleteRangeResponse.prev_kvs())
+                    map.emplace(kvs.key(), kvs.value());
+
+                UNIT_ASSERT_VALUES_EQUAL(map["key4"], "value4");
+                UNIT_ASSERT_VALUES_EQUAL(map["key5"], "value5");
+                UNIT_ASSERT_VALUES_EQUAL(map["key6"], "value6");
+            }
+
+            {
+                grpc::ClientContext delCtx;
+                etcdserverpb::DeleteRangeRequest deleteRangeRequest;
+                deleteRangeRequest.set_key("key");
+                deleteRangeRequest.set_range_end("kez");
+                deleteRangeRequest.set_prev_kv(true);
+                etcdserverpb::DeleteRangeResponse deleteRangeResponse;
+                etcd->DeleteRange(&delCtx, deleteRangeRequest, &deleteRangeResponse);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.deleted(), 4L);
+                UNIT_ASSERT_VALUES_EQUAL(deleteRangeResponse.prev_kvs().size(), 4L);
+
+                std::unordered_map<std::string, std::string> map(deleteRangeResponse.prev_kvs().size());
+                for (const auto& kvs : deleteRangeResponse.prev_kvs())
+                    map.emplace(kvs.key(), kvs.value());
+
+                UNIT_ASSERT_VALUES_EQUAL(map["key0"], "value0");
+                UNIT_ASSERT_VALUES_EQUAL(map["key1"], "value1");
+                UNIT_ASSERT_VALUES_EQUAL(map["key3"], "value3");
+                UNIT_ASSERT_VALUES_EQUAL(map["key7"], "value7");
+            }
+        });
+    }
 } // Y_UNIT_TEST_SUITE(Etcd_KV)
 
 Y_UNIT_TEST_SUITE(Etcd_Lease) {
@@ -270,14 +419,14 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd, const std::unique_ptr<etcdserverpb::Lease::Stub> &lease) {
             const auto leaseId = Grant(101LL, lease);
 
-            Write("key0", "value0", etcd);
-            Write("key1", "value1", etcd, leaseId);
-            Write("key2", "value2", etcd, leaseId);
-            Write("key3", "value3", etcd);
-            Write("key4", "value4", etcd);
-            Write("key5", "value5", etcd, leaseId);
-            Write("key6", "value6", etcd, leaseId);
-            Write("key7", "value7", etcd);
+            Put("key0", "value0", etcd);
+            Put("key1", "value1", etcd, leaseId);
+            Put("key2", "value2", etcd, leaseId);
+            Put("key3", "value3", etcd);
+            Put("key4", "value4", etcd);
+            Put("key5", "value5", etcd, leaseId);
+            Put("key6", "value6", etcd, leaseId);
+            Put("key7", "value7", etcd);
 
             {
                 grpc::ClientContext readRangeCtx;
@@ -346,14 +495,14 @@ Y_UNIT_TEST_SUITE(Etcd_Lease) {
 
             const i64 one = Grant(97LL, lease), two = Grant(17LL, lease);
 
-            Write("key0", "value0", etcd);
-            Write("key1", "value1", etcd, two);
-            Write("key2", "value2", etcd, one);
-            Write("key3", "value3", etcd, one);
-            Write("key4", "value4", etcd);
-            Write("key5", "value5", etcd, one);
-            Write("key6", "value6", etcd, two);
-            Write("key7", "value7", etcd);
+            Put("key0", "value0", etcd);
+            Put("key1", "value1", etcd, two);
+            Put("key2", "value2", etcd, one);
+            Put("key3", "value3", etcd, one);
+            Put("key4", "value4", etcd);
+            Put("key5", "value5", etcd, one);
+            Put("key6", "value6", etcd, two);
+            Put("key7", "value7", etcd);
 
             {
                 grpc::ClientContext timeToLiveCtx;

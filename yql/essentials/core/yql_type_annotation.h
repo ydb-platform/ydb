@@ -301,6 +301,12 @@ enum class EBlockEngineMode {
     Force /* "force" */,
 };
 
+enum class EEngineType {
+    Default /* "default" */,
+    Dq /* "dq" */,
+    Ytflow /* "ytflow" */,
+};
+
 struct TUdfCachedInfo {
     TString NormalizedName;
     const TTypeAnnotationNode* FunctionType = nullptr;
@@ -429,6 +435,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
 
     std::optional<bool> InitializeResult;
     EHiddenMode HiddenMode = EHiddenMode::Disable;
+    EEngineType EngineType = EEngineType::Default;
 
     template <typename T>
     T GetRandom() const noexcept;

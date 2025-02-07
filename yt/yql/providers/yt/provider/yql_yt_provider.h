@@ -17,6 +17,9 @@
 #include <library/cpp/time_provider/monotonic.h>
 #include <library/cpp/yson/writer.h>
 
+#include <yt/yql/providers/ytflow/integration/interface/yql_ytflow_integration.h>
+#include <yt/yql/providers/ytflow/integration/interface/yql_ytflow_optimization.h>
+
 #include <util/generic/string.h>
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
@@ -112,6 +115,8 @@ struct TYtState : public TThrRefBase {
     TMutex StatisticsMutex;
     THashSet<std::pair<TString, TString>> Checkpoints; // Set of checkpoint tables
     THolder<IDqIntegration> DqIntegration_;
+    THolder<IYtflowIntegration> YtflowIntegration_;
+    THolder<IYtflowOptimization> YtflowOptimization_;
     ui32 NextEpochId = 1;
     bool OnlyNativeExecution = false;
     bool PassiveExecution = false;

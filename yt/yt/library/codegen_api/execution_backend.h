@@ -11,6 +11,8 @@ DEFINE_ENUM(EExecutionBackend,
     (WebAssembly)
 );
 
+DEFINE_ENUM_UNKNOWN_VALUE(EExecutionBackend, Native);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NCodegen

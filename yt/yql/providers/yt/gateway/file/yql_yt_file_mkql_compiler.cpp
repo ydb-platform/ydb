@@ -661,6 +661,14 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             }
 
             if (IsWideBlockType(lambdaInputType)) {
+                // Static assert to ensure backward compatible change: if the
+                // constant below is true, both input and output types of
+                // WideToBlocks callable have to be WideStream; otherwise,
+                // both input and output types have to be WideFlow.
+                // FIXME: When all spots using WideToBlocks are adjusted
+                // to work with WideStream, drop the assertion below.
+                static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
                 values = ctx.ProgramBuilder.WideToBlocks(values);
             }
 
@@ -1113,6 +1121,15 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
                 auto values = BuildTableContentCall("YtTableInputFile", outputType, cluster,
                     ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
                 values = ApplyPathRangesAndSampling(values, outputType, ytRead.Input().Ref(), ctx);
+
+                // Static assert to ensure backward compatible change: if the
+                // constant below is true, both input and output types of
+                // WideToBlocks callable have to be WideStream; otherwise,
+                // both input and output types have to be WideFlow.
+                // FIXME: When all spots using WideToBlocks are adjusted
+                // to work with WideStream, drop the assertion below.
+                static_assert(!NYql::NBlockStreamIO::WideToBlocks);
+
                 return ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.WideToBlocks(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
             }
 

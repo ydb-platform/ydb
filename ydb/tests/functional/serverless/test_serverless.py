@@ -539,13 +539,13 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
         # Writes should be denied when database moves into DiskQuotaExceeded state
         time.sleep(1)
         logger.debug("start insert")
-        with pytest.raises(ydb.issues.Overloaded, match=r'.*overload data error.*'):
+        with pytest.raises(ydb.issues.Unavailable, match=r'.*Disk space exhausted.*'):
             qpool.execute_with_retries(
                 "UPSERT INTO `{}`(id, value_string) VALUES({}, 'xxx')".format(path, int(datetime.datetime.now().timestamp()) + 100),
                 retry_settings=RetrySettings(max_retries=0))
         logger.debug("finish insert")
 #        with pytest.raises(ydb.Overloaded, match=r'.*Cannot write data into shard.*'):
-        with pytest.raises(ydb.Overloaded, match=r'.*System overloaded.*'):
+        with pytest.raises(ydb.issues.InternalError, match=r'.*Disk space exhausted.*'):
             IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(0, 'test')]))
 
         for _ in range(300):

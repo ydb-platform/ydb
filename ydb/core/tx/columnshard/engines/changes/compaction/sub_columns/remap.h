@@ -52,7 +52,7 @@ private:
     };
 
     const TDictStats* ResultColumnStats = nullptr;
-    std::map<TSourceAddress, TRemapInfo> RemapInfo;
+    std::vector<std::vector<std::vector<std::optional<TRemapInfo>>>> RemapInfo;
     std::map<TString, ui32> TemporaryKeyIndex;
 
     ui32 RegisterNewOtherIndex(const TString& keyName) {
@@ -74,36 +74,48 @@ public:
     }
 
     void StartSourceChunk(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats) {
-        for (auto it = RemapInfo.begin(); it != RemapInfo.end();) {
-            if (it->first.GetSourceIndex() == sourceIdx) {
-                it = RemapInfo.erase(it);
-            } else {
-                ++it;
-            }
+        if (RemapInfo.size() <= sourceIdx) {
+            RemapInfo.resize(sourceIdx);
         }
+        RemapInfo[sourceIdx].clear();
+        auto& remapSourceInfo = RemapInfo[sourceIdx];
+        remapSourceInfo.resize(2);
+        auto& remapSourceInfoColumns = remapSourceInfo[1];
+        auto& remapSourceInfoOthers = remapSourceInfo[0];
         AFL_VERIFY(ResultColumnStats);
         for (ui32 i = 0; i < sourceColumnStats.GetColumnsCount(); ++i) {
+            if (remapSourceInfoColumns.size() <= i) {
+                remapSourceInfoColumns.resize((i + 1) * 2);
+            }
+            AFL_VERIFY(!remapSourceInfoColumns[i]);
             if (auto commonKeyIndex = ResultColumnStats->GetKeyIndexOptional(sourceColumnStats.GetColumnName(i))) {
-                AFL_VERIFY(RemapInfo.emplace(TSourceAddress(sourceIdx, i, true), TRemapInfo(*commonKeyIndex, true)).second);
+                remapSourceInfoColumns[i] = TRemapInfo(*commonKeyIndex, true);
             } else {
                 commonKeyIndex = RegisterNewOtherIndex(sourceColumnStats.GetColumnName(i));
-                AFL_VERIFY(RemapInfo.emplace(TSourceAddress(sourceIdx, i, true), TRemapInfo(*commonKeyIndex, false)).second);
+                remapSourceInfoColumns[i] = TRemapInfo(*commonKeyIndex, false);
             }
         }
         for (ui32 i = 0; i < sourceOtherStats.GetColumnsCount(); ++i) {
+            if (remapSourceInfoOthers.size() <= i) {
+                remapSourceInfoOthers.resize((i + 1) * 2);
+            }
+            AFL_VERIFY(!remapSourceInfoOthers[i]);
             if (auto commonKeyIndex = ResultColumnStats->GetKeyIndexOptional(sourceOtherStats.GetColumnName(i))) {
-                AFL_VERIFY(RemapInfo.emplace(TSourceAddress(sourceIdx, i, false), TRemapInfo(*commonKeyIndex, true)).second);
+                remapSourceInfoOthers[i] = TRemapInfo(*commonKeyIndex, true);
             } else {
                 commonKeyIndex = RegisterNewOtherIndex(sourceOtherStats.GetColumnName(i));
-                AFL_VERIFY(RemapInfo.emplace(TSourceAddress(sourceIdx, i, false), TRemapInfo(*commonKeyIndex, false)).second);
+                remapSourceInfoOthers[i] = TRemapInfo(*commonKeyIndex, false);
             }
         }
     }
 
     TRemapInfo RemapIndex(const ui32 sourceIdx, const ui32 sourceKeyIndex, const bool isColumnKey) const {
-        auto it = RemapInfo.find(TSourceAddress(sourceIdx, sourceKeyIndex, isColumnKey));
-        AFL_VERIFY(it != RemapInfo.end());
-        return it->second;
+        AFL_VERIFY(sourceIdx < RemapInfo.size());
+        AFL_VERIFY(RemapInfo[sourceIdx].size() == 2);
+        AFL_VERIFY(sourceKeyIndex < RemapInfo[sourceIdx][isColumnKey ? 1 : 0].size());
+        auto result = RemapInfo[sourceIdx][isColumnKey ? 1 : 0][sourceKeyIndex];
+        AFL_VERIFY(result);
+        return *result;
     }
 };
 

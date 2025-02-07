@@ -743,7 +743,7 @@
         {
             "Name": "TKqpOpMapElement",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqpOpElement"},
+            "Match": {"Type": "Callable", "Name": "KqpOpMapElement"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Variable", "Type": "TCoAtom"},
@@ -775,7 +775,7 @@
         {
             "Name": "TKqpOpJoin",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "TKqpOpJoin"},
+            "Match": {"Type": "Callable", "Name": "KqpOpJoin"},
             "Children": [
                 {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
                 {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
@@ -783,6 +783,14 @@
                 {"Index": 3, "Name": "RightLabel", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "JoinKind", "Type":"TCoAtom"},
                 {"Index": 5, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList", "Optional" : true}
+            ]
+        },
+        {
+            "Name": "TKqpOpRoot",
+            "Base": "TCallable",
+            "Match" : {"Type": "Callable", "Name": "KqpOpRoot"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
             ]
         }
 

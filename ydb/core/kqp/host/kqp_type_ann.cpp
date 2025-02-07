@@ -2072,6 +2072,12 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpRoot(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
+    input->SetTypeAnn(inputType);
+    return TStatus::Ok;
+}
+
 } // namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cluster,
@@ -2256,6 +2262,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOpJoin::Match(input.Get())) {
                 return AnnotateOpJoin(input, ctx);
+            }
+
+            if (TKqpOpRoot::Match(input.Get())) {
+                return AnnotateOpRoot(input, ctx);
             }
 
             return dqTransformer->Transform(input, output, ctx);

@@ -174,6 +174,71 @@ const TScaleRecommenderPolicies& TGetDatabaseStatusResult::GetScaleRecommenderPo
     return ScaleRecommenderPolicies_;
 }
 
+void TGetDatabaseStatusResult::SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const {
+    request.set_path(Path_);
+    if (std::holds_alternative<NCms::TResources>(ResourcesKind_)) {
+        const auto& resources = std::get<NCms::TResources>(ResourcesKind_);
+        for (const auto& storageUnit : resources.StorageUnits) {
+            auto* protoUnit = request.mutable_resources()->add_storage_units();
+            protoUnit->set_unit_kind(storageUnit.UnitKind);
+            protoUnit->set_count(storageUnit.Count);
+        }
+        for (const auto& computationalUnit : resources.ComputationalUnits) {
+            auto* protoUnit = request.mutable_resources()->add_computational_units();
+            protoUnit->set_unit_kind(computationalUnit.UnitKind);
+            protoUnit->set_count(computationalUnit.Count);
+            protoUnit->set_availability_zone(computationalUnit.AvailabilityZone);
+        }
+    } else if (std::holds_alternative<NCms::TSharedResources>(ResourcesKind_)) {
+        const auto& resources = std::get<NCms::TSharedResources>(ResourcesKind_);
+        for (const auto& storageUnit : resources.StorageUnits) {
+            auto* protoUnit = request.mutable_shared_resources()->add_storage_units();
+            protoUnit->set_unit_kind(storageUnit.UnitKind);
+            protoUnit->set_count(storageUnit.Count);
+        }
+        for (const auto& computationalUnit : resources.ComputationalUnits) {
+            auto* protoUnit = request.mutable_shared_resources()->add_computational_units();
+            protoUnit->set_unit_kind(computationalUnit.UnitKind);
+            protoUnit->set_count(computationalUnit.Count);
+            protoUnit->set_availability_zone(computationalUnit.AvailabilityZone);
+        }
+    } else if (std::holds_alternative<NCms::TServerlessResources>(ResourcesKind_)) {
+        const auto& resources = std::get<NCms::TServerlessResources>(ResourcesKind_);
+        request.mutable_serverless_resources()->set_shared_database_path(resources.SharedDatabasePath);
+    }
+    
+    for (const auto& quota : SchemaOperationQuotas_.LeakyBucketQuotas) {
+        auto protoQuota = request.mutable_schema_operation_quotas()->add_leaky_bucket_quotas();
+        protoQuota->set_bucket_seconds(quota.BucketSeconds);
+        protoQuota->set_bucket_size(quota.BucketSize);
+    }
+
+    request.mutable_database_quotas()->set_data_size_hard_quota(DatabaseQuotas_.DataSizeHardQuota);
+    request.mutable_database_quotas()->set_data_size_soft_quota(DatabaseQuotas_.DataSizeSoftQuota);
+    request.mutable_database_quotas()->set_data_stream_shards_quota(DatabaseQuotas_.DataStreamShardsQuota);
+    request.mutable_database_quotas()->set_data_stream_reserved_storage_quota(DatabaseQuotas_.DataStreamReservedStorageQuota);
+    request.mutable_database_quotas()->set_ttl_min_run_internal_seconds(DatabaseQuotas_.TtlMinRunInternalSeconds);
+
+    for (const auto& quota : DatabaseQuotas_.StorageQuotas) {
+        auto protoQuota = request.mutable_database_quotas()->add_storage_quotas();
+        protoQuota->set_unit_kind(quota.UnitKind);
+        protoQuota->set_data_size_hard_quota(quota.DataSizeHardQuota);
+        protoQuota->set_data_size_soft_quota(quota.DataSizeSoftQuota);
+    }
+
+    for (const auto& policy : ScaleRecommenderPolicies_.Policies) {
+        auto* protoPolicy = request.mutable_scale_recommender_policies()->add_policies();
+        if (std::holds_alternative<NCms::TTargetTrackingPolicy>(policy.Policy)) {
+            const auto& targetTracking = std::get<NCms::TTargetTrackingPolicy>(policy.Policy);
+            auto* protoTargetTracking = protoPolicy->mutable_target_tracking_policy();
+            if (std::holds_alternative<NCms::TTargetTrackingPolicy::TAverageCpuUtilizationPercent>(targetTracking.Target)) {
+                const auto& target = std::get<NCms::TTargetTrackingPolicy::TAverageCpuUtilizationPercent>(targetTracking.Target);
+                protoTargetTracking->set_average_cpu_utilization_percent(target);
+            }
+        }
+    }
+}
+
 class TCmsClient::TImpl : public TClientImplCommon<TCmsClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
@@ -206,9 +271,9 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncGetDatabaseStatusResult GetDatabaseStatus(const TGetDatabaseStatusSettings& settings) {
+    TAsyncGetDatabaseStatusResult GetDatabaseStatus(const std::string& path, const TGetDatabaseStatusSettings& settings) {
         Ydb::Cms::GetDatabaseStatusRequest request;
-        request.set_path(settings.Path_);
+        request.set_path(path);
 
         auto promise = NThreading::NewPromise<TGetDatabaseStatusResult>();
 
@@ -242,8 +307,11 @@ TAsyncListDatabasesResult TCmsClient::ListDatabases(const TListDatabasesSettings
     return Impl_->ListDatabases(settings);
 }
 
-TAsyncGetDatabaseStatusResult TCmsClient::GetDatabaseStatus(const TGetDatabaseStatusSettings& settings) {
-    return Impl_->GetDatabaseStatus(settings);
+TAsyncGetDatabaseStatusResult TCmsClient::GetDatabaseStatus(
+    const std::string& path,
+    const TGetDatabaseStatusSettings& settings)
+{
+    return Impl_->GetDatabaseStatus(path, settings);
 }
 
 } // namespace NYdb::NCms

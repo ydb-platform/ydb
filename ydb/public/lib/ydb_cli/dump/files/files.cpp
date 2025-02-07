@@ -14,6 +14,10 @@ enum EFilesType {
     INCOMPLETE,
     EMPTY,
     CREATE_VIEW,
+    DATABASE,
+    CREATE_USER,
+    CREATE_GROUP,
+    ALTER_GROUP,
 };
 
 static constexpr TFileInfo FILES_INFO[] = {
@@ -28,6 +32,10 @@ static constexpr TFileInfo FILES_INFO[] = {
     {"incomplete", "incomplete"},
     {"empty_dir", "empty_dir"},
     {"create_view.sql", "view"},
+    {"database.pb", "database description"},
+    {"create_user.sql", "users"},
+    {"create_group.sql", "groups"},
+    {"alter_group.sql", "group members"},
 };
 
 const TFileInfo& TableScheme() {
@@ -72,6 +80,22 @@ const TFileInfo& Empty() {
 
 const TFileInfo& CreateView() {
     return FILES_INFO[CREATE_VIEW];
+}
+
+const TFileInfo& Database() {
+    return FILES_INFO[DATABASE];
+}
+
+const TFileInfo& CreateUser() {
+    return FILES_INFO[CREATE_USER];
+}
+
+const TFileInfo& CreateGroup() {
+    return FILES_INFO[CREATE_GROUP];
+}
+
+const TFileInfo& AlterGroup() {
+    return FILES_INFO[ALTER_GROUP];
 }
 
 } // NYdb::NDump::NFiles

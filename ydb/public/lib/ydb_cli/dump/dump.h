@@ -130,6 +130,10 @@ public:
     TDumpResult Dump(const TString& dbPath, const TString& fsPath, const TDumpSettings& settings = {});
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings = {});
 
+    TDumpResult DumpCluster(const TString& fsPath);
+
+    TDumpResult DumpDatabase(const TString& database, const TString& fsPath);
+    
 private:
     std::shared_ptr<TImpl> Impl_;
 

@@ -44,7 +44,11 @@ void BackupFolder(
     bool avoidCopy = false,
     bool savePartialResult = false,
     bool preservePoolKinds = false,
-    bool ordered = false);
+    bool ordered = false,
+    bool checkFolder = true);
+
+void BackupCluster(const TDriver& driver, TFsPath folderPath);
+void BackupDatabase(const TDriver& driver, const TString& database, TFsPath folderPath);
 
 // For unit-tests only
 TMaybe<TValue> ProcessResultSet(

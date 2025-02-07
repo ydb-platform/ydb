@@ -230,32 +230,26 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
     return MakeHolder<TEvIndexBuilder::TEvCancelRequest>(ui64(indexBuildId), domainPath.PathString(), ui64(indexBuildId));
 }
 
-std::pair<TString, TString> SplitPathIntoWorkingDirAndName(const TString& path) {
-    auto splitPos = path.find_last_of('/');
-    if (splitPos == path.npos || splitPos + 1 == path.size()) {
-        ythrow yexception() << "wrong path format '" << path << "'" ;
-    }
-    return {path.substr(0, splitPos), path.substr(splitPos + 1)};
-}
-
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo::TItem& item
 ) {
     Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
+
     const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];
     const auto& changefeed = importChangefeedTopic.GetChangefeed();
     const auto& topic = importChangefeedTopic.GetTopic();
+
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
     auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
-    Cerr << "TableName: " << item.DstPathName << Endl;
-    auto pair = SplitPathIntoWorkingDirAndName(item.DstPathName);
-    modifyScheme.SetWorkingDir(pair.first);
-    cdcStream.SetTableName(pair.second);
+
+    const TPath dstPath = TPath::Init(item.DstPathId, ss);
+    modifyScheme.SetWorkingDir( dstPath.Parent().PathString());
+    cdcStream.SetTableName(dstPath.LeafName());
 
     TString error;
     Ydb::StatusIds::StatusCode status;
@@ -294,8 +288,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
             cdcStream.SetMaxPartitionCount(maxActivePartitions);
         }
     }
-    Cerr << "Create Changefeed proppse" << Endl;
-    Cerr << record << Endl;
     return propose;
 }
 

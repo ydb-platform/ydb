@@ -191,8 +191,6 @@ protected:
     void CheckTabletKeys(const TString& topicName);
     void DumpPQTabletKeys(const TString& topicName);
 
-    void EnsureKeysIsEqual(const TString& topicName, unsigned id);
-
     NTable::TDataQueryResult ExecuteDataQuery(NTable::TSession session, const TString& query, const NTable::TTxControl& control);
 
     TVector<TString> Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
@@ -240,6 +238,8 @@ protected:
     virtual bool GetEnableHtapTx() const;
     virtual bool GetAllowOlapDataQuery() const;
 
+    size_t GetPQCacheRenameKeysCount();
+
 private:
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader, NTable::TTransaction& tx);
@@ -253,8 +253,6 @@ private:
                                            ui64 tabletId);
     std::vector<std::string> GetPQTabletDataKeys(const TActorId& actorId,
                                                  ui64 tabletId);
-    std::vector<NKikimr::NPQ::TEvPqCache::TEvCacheKeysResponse::TKey> GetPQCacheKeys(const TActorId& actorId,
-                                                                                     ui64 tabletId);
     NPQ::TWriteId GetTransactionWriteId(const TActorId& actorId,
                                         ui64 tabletId);
     void SendLongTxLockStatus(const TActorId& actorId,
@@ -1111,12 +1109,12 @@ std::vector<std::string> TFixture::GetPQTabletDataKeys(const TActorId& actorId,
     return keys;
 }
 
-std::vector<NKikimr::NPQ::TEvPqCache::TEvCacheKeysResponse::TKey> TFixture::GetPQCacheKeys(const TActorId& edge,
-                                                                                           ui64 tabletId)
+size_t TFixture::GetPQCacheRenameKeysCount()
 {
     using namespace NKikimr::NPQ;
 
     auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
 
     auto request = MakeHolder<TEvPqCache::TEvCacheKeysRequest>();
 
@@ -1125,15 +1123,7 @@ std::vector<NKikimr::NPQ::TEvPqCache::TEvCacheKeysResponse::TKey> TFixture::GetP
     TAutoPtr<IEventHandle> handle;
     auto* result = runtime.GrabEdgeEvent<TEvPqCache::TEvCacheKeysResponse>(handle);
 
-    std::vector<NKikimr::NPQ::TEvPqCache::TEvCacheKeysResponse::TKey> keys;
-
-    for (const auto& key : result->Keys) {
-        if (key.TabletId == tabletId) {
-            keys.push_back(key);
-        }
-    }
-
-    return keys;
+    return result->RenamedKeys;
 }
 
 void TFixture::RestartLongTxService()
@@ -1839,51 +1829,6 @@ void TFixture::CheckTabletKeys(const TString& topicName)
         Cerr << "=============" << Endl;
 
         UNIT_FAIL("unexpected keys for tablet " << tabletId);
-    }
-}
-
-void TFixture::EnsureKeysIsEqual(const TString& topicName, unsigned id)
-{
-    using namespace NKikimr::NPQ;
-
-    auto& runtime = Setup->GetRuntime();
-    TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
-
-    auto tabletKeys = GetPQTabletDataKeys(edge, tabletId);
-    auto cacheKeys = GetPQCacheKeys(edge, tabletId);
-
-    UNIT_ASSERT_VALUES_EQUAL_C(tabletKeys.size(), cacheKeys.size(), "id=" << id);
-
-    auto compareBlobId = [](const TEvPqCache::TEvCacheKeysResponse::TKey& lhs,
-                            const TEvPqCache::TEvCacheKeysResponse::TKey& rhs) {
-        auto makeTuple = [](const TEvPqCache::TEvCacheKeysResponse::TKey& v) {
-            return std::make_tuple(v.TabletId,
-                                   v.Partition,
-                                   v.Offset,
-                                   v.PartNo);
-        };
-
-        return makeTuple(lhs) < makeTuple(rhs);
-    };
-
-    std::sort(tabletKeys.begin(), tabletKeys.end());
-    std::sort(cacheKeys.begin(), cacheKeys.end(), compareBlobId);
-
-    auto toString = [](const std::string& s) -> TString {
-        return {s.begin(), s.end()};
-    };
-
-    for (size_t i = 0; i < tabletKeys.size(); ++i) {
-        const TKey key(toString(tabletKeys[i]));
-        const auto& blobId = cacheKeys[i];
-
-        UNIT_ASSERT_VALUES_EQUAL_C(key.GetPartition().InternalPartitionId, blobId.Partition.InternalPartitionId,
-                                   "id=" << id << ", i=" << i);
-        UNIT_ASSERT_VALUES_EQUAL_C(key.GetOffset(), blobId.Offset,
-                                   "id=" << id << ", i=" << i);
-        UNIT_ASSERT_VALUES_EQUAL_C(key.GetPartNo(), blobId.PartNo,
-                                   "id=" << id << ", i=" << i);
     }
 }
 
@@ -2676,22 +2621,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_48, TFixture)
     UNIT_ASSERT_GT(topicDescription.GetTotalPartitionsCount(), 2);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_49, TFixture)
-{
-    // We write 252 128KB messages to the topic. After each write operation, we check that the partition
-    // and cache have the same set of keys. The test will include both adding new keys and deleting old ones.
-    CreateTopic("topic_A", TEST_CONSUMER);
-
-    TString message(128_KB, 'x');
-
-    for (unsigned i = 0; i < 252; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, message);
-        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
-
-        EnsureKeysIsEqual("topic_A", i);
-    }
-}
-
 Y_UNIT_TEST_F(WriteToTopic_Demo_50, TFixture)
 {
     // We write to the topic in the transaction. When a transaction is committed, the keys in the blob
@@ -2707,14 +2636,23 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_50, TFixture)
     auto session = CreateTableSession();
 
     // tx #1
+    // After the transaction commit, there will be no large blobs in the batches.  The number of renames
+    // will not change in the cache.
     auto tx = BeginTx(session);
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx);
     WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_3, message, &tx);
 
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
+
     CommitTx(tx, EStatus::SUCCESS);
 
+    Sleep(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
+
     // tx #2
+    // After the commit, the party will rename one big blob
     tx = BeginTx(session);
 
     for (unsigned i = 0; i < 80; ++i) {
@@ -2723,11 +2661,13 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_50, TFixture)
 
     WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_3, message, &tx);
 
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
+
     CommitTx(tx, EStatus::SUCCESS);
 
     Sleep(TDuration::Seconds(5));
 
-    EnsureKeysIsEqual("topic_A", 0);
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 1);
 }
 
 class TFixtureSinks : public TFixture {

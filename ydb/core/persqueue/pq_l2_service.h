@@ -130,14 +130,7 @@ struct TEvPqCache {
     };
 
     struct TEvCacheKeysResponse : TEventLocal<TEvCacheKeysResponse, EvCacheKeysResponse> {
-        struct TKey {
-            ui64 TabletId;
-            TPartitionId Partition;
-            ui64 Offset;
-            ui16 PartNo;
-        };
-
-        TVector<TKey> Keys;
+        size_t RenamedKeys = 0;
     };
 };
 

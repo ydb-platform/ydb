@@ -76,10 +76,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
 void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheKeysRequest::TPtr& ev, const TActorContext& ctx)
 {
     auto response = MakeHolder<TEvPqCache::TEvCacheKeysResponse>();
-    for (auto i = Cache.Begin(); i != Cache.End(); ++i) {
-        const auto& key = i.Key();
-        response->Keys.emplace_back(key.TabletId, key.Partition, key.Offset, key.PartNo);
-    }
+    response->RenamedKeys = RenamedKeys;
     ctx.Send(ev->Sender, response.Release());
 }
 
@@ -170,6 +167,8 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
 void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
                                     const TVector<std::pair<TCacheBlobL2, TCacheBlobL2>>& blobs)
 {
+    RenamedKeys += blobs.size();
+
     for (const auto& [oldBlob, newBlob] : blobs) {
         TKey oldKey(tabletId, oldBlob);
         auto it = Cache.FindWithoutPromote(oldKey);

@@ -198,10 +198,10 @@ namespace NPQ {
                 , Source(SourcePrefetch)
             {}
 
-            const TCacheValue::TPtr GetBlob() const { return Blob.lock(); }
+            const TCacheValue::TPtr GetBlob() const { return Blob; }
 
         private:
-            TCacheValue::TWeakPtr Blob;
+            TCacheValue::TPtr Blob;
         };
 
         using TMapType = TMap<TBlobId, TValueL1>;

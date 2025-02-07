@@ -135,6 +135,8 @@ private:
     TL2Counters Counters;
 
     TString HttpForm() const;
+
+    size_t RenamedKeys = 0;
 };
 
 } // NPQ

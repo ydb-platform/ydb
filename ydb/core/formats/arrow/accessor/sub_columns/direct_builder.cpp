@@ -38,8 +38,9 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     ui64 columnsSize = 0;
     for (auto rIt = elementsBySize.rbegin(); rIt != elementsBySize.rend(); ++rIt) {
         for (auto&& i : rIt->second) {
-            AFL_VERIFY(sumSize > columnsSize);
-            if (columnAccessorsCount < Settings.GetColumnsLimit() && (1.0 * (sumSize - columnsSize) / sumSize > Settings.GetOthersAllowedFraction())) {
+            AFL_VERIFY(sumSize >= columnsSize)("sum", sumSize)("columns", columnsSize);
+            if (columnAccessorsCount < Settings.GetColumnsLimit() &&
+                (!sumSize || 1.0 * (sumSize - columnsSize) / sumSize > Settings.GetOthersAllowedFraction())) {
                 columnsSize += rIt->first;
                 columnElements.emplace_back(i);
                 ++columnAccessorsCount;

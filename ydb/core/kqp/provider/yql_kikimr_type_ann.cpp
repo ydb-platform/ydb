@@ -209,6 +209,11 @@ private:
                 return TStatus::Ok;
             }
 
+            case TKikimrKey::Type::Database:
+            {
+                return TStatus::Ok;
+            }
+
             case TKikimrKey::Type::Role:
             {
                 return TStatus::Ok;
@@ -1898,6 +1903,12 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
     virtual TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext&) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) override {
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
         return TStatus::Ok;
     }
 

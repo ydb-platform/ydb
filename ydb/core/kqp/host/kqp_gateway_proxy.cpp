@@ -632,6 +632,12 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
+    TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) override {
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        return {};
+    }
+
     TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {
         Y_UNUSED(replaceIfExists);
         CHECK_PREPARED_DDL(CreateTable);

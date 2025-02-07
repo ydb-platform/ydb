@@ -100,6 +100,12 @@ namespace {
         return permissionsSettings;
     }
 
+    TAlterDatabaseSettings ParseAlterDatabaseSettings(TKiAlterDatabase alterDatabase) {
+        Y_UNUSED(alterDatabase);
+        TAlterDatabaseSettings alterDatabaseSettings;
+        return alterDatabaseSettings;
+    }
+
     TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) {
         TCreateUserSettings createUserSettings;
         createUserSettings.UserName = TString(createUser.UserName());
@@ -1333,6 +1339,25 @@ public:
             input->SetState(TExprNode::EState::ExecutionComplete);
             input->SetResult(ctx.NewWorld(input->Pos()));
             return SyncOk();
+        }
+
+        if (auto maybeAlterDatabase = TMaybeNode<TKiAlterDatabase>(input)) {
+            auto requireStatus = RequireChild(*input, TKiExecDataQuery::idx_World);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeAlterDatabase.Cast().DataSink().Cluster());
+            TAlterDatabaseSettings alterDatabaseSettings = ParseAlterDatabaseSettings(maybeAlterDatabase.Cast());
+
+            auto future = Gateway->AlterDatabase(cluster, alterDatabaseSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ALTER DATABASE");
         }
 
         if (auto maybeCreate = TMaybeNode<TKiCreateTable>(input)) {

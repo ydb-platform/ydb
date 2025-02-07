@@ -158,6 +158,80 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         }
     }
 
+    Y_UNIT_TEST(SplitShardsWhithPgKey) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        opts.EnableTablePgTypes(true);
+
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 100;
+
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
+        NDataShard::gDbStatsDataSizeResolution = 10;
+        NDataShard::gDbStatsRowCountResolution = 10;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_CRIT);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "Table"
+                        Columns { Name: "key"       Type: "pgint8"}
+                        Columns { Name: "value"      Type: "Utf8"}
+                        KeyColumnNames: ["key"]
+                        UniformPartitionsCount: 1
+                        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString valueString = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; 
+        for (ui64 key = 0; key < 1000; ++key) {
+            auto pgKey = NPg::PgNativeBinaryFromNativeText(ToString(key * 1'000'000), NPg::TypeDescFromPgTypeName("pgint8")).Str;
+            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell(pgKey)}, {TCell(valueString)});
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionCount(1)});
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "Table"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 100
+                                MaxPartitionsCount: 100
+                                SizeToSplit: 1
+                            }
+                        }
+                    )");
+        env.TestWaitNotification(runtime, txId);
+
+        while (true) {
+            TVector<THolder<IEventHandle>> suppressed;
+            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvGetTableStatsResult::EventType);
+
+            WaitForSuppressed(runtime, suppressed, 1, prevObserver);
+            for (auto &msg : suppressed) {
+                runtime.Send(msg.Release());
+            }
+            suppressed.clear();
+
+            bool itIsEnough = false;
+
+            NLs::TCheckFunc checkPartitionCount = [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                if (record.GetPathDescription().TablePartitionsSize() >= 10) {
+                    itIsEnough = true;
+                }
+            };
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                               {checkPartitionCount});
+
+            if (itIsEnough) {
+                return;
+            }
+        }
+    }
+
     Y_UNIT_TEST(Merge1KShards) {
         TTestBasicRuntime runtime;
 

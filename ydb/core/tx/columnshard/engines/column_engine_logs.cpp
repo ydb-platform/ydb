@@ -86,15 +86,14 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
 
 TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo) {
     TColumnEngineStats::TPortionsStats deltaStats;
-    deltaStats.Bytes = 0;
+    deltaStats.Bytes = 0u;
     deltaStats.Rows = portionInfo.GetRecordsCount();
     deltaStats.Bytes = portionInfo.GetTotalBlobBytes();
     deltaStats.RawBytes = portionInfo.GetTotalRawBytes();
     deltaStats.Blobs = portionInfo.GetBlobIdsCount();
-    deltaStats.Portions = 1;
+    deltaStats.Portions = 1u;
     for (const auto& blob : portionInfo.GetBlobIds()) {
-        const ui32 channel = blob.Channel();
-        deltaStats.BytesByChannel[channel] += blob.BlobSize();
+        deltaStats.BytesByChannel[blob.Channel()].Add(blob.BlobSize());
     }
     return deltaStats;
 }

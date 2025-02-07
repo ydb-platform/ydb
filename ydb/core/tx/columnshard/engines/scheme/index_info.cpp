@@ -50,7 +50,7 @@ std::optional<ui32> TIndexInfo::GetColumnIndexOptional(const std::string& name) 
 TString TIndexInfo::GetColumnName(const ui32 id, bool required) const {
     const auto& f = GetColumnFeaturesOptional(id);
     if (!f) {
-        AFL_VERIFY(!required);
+        AFL_VERIFY(!required)("column_id", id);
         return "";
     } else {
         return f->GetColumnName();

@@ -148,9 +148,9 @@ namespace NYql {
             TNodeOnNodeOwnedMap replaces(reads.size());
 
             for (const auto& r : reads) {
-                auto issues = HandleDescribeTableResponse(r, ctx, replaces);
+                TIssues issues = HandleDescribeTableResponse(r, ctx, replaces);
                 if (issues) {
-                    for (const auto& issue : *issues) {
+                    for (const auto& issue : issues) {
                         ctx.AddError(issue);
                     }
 
@@ -167,7 +167,7 @@ namespace NYql {
         }
 
     private:
-        std::optional<TIssues> HandleDescribeTableResponse(
+        TIssues HandleDescribeTableResponse(
             const TIntrusivePtr<TExprNode>& read,
             TExprContext& ctx,
             TNodeOnNodeOwnedMap& replaces
@@ -211,7 +211,7 @@ namespace NYql {
             }
 
             State_->AddTable(clusterName, tableName, std::move(tableMeta));
-            return std::nullopt;
+            return TIssues{};
         }
 
         std::optional<TIssue> ParseTableMeta(

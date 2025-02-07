@@ -221,20 +221,21 @@ namespace NYql {
         ) try {
             TVector<const TItemExprType*> items;
 
-            auto columns = tableMeta.Schema.columns();
+            const auto& columns = tableMeta.Schema.columns();
             if (columns.empty()) {
                 TIssues issues;
                 issues.AddIssue(TIssue(pos, TStringBuilder() << "Table " << cluster << '.' << table << " doesn't exist."));
+                return issues;
             }
 
-            for (auto i = 0; i < columns.size(); i++) {
+            for (const auto& column: columns) {
                 // Make type annotation
-                NYdb::TTypeParser parser(columns.Get(i).type());
+                NYdb::TTypeParser parser(column.type());
                 auto typeAnnotation = NFq::MakeType(parser, ctx);
 
                 // Create items from graph
-                items.emplace_back(ctx.MakeType<TItemExprType>(columns.Get(i).name(), typeAnnotation));
-                tableMeta.ColumnOrder.emplace_back(columns.Get(i).name());
+                items.emplace_back(ctx.MakeType<TItemExprType>(column.name(), typeAnnotation));
+                tableMeta.ColumnOrder.emplace_back(column.name());
             }
 
             tableMeta.ItemType = ctx.MakeType<TStructExprType>(items);

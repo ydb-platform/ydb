@@ -786,6 +786,95 @@ const TString VOLATILE_YAML_CONFIG_1_2 = R"(
 
 const size_t VOLATILE_YAML_CONFIG_1_2_HASH = THash<TString>{}(VOLATILE_YAML_CONFIG_1_2);
 
+const TString DATABASE_1_YAML_CONFIG_1 = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: )" TENANT1_1_NAME R"(
+  version: 0
+config:
+  feature_flags:
+    cluster_name: cluster1
+)";
+
+const TString DATABASE_1_YAML_CONFIG_1_UPDATED = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: )" TENANT1_1_NAME R"(
+  version: 1
+config:
+  feature_flags:
+    cluster_name: cluster1
+)";
+
+const TString DATABASE_1_YAML_CONFIG_2 = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: )" TENANT1_1_NAME R"(
+  version: 1
+config:
+  feature_flags:
+    cluster_name: cluster1
+)";
+
+const TString DATABASE_1_YAML_CONFIG_2_UPDATED = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: )" TENANT1_1_NAME R"(
+  version: 2
+config:
+  feature_flags:
+    cluster_name: cluster1
+)";
+
+const TString DATABASE_2_YAML_CONFIG_2 = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: )" TENANT1_1_NAME R"(
+  version: 0
+config:
+  feature_flags:
+    cluster_name: cluster1
+)";
+
+const TString DATABASE_2_YAML_CONFIG_2_UPDATED = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: )" TENANT1_1_NAME R"(
+  version: 1
+config:
+  feature_flags:
+    cluster_name: cluster1
+)";
+
+const TString DATABASE_2_YAML_CONFIG_2 = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: )" TENANT1_1_NAME R"(
+  version: 0
+config:
+  feature_flags:
+    cluster_name: cluster1
+)";
+
+const TString DATABASE_2_YAML_CONFIG_2_UPDATED = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: )" TENANT1_1_NAME R"(
+  version: 1
+config:
+  feature_flags:
+    cluster_name: cluster1
+)";
+
+
 void InitializeTestConfigItems()
 {
     ITEM_DOMAIN_LOG_1

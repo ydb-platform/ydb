@@ -841,11 +841,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
 
             auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            if (isSink) { // TODO: fix status?
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 

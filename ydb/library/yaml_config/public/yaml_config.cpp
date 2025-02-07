@@ -650,7 +650,7 @@ struct TMetadataDocument {
 
     TMetadataDocument(const TString& yaml)
         : Doc(NFyaml::TDocument::Parse(yaml))
-        , Node(Doc.Root().Map()["metadata"].Map())
+        , Node(Doc.Root().Map().at("metadata").Map())
     {}
 };
 
@@ -659,7 +659,11 @@ std::optional<TMetadataDocument> GetMetadataDoc(const TString& config) {
         return {};
     }
 
-    return TMetadataDocument(config);
+    try {
+        return TMetadataDocument(config);
+    } catch(const NFyaml::TFyamlEx&) {
+        return {};
+    }
 }
 
 TMainMetadata GetMainMetadata(const TString& config) {

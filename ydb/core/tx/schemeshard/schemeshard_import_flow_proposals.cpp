@@ -255,7 +255,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     Ydb::StatusIds::StatusCode status;
 
     auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
-    Cerr << "FillChangefeedDescription" << Endl;
     if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
         return nullptr;
     }

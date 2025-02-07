@@ -2838,11 +2838,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         S3 = 0,
     };
 
-    struct TChangefeedImportDescriptions {
-        Ydb::Table::ChangefeedDescription Changefeed;
-        Ydb::Topic::DescribeTopicResult Topic;
-    };
-
     struct TItem {
         enum class ESubState: ui8 {
             AllocateTxId = 0,

@@ -323,14 +323,12 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         } else if (SchemeQueryResult) {
             OnSchemeQueryPreparation(txc);
         } else if (AllocateResult) {
-            Cerr << "DoExecute:OnAllocateResult&&" << Endl;
             OnAllocateResult(txc, ctx);
         } else if (ModifyResult) {
             OnModifyResult(txc, ctx);
         } else if (CreateIndexResult) {
             OnCreateIndexResult(txc, ctx);
         } else if (CompletedTxId) {
-            Cerr << "DoExecute:OnNotifyResult&&" << Endl;
             OnNotifyResult(txc, ctx);
         } else {
             Resume(txc, ctx);
@@ -512,7 +510,6 @@ private:
     void CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
-        Cerr << "CreateChangefeed13232" << Endl;
         item.SubState = ESubState::Proposed;
 
         LOG_I("TImport::TTxProgress: CreateChangefeed propose"
@@ -523,7 +520,6 @@ private:
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
         auto propose = CreateChangefeedPropose(Self, txId, item);
-        if (!propose) Cerr << "NO CHNGF PROPOSE" << Endl;
         Send(Self->SelfId(), std::move(propose));
     }
 
@@ -975,7 +971,6 @@ private:
 
             switch (item.State) {
             case EState::CreateSchemeObject:
-            Cerr << "CreateSchemeObject!!!" << Endl;
                 if (item.PreparedCreationQuery) {
                     ExecutePreparedQuery(txc, importInfo, i, txId);
                     itemIdx = i;
@@ -1005,7 +1000,6 @@ private:
                 break;
             
             case EState::CreateChangefeed:
-                Cerr << "OnAllocateResult:CreateChangefeed" << Endl;
                 CreateChangefeed(importInfo, i, txId);
                 itemIdx = i;
                 break;

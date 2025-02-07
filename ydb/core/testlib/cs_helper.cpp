@@ -450,7 +450,7 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
     arrow::Int32Builder bId;
     arrow::StringBuilder bResourceId;
     arrow::Int32Builder bLevel;
-    arrow::StringBuilder bBinaryStr;
+    arrow::BinaryBuilder bBinaryStr;
     arrow::StringBuilder bJsonVal;
     arrow::BinaryBuilder bJsonDoc;
 
@@ -476,7 +476,7 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
     std::shared_ptr<arrow::Int32Array> aId;
     std::shared_ptr<arrow::StringArray> aResourceId;
     std::shared_ptr<arrow::Int32Array> aLevel;
-    std::shared_ptr<arrow::StringArray> aBinaryStr;
+    std::shared_ptr<arrow::BinaryArray> aBinaryStr;
     std::shared_ptr<arrow::StringArray> aJsonVal;
     std::shared_ptr<arrow::BinaryArray> aJsonDoc;
 

@@ -785,7 +785,6 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
             Bootstrap(); // retry bootstrap without redirect this time
         }
     }
-    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -808,7 +807,6 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
             Bootstrap(); // retry bootstrap without redirect this time
         }
     }
-    RequestDone();
 }
 
 void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
@@ -826,7 +824,6 @@ void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
             Bootstrap(); // retry bootstrap without redirect this time
         }
     }
-    RequestDone();
 }
 
 void TViewerPipeClient::HandleTimeout() {

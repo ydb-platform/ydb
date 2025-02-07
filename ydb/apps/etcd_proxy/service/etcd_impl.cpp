@@ -64,6 +64,13 @@ void MakeSimplePredicate(const std::string& key, const std::string& rangeEnd, TS
         sql << "`key` between " << AddParam("Key", params, key, paramsCounter) << " and " << AddParam("RangeEnd", params, rangeEnd, paramsCounter);
 }
 
+void FillHeader(i64 revision, etcdserverpb::ResponseHeader& header) {
+    header.set_revision(revision);
+    header.set_cluster_id(0ULL);
+    header.set_member_id(0ULL);
+    header.set_raft_term(0ULL);
+}
+
 struct TOperation {
     size_t ResultIndex = 0ULL;
 };
@@ -149,8 +156,10 @@ struct TRange : public TOperation {
         sql << ';' << Endl;
     }
 
-    etcdserverpb::RangeResponse MakeResponse(const NYdb::TResultSets& results) const {
+    etcdserverpb::RangeResponse MakeResponse(i64 revision, const NYdb::TResultSets& results) const {
         etcdserverpb::RangeResponse response;
+        FillHeader(revision, *response.mutable_header());
+
         if (!results.empty()) {
             if (CountOnly) {
                 if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
@@ -241,8 +250,10 @@ struct TPut : public TOperation {
         }
     }
 
-    etcdserverpb::PutResponse MakeResponse(const NYdb::TResultSets& results, const TNotifier& notifier) const {
+    etcdserverpb::PutResponse MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
         etcdserverpb::PutResponse response;
+        FillHeader(revision, *response.mutable_header());
+
         if (GetPrevious) {
             if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
                 const auto prev = response.mutable_prev_kv();
@@ -313,8 +324,10 @@ struct TDeleteRange : public TOperation {
         sql << "delete from `huidig` " << where << ';' << Endl;
     }
 
-    etcdserverpb::DeleteRangeResponse MakeResponse(const NYdb::TResultSets& results, const TNotifier& notifier) const {
+    etcdserverpb::DeleteRangeResponse MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
         etcdserverpb::DeleteRangeResponse response;
+        FillHeader(revision, *response.mutable_header());
+
         if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
             response.set_deleted(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
         }
@@ -512,21 +525,23 @@ struct TTxn : public TOperation {
         make(Failure, paramsCounter, resultsCounter, scalarBoolTwoName);
     }
 
-    etcdserverpb::TxnResponse MakeResponse(const NYdb::TResultSets& results, const TNotifier& notifier) const {
+    etcdserverpb::TxnResponse MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
         etcdserverpb::TxnResponse response;
+        FillHeader(revision, *response.mutable_header());
+
         if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
             const bool succeeded = NYdb::TValueParser(parser.GetValue(0)).GetBool();
             response.set_succeeded(succeeded);
             for (const auto& operation : succeeded ? Success : Failure) {
                 const auto resp = response.add_responses();
                 if (const auto oper = std::get_if<TRange>(&operation))
-                    *resp->mutable_response_range() = oper->MakeResponse(results);
+                    *resp->mutable_response_range() = oper->MakeResponse(revision, results);
                 else if (const auto oper = std::get_if<TPut>(&operation))
-                    *resp->mutable_response_put() = oper->MakeResponse(results, notifier);
+                    *resp->mutable_response_put() = oper->MakeResponse(revision, results, notifier);
                 else if (const auto oper = std::get_if<TDeleteRange>(&operation))
-                    *resp->mutable_response_delete_range() = oper->MakeResponse(results, notifier);
+                    *resp->mutable_response_delete_range() = oper->MakeResponse(revision, results, notifier);
                 else if (const auto oper = std::get_if<TTxn>(&operation))
-                    *resp->mutable_response_txn() = oper->MakeResponse(results, notifier);
+                    *resp->mutable_response_txn() = oper->MakeResponse(revision, results, notifier);
             }
         }
         return response;
@@ -539,14 +554,7 @@ protected:
     virtual void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) = 0;
     virtual void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) = 0;
 
-    void FillHeader(etcdserverpb::ResponseHeader& header) const {
-        header.set_revision(Revision);
-        header.set_cluster_id(0ULL);
-        header.set_member_id(0ULL);
-        header.set_raft_term(0ULL);
-    }
-
-    i64 Revision;
+    i64 Revision = 0LL;
 };
 
 template <typename TDerived, typename TRequest>
@@ -624,8 +632,7 @@ private:
     }
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
-        auto response = Range.MakeResponse(results);
-        FillHeader(*response.mutable_header());
+        auto response = Range.MakeResponse(Revision, results);
         return this->Reply(response, ctx);
     }
 
@@ -654,8 +661,7 @@ private:
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
         };
 
-        auto response = Put.MakeResponse(results, notifier);
-        FillHeader(*response.mutable_header());
+        auto response = Put.MakeResponse(Revision, results, notifier);
         return this->Reply(response, ctx);
     }
 
@@ -684,8 +690,7 @@ private:
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
         };
 
-        auto response = DeleteRange.MakeResponse(results, notifier);
-        FillHeader(*response.mutable_header());
+        auto response = DeleteRange.MakeResponse(Revision, results, notifier);
         return this->Reply(response, ctx);
     }
 
@@ -715,8 +720,7 @@ private:
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
         };
 
-        auto response = Txn.MakeResponse(results, notifier);
-        FillHeader(*response.mutable_header());
+        auto response = Txn.MakeResponse(Revision, results, notifier);
         return this->Reply(response, ctx);
     }
 
@@ -743,7 +747,7 @@ private:
 
     void ReplyWith(const NYdb::TResultSets&, const TActorContext& ctx) final {
         etcdserverpb::CompactionResponse response;
-        FillHeader(*response.mutable_header());
+        FillHeader(Revision, *response.mutable_header());
         return this->Reply(response, ctx);
     }
 
@@ -772,7 +776,7 @@ private:
 
     void ReplyWith(const NYdb::TResultSets&, const TActorContext& ctx) final {
         etcdserverpb::LeaseGrantResponse response;
-        FillHeader(*response.mutable_header());
+        FillHeader(Revision, *response.mutable_header());
         response.set_id(Lease);
         response.set_ttl(TTL);
         return this->Reply(response, ctx);
@@ -833,7 +837,7 @@ private:
         }
 
         etcdserverpb::LeaseRevokeResponse response;
-        FillHeader(*response.mutable_header());
+        FillHeader(Revision, *response.mutable_header());
         return this->Reply(response, ctx);
     }
 
@@ -866,7 +870,7 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         etcdserverpb::LeaseTimeToLiveResponse response;
-        FillHeader(*response.mutable_header());
+        FillHeader(Revision, *response.mutable_header());
 
         response.set_id(Lease);
         auto parser = NYdb::TResultSetParser(results.front());
@@ -904,7 +908,7 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         etcdserverpb::LeaseLeasesResponse response;
-        FillHeader(*response.mutable_header());
+        FillHeader(Revision, *response.mutable_header());
 
         for (auto parser = NYdb::TResultSetParser(results.back()); parser.TryNextRow();) {
             response.add_leases()->set_id(NYdb::TValueParser(parser.GetValue(0)).GetInt64());

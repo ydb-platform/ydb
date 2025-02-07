@@ -149,8 +149,8 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
         }
         if (opCtx.UpdatedConfig != currentConfig) {
             auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
-            auto d = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
-            NYamlConfig::AppendDatabaseConfig(tree, d);
+            auto databaseTree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
+            NYamlConfig::AppendDatabaseConfig(tree, databaseTree);
             auto resolved = NYamlConfig::ResolveAll(tree);
 
             TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
@@ -767,14 +767,15 @@ void TConfigsManager::Handle(TEvConsole::TEvToggleConfigValidatorRequest::TPtr &
 
 void TConfigsManager::Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
-    auto metadata = NYamlConfig::GetGenericMetadata(ev->Get()->Record.GetRequest().config());
+    auto& request = ev->Get()->Record.GetRequest();
+    auto metadata = NYamlConfig::GetGenericMetadata(request.config());
 
     std::visit(TOverloaded{
             [&](const NYamlConfig::TMainMetadata& /* value */) {
                 TxProcessor->ProcessTx(CreateTxReplaceMainYamlConfig(ev), ctx);
             },
             [&](const NYamlConfig::TDatabaseMetadata&  value) {
-                if (!value.Database || !Self.HasTenant(*value.Database)) {
+                if (!value.Database || (!request.allow_absent_database() && !Self.HasTenant(*value.Database))) {
                     return FailReplaceConfig(ev->Sender, "Unknown database", ctx);
                 }
                 TxProcessor->ProcessTx(CreateTxReplaceDatabaseYamlConfig(ev), ctx);
@@ -795,14 +796,15 @@ void TConfigsManager::Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, 
 
 void TConfigsManager::Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
-    auto metadata = NYamlConfig::GetGenericMetadata(ev->Get()->Record.GetRequest().config());
+    auto& request = ev->Get()->Record.GetRequest();
+    auto metadata = NYamlConfig::GetGenericMetadata(request.config());
 
     std::visit(TOverloaded{
             [&](const NYamlConfig::TMainMetadata& /* value */) {
                 TxProcessor->ProcessTx(CreateTxSetMainYamlConfig(ev), ctx);
             },
             [&](const NYamlConfig::TDatabaseMetadata& value) {
-                if (!value.Database || !Self.HasTenant(*value.Database)) {
+                if (!value.Database || (!request.allow_absent_database() && !Self.HasTenant(*value.Database))) {
                     return FailReplaceConfig(ev->Sender, "Unknown database", ctx);
                 }
                 TxProcessor->ProcessTx(CreateTxSetDatabaseYamlConfig(ev), ctx);

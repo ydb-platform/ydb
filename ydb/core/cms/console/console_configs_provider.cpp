@@ -710,7 +710,8 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
     subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
 
     if (auto it = DatabaseYamlConfigs.find(subscription->Tenant); it != DatabaseYamlConfigs.end()) {
-        if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version) {
+        // FIXME: handle version change correctly, instead of always sending on first update
+        if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version || !subscription->FirstUpdateSent) {
             subscription->DatabaseYamlConfigVersion = it->second.Version;
             request->Record.SetDatabaseYamlConfig(it->second.Config);
         } else {
@@ -819,6 +820,10 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
         subscription->ServeYaml = rec.GetServeYaml();
         subscription->YamlApiVersion = rec.GetYamlApiVersion();
         subscription->MainYamlConfigVersion = rec.GetMainYamlVersion();
+        // FIXME: store version to avoid resending
+        // if (auto it = DatabaseYamlConfigs.find(rec.GetOptions().GetTenant()); it != DatabaseYamlConfigs.end()) {
+        //     subscription->DatabaseYamlConfig = it->second.Config;
+        // }
         for (auto &volatileConfigVersion : rec.GetVolatileYamlVersion()) {
             subscription->VolatileYamlConfigHashes[volatileConfigVersion.GetId()] = volatileConfigVersion.GetHash();
         }
@@ -1270,42 +1275,41 @@ void TConfigsProvider::UpdateConfig(TInMemorySubscription::TPtr subscription,
                                     const TActorContext &ctx)
 {
     if (subscription->ServeYaml) {
-    auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
-            subscription->Generation,
-            NKikimrConfig::TAppConfig{},
-            THashSet<ui32>{});
+        auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
+                subscription->Generation,
+                NKikimrConfig::TAppConfig{},
+                THashSet<ui32>{});
 
-    if (subscription->MainYamlConfigVersion != MainYamlConfigVersion) {
-        subscription->MainYamlConfigVersion = MainYamlConfigVersion;
-        request->Record.SetMainYamlConfig(MainYamlConfig);
-    } else {
-        request->Record.SetMainYamlConfigNotChanged(true);
-    }
-
-    for (auto &[id, hash] : VolatileYamlConfigHashes) {
-        auto *volatileConfig = request->Record.AddVolatileConfigs();
-        volatileConfig->SetId(id);
-        if (auto it = subscription->VolatileYamlConfigHashes.find(id); it != subscription->VolatileYamlConfigHashes.end() && it->second == hash) {
-            volatileConfig->SetNotChanged(true);
+        if (subscription->MainYamlConfigVersion != MainYamlConfigVersion) {
+            subscription->MainYamlConfigVersion = MainYamlConfigVersion;
+            request->Record.SetMainYamlConfig(MainYamlConfig);
         } else {
-            volatileConfig->SetConfig(VolatileYamlConfigs[id]);
+            request->Record.SetMainYamlConfigNotChanged(true);
         }
-    }
 
-    subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
-
-    if (auto it = DatabaseYamlConfigs.find(subscription->Tenant); it != DatabaseYamlConfigs.end()) {
-        if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version) {
-            subscription->DatabaseYamlConfigVersion = it->second.Version;
-            request->Record.SetDatabaseYamlConfig(it->second.Config);
-        } else {
-            request->Record.SetDatabaseYamlConfigNotChanged(true);
+        for (auto &[id, hash] : VolatileYamlConfigHashes) {
+            auto *volatileConfig = request->Record.AddVolatileConfigs();
+            volatileConfig->SetId(id);
+            if (auto it = subscription->VolatileYamlConfigHashes.find(id); it != subscription->VolatileYamlConfigHashes.end() && it->second == hash) {
+                volatileConfig->SetNotChanged(true);
+            } else {
+                volatileConfig->SetConfig(VolatileYamlConfigs[id]);
+            }
         }
+
+        subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
+
+        if (auto it = DatabaseYamlConfigs.find(subscription->Tenant); it != DatabaseYamlConfigs.end()) {
+            if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version) {
+                subscription->DatabaseYamlConfigVersion = it->second.Version;
+                request->Record.SetDatabaseYamlConfig(it->second.Config);
+            } else {
+                request->Record.SetDatabaseYamlConfigNotChanged(true);
+            }
+        }
+
+        ctx.Send(subscription->Worker, request.Release());
     }
-
-    ctx.Send(subscription->Worker, request.Release());
-}
-
 }
 
 } // namespace NKikimr::NConsole

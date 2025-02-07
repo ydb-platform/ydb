@@ -269,13 +269,14 @@ public:
         try {
             Version = opCtx.Version;
             UpdatedDatabaseConfig = opCtx.UpdatedConfig;
+            TargetDatabase = opCtx.TargetDatabase;
             TString currentConfig;
-            if (auto it = Self->DatabaseYamlConfigs.find(opCtx.TargetDatabase); it != Self->DatabaseYamlConfigs.end()) {
+            if (auto it = Self->DatabaseYamlConfigs.find(TargetDatabase); it != Self->DatabaseYamlConfigs.end()) {
                 currentConfig = it->second.Config;
             }
             Modify = opCtx.UpdatedConfig != currentConfig;
 
-            if (IngressDatabase != opCtx.TargetDatabase) {
+            if (IngressDatabase != TargetDatabase) {
                 WarnDatabaseBypass = true;
             }
 
@@ -369,7 +370,7 @@ public:
                 /* reason = */ {},
                 /* success = */ true);
 
-            Self->DatabaseYamlConfigs[*IngressDatabase] = TDatabaseYamlConfig {
+            Self->DatabaseYamlConfigs[TargetDatabase] = TDatabaseYamlConfig {
                 .Config = UpdatedDatabaseConfig,
                 .Version = Version + 1,
             };

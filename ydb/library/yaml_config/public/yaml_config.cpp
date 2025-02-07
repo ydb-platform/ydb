@@ -635,7 +635,7 @@ void AppendDatabaseConfig(NFyaml::TDocument& config, NFyaml::TDocument& database
 description: Implicit DatabaseConfig node
 selector: {}
 )"));
-    auto node = databaseConfigRoot.Copy(config);
+    auto node = databaseConfigRoot.Map()["config"].Copy(config);
     selectors.at(0).Map().Append(config.Buildf("config"), node);
 }
 

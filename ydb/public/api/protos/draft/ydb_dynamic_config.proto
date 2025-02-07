@@ -23,6 +23,7 @@ message SetConfigRequest {
     string config = 2;
     bool dry_run = 3;
     bool allow_unknown_fields = 4;
+    bool allow_absent_database = 5;
 }
 
 message SetConfigResponse {
@@ -35,6 +36,7 @@ message ReplaceConfigRequest {
     string config = 2;
     bool dry_run = 3;
     bool allow_unknown_fields = 4;
+    bool allow_absent_database = 5;
 }
 
 message ReplaceConfigResponse {

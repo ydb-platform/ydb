@@ -2900,6 +2900,12 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (DelayedResult) {
+            if (!Self->ReadIteratorsByLocalReadId.contains(LocalReadId)) {
+                // the one who removed the iterator should have replied to the user
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << LocalReadId
+                    << " has been invalidated before TTxReadContinue::Complete()");
+                return;
+            }
             SendResult(ctx);
         }
     }

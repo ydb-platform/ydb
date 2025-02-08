@@ -7,7 +7,6 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/testing/unittest
     util
-    ydb/core/base
 )
 
 SRCS(

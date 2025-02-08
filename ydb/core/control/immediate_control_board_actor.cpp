@@ -1,5 +1,7 @@
 #include "immediate_control_board_actor.h"
 
+#include <ydb/core/control/lib/immediate_control_board_html_renderer.h>
+
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -33,7 +35,8 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
         }
     };
 
-    TIntrusivePtr<TControlBoard> Board;
+    TIntrusivePtr<TControlBoard> Icb;
+    TIntrusivePtr<TStaticControlBoard> StaticControlBoard;
     TVector<TLogRecord> HistoryLog;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr HasChanged;
@@ -44,9 +47,12 @@ public:
         return NKikimrServices::TActivity::IMMEDIATE_CONTROL_BOARD;
     }
 
-    TImmediateControlActor(TIntrusivePtr<TControlBoard> board,
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
-        : Board(board)
+    TImmediateControlActor(
+                            TIntrusivePtr<TControlBoard> board,
+                            TIntrusivePtr<TStaticControlBoard> staticControlBoard,
+                            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+        : Icb(board)
+        , StaticControlBoard(staticControlBoard)
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> IcbGroup = GetServiceCounters(counters, "utils");
         HasChanged = IcbGroup->GetCounter("Icb/HasChangedContol");
@@ -67,17 +73,23 @@ public:
 private:
     void HandlePostParams(const TCgiParameters &cgi) {
         if (cgi.Has("restoreDefaults")) {
-            Board->RestoreDefaults();
+            Icb->RestoreDefaults();
+            StaticControlBoard->RestoreDefaults();
             HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0);
             *HasChanged = 0;
             *ChangedCount = 0;
         }
-        for (const auto &param : cgi) {
-            TAtomicBase newValue = strtoull(param.second.data(), nullptr, 10);
+        for (const auto& [paramName, paramValue] : cgi) {
+            TAtomicBase newValue = strtoull(paramValue.data(), nullptr, 10);
             TAtomicBase prevValue = newValue;
-            bool isDefault = Board->SetValue(param.first, newValue, prevValue);
+            bool isDefault = false;
+            if (auto controlId = StaticControlBoard->GetStaticControlId(paramName)) {
+                isDefault = StaticControlBoard->SetValue(*controlId, newValue, prevValue);
+            } else {
+                isDefault = Icb->SetValue(paramName, newValue, prevValue);
+            }
             if (prevValue != newValue) {
-                HistoryLog.emplace_back(TInstant::Now(), param.first, prevValue, newValue);
+                HistoryLog.emplace_back(TInstant::Now(), paramName, prevValue, newValue);
                 if (isDefault) {
                     ChangedCount->Dec();
                 } else {
@@ -94,7 +106,12 @@ private:
             HandlePostParams(ev->Get()->Request.GetPostParams());
         }
         TStringStream str;
-        str << Board->RenderAsHtml();
+
+        TControlBoardTableHtmlRenderer renderer;
+        Icb->RenderAsHtml(renderer);
+        StaticControlBoard->RenderAsHtml(renderer);
+
+        str << renderer.GetHtml();
         HTML(str) {
             str << "<h3>History</h3>";
             TABLE_SORTABLE_CLASS("historyLogTable") {
@@ -128,8 +145,11 @@ private:
     }
 };
 
-NActors::IActor* CreateImmediateControlActor(TIntrusivePtr<TControlBoard> board,
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
-    return new NKikimr::TImmediateControlActor(board, counters);
+NActors::IActor* CreateImmediateControlActor(
+                    TIntrusivePtr<TControlBoard> board,
+                     TIntrusivePtr<TStaticControlBoard> staticControlBoard,
+                     const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters) {
+    return new NKikimr::TImmediateControlActor(board, staticControlBoard, counters);
 }
+
 };

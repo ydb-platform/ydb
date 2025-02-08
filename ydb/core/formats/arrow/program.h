@@ -1,13 +1,15 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_aggregate.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <util/system/types.h>
+#include "arrow_filter.h"
+#include "arrow_helpers.h"
+
+#include <ydb/core/scheme_types/scheme_types_defs.h>
 
 #include <ydb/library/arrow_kernels/operations.h>
-#include <ydb/core/scheme_types/scheme_types_defs.h>
-#include "arrow_helpers.h"
-#include "arrow_filter.h"
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_aggregate.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
+#include <util/system/types.h>
 
 namespace NKikimr::NArrow {
 
@@ -24,7 +26,7 @@ enum class EAggregate {
     NumRows = 7,
 };
 
-}
+}   // namespace NKikimr::NArrow
 
 namespace NKikimr::NSsa {
 
@@ -32,10 +34,12 @@ using EOperation = NArrow::EOperation;
 using EAggregate = NArrow::EAggregate;
 using TFunctionPtr = std::shared_ptr<arrow::compute::ScalarFunction>;
 
-const char * GetFunctionName(EOperation op);
-const char * GetFunctionName(EAggregate op);
-const char * GetHouseFunctionName(EAggregate op);
-inline const char * GetHouseGroupByName() { return "ch.group_by"; }
+const char* GetFunctionName(EOperation op);
+const char* GetFunctionName(EAggregate op);
+const char* GetHouseFunctionName(EAggregate op);
+inline const char* GetHouseGroupByName() {
+    return "ch.group_by";
+}
 EOperation ValidateOperation(EOperation op, ui32 argsSize);
 
 class TDatumBatch {
@@ -92,7 +96,6 @@ private:
         : GeneratedFlag(generated)
         , ColumnName(columnName)
         , ColumnId(columnId) {
-
     }
 
 public:
@@ -116,16 +119,19 @@ public:
 template <class TAssignObject>
 class IStepFunction {
     using TSelf = IStepFunction<TAssignObject>;
+
 protected:
     arrow::compute::ExecContext* Ctx;
+
 public:
     using TPtr = std::shared_ptr<TSelf>;
 
     IStepFunction(arrow::compute::ExecContext* ctx)
-        : Ctx(ctx)
-    {}
+        : Ctx(ctx) {
+    }
 
-    virtual ~IStepFunction() {}
+    virtual ~IStepFunction() {
+    }
 
     virtual arrow::Result<arrow::Datum> Call(const TAssignObject& assign, const TDatumBatch& batch) const = 0;
 
@@ -144,6 +150,7 @@ protected:
 class TAssign {
 private:
     YDB_ACCESSOR_DEF(std::optional<ui32>, YqlOperationId);
+
 public:
     using TOperationType = EOperation;
 
@@ -151,134 +158,64 @@ public:
         : Column(column)
         , Operation(ValidateOperation(op, args.size()))
         , Arguments(std::move(args))
-        , FuncOpts(nullptr)
-    {}
+        , FuncOpts(nullptr) {
+    }
 
     TAssign(const TColumnInfo& column, EOperation op, std::vector<TColumnInfo>&& args, std::shared_ptr<arrow::compute::FunctionOptions> funcOpts)
         : Column(column)
         , Operation(ValidateOperation(op, args.size()))
         , Arguments(std::move(args))
-        , FuncOpts(std::move(funcOpts))
-    {}
-
-    explicit TAssign(const TColumnInfo& column, bool value)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::BooleanScalar>(value))
-        , FuncOpts(nullptr)
-    {}
-
-    explicit TAssign(const TColumnInfo& column, i8 value)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::Int8Scalar>(value))
-        , FuncOpts(nullptr)
-    {}
-
-    explicit TAssign(const TColumnInfo& column, ui8 value)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::UInt8Scalar>(value))
-        , FuncOpts(nullptr)
-    {}
-
-    explicit TAssign(const TColumnInfo& column, i16 value)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::Int16Scalar>(value))
-        , FuncOpts(nullptr)
-    {}
-
-    explicit TAssign(const TColumnInfo& column, ui16 value)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::UInt16Scalar>(value))
-        , FuncOpts(nullptr)
-    {}
-
-    explicit TAssign(const TColumnInfo& column, i32 value)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::Int32Scalar>(value))
-        , FuncOpts(nullptr)
-    {}
-
-    explicit TAssign(const TColumnInfo& column, ui32 value)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::UInt32Scalar>(value))
-        , FuncOpts(nullptr)
-    {}
-
-    explicit TAssign(const TColumnInfo& column, i64 value)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::Int64Scalar>(value))
-        , FuncOpts(nullptr)
-    {}
-
-    explicit TAssign(const TColumnInfo& column, ui64 value)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::UInt64Scalar>(value))
-        , FuncOpts(nullptr)
-    {}
-
-    explicit TAssign(const TColumnInfo& column, float value)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::FloatScalar>(value))
-        , FuncOpts(nullptr)
-    {}
-
-    explicit TAssign(const TColumnInfo& column, double value)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::DoubleScalar>(value))
-        , FuncOpts(nullptr)
-    {}
-
-    explicit TAssign(const TColumnInfo& column, const std::string& value, bool binary)
-        : Column(column)
-        , Operation(EOperation::Constant)
-        , Constant( binary ? std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(value), arrow::binary())
-                              : std::make_shared<arrow::StringScalar>(value))
-        , FuncOpts(nullptr)
-    {}
+        , FuncOpts(std::move(funcOpts)) {
+    }
 
     TAssign(const TColumnInfo& column, const std::shared_ptr<arrow::Scalar>& value)
         : Column(column)
         , Operation(EOperation::Constant)
         , Constant(value)
-        , FuncOpts(nullptr)
-    {}
+        , FuncOpts(nullptr) {
+    }
 
-    TAssign(const TColumnInfo& column,
-            TFunctionPtr kernelFunction,
-            std::vector<TColumnInfo>&& args,
-            std::shared_ptr<arrow::compute::FunctionOptions> funcOpts)
+    TAssign(const TColumnInfo& column, TFunctionPtr kernelFunction, std::vector<TColumnInfo>&& args,
+        std::shared_ptr<arrow::compute::FunctionOptions> funcOpts)
         : Column(column)
         , Arguments(std::move(args))
         , FuncOpts(std::move(funcOpts))
-        , KernelFunction(std::move(kernelFunction))
-    {}
+        , KernelFunction(std::move(kernelFunction)) {
+    }
 
     static TAssign MakeTimestamp(const TColumnInfo& column, ui64 value);
 
-    bool IsConstant() const { return Operation == EOperation::Constant; }
-    bool IsOk() const { return Operation != EOperation::Unspecified || !!KernelFunction; }
-    EOperation GetOperation() const { return Operation; }
-    const std::vector<TColumnInfo>& GetArguments() const { return Arguments; }
-    std::shared_ptr<arrow::Scalar> GetConstant() const { return Constant; }
-    const TColumnInfo& GetColumn() const { return Column; }
-    const std::string& GetName() const { return Column.GetColumnName(); }
-    const arrow::compute::FunctionOptions* GetOptions() const { return FuncOpts.get(); }
+    bool IsConstant() const {
+        return Operation == EOperation::Constant;
+    }
+    bool IsOk() const {
+        return Operation != EOperation::Unspecified || !!KernelFunction;
+    }
+    EOperation GetOperation() const {
+        return Operation;
+    }
+    const std::vector<TColumnInfo>& GetArguments() const {
+        return Arguments;
+    }
+    std::shared_ptr<arrow::Scalar> GetConstant() const {
+        return Constant;
+    }
+    const TColumnInfo& GetColumn() const {
+        return Column;
+    }
+    const std::string& GetName() const {
+        return Column.GetColumnName();
+    }
+    const arrow::compute::FunctionOptions* GetOptions() const {
+        return FuncOpts.get();
+    }
 
     IStepFunction<TAssign>::TPtr GetFunction(arrow::compute::ExecContext* ctx) const;
     TString DebugString() const;
+
 private:
     const TColumnInfo Column;
-    EOperation Operation{EOperation::Unspecified};
+    EOperation Operation{ EOperation::Unspecified };
     std::vector<TColumnInfo> Arguments;
     std::shared_ptr<arrow::Scalar> Constant;
     std::shared_ptr<arrow::compute::FunctionOptions> FuncOpts;
@@ -291,8 +228,7 @@ public:
 
     TAggregateAssign(const TColumnInfo& column, EAggregate op = EAggregate::Unspecified)
         : Column(column)
-        , Operation(op)
-    {
+        , Operation(op) {
         if (op != EAggregate::Count) {
             op = EAggregate::Unspecified;
         }
@@ -301,58 +237,66 @@ public:
     TAggregateAssign(const TColumnInfo& column, EAggregate op, const TColumnInfo& arg)
         : Column(column)
         , Operation(op)
-        , Arguments({arg})
-    {
+        , Arguments({ arg }) {
         if (Arguments.empty()) {
             op = EAggregate::Unspecified;
         }
     }
 
-    TAggregateAssign(const TColumnInfo& column,
-            TFunctionPtr kernelFunction,
-            const std::vector<TColumnInfo>& args)
+    TAggregateAssign(const TColumnInfo& column, TFunctionPtr kernelFunction, const std::vector<TColumnInfo>& args)
         : Column(column)
         , Arguments(args)
-        , KernelFunction(kernelFunction)
-    {}
+        , KernelFunction(kernelFunction) {
+    }
 
-    bool IsOk() const { return Operation != EAggregate::Unspecified || !!KernelFunction; }
-    EAggregate GetOperation() const { return Operation; }
-    const std::vector<TColumnInfo>& GetArguments() const { return Arguments; }
-    std::vector<TColumnInfo>& MutableArguments() { return Arguments; }
-    const std::string& GetName() const { return Column.GetColumnName(); }
-    const arrow::compute::ScalarAggregateOptions* GetOptions() const { return &ScalarOpts; }
+    bool IsOk() const {
+        return Operation != EAggregate::Unspecified || !!KernelFunction;
+    }
+    EAggregate GetOperation() const {
+        return Operation;
+    }
+    const std::vector<TColumnInfo>& GetArguments() const {
+        return Arguments;
+    }
+    std::vector<TColumnInfo>& MutableArguments() {
+        return Arguments;
+    }
+    const std::string& GetName() const {
+        return Column.GetColumnName();
+    }
+    const arrow::compute::ScalarAggregateOptions* GetOptions() const {
+        return &ScalarOpts;
+    }
 
     IStepFunction<TAggregateAssign>::TPtr GetFunction(arrow::compute::ExecContext* ctx) const;
     TString DebugString() const;
 
 private:
     TColumnInfo Column;
-    EAggregate Operation{EAggregate::Unspecified};
+    EAggregate Operation{ EAggregate::Unspecified };
     std::vector<TColumnInfo> Arguments;
-    arrow::compute::ScalarAggregateOptions ScalarOpts; // TODO: make correct options
+    arrow::compute::ScalarAggregateOptions ScalarOpts;   // TODO: make correct options
     TFunctionPtr KernelFunction;
 };
-
 
 /// Group of commands that finishes with projection. Steps add locality for columns definition.
 ///
 /// In step we have non-decreasing count of columns (line to line) till projection. So columns are either source
 /// for the step either defined in this step.
-/// It's also possible to use several filters in step. They would be applyed after assignes, just before projection.
-/// "Filter (a > 0 AND b <= 42)" is logically equal to "Filret a > 0; Filter b <= 42"
+/// It's also possible to use several filters in step. They would be applied after assigns, just before projection.
+/// "Filter (a > 0 AND b <= 42)" is logically equal to "Filter a > 0; Filter b <= 42"
 /// Step combines (f1 AND f2 AND ... AND fn) into one filter and applies it once. You have to split filters in different
 /// steps if you want to run them separately. I.e. if you expect that f1 is fast and leads to a small row-set.
-/// Then when we place all assignes before filters they have the same row count. It's possible to run them in parallel.
+/// Then when we place all assigns before filters they have the same row count. It's possible to run them in parallel.
 class TProgramStep {
 private:
     YDB_READONLY_DEF(std::vector<TAssign>, Assignes);
-    YDB_READONLY_DEF(std::vector<TColumnInfo>, Filters); // List of filter columns. Implicit "Filter by (f1 AND f2 AND .. AND fn)"
+    YDB_READONLY_DEF(std::vector<TColumnInfo>, Filters);   // List of filter columns. Implicit "Filter by (f1 AND f2 AND .. AND fn)"
     std::set<ui32> FilterOriginalColumnIds;
 
     YDB_ACCESSOR_DEF(std::vector<TAggregateAssign>, GroupBy);
-    YDB_READONLY_DEF(std::vector<TColumnInfo>, GroupByKeys); // TODO: it's possible to use them without GROUP BY for DISTINCT
-    YDB_READONLY_DEF(std::vector<TColumnInfo>, Projection); // Step's result columns (remove others)
+    YDB_READONLY_DEF(std::vector<TColumnInfo>, GroupByKeys);   // TODO: it's possible to use them without GROUP BY for DISTINCT
+    YDB_READONLY_DEF(std::vector<TColumnInfo>, Projection);   // Step's result columns (remove others)
 public:
     using TDatumBatch = TDatumBatch;
 
@@ -458,8 +402,8 @@ public:
     TProgram() = default;
 
     TProgram(std::vector<std::shared_ptr<TProgramStep>>&& steps)
-        : Steps(std::move(steps))
-    {}
+        : Steps(std::move(steps)) {
+    }
 
     arrow::Status ApplyTo(std::shared_ptr<arrow::Table>& table, arrow::compute::ExecContext* ctx) const {
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::SliceToRecordBatches(table);
@@ -500,18 +444,13 @@ public:
     }
 };
 
-inline arrow::Status ApplyProgram(
-    std::shared_ptr<arrow::Table>& batch,
-    const TProgram& program,
-    arrow::compute::ExecContext* ctx = nullptr) {
+inline arrow::Status ApplyProgram(std::shared_ptr<arrow::Table>& batch, const TProgram& program, arrow::compute::ExecContext* ctx = nullptr) {
     return program.ApplyTo(batch, ctx);
 }
 
 inline arrow::Status ApplyProgram(
-    std::shared_ptr<arrow::RecordBatch>& batch,
-    const TProgram& program,
-    arrow::compute::ExecContext* ctx = nullptr) {
+    std::shared_ptr<arrow::RecordBatch>& batch, const TProgram& program, arrow::compute::ExecContext* ctx = nullptr) {
     return program.ApplyTo(batch, ctx);
 }
 
-}
+}   // namespace NKikimr::NSsa

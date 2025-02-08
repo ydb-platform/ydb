@@ -317,10 +317,9 @@ public:
 
 }
 
-TEtcdKVService::TEtcdKVService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId)
-    : TEtcdServiceBase<etcdserverpb::KV>(actorSystem, std::move(counters))
-{}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+template<>
 void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
@@ -335,8 +334,8 @@ void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());       \
             ActorSystem->Register(Make##methodName(new TEtcdRequestCall<                       \
                 etcdserverpb::Y_CAT(secondName, Request),                                       \
-                etcdserverpb::Y_CAT(secondName, Response)>(reqCtx)                               \
-            ));                                                                                   \
+                etcdserverpb::Y_CAT(secondName, Response)>(reqCtx),                              \
+            Stuff));                                                                              \
         },                                                                                         \
         &etcdserverpb::KV::AsyncService::Y_CAT(Request, methodName),                               \
         "KV/" Y_STRINGIZE(methodName),                                                             \
@@ -355,10 +354,7 @@ void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TEtcdWatchService::TEtcdWatchService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId)
-    : TEtcdServiceBase<etcdserverpb::Watch>(actorSystem, std::move(counters))
-{}
-
+template<>
 void TEtcdWatchService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr) {
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
@@ -370,7 +366,7 @@ void TEtcdWatchService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr) {
 
     TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Watch::AsyncService::RequestWatch,
         [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-            ActorSystem->Send(TSharedStuff::Get()->Watchtower, new TEvWatchRequest(context.Release()));
+            ActorSystem->Send(this->Watchtower, new TEvWatchRequest(context.Release()));
         },
         *ActorSystem, "Lease/LeaseKeepAlive", getCounterBlock("etcd", "LeaseKeepAlive", true), nullptr
     );
@@ -378,10 +374,7 @@ void TEtcdWatchService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr) {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TEtcdLeaseService::TEtcdLeaseService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId)
-    : TEtcdServiceBase<etcdserverpb::Lease>(actorSystem, std::move(counters))
-{}
-
+template<>
 void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
@@ -396,8 +389,8 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());       \
             ActorSystem->Register(Make##methodName(new TEtcdRequestCall<                       \
                 etcdserverpb::Y_CAT(methodName, Request),                                       \
-                etcdserverpb::Y_CAT(methodName, Response)>(reqCtx)                               \
-            ));                                                                                   \
+                etcdserverpb::Y_CAT(methodName, Response)>(reqCtx),                              \
+            Stuff));                                                                              \
         },                                                                                         \
         &etcdserverpb::Lease::AsyncService::Y_CAT(Request, methodName),                            \
         "Lease/" Y_STRINGIZE(methodName),                                                          \
@@ -420,7 +413,7 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Lease::AsyncService::RequestLeaseKeepAlive,
         [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-            ActorSystem->Send(TSharedStuff::Get()->Watchtower, new TEvLeaseKeepAliveRequest(context.Release()));
+            ActorSystem->Send(this->Watchtower, new TEvLeaseKeepAliveRequest(context.Release()));
         },
         *ActorSystem, "Lease", getCounterBlock("etcd", "Watch", true), nullptr
     );

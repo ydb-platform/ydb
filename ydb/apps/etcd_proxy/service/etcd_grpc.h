@@ -1,5 +1,7 @@
 #pragma once
 
+#include "etcd_shared.h"
+
 #include <ydb/apps/etcd_proxy/proto/rpc.grpc.pb.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
@@ -11,45 +13,27 @@ template<class TService>
 class TEtcdServiceBase
     : public NYdbGrpc::TGrpcServiceBase<TService>
 {
-protected:
-    TEtcdServiceBase(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
-        : ActorSystem(actorSystem), Counters(std::move(counters))
+public:
+    TEtcdServiceBase(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId watchtower, TSharedStuff::TPtr stuff)
+        : ActorSystem(actorSystem), Counters(std::move(counters)), Watchtower(std::move(watchtower)), Stuff(std::move(stuff))
     {}
 
-    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) final {
+    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
         CQ = cq;
         SetupIncomingRequests(std::move(logger));
     }
-
-    virtual void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) = 0;
+private:
+    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
     NActors::TActorSystem *const ActorSystem;
     const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    const NActors::TActorId Watchtower;
+    const TSharedStuff::TPtr Stuff;
     grpc::ServerCompletionQueue* CQ = nullptr;
 };
 
-class TEtcdKVService : public TEtcdServiceBase<etcdserverpb::KV>
-{
-public:
-    TEtcdKVService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId = {});
-private:
-    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) final;
-};
-
-class TEtcdWatchService : public TEtcdServiceBase<etcdserverpb::Watch>
-{
-public:
-    TEtcdWatchService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId = {});
-private:
-    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) final;
-};
-
-class TEtcdLeaseService : public TEtcdServiceBase<etcdserverpb::Lease>
-{
-public:
-    TEtcdLeaseService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId = {});
-private:
-    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) final;
-};
+using TEtcdKVService = TEtcdServiceBase<etcdserverpb::KV>;
+using TEtcdWatchService = TEtcdServiceBase<etcdserverpb::Watch>;
+using TEtcdLeaseService = TEtcdServiceBase<etcdserverpb::Lease>;
 
 } // namespace NEtcd

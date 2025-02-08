@@ -15,8 +15,8 @@ class TKeysKeeper : public TActorBootstrapped<TKeysKeeper> {
 public:
     using IStreamCtx = NKikimr::NGRpcServer::IGRpcStreamingContext<etcdserverpb::LeaseKeepAliveRequest, etcdserverpb::LeaseKeepAliveResponse>;
 
-    TKeysKeeper(TIntrusivePtr<IStreamCtx> ctx, TActorId office)
-        : Ctx(std::move(ctx)), Office(office)
+    TKeysKeeper(TIntrusivePtr<IStreamCtx> ctx, TSharedStuff::TPtr stuff)
+        : Ctx(std::move(ctx)), Stuff(std::move(stuff))
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -44,7 +44,7 @@ private:
             response.set_ttl(NYdb::TValueParser(parser.GetValue(1)).GetInt64());
 
             const auto header = response.mutable_header();
-            header->set_revision(TSharedStuff::Get()->Revision.load());
+            header->set_revision(Stuff->Revision.load());
             header->set_cluster_id(0ULL);
             header->set_member_id(0ULL);
             header->set_raft_term(0ULL);
@@ -70,7 +70,7 @@ private:
         params.AddParam("$Lease").Int64(ev->Get()->Record.id()).Build();
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        NEtcd::TSharedStuff::Get()->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
+        Stuff->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
             if (const auto res = future.GetValueSync(); res.IsSuccess())
                 ass->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
             else
@@ -92,15 +92,15 @@ private:
     }
 
     const TIntrusivePtr<IStreamCtx> Ctx;
-    const TActorId Office;
+    const TSharedStuff::TPtr Stuff;
 };
 
 class TWatchman : public TActorBootstrapped<TWatchman> {
 public:
     using IStreamCtx = NKikimr::NGRpcServer::IGRpcStreamingContext<etcdserverpb::WatchRequest, etcdserverpb::WatchResponse>;
 
-    TWatchman(TIntrusivePtr<IStreamCtx> ctx, TActorId watchtower)
-        : Ctx(std::move(ctx)), Watchtower(watchtower)
+    TWatchman(TIntrusivePtr<IStreamCtx> ctx, TActorId watchtower, TSharedStuff::TPtr stuff)
+        : Ctx(std::move(ctx)), Watchtower(std::move(watchtower)), Stuff(std::move(stuff))
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -214,7 +214,7 @@ private:
                     (ev->Get()->NewData.Version ? EWatchKind::OnUpdates : EWatchKind::OnDeletions) == sub->Kind) {
                     etcdserverpb::WatchResponse res;
                     const auto header = res.mutable_header();
-                    header->set_revision(TSharedStuff::Get()->Revision.load());
+                    header->set_revision(Stuff->Revision.load());
                     header->set_cluster_id(0ULL);
                     header->set_member_id(0ULL);
                     header->set_raft_term(0ULL);
@@ -222,7 +222,7 @@ private:
                     const auto event = res.add_events();
                     event->set_type(ev->Get()->NewData.Version ? mvccpb::Event_EventType_PUT : mvccpb::Event_EventType_DELETE);
 
-                    if (sub->WithPrevious) {
+                    if (sub->WithPrevious && ev->Get()->OldData.Version) {
                         const auto kv = event->mutable_prev_kv();
                         kv->set_key(ev->Get()->Key);
                         kv->set_value(ev->Get()->OldData.Value);
@@ -260,7 +260,7 @@ private:
 
         etcdserverpb::WatchResponse response;
         const auto header = response.mutable_header();
-        header->set_revision(TSharedStuff::Get()->Revision.load());
+        header->set_revision(Stuff->Revision.load());
         header->set_cluster_id(0ULL);
         header->set_member_id(0ULL);
         header->set_raft_term(0ULL);
@@ -297,19 +297,21 @@ private:
 
     const TIntrusivePtr<IStreamCtx> Ctx;
     const TActorId Watchtower;
+    const TSharedStuff::TPtr Stuff;
+
     TSubscriptionsMap SubscriptionsMap;
     TUserSubscriptionsMap UserSubscriptionsMap;
 };
 
 class TWatchtower : public TActorBootstrapped<TWatchtower> {
 public:
-    TWatchtower(TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
-        : Counters(std::move(counters))
+    TWatchtower(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TSharedStuff::TPtr stuff)
+        : Counters(std::move(counters)), Stuff(std::move(stuff))
     {}
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateFunc);
-        TSharedStuff::Get()->Watchtower = SelfId();
+        Stuff->Watchtower = SelfId();
         ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
     }
 private:
@@ -341,11 +343,11 @@ private:
     }
 
     void Handle(TEvWatchRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.RegisterWithSameMailbox(new TWatchman(ev->Get()->GetStreamCtx(), ctx.SelfID));
+        ctx.RegisterWithSameMailbox(new TWatchman(ev->Get()->GetStreamCtx(), ctx.SelfID, Stuff));
     }
 
     void Handle(TEvLeaseKeepAliveRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.RegisterWithSameMailbox(new TKeysKeeper(ev->Get()->GetStreamCtx(), ctx.SelfID));
+        ctx.RegisterWithSameMailbox(new TKeysKeeper(ev->Get()->GetStreamCtx(), Stuff));
     }
 
     void Handle(TEvSubscribe::TPtr& ev, const TActorContext&) {
@@ -380,7 +382,7 @@ private:
     void Wakeup(const TActorContext&) {
         TStringBuilder sql;
         NYdb::TParamsBuilder params;
-        Revision = TSharedStuff::Get()->Revision.fetch_add(1LL);
+        Revision = Stuff->Revision.fetch_add(1LL);
         params.AddParam("$Revision").Int64(Revision).Build();
 
         sql << "$Expired = select `id` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) < CurrentUtcDatetime();" << Endl;
@@ -400,7 +402,7 @@ private:
 
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        NEtcd::TSharedStuff::Get()->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
+        Stuff->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
             if (const auto res = future.GetValueSync(); res.IsSuccess())
                 ass->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
             else
@@ -430,7 +432,7 @@ private:
 
         if (!deleted) {
             auto expected = Revision + 1U;
-            NEtcd::TSharedStuff::Get()->Revision.compare_exchange_strong(expected, Revision);
+            Stuff->Revision.compare_exchange_strong(expected, Revision);
         }
 
         ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
@@ -442,6 +444,7 @@ private:
     }
 
     const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    const TSharedStuff::TPtr Stuff;
 
     TWatchmanSubscriptionsMap WatchmanSubscriptionsMap;
     TSubscriptionsMap SubscriptionsMap;
@@ -451,8 +454,8 @@ private:
 
 }
 
-NActors::IActor* BuildWatchtower(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
-    return new TWatchtower(std::move(counters));
+NActors::IActor* BuildWatchtower(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TSharedStuff::TPtr stuff) {
+    return new TWatchtower(std::move(counters), std::move(stuff));
 
 }
 

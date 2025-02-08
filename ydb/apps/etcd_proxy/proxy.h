@@ -3,6 +3,8 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/grpc/server/grpc_server.h>
 
+#include <ydb/apps/etcd_proxy/service/etcd_shared.h>
+
 #include <library/cpp/monlib/metrics/metric_registry.h>
 
 #include "signals.h"
@@ -17,6 +19,8 @@ public:
     int Run();
 
 private:
+    const NEtcd::TSharedStuff::TPtr Stuff;
+
     static std::atomic_bool Quit;
     static void OnTerminate(int);
     NSignals::TSignalHandler<SIGINT, &TProxy::OnTerminate> SignalSIGINT;
@@ -44,7 +48,6 @@ private:
     TString Database, Endpoint;
     uint16_t ListeningPort = 2379;
     TString SslCertificate;
-
 };
 
 }

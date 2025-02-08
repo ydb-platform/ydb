@@ -9,7 +9,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
-#include <ydb/apps/etcd_proxy/service/etcd_shared.h>
 #include <ydb/apps/etcd_proxy/service/etcd_watch.h>
 #include <ydb/apps/etcd_proxy/service/etcd_grpc.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -50,7 +49,7 @@ int TProxy::Discovery() {
         config.SetEndpoint(Endpoint);
         config.SetDatabase(Database);
         const auto driver = NYdb::TDriver(config);
-        NEtcd::TSharedStuff::Get()->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
+        Stuff->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
         return 0;
     } else {
         Cerr << res.GetIssues().ToString() << Endl;
@@ -59,12 +58,12 @@ int TProxy::Discovery() {
 }
 
 int TProxy::StartServer() {
-    const auto res = NEtcd::TSharedStuff::Get()->Client->ExecuteQuery(NEtcd::GetLastRevisionSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetLastRevisionSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     if (res.IsSuccess()) {
         if (auto result = res.GetResultSetParser(0); result.TryNextRow()) {
             const auto revision = NYdb::TValueParser(result.GetValue(0)).GetInt64();
             Cout << "The current revision is " << revision << '.' << Endl;
-            NEtcd::TSharedStuff::Get()->Revision.store(revision);
+            Stuff->Revision.store(revision);
         } else {
             Cout << "Unexpected result of get max revision." << Endl;
             return 1;
@@ -72,7 +71,7 @@ int TProxy::StartServer() {
         if (auto result = res.GetResultSetParser(1); result.TryNextRow()) {
             const auto lease = NYdb::TValueParser(result.GetValue(0)).GetInt64();
             Cout << "The current lease is " << lease << '.' << Endl;
-            NEtcd::TSharedStuff::Get()->Lease.store(lease);
+            Stuff->Lease.store(lease);
         } else {
             Cout << "Unexpected result of get max lease." << Endl;
             return 1;
@@ -85,12 +84,12 @@ int TProxy::StartServer() {
     NYdbGrpc::TServerOptions opts;
     opts.SetPort(ListeningPort);
 
-    const auto watchtower = ActorSystem->Register(NEtcd::BuildWatchtower(Counters));
+    const auto watchtower = ActorSystem->Register(NEtcd::BuildWatchtower(Counters, Stuff));
 
     GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts, Counters);
-    GRpcServer->AddService(new NEtcd::TEtcdKVService(ActorSystem.get(), Counters, watchtower));
-    GRpcServer->AddService(new NEtcd::TEtcdWatchService(ActorSystem.get(), Counters, watchtower));
-    GRpcServer->AddService(new NEtcd::TEtcdLeaseService(ActorSystem.get(), Counters, watchtower));
+    GRpcServer->AddService(new NEtcd::TEtcdKVService(ActorSystem.get(), Counters, watchtower, Stuff));
+    GRpcServer->AddService(new NEtcd::TEtcdWatchService(ActorSystem.get(), Counters, watchtower, Stuff));
+    GRpcServer->AddService(new NEtcd::TEtcdLeaseService(ActorSystem.get(), Counters, watchtower, Stuff));
     GRpcServer->Start();
     Cout << "Etcd service over " << Database << " on " << Endpoint << " was started." << Endl;
     return 0;
@@ -116,7 +115,7 @@ int TProxy::Run() {
 }
 
 int TProxy::InitDatabase() {
-    if (const auto res = NEtcd::TSharedStuff::Get()->Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
+    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
         Cout << "Database " << Database << " on " << Endpoint << " was initialized." << Endl;
         return 0;
     } else {
@@ -133,7 +132,7 @@ int TProxy::Shutdown() {
 }
 
 TProxy::TProxy(int argc, char** argv)
-    : MetricRegistry(NMonitoring::TMetricRegistry::SharedInstance()), Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
+    : Stuff(std::make_shared<NEtcd::TSharedStuff>()), MetricRegistry(NMonitoring::TMetricRegistry::SharedInstance()), Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
 {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     bool useStdErr = false;

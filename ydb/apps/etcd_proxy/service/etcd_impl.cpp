@@ -564,8 +564,8 @@ class TEtcdRequestGrpc
 {
     friend class TBaseEtcdRequest;
 public:
-    TEtcdRequestGrpc(IRequestNoOpCtx* request)
-        : Request_(request)
+    TEtcdRequestGrpc(IRequestNoOpCtx* request, TSharedStuff::TPtr stuff)
+        : Request_(request), Stuff(std::move(stuff))
     {}
 
     void Bootstrap(const TActorContext&) {
@@ -583,7 +583,7 @@ private:
         Cerr << Endl << sql << Endl;
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        NEtcd::TSharedStuff::Get()->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
+        Stuff->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
             if (const auto res = future.GetValueSync(); res.IsSuccess())
                 ass->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
             else
@@ -616,6 +616,7 @@ protected:
     }
 
     const std::shared_ptr<IRequestNoOpCtx> Request_;
+    const TSharedStuff::TPtr Stuff;
 };
 
 class TRangeRequest
@@ -625,7 +626,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
+        Revision = Stuff->Revision.load();
         return Range.Parse(*GetProtoRequest());
     }
 
@@ -648,7 +649,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::TSharedStuff::Get()->Revision.fetch_add(1L);
+        Revision = Stuff->Revision.fetch_add(1L);
         return Put.Parse(*GetProtoRequest());
     }
 
@@ -658,7 +659,7 @@ private:
     }
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
-        const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
+        const auto watcher = Stuff->Watchtower;
         const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
         };
@@ -677,7 +678,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::TSharedStuff::Get()->Revision.fetch_add(1L);
+        Revision = Stuff->Revision.fetch_add(1L);
         return DeleteRange.Parse(*GetProtoRequest());
     }
 
@@ -687,7 +688,7 @@ private:
     }
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
-        const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
+        const auto watcher = Stuff->Watchtower;
         const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
         };
@@ -706,7 +707,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::TSharedStuff::Get()->Revision.fetch_add(1L);
+        Revision = Stuff->Revision.fetch_add(1L);
         return Txn.Parse(*GetProtoRequest());
     }
 
@@ -717,7 +718,7 @@ private:
     }
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
-        const auto watcher = NEtcd::TSharedStuff::Get()->Watchtower;
+        const auto watcher = Stuff->Watchtower;
         const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
             ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
         };
@@ -736,7 +737,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
+        Revision = Stuff->Revision.load();
 
         const auto &rec = *GetProtoRequest();
         KeyRevision = rec.revision();
@@ -763,8 +764,8 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
-        Lease = NEtcd::TSharedStuff::Get()->Lease.fetch_add(1L);
+        Revision = Stuff->Revision.load();
+        Lease = Stuff->Lease.fetch_add(1L);
 
         const auto &rec = *GetProtoRequest();
         TTL = rec.ttl();
@@ -794,7 +795,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::TSharedStuff::Get()->Revision.fetch_add(1LL);
+        Revision = Stuff->Revision.fetch_add(1LL);
 
         const auto &rec = *GetProtoRequest();
         Lease = rec.id();
@@ -829,12 +830,12 @@ private:
                 oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
                 auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
 
-                ctx.Send(NEtcd::TSharedStuff::Get()->Watchtower, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData)));
+                ctx.Send(Stuff->Watchtower, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData)));
             }
 
             if (!deleted) {
                 auto expected = Revision + 1U;
-                NEtcd::TSharedStuff::Get()->Revision.compare_exchange_strong(expected, Revision);
+                Stuff->Revision.compare_exchange_strong(expected, Revision);
             }
         }
 
@@ -853,7 +854,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
+        Revision = Stuff->Revision.load();
 
         const auto &rec = *GetProtoRequest();
         Lease = rec.id();
@@ -900,7 +901,7 @@ public:
     using TBase::TBase;
 private:
     bool ParseGrpcRequest() final {
-        Revision = NEtcd::TSharedStuff::Get()->Revision.load();
+        Revision = Stuff->Revision.load();
         return true;
     }
 
@@ -922,40 +923,40 @@ private:
 
 }
 
-NActors::IActor* MakeRange(IRequestNoOpCtx* p) {
-    return new TRangeRequest(p);
+NActors::IActor* MakeRange(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
+    return new TRangeRequest(p, std::move(stuff));
 }
 
-NActors::IActor* MakePut(IRequestNoOpCtx* p) {
-    return new TPutRequest(p);
+NActors::IActor* MakePut(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
+    return new TPutRequest(p, std::move(stuff));
 }
 
-NActors::IActor* MakeDeleteRange(IRequestNoOpCtx* p) {
-    return new TDeleteRangeRequest(p);
+NActors::IActor* MakeDeleteRange(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
+    return new TDeleteRangeRequest(p, std::move(stuff));
 }
 
-NActors::IActor* MakeTxn(IRequestNoOpCtx* p) {
-    return new TTxnRequest(p);
+NActors::IActor* MakeTxn(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
+    return new TTxnRequest(p, std::move(stuff));
 }
 
-NActors::IActor* MakeCompact(IRequestNoOpCtx* p) {
-    return new TCompactRequest(p);
+NActors::IActor* MakeCompact(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
+    return new TCompactRequest(p, std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseGrant(IRequestNoOpCtx* p) {
-    return new TLeaseGrantRequest(p);
+NActors::IActor* MakeLeaseGrant(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
+    return new TLeaseGrantRequest(p, std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseRevoke(IRequestNoOpCtx* p) {
-    return new TLeaseRevokeRequest(p);
+NActors::IActor* MakeLeaseRevoke(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
+    return new TLeaseRevokeRequest(p, std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseTimeToLive(IRequestNoOpCtx* p) {
-    return new TLeaseTimeToLiveRequest(p);
+NActors::IActor* MakeLeaseTimeToLive(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
+    return new TLeaseTimeToLiveRequest(p, std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseLeases(IRequestNoOpCtx* p) {
-    return new TLeaseLeasesRequest(p);
+NActors::IActor* MakeLeaseLeases(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
+    return new TLeaseLeasesRequest(p, std::move(stuff));
 }
 
 } // namespace NEtcd

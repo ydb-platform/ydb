@@ -33,10 +33,11 @@ public:
         ServerSettings->SetGrpcPort(grpc);
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
-
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
-        ServerSettings->RegisterGrpcService<TEtcdKVService>("kv");
-        ServerSettings->RegisterGrpcService<TEtcdLeaseService>("lease");
+
+        const auto stuff = std::make_shared<TSharedStuff>();
+        ServerSettings->RegisterGrpcService<TEtcdKVService>("kv", TActorId(), stuff);
+        ServerSettings->RegisterGrpcService<TEtcdLeaseService>("lease", TActorId(), stuff);
         ServerSettings->Verbose = true;
 
         Server_.Reset(new Tests::TServer(*ServerSettings));
@@ -73,9 +74,9 @@ public:
         config.SetEndpoint(TString("localhost:") += ToString(grpc));
         config.SetDatabase("/Root");
         const auto driver = NYdb::TDriver(config);
-        NEtcd::TSharedStuff::Get()->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
-        NEtcd::TSharedStuff::Get()->Revision.store(1LL);
-        NEtcd::TSharedStuff::Get()->Lease.store(1LL);
+        stuff->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
+        stuff->Revision.store(1LL);
+        stuff->Lease.store(1LL);
     }
 
     ui16 GetPort() {

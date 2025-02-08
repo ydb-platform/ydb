@@ -1,11 +1,12 @@
 LIBRARY()
 
 PEERDIR(
+    library/cpp/monlib/dynamic_counters
     ydb/core/base
     ydb/core/control/lib
     ydb/core/mon
     ydb/library/actors/core
-    library/cpp/deprecated/atomic
+    ydb/core/node_whiteboard
 )
 
 SRCS(

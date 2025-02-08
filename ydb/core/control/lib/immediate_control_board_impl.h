@@ -1,7 +1,7 @@
 #pragma once
 
-#include "defs.h"
 #include "immediate_control_board_wrapper.h"
+#include "immediate_control_board_html_renderer.h"
 
 #include <ydb/core/util/concurrent_rw_hash.h>
 
@@ -10,7 +10,6 @@ namespace NKikimr {
 class TControlBoard : public TThrRefBase {
 private:
     TConcurrentRWHashMap<TString, TIntrusivePtr<TControl>, 16> Board;
-
 public:
     bool RegisterLocalControl(TControlWrapper control, TString name);
 
@@ -25,7 +24,7 @@ public:
     // Only for tests
     void GetValue(TString name, TAtomic &outValue, bool &outIsControlExists) const;
 
-    TString RenderAsHtml() const;
+    void RenderAsHtml(TControlBoardTableHtmlRenderer& renderer) const;
 };
 
 }

@@ -933,6 +933,11 @@ IRawBatchRequestPtr THttpRawClient::CreateRawBatchRequest()
     return MakeIntrusive<NRawClient::THttpRawBatchRequest>(Context_, /*retryPolicy*/ nullptr);
 }
 
+IRawClientPtr THttpRawClient::Clone()
+{
+    return ::MakeIntrusive<THttpRawClient>(Context_);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDetail

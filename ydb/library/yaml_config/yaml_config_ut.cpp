@@ -1480,7 +1480,7 @@ metadata:
   version: 10
   cluster: foo
 )";
-            auto metadata = NYamlConfig::GetMetadata(str);
+            auto metadata = NYamlConfig::GetMainMetadata(str);
             UNIT_ASSERT_VALUES_EQUAL(*metadata.Version, 10);
             UNIT_ASSERT_VALUES_EQUAL(*metadata.Cluster, "foo");
         }
@@ -1490,7 +1490,7 @@ metadata:
 metadata:
   version: 10
 )";
-            auto metadata = NYamlConfig::GetMetadata(str);
+            auto metadata = NYamlConfig::GetMainMetadata(str);
             UNIT_ASSERT_VALUES_EQUAL(*metadata.Version, 10);
             UNIT_ASSERT(!metadata.Cluster);
         }
@@ -1500,7 +1500,7 @@ metadata:
 metadata:
   cluster: foo
 )";
-            auto metadata = NYamlConfig::GetMetadata(str);
+            auto metadata = NYamlConfig::GetMainMetadata(str);
             UNIT_ASSERT(!metadata.Version);
             UNIT_ASSERT_VALUES_EQUAL(*metadata.Cluster, "foo");
         }
@@ -1509,21 +1509,21 @@ metadata:
             TString str = R"(
 metadata: {}
 )";
-            auto metadata = NYamlConfig::GetMetadata(str);
+            auto metadata = NYamlConfig::GetMainMetadata(str);
             UNIT_ASSERT(!metadata.Version);
             UNIT_ASSERT(!metadata.Cluster);
         }
 
         {
             TString str = "foo: bar";
-            auto metadata = NYamlConfig::GetMetadata(str);
+            auto metadata = NYamlConfig::GetMainMetadata(str);
             UNIT_ASSERT(!metadata.Version);
             UNIT_ASSERT(!metadata.Cluster);
         }
     }
 
     Y_UNIT_TEST(ReplaceMetadata) {
-        NYamlConfig::TMetadata metadata;
+        NYamlConfig::TMainMetadata metadata;
         metadata.Version = 1;
         metadata.Cluster = "test";
 

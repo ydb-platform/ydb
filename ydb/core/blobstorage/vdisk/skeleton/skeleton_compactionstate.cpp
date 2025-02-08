@@ -24,13 +24,13 @@ namespace NKikimr {
         auto &req = insRes.first->second;
 
         if (req.CompactLogoBlobs) {
-            ctx.Send(LogoBlobsActorId, new TEvHullCompact(EHullDbType::LogoBlobs, requestId, mode));
+            ctx.Send(LogoBlobsActorId, new TEvHullCompact(EHullDbType::LogoBlobs, requestId, mode, req.TablesToCompact));
         }
         if (req.CompactBlocks) {
-            ctx.Send(BlocksActorId, new TEvHullCompact(EHullDbType::Blocks, requestId, mode));
+            ctx.Send(BlocksActorId, new TEvHullCompact(EHullDbType::Blocks, requestId, mode, req.TablesToCompact));
         }
         if (req.CompactBarriers) {
-            ctx.Send(BarriersActorId, new TEvHullCompact(EHullDbType::Barriers, requestId, mode));
+            ctx.Send(BarriersActorId, new TEvHullCompact(EHullDbType::Barriers, requestId, mode, req.TablesToCompact));
         }
     }
 

@@ -203,6 +203,8 @@ class ColumnValueGeneratorSequential(IColumnValueGenerator):
             return str(self._value)
         elif column.type in {PrimitiveType.Json, PrimitiveType.JsonDocument}:
             return f'"{str(self._value)}"'
+        elif column.type == PrimitiveType.Timestamp:
+            return self._value
         raise TypeError(f'Unsupported type {column.type}')
 
 

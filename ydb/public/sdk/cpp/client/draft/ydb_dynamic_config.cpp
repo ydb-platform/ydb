@@ -155,9 +155,9 @@ public:
                 TString config;
                 TMap<ui64, TString> volatileConfigs;
                 if (Ydb::DynamicConfig::GetConfigResult result; any && any->UnpackTo(&result)) {
-                    clusterName = result.identity().cluster();
-                    version = result.identity().version();
-                    config = result.config();
+                    clusterName = result.identity(0).cluster();
+                    version = result.identity(0).version();
+                    config = result.config(0);
                     for (const auto& config : result.volatile_configs()) {
                         volatileConfigs.emplace(config.id(), config.config());
                     }

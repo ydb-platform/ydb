@@ -799,6 +799,13 @@ message TRevisionFilterConfig {
     repeated TRevisionException RevisionException = 1;
 }
 
+///////////////////////////// Ytflow /////////////////////////////
+
+message TYtflowGatewayConfig {
+    optional uint32 GatewayThreads = 1 [default = 1]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
+}
+
+
 /////////////////////////////// Root ///////////////////////////////
 
 message TGatewaysConfig {
@@ -825,4 +832,5 @@ message TGatewaysConfig {
     optional TGenericGatewayConfig Generic = 21;
     optional TRevisionFilterConfig RevisionFilter = 22;
     optional TDbResolverConfig DbResolver = 23;
+    optional TYtflowGatewayConfig Ytflow = 24;
 }

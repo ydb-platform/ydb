@@ -1,5 +1,7 @@
 #include "yql_yt_provider.h"
 #include "yql_yt_dq_integration.h"
+#include "yql_yt_ytflow_integration.h"
+#include "yql_yt_ytflow_optimize.h"
 
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
@@ -346,6 +348,8 @@ std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::
     ytState->DqIntegration_ = CreateYtDqIntegration(ytState.Get());
     ytState->OptimizerFactory_ = optFactory;
     ytState->DqHelper = helper;
+    ytState->YtflowIntegration_ = CreateYtYtflowIntegration(ytState.Get());
+    ytState->YtflowOptimization_ = CreateYtYtflowOptimization(ytState.Get());
 
     if (ytGatewayConfig) {
         std::unordered_set<std::string_view> groups;

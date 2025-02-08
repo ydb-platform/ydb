@@ -11,7 +11,7 @@ using namespace NApi;
 void TClientsCacheConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("default_connection", &TThis::DefaultConnection)
-        .Alias("defailt_config")
+        .Alias("default_config")
         .DefaultNew();
     registrar.Parameter("per_cluster_connection", &TThis::PerClusterConnection)
         .Alias("cluster_configs")

@@ -746,23 +746,31 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
     TNodeOnNodeOwnedMap rightPrecomputes;
 
     if (rightCn) {
-        auto collectRightStage = Build<TDqStage>(ctx, join.Pos())
-            .Inputs()
-                .Add(rightCn.Cast())
-                .Build()
-            .Program()
-                .Args({"stream"})
-                .Body("stream")
-                .Build()
-            .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
-            .Done();
-
         rightBroadcast = Build<TDqCnBroadcast>(ctx, join.Pos())
             .Output()
-                .Stage(collectRightStage)
-                .Index().Build("0")
+                .Stage(rightCn.Cast().Output().Stage())
+                .Index(rightCn.Cast().Output().Index())
                 .Build()
             .Done();
+
+        
+        //auto collectRightStage = Build<TDqStage>(ctx, join.Pos())
+        //    .Inputs()
+        //        .Add(rightCn.Cast())
+        //        .Build()
+        //    .Program()
+        //        .Args({"stream"})
+        //        .Body("stream")
+        //        .Build()
+        //    .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
+        //    .Done();
+
+        //rightBroadcast = Build<TDqCnBroadcast>(ctx, join.Pos())
+        //    .Output()
+        //        .Stage(collectRightStage)
+        //        .Index().Build("0")
+        //        .Build()
+        //    .Done();
     } else {
         YQL_CLOG(TRACE, CoreDq) << "-- DqBuildPhyJoin: right input is DqPure expr";
 

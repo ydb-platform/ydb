@@ -1,5 +1,3 @@
-#include "src/kqp_runner.h"
-
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 
 #include <library/cpp/colorizer/colors.h>
@@ -9,11 +7,12 @@
 #include <util/stream/file.h>
 #include <util/system/env.h>
 
-#include <ydb/core/base/backtrace.h>
 #include <ydb/core/blob_depot/mon_main.h>
-
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
+#include <ydb/tests/tools/kqprun/runlib/application.h>
+#include <ydb/tests/tools/kqprun/runlib/utils.h>
+#include <ydb/tests/tools/kqprun/src/kqp_runner.h>
 
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/udf/udf_static_registry.h>
@@ -26,6 +25,7 @@
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
 #endif
 
+using namespace NKikimrRun;
 
 namespace NKqpRun {
 
@@ -423,9 +423,8 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistr
 }
 
 
-class TMain : public TMainClassArgs {
+class TMain : public TMainBase {
     inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
-    inline static std::vector<std::unique_ptr<TFileOutput>> FileHolders;
     inline static IOutputStream* ProfileAllocationsOutput = nullptr;
     inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
 
@@ -438,52 +437,6 @@ class TMain : public TMainClassArgs {
     TString UdfsDirectory;
     bool ExcludeLinkedUdfs = false;
     bool EmulateYt = false;
-
-    std::optional<NActors::NLog::EPriority> DefaultLogPriority;
-    std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> LogPriorities;
-
-    static TString LoadFile(const TString& file) {
-        return TFileInput(file).ReadAll();
-    }
-
-    static IOutputStream* GetDefaultOutput(const TString& file) {
-        if (file == "-") {
-            return &Cout;
-        }
-        if (file) {
-            FileHolders.emplace_back(new TFileOutput(file));
-            return FileHolders.back().get();
-        }
-        return nullptr;
-    }
-
-    template <typename TResult>
-    class TChoices {
-    public:
-        explicit TChoices(std::map<TString, TResult> choicesMap)
-            : ChoicesMap(std::move(choicesMap))
-        {}
-
-        TResult operator()(const TString& choice) const {
-            return ChoicesMap.at(choice);
-        }
-
-        TVector<TString> GetChoices() const {
-            TVector<TString> choices;
-            choices.reserve(ChoicesMap.size());
-            for (const auto& [choice, _] : ChoicesMap) {
-                choices.emplace_back(choice);
-            }
-            return choices;
-        }
-
-        bool Contains(const TString& choice) const {
-            return ChoicesMap.contains(choice);
-        }
-
-    private:
-        const std::map<TString, TResult> ChoicesMap;
-    };
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 public:
@@ -590,51 +543,6 @@ protected:
 
         // Outputs
 
-        options.AddLongOption("log-file", "File with execution logs (writes in stderr if empty)")
-            .RequiredArgument("file")
-            .StoreResult(&RunnerOptions.YdbSettings.LogOutputFile)
-            .Handler1([](const NLastGetopt::TOptsParser* option) {
-                if (const TString& file = option->CurVal()) {
-                    std::remove(file.c_str());
-                }
-            });
-
-        TChoices<NActors::NLog::EPriority> logPriority({
-            {"emerg", NActors::NLog::EPriority::PRI_EMERG},
-            {"alert", NActors::NLog::EPriority::PRI_ALERT},
-            {"crit", NActors::NLog::EPriority::PRI_CRIT},
-            {"error", NActors::NLog::EPriority::PRI_ERROR},
-            {"warn", NActors::NLog::EPriority::PRI_WARN},
-            {"notice", NActors::NLog::EPriority::PRI_NOTICE},
-            {"info", NActors::NLog::EPriority::PRI_INFO},
-            {"debug", NActors::NLog::EPriority::PRI_DEBUG},
-            {"trace", NActors::NLog::EPriority::PRI_TRACE},
-        });
-        options.AddLongOption("log-default", "Default log priority")
-            .RequiredArgument("priority")
-            .Choices(logPriority.GetChoices())
-            .StoreMappedResultT<TString>(&DefaultLogPriority, logPriority);
-
-        options.AddLongOption("log", "Component log priority in format <component>=<priority> (e. g. KQP_YQL=trace)")
-            .RequiredArgument("component priority")
-            .Handler1([this, logPriority](const NLastGetopt::TOptsParser* option) {
-                TStringBuf component;
-                TStringBuf priority;
-                TStringBuf(option->CurVal()).Split('=', component, priority);
-                if (component.empty() || priority.empty()) {
-                    ythrow yexception() << "Incorrect log setting, expected form component=priority, e. g. KQP_YQL=trace";
-                }
-
-                if (!logPriority.Contains(TString(priority))) {
-                    ythrow yexception() << "Incorrect log priority: " << priority;
-                }
-
-                const auto service = GetLogService(TString(component));
-                if (!LogPriorities.emplace(service, logPriority(TString(priority))).second) {
-                    ythrow yexception() << "Got duplicated log service name: " << component;
-                }
-            });
-
         TChoices<TRunnerOptions::ETraceOptType> traceOpt({
             {"all", TRunnerOptions::ETraceOptType::All},
             {"scheme", TRunnerOptions::ETraceOptType::Scheme},
@@ -669,10 +577,10 @@ protected:
             .DefaultValue(0)
             .StoreResult(&ExecutionOptions.ResultsRowsLimit);
 
-        TChoices<TRunnerOptions::EResultOutputFormat> resultFormat({
-            {"rows", TRunnerOptions::EResultOutputFormat::RowsJson},
-            {"full-json", TRunnerOptions::EResultOutputFormat::FullJson},
-            {"full-proto", TRunnerOptions::EResultOutputFormat::FullProto}
+        TChoices<EResultOutputFormat> resultFormat({
+            {"rows", EResultOutputFormat::RowsJson},
+            {"full-json", EResultOutputFormat::FullJson},
+            {"full-proto", EResultOutputFormat::FullProto}
         });
         options.AddLongOption('R', "result-format", "Script query result format")
             .RequiredArgument("result-format")
@@ -837,24 +745,6 @@ protected:
                 return nodeCount;
             });
 
-        options.AddLongOption('M', "monitoring", "Embedded UI port (use 0 to start on random free port), if used kqprun will be run as daemon")
-            .RequiredArgument("uint")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                if (const TString& port = option->CurVal()) {
-                    RunnerOptions.YdbSettings.MonitoringEnabled = true;
-                    RunnerOptions.YdbSettings.MonitoringPortOffset = FromString(port);
-                }
-            });
-
-        options.AddLongOption('G', "grpc", "gRPC port (use 0 to start on random free port), if used kqprun will be run as daemon")
-            .RequiredArgument("uint")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                if (const TString& port = option->CurVal()) {
-                    RunnerOptions.YdbSettings.GrpcEnabled = true;
-                    RunnerOptions.YdbSettings.GrpcPort = FromString(port);
-                }
-            });
-
         options.AddLongOption('E', "emulate-yt", "Emulate YT tables (use file gateway instead of native gateway)")
             .NoArgument()
             .SetFlag(&EmulateYt);
@@ -870,11 +760,6 @@ protected:
             .RequiredArgument("uint")
             .DefaultValue(10)
             .StoreMappedResultT<ui64>(&RunnerOptions.YdbSettings.HealthCheckTimeout, &TDuration::Seconds<ui64>);
-
-        options.AddLongOption("domain", "Test cluster domain name")
-            .RequiredArgument("name")
-            .DefaultValue(RunnerOptions.YdbSettings.DomainName)
-            .StoreResult(&RunnerOptions.YdbSettings.DomainName);
 
         const auto addTenant = [this](const TString& type, TStorageMeta::TTenant::EType protoType, const NLastGetopt::TOptsParser* option) {
             TStringBuf tenant;
@@ -939,18 +824,7 @@ protected:
             .NoArgument()
             .SetFlag(&RunnerOptions.YdbSettings.DisableDiskMock);
 
-        TChoices<std::function<void()>> backtrace({
-            {"heavy", &NKikimr::EnableYDBBacktraceFormat},
-            {"light", []() { SetFormatBackTraceFn(FormatBackTrace); }}
-        });
-        options.AddLongOption("backtrace", "Default backtrace format function")
-            .RequiredArgument("backtrace-type")
-            .DefaultValue("heavy")
-            .Choices(backtrace.GetChoices())
-            .Handler1([backtrace](const NLastGetopt::TOptsParser* option) {
-                TString choice(option->CurValOrDef());
-                backtrace(choice)();
-            });
+        RegisterKikimrOptions(options, RunnerOptions.YdbSettings);
     }
 
     int DoRun(NLastGetopt::TOptsParseResult&&) override {
@@ -969,10 +843,7 @@ protected:
             appConfig.MutableQueryServiceConfig()->SetScriptResultRowsLimit(ExecutionOptions.ResultsRowsLimit);
         }
 
-        if (DefaultLogPriority) {
-            appConfig.MutableLogConfig()->SetDefaultLevel(*DefaultLogPriority);
-        }
-        ModifyLogPriorities(LogPriorities, *appConfig.MutableLogConfig());
+        FillLogConfig(*appConfig.MutableLogConfig());
 
         if (EmulateYt) {
             const auto& fileStorageConfig = appConfig.GetQueryServiceConfig().GetFileStorage();
@@ -1023,38 +894,6 @@ private:
     }
 };
 
-
-void KqprunTerminateHandler() {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-
-void SegmentationFaultHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= segmentation fault call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "==============================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-void FloatingPointExceptionHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= floating point exception call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "====================================================" << colors.Default() << Endl;
-
-    abort();
-}
-
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 void InterruptHandler(int) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
@@ -1071,9 +910,7 @@ void InterruptHandler(int) {
 }  // namespace NKqpRun
 
 int main(int argc, const char* argv[]) {
-    std::set_terminate(NKqpRun::KqprunTerminateHandler);
-    signal(SIGSEGV, &NKqpRun::SegmentationFaultHandler);
-    signal(SIGFPE, &NKqpRun::FloatingPointExceptionHandler);
+    SetupSignalActions();
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     signal(SIGINT, &NKqpRun::InterruptHandler);

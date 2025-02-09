@@ -140,6 +140,7 @@ namespace Tests {
         bool UseRealThreads = true;
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
+        bool EnableYqGrpc = false;
         TDuration KeepSnapshotTimeout = TDuration::Zero();
         ui64 ChangesQueueItemsLimit = 0;
         ui64 ChangesQueueBytesLimit = 0;
@@ -205,6 +206,7 @@ namespace Tests {
         TServerSettings& SetEnableDbCounters(bool value) { FeatureFlags.SetEnableDbCounters(value); return *this; }
         TServerSettings& SetEnablePersistentQueryStats(bool value) { FeatureFlags.SetEnablePersistentQueryStats(value); return *this; }
         TServerSettings& SetEnableYq(bool value) { EnableYq = value; return *this; }
+        TServerSettings& SetEnableYqGrpc(bool value) { EnableYqGrpc = value; return *this; }
         TServerSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
         TServerSettings& SetChangesQueueItemsLimit(ui64 value) { ChangesQueueItemsLimit = value; return *this; }
         TServerSettings& SetChangesQueueBytesLimit(ui64 value) { ChangesQueueBytesLimit = value; return *this; }

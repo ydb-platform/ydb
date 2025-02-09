@@ -585,7 +585,7 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
 
     // TODO: Maybe NeedToConnect doesn't always mean that we don't need to check endpoint and database
     // TODO: Now we supplying only one error while it is possible to return all errors at once,
-    //       maybe even erros from nested command's validate
+    //       maybe even errors from nested command's validate
     if (!config.NeedToConnect) {
         return;
     }

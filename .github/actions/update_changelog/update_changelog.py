@@ -16,12 +16,8 @@ CATEGORY_PREFIX = "### "
 ITEM_PREFIX = "* "
 
 @functools.cache
-def get_github_repo():
-    return subprocess.run(["git", "config", "--get", "remote.origin.url"], capture_output=True, text=True).stdout.strip()
-
-@functools.cache
 def get_github_api_url():
-    return get_github_repo().split(':')[1].replace('//github.com/', '').replace('.git', '')
+   return os.getenv('GITHUB_REPOSITORY')
 
 def to_dict(changelog_path, encoding='utf-8'):
     changelog = {}

@@ -14,6 +14,7 @@ RECURSE(
     impl/ydb_internal/value_helpers
     impl/ydb_stats
     resources
+    cms
     common_client
     common_client/impl
     coordination

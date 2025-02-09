@@ -27,6 +27,7 @@ namespace NYql {
         {
             using TSelf = TGenericDataSourceTypeAnnotationTransformer;
             AddHandler({TCoConfigure::CallableName()}, Hndl(&TSelf::HandleConfig));
+            AddHandler({TGenTable::CallableName()}, Hndl(&TSelf::HandleTable));
             AddHandler({TGenReadTable::CallableName()}, Hndl(&TSelf::HandleReadTable));
             AddHandler({TGenSourceSettings::CallableName()}, Hndl(&TSelf::HandleSourceSettings));
         }
@@ -45,6 +46,19 @@ namespace NYql {
             }
 
             input->SetTypeAnn(input->Child(TCoConfigure::idx_World)->GetTypeAnn());
+            return TStatus::Ok;
+        }
+
+        TStatus HandleTable(const TExprNode::TPtr& input, TExprContext& ctx) {
+            if (!EnsureArgsCount(*input, 2, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureAtom(*input->Child(TGenTable::idx_Name), ctx)) {
+                return TStatus::Error;
+            }
+
+            input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
             return TStatus::Ok;
         }
 
@@ -131,7 +145,7 @@ namespace NYql {
                 return TStatus::Error;
             }
 
-            if (!EnsureAtom(*input->Child(TGenReadTable::idx_Table), ctx)) {
+            if (!EnsureCallable(*input->Child(TGenReadTable::idx_Table), ctx)) {
                 return TStatus::Error;
             }
 
@@ -157,9 +171,21 @@ namespace NYql {
                 }
             }
 
+            // Determine cluster name
             TString clusterName{input->Child(TGenReadTable::idx_DataSource)->Child(1)->Content()};
-            TString tableName{input->Child(TGenReadTable::idx_Table)->Content()};
 
+            // Determine table name
+            const auto tableNode = input->Child(TGenReadTable::idx_Table);
+            if (!TGenTable::Match(tableNode)) {
+                ctx.AddError(TIssue(ctx.GetPosition(tableNode->Pos()),
+                                    TStringBuilder() << "Expected " << TGenTable::CallableName()));
+                return TStatus::Error;
+            }
+
+            TGenTable table(tableNode);
+            const auto tableName = table.Name().StringValue();
+
+            // Extract table metadata
             auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));
             if (issue.has_value()) {
                 ctx.AddError(issue.value());

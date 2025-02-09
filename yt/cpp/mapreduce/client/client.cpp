@@ -1433,7 +1433,7 @@ TYtPoller& TClient::GetYtPoller()
         // We don't use current client and create new client because YtPoller_ might use
         // this client during current client shutdown.
         // That might lead to incrementing of current client refcount and double delete of current client object.
-        YtPoller_ = std::make_unique<TYtPoller>(Context_, ClientRetryPolicy_);
+        YtPoller_ = std::make_unique<TYtPoller>(RawClient_->Clone(), Context_.Config, ClientRetryPolicy_);
     }
     return *YtPoller_;
 }

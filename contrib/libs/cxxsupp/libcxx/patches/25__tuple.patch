@@ -1,8 +1,8 @@
 diff --git a/include/__tuple/sfinae_helpers.h b/include/__tuple/sfinae_helpers.h
-index 90e9b1e..c76e7e0 100644
+index 35a57ff..dfd00f5 100644
 --- a/include/__tuple/sfinae_helpers.h
 +++ b/include/__tuple/sfinae_helpers.h
-@@ -46,7 +46,7 @@ struct __tuple_sfinae_base {
+@@ -41,7 +41,7 @@ struct __tuple_sfinae_base {
    static auto __do_test(...) -> false_type;
  
    template <class _FromArgs, class _ToArgs>
@@ -11,7 +11,7 @@ index 90e9b1e..c76e7e0 100644
  };
  
  // __tuple_constructible
-@@ -54,11 +54,17 @@ struct __tuple_sfinae_base {
+@@ -49,11 +49,17 @@ struct __tuple_sfinae_base {
  template <class _Tp,
            class _Up,
            bool = __tuple_like_ext<__libcpp_remove_reference_t<_Tp> >::value,
@@ -32,10 +32,10 @@ index 90e9b1e..c76e7e0 100644
                                                     typename __make_tuple_types<_Up>::type > {};
  
 diff --git a/include/__tuple/tuple_element.h b/include/__tuple/tuple_element.h
-index 2b9ac66..e811a21 100644
+index 55b3b47..c6818f2 100644
 --- a/include/__tuple/tuple_element.h
 +++ b/include/__tuple/tuple_element.h
-@@ -63,11 +63,26 @@ __indexed<_Idx, _Tp> __at_index(__indexed<_Idx, _Tp> const&);
+@@ -60,11 +60,26 @@ __indexed<_Idx, _Tp> __at_index(__indexed<_Idx, _Tp> const&);
  
  } // namespace __indexer_detail
  

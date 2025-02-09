@@ -178,7 +178,7 @@ NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.PgParser = UsePgParser && *UsePgParser;
-
+    settings.Antlr4Parser = false;
     if (settings.PgParser) {
         settings.AutoParametrizeEnabled = IsEnablePgConstsToParams ;
         settings.AutoParametrizeValuesStmt = IsEnablePgConstsToParams;

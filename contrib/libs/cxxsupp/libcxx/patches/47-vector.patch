@@ -1,11 +1,11 @@
 diff --git a/include/vector b/include/vector
-index 89cbdf0..4a875b6 100644
+index 1defc43..8d5b846 100644
 --- a/include/vector
 +++ b/include/vector
-@@ -347,6 +347,7 @@ template<class T, class charT> requires is-vector-bool-reference<T> // Since C++
+@@ -348,6 +348,7 @@ template<class T, class charT> requires is-vector-bool-reference<T> // Since C++
  #include <__type_traits/is_allocator.h>
  #include <__type_traits/is_constructible.h>
- #include <__type_traits/is_nothrow_move_assignable.h>
+ #include <__type_traits/is_nothrow_assignable.h>
 +#include <__type_traits/is_trivially_destructible.h>
  #include <__type_traits/noexcept_move_assign_container.h>
  #include <__type_traits/type_identity.h>

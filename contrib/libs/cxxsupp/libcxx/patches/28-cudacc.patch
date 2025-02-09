@@ -1,5 +1,18 @@
+diff --git a/include/__algorithm/simd_utils.h b/include/__algorithm/simd_utils.h
+index 989a195..c2fc02e 100644
+--- a/include/__algorithm/simd_utils.h
++++ b/include/__algorithm/simd_utils.h
+@@ -27,7 +27,7 @@ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
+ 
+ // TODO: Find out how altivec changes things and allow vectorizations there too.
+-#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && _LIBCPP_CLANG_VER >= 1700 && !defined(__ALTIVEC__)
++#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && _LIBCPP_CLANG_VER >= 1700 && !defined(__ALTIVEC__) && !defined(__CUDACC__)
+ #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 1
+ #else
+ #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 0
 diff --git a/include/__iterator/reverse_iterator.h b/include/__iterator/reverse_iterator.h
-index 5900b1c..c8f3628 100644
+index 2ae1461..3fb2a42 100644
 --- a/include/__iterator/reverse_iterator.h
 +++ b/include/__iterator/reverse_iterator.h
 @@ -132,7 +132,7 @@ public:
@@ -49,10 +62,10 @@ index da585af..b271b8f 100644
    return __builtin_isnan(__x);
  }
 diff --git a/include/complex b/include/complex
-index e996485..d553dad 100644
+index a81f968..1e4d99d 100644
 --- a/include/complex
 +++ b/include/complex
-@@ -1518,6 +1518,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
+@@ -1513,6 +1513,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
    return {0.0, static_cast<double>(__im)};
  }
  
@@ -60,7 +73,7 @@ index e996485..d553dad 100644
  _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double __im) {
    return {0.0f, static_cast<float>(__im)};
  }
-@@ -1525,6 +1526,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
+@@ -1520,6 +1521,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
  _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(unsigned long long __im) {
    return {0.0f, static_cast<float>(__im)};
  }
@@ -69,10 +82,10 @@ index e996485..d553dad 100644
  } // namespace literals
  #endif
 diff --git a/include/tuple b/include/tuple
-index 0101d64..f2369fa 100644
+index c7fc550..ed7d912 100644
 --- a/include/tuple
 +++ b/include/tuple
-@@ -305,7 +305,7 @@ class __tuple_leaf {
+@@ -297,7 +297,7 @@ class __tuple_leaf {
  
    template <class _Tp>
    static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
@@ -81,7 +94,7 @@ index 0101d64..f2369fa 100644
      return !__reference_binds_to_temporary(_Hp, _Tp);
  #  else
      return true;
-@@ -611,8 +611,16 @@ public:
+@@ -599,8 +599,16 @@ public:
                is_constructible<_Tp, _Up>... > {};
  
    template <class... _Up,

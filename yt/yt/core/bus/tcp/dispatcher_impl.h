@@ -13,6 +13,7 @@
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/fork_aware_rw_spin_lock.h>
 
@@ -86,7 +87,7 @@ private:
     NConcurrency::IThreadPoolPollerPtr XferPoller_;
 
     TMpscStack<TWeakPtr<TTcpConnection>> ConnectionsToRegister_;
-    std::vector<TWeakPtr<TTcpConnection>> ConnectionList_;
+    NThreading::TAtomicObject<std::vector<TWeakPtr<TTcpConnection>>> ConnectionList_;
     int CurrentConnectionListIndex_ = 0;
 
     struct TNetworkStatistics

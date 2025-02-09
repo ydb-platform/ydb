@@ -17,6 +17,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
         settings.ClusterMapping = options.ClusterMapping;
         settings.SyntaxVersion = options.SyntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
+        settings.EmitReadsForExists = true;
         if (options.IsLibrary) {
             settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         }

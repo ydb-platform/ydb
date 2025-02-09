@@ -43,8 +43,8 @@ IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options);
 //! Shortcut to create cache with default config.
 IClientsCachePtr CreateClientsCache();
 
-//! Helper function to create one cluster config from cluster URL and clusters config.
-NApi::NRpcProxy::TConnectionConfigPtr MakeClusterConfig(const TClientsCacheConfigPtr& config, TStringBuf clusterUrl);
+//! Helper function to get a cluster config by |clusterUrl|.
+NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TClientsCacheConfigPtr& config, TStringBuf clusterUrl);
 
 ////////////////////////////////////////////////////////////////////////////////
 

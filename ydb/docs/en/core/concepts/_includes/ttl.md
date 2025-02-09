@@ -54,7 +54,7 @@ The *BRO* has the following properties:
   * Nanoseconds.
 
 * You can't specify multiple TTL columns.
-* You can't delete the TTL column. However, if this is required, you should first [disable TTL](../../recipes/yql/ttl.md#disable) for the table.
+* You can't delete the TTL column. However, if this is required, you should first [disable TTL](../../yql/reference/recipes/ttl.md#disable) for the table.
 * Only {{ objstorage-name }} is supported as external storage.
 * The delete action can only be specified for the last tier.
 
@@ -62,6 +62,6 @@ The *BRO* has the following properties:
 
 Currently, you can manage TTL settings using:
 
-* [YQL](../../recipes/yql/ttl.md).
+* [YQL](../../yql/reference/recipes/ttl.md).
 * [{{ ydb-short-name }} console client](../../recipes/ydb-cli/ttl.md).
 * {{ ydb-short-name }} {% if oss %}C++, {% endif %}Go and Python [SDK](../../recipes/ydb-sdk/ttl.md).

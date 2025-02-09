@@ -43,7 +43,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
 
         {
@@ -62,7 +62,7 @@ public:
         if (result.IsSuccess()) {
             Session = result.GetSession();
             TString query = TStringBuilder() << "DECLARE $name AS Utf8; SELECT * FROM `" + Location.RootDomain + "/ydb/MasterClusterExt.db` WHERE name=$name";
-            NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+            NActors::TActorSystem* actorSystem = ctx.ActorSystem();
             NActors::TActorId actorId = ctx.SelfID;
             TString name(Request.Parameters["name"]);
             if (name.empty()) {

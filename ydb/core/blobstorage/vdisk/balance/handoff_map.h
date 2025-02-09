@@ -110,16 +110,12 @@ namespace NKikimr {
         }
 
         // update merger with the filtered parts (only remaining local parts are kept)
-        TBlobType::EType type;
-        ui32 inplacedDataSize = 0;
-        dataMerger.FilterLocalParts(ingress.LocalParts(Top->GType), key.LogoBlobID(), &type, &inplacedDataSize);
+        dataMerger.FilterLocalParts(ingress.LocalParts(Top->GType));
 
         // reinstate memRec
         memRec = TMemRecLogoBlob(ingress);
-        memRec.SetType(type);
-        if (type == TBlobType::DiskBlob && inplacedDataSize) { // update inplaced data size for inplace blob
-            memRec.SetDiskBlob(TDiskPart(0, 0, inplacedDataSize));
-        }
+        memRec.SetDiskBlob(TDiskPart(0, 0, dataMerger.GetInplacedBlobSize(key.LogoBlobID())));
+        memRec.SetType(dataMerger.GetType());
 
         Y_ABORT_UNLESS(memRec.GetLocalParts(Top->GType) == dataMerger.GetParts());
     }

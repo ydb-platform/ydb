@@ -10,7 +10,7 @@
 namespace NYdb::NDump {
 
 inline void AddPath(NYdb::NIssue::TIssues& issues, const TString& path) {
-    issues.AddIssue(NYdb::NIssue::TIssue(TStringBuilder() << "Path: " << path)
+    issues.AddIssue(NYdb::NIssue::TIssue(TStringBuilder() << "path: " << path)
         .SetCode(NYdb::NIssue::DEFAULT_ERROR, NYdb::NIssue::ESeverity::Info));
 }
 

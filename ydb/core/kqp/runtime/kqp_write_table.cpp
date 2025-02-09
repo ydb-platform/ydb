@@ -1173,8 +1173,6 @@ public:
 
         if (info.Metadata.Priority == 0) {
             FlushSerializer(token, GetMemory() >= Settings.MemoryLimitTotal);
-        } else {
-            YQL_ENSURE(GetMemory() <= Settings.MemoryLimitTotal);
         }
     }
 

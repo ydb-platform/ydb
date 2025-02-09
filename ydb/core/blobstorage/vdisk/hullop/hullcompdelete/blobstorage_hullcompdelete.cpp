@@ -1,5 +1,6 @@
 #include "blobstorage_hullcompdelete.h"
 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
@@ -20,6 +21,7 @@ namespace NKikimr {
                         LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(vctx->VDiskLogPrefix,
                             "FORGET: PDiskId# %s ChunksToForget# %s", pdiskCtx->PDiskIdString.data(),
                             FormatList(item.ChunksToForget).data()));
+                        ctx.Send(skeletonId, new TEvNotifyChunksDeleted(item.RecordLsn, item.ChunksToForget));
                         TActivationContext::Send(new IEventHandle(pdiskCtx->PDiskId, skeletonId, new NPDisk::TEvChunkForget(
                             pdiskCtx->Dsk->Owner, pdiskCtx->Dsk->OwnerRound, std::move(item.ChunksToForget))));
                     }

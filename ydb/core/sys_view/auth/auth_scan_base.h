@@ -1,5 +1,7 @@
 #pragma once
 
+#include "sort_helpers.h"
+
 #include <ydb/core/base/auth.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -21,7 +23,22 @@ template <typename TDerived>
 class TAuthScanBase : public TScanActorBase<TDerived> {
     struct TTraversingChildren {
         TNavigate::TEntry Entry;
+        TVector<const TNavigate::TListNodeEntry::TChild*> SortedChildren;
         size_t Index = 0;
+
+        TTraversingChildren() = default;
+
+        TTraversingChildren(TNavigate::TEntry&& entry)
+            : Entry(std::move(entry))
+            , SortedChildren(::Reserve(Entry.ListNodeEntry->Children.size()))
+        {
+            for (const auto& child : Entry.ListNodeEntry->Children) {
+                SortedChildren.push_back(&child);
+            }
+            SortBatch(SortedChildren, [](const auto* left, const auto* right) {
+                return left->Name < right->Name;
+            });
+        }
     };
 
 public:
@@ -34,11 +51,19 @@ public:
     TAuthScanBase(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        bool requireUserAdministratorAccess)
+        bool requireUserAdministratorAccess, bool applyPathTableRange)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
         , UserToken(std::move(userToken))
         , RequireUserAdministratorAccess(requireUserAdministratorAccess)
     {
+        if (applyPathTableRange) {
+            if (auto cellsFrom = TBase::TableRange.From.GetCells(); cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
+                PathFrom = cellsFrom[0].AsBuf();
+            }
+            if (auto cellsTo = TBase::TableRange.To.GetCells(); cellsTo.size() > 0 && !cellsTo[0].IsNull()) {
+                PathTo = cellsTo[0].AsBuf();
+            }
+        }
     }
 
     STFUNC(StateScan) {
@@ -64,16 +89,6 @@ protected:
             return;
         }
 
-        // TODO: support TableRange filter
-        if (auto cellsFrom = TBase::TableRange.From.GetCells(); cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "TableRange.From filter is not supported");
-            return;
-        }
-        if (auto cellsTo = TBase::TableRange.To.GetCells(); cellsTo.size() > 0 && !cellsTo[0].IsNull()) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "TableRange.To filter is not supported");
-            return;
-        }
-
         auto& last = DeepFirstSearchStack.emplace_back();
         last.Index = Max<size_t>(); // tenant root
 
@@ -91,20 +106,29 @@ protected:
             auto& last = DeepFirstSearchStack.back();
 
             if (last.Index == Max<size_t>()) { // tenant root
+                if ((PathFrom || PathTo) && ShouldSkipSubTree(TBase::TenantName)) {
+                    DeepFirstSearchStack.pop_back();
+                    continue;
+                }
                 NavigatePath(SplitPath(TBase::TenantName));
                 DeepFirstSearchStack.pop_back();
                 return;
             }
 
-            auto& children = last.Entry.ListNodeEntry->Children;
+            auto& children = last.SortedChildren;
             if (last.Index < children.size()) {
-                auto& child = children.at(last.Index++);
+                const auto& child = *children.at(last.Index++);
 
                 if (child.Kind == TSchemeCacheNavigate::KindExtSubdomain || child.Kind == TSchemeCacheNavigate::KindSubdomain) {
                     continue;
                 }
 
                 last.Entry.Path.push_back(child.Name);
+                if ((PathFrom || PathTo) && ShouldSkipSubTree(CanonizePath(last.Entry.Path))) {
+                    last.Entry.Path.pop_back();
+                    continue;
+                }
+                
                 NavigatePath(last.Entry.Path);
                 last.Entry.Path.pop_back();
                 return;
@@ -172,6 +196,46 @@ protected:
 
         TBase::Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }
+    
+    // this method only skip foolproof useless paths
+    // ignores from/to inclusive flags for simplicity
+    // ignores some boundary cases for simplicity
+    // precise check will be performed later on batch rows filtering
+    bool ShouldSkipSubTree(const TString& path) {
+        Y_DEBUG_ABORT_UNLESS(PathFrom || PathTo);
+
+        if (PathFrom) {
+            // example:
+            // PathFrom = "Dir2/SubDir2"
+            // skip:
+            // - "Dir1"
+            // - "Dir2/SubDir1"
+            // do not skip:
+            // - "Dir2"
+            // - "Dir3"
+
+            if (PathFrom > path && !PathFrom->StartsWith(path)) {
+                return true;
+            }
+        }
+
+        if (PathTo) {
+            // example:
+            // PathTo = "Dir2/SubDir2"
+            // skip:
+            // - "Dir3"
+            // - "Dir2/SubDir3"
+            // do not skip:
+            // - "Dir1"
+            // - "Dir2"
+
+            if (PathTo < path) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     virtual void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TNavigate::TEntry& entry) = 0;
 
@@ -180,6 +244,7 @@ protected:
 
 private:
     bool RequireUserAdministratorAccess;
+    std::optional<TString> PathFrom, PathTo;
     TVector<TTraversingChildren> DeepFirstSearchStack;
 };
 

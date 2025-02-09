@@ -76,6 +76,8 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
     NCommon::TConfSetting<ui32, false> MaxSequentialReadsInFlight;
 
+    NCommon::TConfSetting<ui32, false> KMeansTreeSearchTopSize;
+
     /* Runtime */
     NCommon::TConfSetting<bool, true> ScanQuery;
 
@@ -156,9 +158,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpDataQueryStreamLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnableKqpDataQueryStreamIdxLookupJoin = false;
-    bool EnablePreparedDdl = false;
-    bool EnableSequences = false;
-    bool EnableColumnsWithDefault = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
     NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode IndexAutoChooserMode;
     bool EnableAstCache = false;
@@ -171,8 +170,9 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
     bool EnableHtapTx = false;
+    bool EnableStreamWrite = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
-    bool EnableSpillingGenericQuery = false;
+    bool EnableSpilling = true;
     ui32 DefaultCostBasedOptimizationLevel = 4;
     bool EnableConstantFolding = true;
     ui64 DefaultEnableSpillingNodes = 0;

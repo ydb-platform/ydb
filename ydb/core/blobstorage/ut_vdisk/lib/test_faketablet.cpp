@@ -39,7 +39,7 @@ class TFakeTabletLogChannelActor : public NActors::TActorBootstrapped<TFakeTable
         DataSetPtr.Reset(new TCustomDataSet(TabletId, 1 /*gen*/, 0 /*channel*/, Step, RecsPerIteration, BlobSize,
                                             NKikimrBlobStorage::EPutHandleClass::TabletLog, MinHugeBlobSize, false));
         Step += RecsPerIteration;
-        ctx.ExecutorThread.RegisterActor(ManyPutsToCorrespondingVDisks(ctx.SelfID, Conf, DataSetPtr.Get()));
+        ctx.Register(ManyPutsToCorrespondingVDisks(ctx.SelfID, Conf, DataSetPtr.Get()));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -90,7 +90,7 @@ class TFakeTabletHugeBlobChannelActor : public NActors::TActorBootstrapped<TFake
         DataSetPtr.Reset(new TCustomDataSet(TabletId, 1 /*gen*/, Channel, Step, 1, HugeBlobSize,
                                             NKikimrBlobStorage::EPutHandleClass::AsyncBlob, MinHugeBlobSize, true));
         Step++;
-        ctx.ExecutorThread.RegisterActor(ManyPutsToCorrespondingVDisks(ctx.SelfID, Conf, DataSetPtr.Get()));
+        ctx.Register(ManyPutsToCorrespondingVDisks(ctx.SelfID, Conf, DataSetPtr.Get()));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -127,8 +127,8 @@ class TFakeTabletActor : public NActors::TActorBootstrapped<TFakeTabletActor> {
 
     void Bootstrap(const NActors::TActorContext &ctx) {
         Become(&TThis::StateFunc);
-        ctx.ExecutorThread.RegisterActor(LogActor.Release());
-        ctx.ExecutorThread.RegisterActor(HugeBlobActor.Release());
+        ctx.Register(LogActor.Release());
+        ctx.Register(HugeBlobActor.Release());
         Counter = 2;
     }
 
@@ -175,7 +175,7 @@ class TFakeTabletLoadActor : public NActors::TActorBootstrapped<TFakeTabletLoadA
 
     void Bootstrap(const NActors::TActorContext &ctx) {
         for (ui64 i = 0; i < TabletsNum; i++) {
-            ctx.ExecutorThread.RegisterActor(new TFakeTabletActor(Conf, i, HugeBlobSize, MinHugeBlobSize,
+            ctx.Register(new TFakeTabletActor(Conf, i, HugeBlobSize, MinHugeBlobSize,
                                                                   HugeBlobWaitTime));
         }
         Counter = TabletsNum;

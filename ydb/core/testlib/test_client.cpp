@@ -16,6 +16,7 @@
 #include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
+#include <ydb/services/view/grpc_service.h>
 #include <ydb/services/ymq/grpc_service.h>
 #include <ydb/services/kesus/grpc_service.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
@@ -109,6 +110,7 @@
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
+#include <ydb/core/statistics/service/service.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
@@ -705,7 +707,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies, true, 1));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbTabletService(system, counters, grpcRequestProxies, true, 1));
-        if (Settings->EnableYq) {
+        if (Settings->EnableYq || Settings->EnableYqGrpc) {
             GRpcServer->AddService(new NGRpcService::TGRpcFederatedQueryService(system, counters, grpcRequestProxies[0]));
             GRpcServer->AddService(new NGRpcService::TGRpcFqPrivateTaskService(system, counters, grpcRequestProxies[0]));
         }
@@ -719,6 +721,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcYdbLogStoreService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcReplicationService(system, counters, grpcRequestProxies[0], true));
+        GRpcServer->AddService(new NGRpcService::TGRpcViewService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->Start();
     }
 
@@ -1365,6 +1368,12 @@ namespace Tests {
         }
 
         {
+            auto statActor = NStat::CreateStatService();
+            const TActorId statActorId = Runtime->Register(statActor.Release(), nodeIdx, Runtime->GetAppData(nodeIdx).UserPoolId);
+            Runtime->RegisterService(NStat::MakeStatServiceID(Runtime->GetNodeId(nodeIdx)), statActorId, nodeIdx);
+        }
+
+        {
             IActor* kesusService = NKesus::CreateKesusProxyService();
             TActorId kesusServiceId = Runtime->Register(kesusService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKesus::MakeKesusProxyServiceId(), kesusServiceId, nodeIdx);
@@ -1876,6 +1885,10 @@ namespace Tests {
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
+    void TClient::TestMkDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
+        auto status = MkDir(parent, name, applyIf);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+    }
 
     NMsgBusProxy::EResponseStatus TClient::RmDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
         NMsgBusProxy::TBusSchemeOperation* request(new NMsgBusProxy::TBusSchemeOperation());
@@ -1890,6 +1903,10 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+    void TClient::TestRmDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
+        auto status = RmDir(parent, name, applyIf);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateSubdomain(const TString &parent, const TString &description) {
@@ -2048,12 +2065,19 @@ namespace Tests {
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), NMsgBusProxy::EResponseStatus::MSTATUS_OK, response.GetErrorReason());
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+    void TClient::TestCreateUser(const TString& parent, const TCreateUserOption& options, const TString& userToken) {
+        auto status = CreateUser(parent, options, userToken);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
         return CreateUser(parent, {.User = user, .Password = password}, userToken);
+    }
+    void TClient::TestCreateUser(const TString& parent, const TString& user, const TString& password, const TString& userToken) {
+        auto status = CreateUser(parent, user, password, userToken);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
     NMsgBusProxy::EResponseStatus TClient::ModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken) {
@@ -2081,22 +2105,9 @@ namespace Tests {
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
-
-    NKikimrScheme::TEvLoginResult TClient::Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
-        TActorId sender = runtime.AllocateEdgeActor();
-        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvLogin> evLogin(new NSchemeShard::TEvSchemeShard::TEvLogin());
-        evLogin->Record.SetUser(user);
-        evLogin->Record.SetPassword(password);
-
-        if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
-            evLogin->Record.SetExternalAuth(ldapDomain);
-        }
-        const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
-        ForwardToTablet(runtime, schemeRoot, sender, evLogin.Release());
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(handle);
-        UNIT_ASSERT(event);
-        return event->Record;
+    void TClient::TestModifyUser(const TString& parent, const TModifyUserOption& options, const TString& userToken) {
+        auto status = ModifyUser(parent, options, userToken);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateGroup(const TString& parent, const TString& group) {
@@ -2114,6 +2125,10 @@ namespace Tests {
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
+    void TClient::TestCreateGroup(const TString& parent, const TString& group) {
+        auto status = CreateGroup(parent, group);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+    }
 
     NMsgBusProxy::EResponseStatus TClient::AddGroupMembership(const TString& parent, const TString& group, const TString& member) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
@@ -2130,6 +2145,27 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+    void TClient::TestAddGroupMembership(const TString& parent, const TString& group, const TString& member) {
+        auto status = AddGroupMembership(parent, group, member);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+    }
+
+    NKikimrScheme::TEvLoginResult TClient::Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvLogin> evLogin(new NSchemeShard::TEvSchemeShard::TEvLogin());
+        evLogin->Record.SetUser(user);
+        evLogin->Record.SetPassword(password);
+
+        if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
+            evLogin->Record.SetExternalAuth(ldapDomain);
+        }
+        const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
+        ForwardToTablet(runtime, schemeRoot, sender, evLogin.Release());
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout) {
@@ -2510,7 +2546,7 @@ namespace Tests {
         Y_ABORT_UNLESS(ev);
     }
 
-    void TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner) {
+    NMsgBusProxy::EResponseStatus TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
@@ -2520,9 +2556,15 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+    void TClient::TestModifyOwner(const TString& parent, const TString& name, const TString& owner) {
+        auto status = ModifyOwner(parent, name, owner);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    void TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) {
+    NMsgBusProxy::EResponseStatus TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
@@ -2532,16 +2574,30 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+    void TClient::TestModifyACL(const TString& parent, const TString& name, const TString& acl) {
+        auto status = ModifyACL(parent, name, acl);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    void TClient::Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
+    NMsgBusProxy::EResponseStatus TClient::Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, rights, subject);
-        ModifyACL(parent, name, acl.SerializeAsString());
+        return ModifyACL(parent, name, acl.SerializeAsString());
+    }
+    void TClient::TestGrant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights) {
+        auto status = Grant(parent, name, subject, rights);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    void TClient::GrantConnect(const TString& subject) {
-        Grant("/", DomainName, subject, NACLib::EAccessRights::ConnectDatabase);
+    NMsgBusProxy::EResponseStatus TClient::GrantConnect(const TString& subject) {
+        return Grant("/", DomainName, subject, NACLib::EAccessRights::ConnectDatabase);
+    }
+    void TClient::TestGrantConnect(const TString& subject) {
+        auto status = GrantConnect(subject);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,

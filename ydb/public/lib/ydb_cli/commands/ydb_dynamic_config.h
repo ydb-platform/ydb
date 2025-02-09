@@ -42,7 +42,7 @@ private:
     bool AllowEmptyDatabase = false;
 };
 
-class TCommandConfigFetch : public TYdbCommand {
+class TCommandConfigFetch : public TYdbReadOnlyCommand {
 public:
     TCommandConfigFetch(bool allowEmptyDatabase);
     void Config(TConfig&) override;
@@ -56,7 +56,7 @@ private:
     bool AllowEmptyDatabase = false;
 };
 
-class TCommandConfigResolve : public TYdbCommand {
+class TCommandConfigResolve : public TYdbReadOnlyCommand {
 public:
     TCommandConfigResolve();
     void Config(TConfig& config) override;

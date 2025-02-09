@@ -54,7 +54,7 @@ void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
 }
 
 TCommandConfigFetch::TCommandConfigFetch(bool allowEmptyDatabase)
-    : TYdbCommand("fetch", {"get", "dump"}, "Fetch main dynamic-config")
+    : TYdbReadOnlyCommand("fetch", {"get", "dump"}, "Fetch main dynamic-config")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
@@ -193,7 +193,7 @@ int TCommandConfigReplace::Run(TConfig& config) {
 }
 
 TCommandConfigResolve::TCommandConfigResolve()
-    : TYdbCommand("resolve", {}, "Resolve config")
+    : TYdbReadOnlyCommand("resolve", {}, "Resolve config")
 {
 }
 

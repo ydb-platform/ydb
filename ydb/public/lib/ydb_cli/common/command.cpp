@@ -172,7 +172,7 @@ void TClientCommand::Prepare(TConfig& config) {
     Parse(config);
 }
 
-void TClientCommand::PostPrepare(TConfig& config) {
+void TClientCommand::ExtractParams(TConfig& config) {
     Y_UNUSED(config);
 }
 
@@ -184,7 +184,7 @@ bool TClientCommand::Prompt(TConfig& config) {
 int TClientCommand::ValidateAndRun(TConfig& config) {
     config.Opts = &Opts;
     config.ParseResult = ParseResult.get();
-    PostPrepare(config);
+    ExtractParams(config);
     Validate(config);
     if (Prompt(config)) {
         return Run(config);

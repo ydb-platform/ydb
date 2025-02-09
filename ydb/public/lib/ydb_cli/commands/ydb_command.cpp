@@ -44,6 +44,12 @@ TDriver TYdbCommand::CreateDriver(const TConfig& config, std::unique_ptr<TLogBac
     return TDriver(driverConfig);
 }
 
+bool TYdbReadOnlyCommand::Prompt(TConfig& config) {
+    Y_UNUSED(config);
+
+    return true;
+}
+
 TYdbSimpleCommand::TYdbSimpleCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
     :TYdbCommand(name, aliases, description)
 {}

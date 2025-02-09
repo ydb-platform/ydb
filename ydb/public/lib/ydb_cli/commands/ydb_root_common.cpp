@@ -336,7 +336,7 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
     config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
 }
 
-void TClientCommandRootCommon::PostPrepare(TConfig& config) {
+void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (ProfileFile.empty()) {
         config.ProfileFile = TStringBuilder() << HomeDir << '/' << Settings.YdbDir << "/config/config.yaml";
     } else {

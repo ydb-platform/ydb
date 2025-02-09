@@ -318,7 +318,14 @@ public:
 
     virtual int Process(TConfig& config);
     virtual void Prepare(TConfig& config);
-    virtual void PostPrepare(TConfig& config);
+    /*
+      This method will be called after all child
+      commands set their flags, so we can change
+      behavior of particular environment/cli params
+      handling, for example change requirements for
+      database, profile and endpoint params
+    */
+    virtual void ExtractParams(TConfig& config);
     virtual bool Prompt(TConfig& config);
     virtual int ValidateAndRun(TConfig& config);
     virtual void PropagateFlags(const TCommandFlags& flags) {

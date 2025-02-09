@@ -32,6 +32,13 @@ private:
     static TDriverConfig CreateDriverConfig(const TConfig& config);
 };
 
+class TYdbReadOnlyCommand : public TYdbCommand {
+public:
+    using TYdbCommand::TYdbCommand;
+
+    bool Prompt(TConfig& config) override;
+};
+
 class TYdbSimpleCommand : public TYdbCommand {
 public:
     TYdbSimpleCommand(

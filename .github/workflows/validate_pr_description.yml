@@ -16,13 +16,7 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v3
-        with:
-          # Fetch only the latest commit for a shallow clone
-          fetch-depth: 1
-          
-          # Limit checkout to the specific folder containing the action
-          # path: .github/actions/validate-pr-description
+        uses: actions/checkout@v4
 
       - name: Use custom PR validation action
         id: validate

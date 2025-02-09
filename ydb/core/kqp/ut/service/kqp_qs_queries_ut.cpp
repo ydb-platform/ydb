@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
@@ -234,6 +235,46 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             auto rollbackTxResult = transaction.Rollback().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(rollbackTxResult.GetStatus(), EStatus::NOT_FOUND, rollbackTxResult.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(Followers) {
+        NKikimrConfig::TAppConfig config;
+
+        auto kikimr = TKikimrRunner(TKikimrSettings().SetAppConfig(config).SetUseRealThreads(false));
+        auto db = kikimr.GetQueryClient();
+
+        TExecuteQuerySettings settings;
+
+        THashMap<TActorId, ui64> countResolveTablet;
+        countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] = 0;
+        countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] = 0;
+        auto counterObserver = [&countResolveTablet](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::TEvPipeCache::TEvGetTabletNode::EventType) {
+                countResolveTablet[ev->Recipient]++;
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        kikimr.GetTestServer().GetRuntime()->SetObserverFunc(counterObserver);
+
+        Y_DEFER {
+            kikimr.GetTestServer().GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        };
+
+        {
+            const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Key = 1u";
+            auto result = kikimr.RunCall([&] { return db.ExecuteQuery(query, NQuery::TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            CompareYson(R"([
+                [[1u];[-1]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] == 0);
+            // using followers resolver.
+            UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] > 0);
         }
     }
 

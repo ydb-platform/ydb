@@ -10,6 +10,7 @@ def validate_pr_description(description, is_not_for_cl_valid=True):
     try:
         if not description.strip():
             print("::warning::PR description is empty. Please fill it out.")
+            echo "::warning::PR description is empty. Please fill it out." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
             return False
 
         if "### Changelog category" not in description and "### Changelog entry" not in description:

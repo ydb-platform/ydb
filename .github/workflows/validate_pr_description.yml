@@ -32,20 +32,3 @@ jobs:
       - name: Set status
         if: failure()
         run: echo "Validation failed."
-
-      - name: Comment on PR if validation fails
-        if: ${{ failure() && steps.validate.outcome == 'failure' }}
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { context } = require('@actions/github');
-            const issueNumber = context.payload.pull_request.number;
-            const errors = `${{ steps.validate.outputs.result }}`;  # Ошибки из скрипта
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              body: `### Ошибки проверки описания PR:\n\n${errors}`
-            });

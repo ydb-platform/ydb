@@ -318,6 +318,7 @@ public:
     virtual int Process(TConfig& config);
     virtual void Prepare(TConfig& config);
     virtual void PostPrepare(TConfig& config);
+    virtual void Prompt(TConfig& config);
     virtual int ValidateAndRun(TConfig& config);
     virtual void PropagateFlags(const TCommandFlags& flags) {
         Dangerous |= flags.Dangerous;

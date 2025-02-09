@@ -32,7 +32,10 @@ TCommandAdmin::TCommandAdmin()
 {
     MarkDangerous();
     UseOnlyExplicitProfile();
-    AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false));
+    // keep old commands "safe", to keep old behavior
+    AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandConfig>(
+                         NDynamicConfig::TCommandFlagsOverrides{.Dangerous = false, .OnlyExplicitProfile = false},
+                         false));
     AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandVolatileConfig>());
     AddHiddenCommand(std::make_unique<NStorageConfig::TCommandStorageConfig>(false));
     AddCommand(std::make_unique<NCluster::TCommandCluster>());

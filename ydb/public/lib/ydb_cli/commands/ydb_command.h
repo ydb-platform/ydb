@@ -10,7 +10,19 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TYdbCommand : public TClientCommand {
+class TLeafCommand : public TClientCommand {
+public:
+    using TClientCommand::TClientCommand;
+
+    void Prompt(TConfig& config) override {
+        Y_UNUSED(config);
+        if (Dangerous) {
+            Cerr << "I'm afraid" << Endl;
+        }
+    }
+};
+
+class TYdbCommand : public TLeafCommand {
 public:
     TYdbCommand(
         const TString& name,

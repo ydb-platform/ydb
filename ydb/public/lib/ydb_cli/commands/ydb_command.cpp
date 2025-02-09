@@ -5,7 +5,7 @@ namespace NYdb {
 namespace NConsoleClient {
 
 TYdbCommand::TYdbCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
-    :TClientCommand(name, aliases, description)
+    : TLeafCommand(name, aliases, description)
 {}
 
 TDriverConfig TYdbCommand::CreateDriverConfig(const TConfig& config) {

@@ -176,11 +176,16 @@ void TClientCommand::PostPrepare(TConfig& config) {
     Y_UNUSED(config);
 }
 
+void TClientCommand::Prompt(TConfig& config) {
+    Y_UNUSED(config);
+}
+
 int TClientCommand::ValidateAndRun(TConfig& config) {
     config.Opts = &Opts;
     config.ParseResult = ParseResult.get();
     PostPrepare(config);
     Validate(config);
+    Prompt(config);
     return Run(config);
 }
 

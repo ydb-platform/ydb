@@ -7,12 +7,22 @@
 
 namespace NYdb::NConsoleClient::NDynamicConfig {
 
+struct TCommandFlagsOverrides {
+    std::optional<bool> Dangerous;
+    std::optional<bool> OnlyExplicitProfile;
+};
+
 class TCommandConfig : public TClientCommandTree {
 public:
-    TCommandConfig(std::optional<bool> overrideOnlyExplicitProfile = std::nullopt, bool allowEmptyDatabase = false);
+    TCommandConfig(
+        TCommandFlagsOverrides commandFlagsOverrides = {},
+        bool allowEmptyDatabase = false);
+
+    TCommandConfig(bool allowEmptyDatabase);
+
     void PropagateFlags(const TCommandFlags& flags) override;
 private:
-    std::optional<bool> OverrideOnlyExplicitProfile;
+    TCommandFlagsOverrides CommandFlagsOverrides;
 };
 
 class TCommandConfigReplace : public TYdbCommand {

@@ -22,21 +22,30 @@ TString WrapYaml(const TString& yaml) {
     return out.Str();
 }
 
-TCommandConfig::TCommandConfig(std::optional<bool> overrideOnlyExplicitProfile, bool allowEmptyDatabase)
+TCommandConfig::TCommandConfig(
+        TCommandFlagsOverrides commandFlagsOverrides,
+        bool allowEmptyDatabase)
     : TClientCommandTree("config", {}, "Dynamic config")
-    , OverrideOnlyExplicitProfile(overrideOnlyExplicitProfile)
+    , CommandFlagsOverrides(commandFlagsOverrides)
 {
     AddCommand(std::make_unique<TCommandConfigFetch>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigReplace>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
 }
 
+TCommandConfig::TCommandConfig(bool allowEmptyDatabase)
+    : TCommandConfig(TCommandFlagsOverrides{}, allowEmptyDatabase)
+{}
 
 void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
     TClientCommand::PropagateFlags(flags);
 
-    if (OverrideOnlyExplicitProfile) {
-        OnlyExplicitProfile = *OverrideOnlyExplicitProfile;
+    if (CommandFlagsOverrides.OnlyExplicitProfile) {
+        OnlyExplicitProfile = *CommandFlagsOverrides.OnlyExplicitProfile;
+    }
+
+    if (CommandFlagsOverrides.Dangerous) {
+        Dangerous = *CommandFlagsOverrides.Dangerous;
     }
 
     for (auto& [_, cmd] : SubCommands) {

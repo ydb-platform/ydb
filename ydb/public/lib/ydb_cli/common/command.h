@@ -147,6 +147,7 @@ public:
         bool AllowEmptyDatabase = false;
         bool AllowEmptyAddress = false;
         bool OnlyExplicitProfile = false;
+        bool AssumeYes = false;
 
         TCredentialsGetter CredentialsGetter;
 
@@ -318,7 +319,7 @@ public:
     virtual int Process(TConfig& config);
     virtual void Prepare(TConfig& config);
     virtual void PostPrepare(TConfig& config);
-    virtual void Prompt(TConfig& config);
+    virtual bool Prompt(TConfig& config);
     virtual int ValidateAndRun(TConfig& config);
     virtual void PropagateFlags(const TCommandFlags& flags) {
         Dangerous |= flags.Dangerous;

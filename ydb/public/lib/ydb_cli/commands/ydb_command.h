@@ -7,6 +7,12 @@
 
 #include <library/cpp/logger/backend.h>
 
+#ifndef WINDOWS_OS
+#include <unistd.h>
+#else
+#include <io.h>
+#endif
+
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -14,12 +20,7 @@ class TLeafCommand : public TClientCommand {
 public:
     using TClientCommand::TClientCommand;
 
-    void Prompt(TConfig& config) override {
-        Y_UNUSED(config);
-        if (Dangerous) {
-            Cerr << "I'm afraid" << Endl;
-        }
-    }
+    bool Prompt(TConfig& config) override;
 };
 
 class TYdbCommand : public TLeafCommand {

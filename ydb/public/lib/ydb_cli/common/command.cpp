@@ -176,8 +176,9 @@ void TClientCommand::PostPrepare(TConfig& config) {
     Y_UNUSED(config);
 }
 
-void TClientCommand::Prompt(TConfig& config) {
+bool TClientCommand::Prompt(TConfig& config) {
     Y_UNUSED(config);
+    return true;
 }
 
 int TClientCommand::ValidateAndRun(TConfig& config) {
@@ -185,8 +186,11 @@ int TClientCommand::ValidateAndRun(TConfig& config) {
     config.ParseResult = ParseResult.get();
     PostPrepare(config);
     Validate(config);
-    Prompt(config);
-    return Run(config);
+    if (Prompt(config)) {
+        return Run(config);
+    } else {
+        return EXIT_FAILURE;
+    }
 }
 
 void TClientCommand::SetCustomUsage(TConfig& config) {

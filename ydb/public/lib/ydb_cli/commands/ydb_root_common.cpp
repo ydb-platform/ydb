@@ -119,7 +119,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     NLastGetopt::TOpts& opts = *config.Opts;
 
     TStringBuilder endpointHelp;
-    endpointHelp << "[Required] Endpoint to connect. Protocols: grpc, grpcs (Default: "
+    endpointHelp << "Endpoint to connect. Protocols: grpc, grpcs (Default: "
         << (Settings.EnableSsl.GetRef() ? "grpcs" : "grpc" ) << ")." << Endl;
 
     endpointHelp << "  Endpoint search order:" << Endl
@@ -127,7 +127,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         << "    2. Profile specified with --profile option" << Endl
         << "    3. Active configuration profile";
     TStringBuilder databaseHelp;
-    databaseHelp << "[Required] Database to work with." << Endl
+    databaseHelp << "Database to work with." << Endl
         << "  Database search order:" << Endl
         << "    1. This option" << Endl
         << "    2. Profile specified with --profile option" << Endl
@@ -143,6 +143,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         });
     opts.AddLongOption('p', "profile", "Profile name to use configuration parameters from.")
         .RequiredArgument("NAME").StoreResult(&ProfileName);
+    opts.AddLongOption('y', "assume-yes", "Automatic yes to prompts; assume \"yes\" as answer to all prompts and run non-interactively.")
+        .Optional().StoreTrue(&config.AssumeYes);
     TClientCommandRootBase::Config(config);
 
     if (config.UseIamAuth) {

@@ -1,45 +1,10 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
+
 namespace NYdb {
 namespace NConsoleClient {
-
-bool AskPrompt(const std::string &query, bool defaultAnswer)
-{
-    bool isTTY = true;
-
-#ifndef WINDOWS_OS
-    isTTY = isatty(fileno(stdin));
-#else
-    isTTY = _isatty(_fileno(stdin));
-#endif
-
-    if (isTTY) {
-        Cerr << query << (defaultAnswer ? " [Y/n] " : " [y/N] ");
-
-        while(true) {
-            std::string text;
-            std::getline(std::cin, text);
-
-            std::transform(text.begin(), text.end(), text.begin(),
-                [](unsigned char c){ return std::tolower(c); });
-
-            if (text == "y" || text == "yes") {
-                return true;
-            } else if (text == "n" || text == "no") {
-                return false;
-            } else if (text == "") {
-                return defaultAnswer;
-            } else {
-                Cerr << "Please type \"y\" or \"n\". ";
-            }
-        }
-    } else {
-        Cerr << query << " Non interactive session, assuming default answer: " << defaultAnswer << Endl;
-    }
-
-    return defaultAnswer;
-}
 
 bool TLeafCommand::Prompt(TConfig& config) {
     Y_UNUSED(config);
@@ -49,7 +14,6 @@ bool TLeafCommand::Prompt(TConfig& config) {
 
     return true;
 }
-
 
 TYdbCommand::TYdbCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
     : TLeafCommand(name, aliases, description)

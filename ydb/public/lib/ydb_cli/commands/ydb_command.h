@@ -7,12 +7,6 @@
 
 #include <library/cpp/logger/backend.h>
 
-#ifndef WINDOWS_OS
-#include <unistd.h>
-#else
-#include <io.h>
-#endif
-
 namespace NYdb {
 namespace NConsoleClient {
 

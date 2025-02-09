@@ -10,6 +10,7 @@ def validate_pr_description(description, is_not_for_cl_valid=True):
     try:
         if not description.strip():
             print("::warning::PR description is empty. Please fill it out.")
+            echo("::warning::PR description is empty. Please fill it out.")
             return False
 
         if "### Changelog category" not in description and "### Changelog entry" not in description:
@@ -19,12 +20,14 @@ def validate_pr_description(description, is_not_for_cl_valid=True):
         category_section = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", description, re.DOTALL)
         if not category_section:
             print("::warning::Changelog category section not found.")
+            echo("::warning::Changelog category section not found.")
             return False
 
         categories = [line.strip('* ').strip() for line in category_section.group(1).splitlines() if line.strip()]
 
         if len(categories) != 1:
             print("::warning::Only one category can be selected at a time.")
+            echo("::warning::Only one category can be selected at a time.")
             return False
 
         category = categories[0]
@@ -47,16 +50,19 @@ def validate_pr_description(description, is_not_for_cl_valid=True):
 
         if not any(cat.startswith(category) for cat in valid_categories):
             print(f"::warning::Invalid Changelog category: {category}")
+            echo(f"::warning::Invalid Changelog category: {category}")
             return False
 
         if not is_not_for_cl_valid and any(cat.startswith(category) for cat in not_for_cl_categories):
             print(f"::notice::Category is not for changelog: {category}")
+            echo(f"::notice::Category is not for changelog: {category}")
             return False
 
         if not any(cat.startswith(category) for cat in not_for_cl_categories):
             entry_section = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", description, re.DOTALL)
             if not entry_section or len(entry_section.group(1).strip()) < 20:
                 print("::warning::The changelog entry is less than 20 characters or missing.")
+                echo("::warning::The changelog entry is less than 20 characters or missing.")
                 return False
 
             if category == "Bugfix":
@@ -65,13 +71,16 @@ def validate_pr_description(description, is_not_for_cl_valid=True):
 
                 if not any(check_issue_pattern(issue_pattern) for issue_pattern in issue_patterns):
                     print("::warning::Bugfix requires a linked issue in the changelog entry")
+                    echo("::warning::Bugfix requires a linked issue in the changelog entry")
                     return False
 
         print("PR description is valid.")
+        echo("PR description is valid.")
         return True
 
     except Exception as e:
         print(f"::error::Error during validation: {e}")
+        echo(f"::error::Error during validation: {e}")
         return False
 
 def validate_pr_description_from_file(file_path):

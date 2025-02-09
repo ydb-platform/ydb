@@ -41,6 +41,7 @@ SRCS(
     space_check.cpp
     sync.cpp
     ut_helpers.cpp
+    vdisk_malfunction.cpp
 )
 
 PEERDIR(

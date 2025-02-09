@@ -41,12 +41,12 @@ void TCommandMakeDirectory::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to create");
 }
 
-void TCommandMakeDirectory::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandMakeDirectory::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
 }
 
 int TCommandMakeDirectory::Run(TConfig& config) {
-    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.MakeDirectory(
@@ -76,12 +76,12 @@ void TCommandRemoveDirectory::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to remove");
 }
 
-void TCommandRemoveDirectory::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandRemoveDirectory::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
 }
 
 int TCommandRemoveDirectory::Run(TConfig& config) {
-    ParsePath(config, 0);
     TDriver driver = CreateDriver(config);
     NScheme::TSchemeClient schemeClient(driver);
     const auto settings = FillSettings(NScheme::TRemoveDirectorySettings());
@@ -247,8 +247,12 @@ void TCommandDescribe::Parse(TConfig& config) {
     ParseOutputFormats();
 }
 
-int TCommandDescribe::Run(TConfig& config) {
+void TCommandDescribe::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
+}
+
+int TCommandDescribe::Run(TConfig& config) {
     TDriver driver = CreateDriver(config);
     NScheme::TSchemeClient client(driver);
     NScheme::TDescribePathResult result = client.DescribePath(
@@ -1065,8 +1069,12 @@ void TCommandList::Parse(TConfig& config) {
     }
 }
 
+void TCommandList::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
+}
+
 int TCommandList::Run(TConfig& config) {
-    ParsePath(config, 0, true);
     TDriver driver = CreateDriver(config);
     ISchemePrinter::TSettings settings = {
         Path,
@@ -1138,8 +1146,12 @@ void TCommandPermissionGrant::Parse(TConfig& config) {
     }
 }
 
-int TCommandPermissionGrant::Run(TConfig& config) {
+void TCommandPermissionGrant::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
+}
+
+int TCommandPermissionGrant::Run(TConfig& config) {
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1179,8 +1191,12 @@ void TCommandPermissionRevoke::Parse(TConfig& config) {
     }
 }
 
-int TCommandPermissionRevoke::Run(TConfig& config) {
+void TCommandPermissionRevoke::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
+}
+
+int TCommandPermissionRevoke::Run(TConfig& config) {
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1220,8 +1236,12 @@ void TCommandPermissionSet::Parse(TConfig& config) {
     }
 }
 
-int TCommandPermissionSet::Run(TConfig& config) {
+void TCommandPermissionSet::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
+}
+
+int TCommandPermissionSet::Run(TConfig& config) {
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1255,8 +1275,12 @@ void TCommandChangeOwner::Parse(TConfig& config) {
     }
 }
 
-int TCommandChangeOwner::Run(TConfig& config) {
+void TCommandChangeOwner::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
+}
+
+int TCommandChangeOwner::Run(TConfig& config) {
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1281,12 +1305,12 @@ void TCommandPermissionClear::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to clear permissions to");
 }
 
-void TCommandPermissionClear::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandPermissionClear::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
 }
 
 int TCommandPermissionClear::Run(TConfig& config) {
-    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1311,12 +1335,12 @@ void TCommandPermissionSetInheritance::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
 }
 
-void TCommandPermissionSetInheritance::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandPermissionSetInheritance::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
 }
 
 int TCommandPermissionSetInheritance::Run(TConfig& config) {
-    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1341,12 +1365,12 @@ void TCommandPermissionClearInheritance::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
 }
 
-void TCommandPermissionClearInheritance::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandPermissionClearInheritance::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
 }
 
 int TCommandPermissionClearInheritance::Run(TConfig& config) {
-    ParsePath(config, 0);
     NScheme::TSchemeClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
@@ -1371,12 +1395,12 @@ void TCommandPermissionList::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to list permissions for");
 }
 
-void TCommandPermissionList::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandPermissionList::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
 }
 
 int TCommandPermissionList::Run(TConfig& config) {
-    ParsePath(config, 0);
     TDriver driver = CreateDriver(config);
     NScheme::TSchemeClient client(driver);
     NScheme::TDescribePathResult result = client.DescribePath(

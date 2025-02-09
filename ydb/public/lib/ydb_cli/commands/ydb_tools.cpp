@@ -88,8 +88,12 @@ void TCommandDump::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 }
 
-int TCommandDump::Run(TConfig& config) {
+void TCommandDump::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     AdjustPath(config);
+}
+
+int TCommandDump::Run(TConfig& config) {
     NDump::TDumpSettings::EConsistencyLevel consistencyLevel;
     if (!TryFromString<NDump::TDumpSettings::EConsistencyLevel>(ConsistencyLevel, consistencyLevel)) {
         throw yexception() << "Incorrect consistency level."

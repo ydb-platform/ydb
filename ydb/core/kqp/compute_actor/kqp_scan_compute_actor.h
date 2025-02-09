@@ -26,7 +26,7 @@ private:
     const ui32 LockNodeId;
 
     struct TLockHash {
-        bool operator()(const NKikimrDataEvents::TLock& lock) {
+        size_t operator()(const NKikimrDataEvents::TLock& lock) {
             return MultiHash(
                 lock.GetLockId(),
                 lock.GetDataShard(),

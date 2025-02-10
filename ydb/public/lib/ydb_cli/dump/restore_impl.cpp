@@ -2,6 +2,7 @@
 #include "restore_import_data.h"
 #include "restore_compat.h"
 
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
@@ -14,6 +15,7 @@
 
 #include <library/cpp/threading/future/core/future.h>
 
+#include <util/generic/deque.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
@@ -30,6 +32,7 @@ namespace NYdb::NDump {
 using namespace NConsoleClient;
 using namespace NImport;
 using namespace NOperation;
+using namespace NRateLimiter;
 using namespace NScheme;
 using namespace NTable;
 using namespace NTopic;
@@ -71,6 +74,10 @@ Ydb::Topic::CreateTopicRequest ReadTopicCreationRequest(const TFsPath& fsDirPath
 
 Ydb::Coordination::CreateNodeRequest ReadCoordinationNodeCreationRequest(const TFsPath& fsDirPath, const TLog* log) {
     return ReadProtoFromFile<Ydb::Coordination::CreateNodeRequest>(fsDirPath, log, NDump::NFiles::CreateCoordinationNode());
+}
+
+Ydb::RateLimiter::CreateResourceRequest ReadRateLimiterCreationRequest(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadProtoFromFile<Ydb::RateLimiter::CreateResourceRequest>(fsDirPath, log, NDump::NFiles::CreateRateLimiter());
 }
 
 Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TFsPath& fsDirPath, const TLog* log) {
@@ -194,6 +201,19 @@ TStatus CreateCoordinationNode(
     return result;
 }
 
+TStatus CreateRateLimiter(
+    TRateLimiterClient& client,
+    const std::string& coordinationNodePath,
+    const std::string& rateLimiterPath,
+    const Ydb::RateLimiter::CreateResourceRequest& request)
+{
+    const auto settings = TCreateResourceSettings(request);
+    auto result = RetryFunction([&]() {
+        return client.CreateResource(coordinationNodePath, rateLimiterPath, settings).ExtractValueSync();
+    });
+    return result;
+}
+
 } // anonymous
 
 namespace NPrivate {
@@ -258,6 +278,7 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
     , TableClient(driver)
     , TopicClient(driver)
     , CoordinationNodeClient(driver)
+    , RateLimiterClient(driver)
     , QueryClient(driver)
     , Log(log)
 {
@@ -562,6 +583,63 @@ TRestoreResult TRestoreClient::RestoreTopic(
     return Result<TRestoreResult>(dbPath, std::move(result));
 }
 
+TRestoreResult TRestoreClient::RestoreRateLimiter(
+    const TFsPath& fsPath,
+    const TString& coordinationNodePath,
+    const TString& rateLimiterPath)
+{
+    LOG_D("Process " << fsPath.GetPath().Quote());
+
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
+    }
+
+    const auto creationRequest = ReadRateLimiterCreationRequest(fsPath, Log.get());
+    auto result = CreateRateLimiter(RateLimiterClient, coordinationNodePath, rateLimiterPath, creationRequest);
+    if (result.IsSuccess()) {
+        LOG_D("Created rate limiter: " << rateLimiterPath.Quote()
+            << " dependent on the coordination node: " << coordinationNodePath.Quote()
+        );
+        return Result<TRestoreResult>();
+    }
+
+    LOG_E("Failed to create rate limiter: " << rateLimiterPath.Quote()
+        << " dependent on the coordination node: " << coordinationNodePath.Quote()
+    );
+    return Result<TRestoreResult>(JoinFsPaths(coordinationNodePath, rateLimiterPath), std::move(result));
+}
+
+TRestoreResult TRestoreClient::RestoreDependentResources(
+    const TFsPath& coordinationNodeFsPath, const TString& coordinationNodeDbPath)
+{
+    LOG_I("Restore coordination node's resources " << coordinationNodeFsPath.GetPath().Quote()
+        << " to " << coordinationNodeDbPath.Quote()
+    );
+
+    TVector<TFsPath> children;
+    coordinationNodeFsPath.List(children);
+    TDeque<TFsPath> pathQueue(children.begin(), children.end());
+    while (!pathQueue.empty()) {
+        const auto path = pathQueue.front();
+        pathQueue.pop_front();
+        if (path.IsDirectory()) {
+            if (IsFileExists(path.Child(NFiles::CreateRateLimiter().FileName))) {
+                const auto result = RestoreRateLimiter(
+                    path, coordinationNodeDbPath, path.RelativeTo(coordinationNodeFsPath).GetPath()
+                );
+                if (!result.IsSuccess()) {
+                    return result;
+                }
+            }
+            children.clear();
+            path.List(children);
+            pathQueue.insert(pathQueue.end(), children.begin(), children.end());
+        }
+
+    }
+    return Result<TRestoreResult>();
+}
+
 TRestoreResult TRestoreClient::RestoreCoordinationNode(
     const TFsPath& fsPath,
     const TString& dbPath,
@@ -583,6 +661,10 @@ TRestoreResult TRestoreClient::RestoreCoordinationNode(
     const auto creationRequest = ReadCoordinationNodeCreationRequest(fsPath, Log.get());
     auto result = CreateCoordinationNode(CoordinationNodeClient, dbPath, creationRequest);
     if (result.IsSuccess()) {
+        if (auto result = RestoreDependentResources(fsPath, dbPath); !result.IsSuccess()) {
+            LOG_E("Failed to create coordination node's resources " << dbPath.Quote());
+            return Result<TRestoreResult>(dbPath, std::move(result));
+        }
         LOG_D("Created " << dbPath.Quote());
         return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
     }

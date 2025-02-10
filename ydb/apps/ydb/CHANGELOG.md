@@ -1,3 +1,4 @@
+* Include coordination nodes in local backups (`ydb tools dump` and `ydb tools restore`). Rate limiters that utilize the coordination node are saved in the coordination node's backup folder, preserving the existing path hierarchy.
 * Fixed a bug where some errors could be ignored when restoring from a local backup.
 * Added `ydb workload log import generator` command.
 * Queries in `ydb workload run` command are now executed in random order.

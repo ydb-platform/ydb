@@ -621,32 +621,6 @@ void BackupTopic(TDriver driver, const TString& dbPath, const TFsPath& fsBackupF
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
-void CreateClusterDirectory(const TDriver& driver, const TString& path, bool rootBackupDir = false) {
-    if (rootBackupDir) {
-        LOG_I("Create temporary directory " << path.Quote() << " in database");
-    } else {
-        LOG_D("Create directory " << path.Quote() << " in database");
-    }
-    NScheme::TSchemeClient client(driver);
-    TStatus status = client.MakeDirectory(path).GetValueSync();
-    VerifyStatus(status, TStringBuilder() << "Create directory " << path.Quote() << " failed");
-}
-
-void RemoveClusterDirectory(const TDriver& driver, const TString& path) {
-    LOG_D("Remove directory " << path.Quote());
-    NScheme::TSchemeClient client(driver);
-    TStatus status = client.RemoveDirectory(path).GetValueSync();
-    VerifyStatus(status, TStringBuilder() << "Remove directory " << path.Quote() << " failed");
-}
-
-void RemoveClusterDirectoryRecursive(const TDriver& driver, const TString& path) {
-    LOG_I("Remove temporary directory " << path.Quote() << " in database");
-    NScheme::TSchemeClient schemeClient(driver);
-    NTable::TTableClient tableClient(driver);
-    TStatus status = NConsoleClient::RemoveDirectoryRecursive(schemeClient, tableClient, path, {}, true, false);
-    VerifyStatus(status, TStringBuilder() << "Remove temporary directory " << path.Quote() << " failed");
-}
-
 namespace {
 
 NCoordination::TNodeDescription DescribeCoordinationNode(TDriver driver, const TString& path) {
@@ -707,6 +681,32 @@ void BackupCoordinationNode(TDriver driver, const TString& dbPath, const TFsPath
     WriteProtoToFile(creationRequest, fsBackupFolder, NDump::NFiles::CreateCoordinationNode());
     BackupDependentResources(driver, dbPath, fsBackupFolder);
     BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
+void CreateClusterDirectory(const TDriver& driver, const TString& path, bool rootBackupDir = false) {
+    if (rootBackupDir) {
+        LOG_I("Create temporary directory " << path.Quote() << " in database");
+    } else {
+        LOG_D("Create directory " << path.Quote() << " in database");
+    }
+    NScheme::TSchemeClient client(driver);
+    TStatus status = client.MakeDirectory(path).GetValueSync();
+    VerifyStatus(status, TStringBuilder() << "Create directory " << path.Quote() << " failed");
+}
+
+void RemoveClusterDirectory(const TDriver& driver, const TString& path) {
+    LOG_D("Remove directory " << path.Quote());
+    NScheme::TSchemeClient client(driver);
+    TStatus status = client.RemoveDirectory(path).GetValueSync();
+    VerifyStatus(status, TStringBuilder() << "Remove directory " << path.Quote() << " failed");
+}
+
+void RemoveClusterDirectoryRecursive(const TDriver& driver, const TString& path) {
+    LOG_I("Remove temporary directory " << path.Quote() << " in database");
+    NScheme::TSchemeClient schemeClient(driver);
+    NTable::TTableClient tableClient(driver);
+    TStatus status = NConsoleClient::RemoveDirectoryRecursive(schemeClient, tableClient, path, {}, true, false);
+    VerifyStatus(status, TStringBuilder() << "Remove temporary directory " << path.Quote() << " failed");
 }
 
 static bool IsExcluded(const TString& path, const TVector<TRegExMatch>& exclusionPatterns) {

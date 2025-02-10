@@ -184,7 +184,9 @@ NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& columns) {
                 .Add(std::move(structMembers)))
     );
 
-    return NYT::TNode::CreateList().Add("StructType").Add(std::move(rootMembers));
+    return NYT::TNode::CreateList()
+        .Add("StructType")
+        .Add(std::move(rootMembers));
 }
 
 class TProgramHolder : public NFq::IProgramHolder {

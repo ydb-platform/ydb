@@ -1,11 +1,22 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
+
 namespace NYdb {
 namespace NConsoleClient {
 
+bool TLeafCommand::Prompt(TConfig& config) {
+    Y_UNUSED(config);
+    if (Dangerous && !config.AssumeYes) {
+        return AskPrompt("This command may damage your cluster, do you want to conitnue?", false);
+    }
+
+    return true;
+}
+
 TYdbCommand::TYdbCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
-    :TClientCommand(name, aliases, description)
+    : TLeafCommand(name, aliases, description)
 {}
 
 TDriverConfig TYdbCommand::CreateDriverConfig(const TConfig& config) {
@@ -31,6 +42,12 @@ TDriver TYdbCommand::CreateDriver(const TConfig& config, std::unique_ptr<TLogBac
     driverConfig.SetLog(std::move(loggingBackend));
 
     return TDriver(driverConfig);
+}
+
+bool TYdbReadOnlyCommand::Prompt(TConfig& config) {
+    Y_UNUSED(config);
+
+    return true;
 }
 
 TYdbSimpleCommand::TYdbSimpleCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)

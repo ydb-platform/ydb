@@ -156,9 +156,12 @@ public:
                 std::string config;
                 std::map<uint64_t, std::string> volatileConfigs;
                 if (Ydb::DynamicConfig::GetConfigResult result; any && any->UnpackTo(&result)) {
-                    clusterName = result.identity(0).cluster();
-                    version = result.identity(0).version();
-                    config = result.config(0);
+                    // only if they are present
+                    if (result.identity_size() && result.config_size()) {
+                        clusterName = result.identity(0).cluster();
+                        version = result.identity(0).version();
+                        config = result.config(0);
+                    }
                     for (const auto& config : result.volatile_configs()) {
                         volatileConfigs.emplace(config.id(), config.config());
                     }

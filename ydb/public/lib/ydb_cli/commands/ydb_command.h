@@ -10,7 +10,14 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TYdbCommand : public TClientCommand {
+class TLeafCommand : public TClientCommand {
+public:
+    using TClientCommand::TClientCommand;
+
+    bool Prompt(TConfig& config) override;
+};
+
+class TYdbCommand : public TLeafCommand {
 public:
     TYdbCommand(
         const TString& name,
@@ -23,6 +30,13 @@ public:
 
 private:
     static TDriverConfig CreateDriverConfig(const TConfig& config);
+};
+
+class TYdbReadOnlyCommand : public TYdbCommand {
+public:
+    using TYdbCommand::TYdbCommand;
+
+    bool Prompt(TConfig& config) override;
 };
 
 class TYdbSimpleCommand : public TYdbCommand {

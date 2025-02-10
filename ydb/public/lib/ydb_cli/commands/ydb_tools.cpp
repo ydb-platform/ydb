@@ -86,6 +86,10 @@ void TCommandDump::Config(TConfig& config) {
 
 void TCommandDump::Parse(TConfig& config) {
     TClientCommand::Parse(config);
+}
+
+void TCommandDump::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     AdjustPath(config);
 }
 

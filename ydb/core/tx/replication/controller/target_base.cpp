@@ -16,7 +16,8 @@ using EStreamState = TReplication::EStreamState;
 TTargetBase::TConfigBase::TConfigBase(ETargetKind kind, const TString& srcPath, const TString& dstPath)
     : Kind(kind)
     , SrcPath(srcPath)
-    , DstPath(dstPath) {
+    , DstPath(dstPath)
+{
 }
 
 ETargetKind TTargetBase::TConfigBase::GetKind() const {

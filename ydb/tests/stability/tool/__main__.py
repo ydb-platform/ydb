@@ -521,15 +521,6 @@ def main():
                             ],
                             raise_on_error=True
                         )
-                        first_node.ssh_command([
-                            '/Berkanavt/nemesis/bin/ydb_cli',
-                            '--endpoint', f'grpc://localhost:{first_node.grpc_port}',
-                            '--database', '/Root/db1',
-                            'workload', 'log', 'clean',
-                            '--path', f'log_workload_select_{store_type}',
-                            ],
-                            raise_on_error=True
-                        )
                 else:
                     print(f"Not supported workload clean command for {workload_name}")
             else:

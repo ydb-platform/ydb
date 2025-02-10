@@ -51,7 +51,7 @@ class TCommandRestore : public TToolsCommand, public TCommandWithPath {
 public:
     TCommandRestore();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -77,6 +77,7 @@ public:
     TCommandCopy();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -95,6 +96,7 @@ public:
     TCommandRename();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:

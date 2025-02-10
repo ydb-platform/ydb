@@ -199,8 +199,8 @@ void TCommandRestore::Config(TConfig& config) {
     config.Opts->MutuallyExclusive("import-data", "bulk-upsert");
 }
 
-void TCommandRestore::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandRestore::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     AdjustPath(config);
 }
 
@@ -283,6 +283,10 @@ void TCommandCopy::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
+
+void TCommandCopy::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);
@@ -373,6 +377,10 @@ void TCommandRename::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
+
+void TCommandRename::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);

@@ -125,7 +125,7 @@ NImport::EImportProgress TProtoAccessor::FromProto(Ydb::Import::ImportProgress::
     case Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES:
         return NImport::EImportProgress::BuildIndexes;
     case Ydb::Import::ImportProgress::PROGRESS_CREATE_CHANGEFEEDS:
-        return NImport::EImportProgress::CreateChangefeed;
+        return NImport::EImportProgress::CreateChangefeeds;
     case Ydb::Import::ImportProgress::PROGRESS_DONE:
         return NImport::EImportProgress::Done;
     case Ydb::Import::ImportProgress::PROGRESS_CANCELLATION:

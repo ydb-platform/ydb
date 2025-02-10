@@ -1162,9 +1162,6 @@ private:
 
     void OnNotifyResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(CompletedTxId);
-
-        AppData()->FeatureFlags.SetEnableChangefeedsImport(true);
-
         LOG_D("TImport::TTxProgress: OnNotifyResult"
             << ": txId# " << CompletedTxId);
 

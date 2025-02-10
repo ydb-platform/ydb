@@ -45,12 +45,7 @@ public:
     }
 
     std::shared_ptr<void> ExtractBatch() override {
-        auto r = Extract();
-        if (auto p = dynamic_cast<typename std::shared_ptr<void>::element_type*>(r.get())) {
-            return std::shared_ptr<void>{r, p};
-        } else {
-            return std::shared_ptr<void>{};
-        }
+        return std::dynamic_pointer_cast<void>(Extract());
     }
 
     explicit TColumnBatch(const TRecordBatchPtr& data)
@@ -86,7 +81,7 @@ public:
 
     std::shared_ptr<void> ExtractBatch() override {
         auto r = std::make_shared<std::pair<std::vector<TCell>, std::vector<TCharVectorPtr>>>(Extract());
-        return std::shared_ptr<void>{r, r.get()};
+        return std::dynamic_pointer_cast<void>(r);
     }
 
     TRowBatch(std::vector<TCell>&& cells, std::vector<TCharVectorPtr>&& data, i64 size, ui32 rows, ui16 columns)

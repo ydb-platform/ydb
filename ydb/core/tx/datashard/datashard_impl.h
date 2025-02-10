@@ -1160,7 +1160,7 @@ class TDataShard
             Sys_InMemoryStateActorId = 45,
             Sys_InMemoryStateGeneration = 46,
 
-            Sys_DataCleanupGeneration = 47,
+            Sys_DataCleanupCompletedGeneration = 47,
 
             // reserved
             SysPipeline_Flags = 1000,

@@ -32,7 +32,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         ui64 lastGen = 0;
-        if (!Self->SysGetUi64(db, Schema::Sys_DataCleanupGeneration, lastGen)) {
+        if (!Self->SysGetUi64(db, Schema::Sys_DataCleanupCompletedGeneration, lastGen)) {
             return false;
         }
 
@@ -78,7 +78,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistSys(db, Schema::Sys_DataCleanupGeneration, DataCleanupGeneration);
+        Self->PersistSys(db, Schema::Sys_DataCleanupCompletedGeneration, DataCleanupGeneration);
         return true;
     }
 

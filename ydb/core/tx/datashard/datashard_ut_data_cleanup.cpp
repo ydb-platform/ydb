@@ -24,6 +24,17 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         return {server, sender, shards};
     }
 
+    void CheckResultEvent(const TEvDataShard::TEvForceDataCleanupResult& ev, ui64 tabletId, ui64 generation) {
+        UNIT_ASSERT_EQUAL(ev.Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(ev.Record.GetTabletId(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(ev.Record.GetDataCleanupGeneration(), generation);
+    }
+
+    void CheckTableData(Tests::TServer::TPtr server) {
+        auto result = ReadShardedTable(server, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(result, "key = 3, value = 300\n");
+    }
+
     Y_UNIT_TEST(ForceDataCleanup) {
         auto [server, sender, tableShards] = SetupWithTable();
         auto& runtime = *server->GetRuntime();
@@ -34,16 +45,14 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), expectedDataCleanupGeneration);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), expectedDataCleanupGeneration);
         };
 
         cleanupAndCheck(24);
         cleanupAndCheck(24);
         cleanupAndCheck(25);
 
-        auto result = ReadShardedTable(server, "/Root/table-1");
-        UNIT_ASSERT_VALUES_EQUAL(result, "key = 3, value = 300\n");
+        CheckTableData(server);
     }
 
     Y_UNIT_TEST(MultipleDataCleanups) {
@@ -60,18 +69,15 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
 
         {
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), expectedGenLast);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), expectedGenLast);
         }
 
         {
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), expectedGenLast);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), expectedGenLast);
         }
 
-        auto result = ReadShardedTable(server, "/Root/table-1");
-        UNIT_ASSERT_VALUES_EQUAL(result, "key = 3, value = 300\n");
+        CheckTableData(server);
     }
 
     Y_UNIT_TEST(MultipleDataCleanupsWithOldGenerations) {
@@ -88,18 +94,15 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
 
         {
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), expectedGenFirst);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), expectedGenFirst);
         }
 
         {
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), expectedGenFirst);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), expectedGenFirst);
         }
 
-        auto result = ReadShardedTable(server, "/Root/table-1");
-        UNIT_ASSERT_VALUES_EQUAL(result, "key = 3, value = 300\n");
+        CheckTableData(server);
     }
 
     Y_UNIT_TEST(ForceDataCleanupWithRestart) {
@@ -116,8 +119,7 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), cleanupGeneration);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), cleanupGeneration);
         }
 
         {
@@ -126,8 +128,7 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), cleanupGeneration);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), cleanupGeneration);
         }
 
         // restart tablet
@@ -140,13 +141,11 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
             // more recent generation should be persisted
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), cleanupGeneration);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), cleanupGeneration);
         }
 
-        auto result = ReadShardedTable(server, "/Root/table-1");
-        UNIT_ASSERT_VALUES_EQUAL(result, "key = 3, value = 300\n");
+        CheckTableData(server);
     }
 }
 

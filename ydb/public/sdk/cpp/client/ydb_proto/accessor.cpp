@@ -122,8 +122,6 @@ NImport::EImportProgress TProtoAccessor::FromProto(Ydb::Import::ImportProgress::
         return NImport::EImportProgress::Preparing;
     case Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA:
         return NImport::EImportProgress::TransferData;
-    case Ydb::Import::ImportProgress::PROGRESS_CREATE_CHANGEFEEDS:
-        return NImport::EImportProgress::CreateChangefeed;
     case Ydb::Import::ImportProgress::PROGRESS_DONE:
         return NImport::EImportProgress::Done;
     case Ydb::Import::ImportProgress::PROGRESS_CANCELLATION:

@@ -1217,8 +1217,9 @@ private:
                 if (item.NextIndexIdx < item.Scheme.indexes_size()) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(importInfo, itemIdx);
-                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size()) {
-                    item.State = AppData()->FeatureFlags.GetEnableChangefeedsImport() ? EState::CreateChangefeed : EState::Done;
+                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
+                           AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
+                    item.State = EState::CreateChangefeed;
                     AllocateTxId(importInfo, itemIdx);
                 } else {
                     item.State = EState::Done;
@@ -1233,8 +1234,12 @@ private:
             } else {
                 if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
                     AllocateTxId(importInfo, itemIdx);
+                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
+                           AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
+                    item.State = EState::CreateChangefeed;
+                    AllocateTxId(importInfo, itemIdx);
                 } else {
-                    item.State = AppData()->FeatureFlags.GetEnableChangefeedsImport() ? EState::CreateChangefeed : EState::Done;
+                    item.State = EState::Done;
                 }
             }
             break;

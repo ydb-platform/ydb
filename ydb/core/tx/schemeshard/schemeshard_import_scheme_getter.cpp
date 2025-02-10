@@ -337,7 +337,13 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &changefeed)) {
             return Reply(false, "Cannot parse сhangefeed");
         }
-        *item.Changefeeds.MutableChangefeeds()->Add()->MutableChangefeed() = std::move(changefeed);
+
+        if (IndexDownloadedChangefeed == item.Changefeeds.ChangefeedsSize()) {
+            *item.Changefeeds.MutableChangefeeds()->Add()->MutableChangefeed() = std::move(changefeed);
+        } else {
+            *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableChangefeed() = std::move(changefeed);
+        }
+        
 
         auto nextStep = [this]() {
             Become(&TThis::StateDownloadTopics);
@@ -410,6 +416,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         const auto& objects = result.GetResult().GetContents();
+        ChangefeedsKeys.clear();
         ChangefeedsKeys.reserve(objects.size());
 
         for (const auto& obj : objects) {
@@ -500,6 +507,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void DownloadChangefeeds() {
+        Become(&TThis::StateDownloadChangefeeds);
         ListChangefeeds();
     }
 
@@ -522,7 +530,6 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     void StartDownloadingChangefeeds() {
         ResetRetries();
         DownloadChangefeeds();
-        Become(&TThis::StateDownloadChangefeeds);
     }
 
     void StartValidatingChecksum(const TString& key, const TString& object, std::function<void()> checksumValidatedCallback) {

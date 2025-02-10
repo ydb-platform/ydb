@@ -7,7 +7,7 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
-    
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -249,7 +249,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);
-    modifyScheme.SetWorkingDir( dstPath.Parent().PathString());
+    modifyScheme.SetWorkingDir(dstPath.Parent().PathString());
     cdcStream.SetTableName(dstPath.LeafName());
 
     TString error;

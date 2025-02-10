@@ -17,7 +17,6 @@ enum class EImportProgress {
     Done = 4,
     Cancellation = 5,
     Cancelled = 6,
-    CreateChangefeed = 7,
 
     Unknown = Max<int>(),
 };

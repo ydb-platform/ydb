@@ -153,7 +153,7 @@ public:
                 }
             }
         }
-        return TKqpQueryId{query.Cluster, query.Database, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
+        return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
     }
 
     TKqpCompileResult::TConstPtr FindByQuery(const TKqpQueryId& query, bool promote) {

@@ -830,6 +830,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     FullScansExecuted = KqpGroup->GetCounter("FullScans", true);
 
     SchedulerThrottled = KqpGroup->GetCounter("NodeScheduler/ThrottledUs", true);
+    SchedulerGroupsCount = KqpGroup->GetCounter("NodeScheduler/GroupsCount", false);
+    SchedulerValuesCount = KqpGroup->GetCounter("NodeScheduler/ValuesCount", false);
     SchedulerCapacity = KqpGroup->GetCounter("NodeScheduler/Capacity");
     ComputeActorExecutions = KqpGroup->GetHistogram("NodeScheduler/BatchUs", NMonitoring::ExponentialHistogram(20, 2, 1));
     ComputeActorDelays = KqpGroup->GetHistogram("NodeScheduler/Delays", NMonitoring::ExponentialHistogram(20, 2, 1));

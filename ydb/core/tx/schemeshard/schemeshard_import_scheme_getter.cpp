@@ -339,7 +339,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableChangefeed() = std::move(changefeed);
-        
+
         auto nextStep = [this]() {
             Become(&TThis::StateDownloadTopics);
             HeadObject(TopicDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));
@@ -396,7 +396,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     void ListObjects(const TString& prefix) {
         auto request = Model::ListObjectsRequest()
             .WithPrefix(prefix);
-        
+
         Send(Client, new TEvExternalStorage::TEvListObjectsRequest(request));
     }
 

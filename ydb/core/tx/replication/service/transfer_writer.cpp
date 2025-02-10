@@ -529,14 +529,14 @@ private:
     void StartWork() {
         Become(&TThis::StateWork);
 
-        if (HandshakeEv) {
-            Handle(HandshakeEv);
-            HandshakeEv.Reset();
+        if (PendingWorker) {
+            ProcessWorker(*PendingWorker);
+            PendingWorker.reset();
         }
 
-        if (DataEv) {
-            Handle(DataEv);
-            DataEv.Reset();
+        if (PendingRecords) {
+            ProcessData(*PendingRecords);
+            PendingRecords.reset();
         }
     }
 
@@ -550,12 +550,16 @@ private:
     }
 
     void HoldHandle(TEvWorker::TEvHandshake::TPtr& ev) {
-        Y_ABORT_UNLESS(!HandshakeEv);
-        HandshakeEv = ev;
+        Y_ABORT_UNLESS(!PendingWorker);
+        PendingWorker = ev->Sender;
     }
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
-        Worker = ev->Sender;
+        ProcessWorker(ev->Sender);
+    }
+
+    void ProcessWorker(const TActorId& worker) {
+        Worker = worker;
         LOG_D("Handshake"
             << ": worker# " << Worker);
 
@@ -563,21 +567,24 @@ private:
     }
 
     void HoldHandle(TEvWorker::TEvData::TPtr& ev) {
-        Y_ABORT_UNLESS(!DataEv);
-        DataEv = ev;
+        Y_ABORT_UNLESS(!PendingRecords);
+        PendingRecords = std::move(ev->Get()->Records);
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
         LOG_D("Handle TEvData " << ev->Get()->ToString());
+        ProcessData(ev->Get()->Records);
+    }
 
-        if (!ev->Get()->Records) {
+    void ProcessData(const TVector<TEvWorker::TEvData::TRecord>& records) {
+        if (!records) {
             Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
             return;
         }
 
         TableState->EnshureDataBatch();
 
-        for (auto& message : ev->Get()->Records) {
+        for (auto& message : records) {
             NYdb::NTopic::NPurecalc::TMessage input(message.Data);
             input.WithOffset(message.Offset);
 
@@ -687,8 +694,8 @@ private:
 
     mutable TMaybe<TString> LogPrefix;
 
-    TEvWorker::TEvHandshake::TPtr HandshakeEv;
-    TEvWorker::TEvData::TPtr DataEv;
+    std::optional<TActorId> PendingWorker;
+    std::optional<TVector<TEvWorker::TEvData::TRecord>> PendingRecords;
 
     ui32 Attempt = 0;
     TDuration Delay = TDuration::Minutes(1);

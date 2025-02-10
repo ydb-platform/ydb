@@ -7,7 +7,6 @@
 namespace NKikimr {
     struct TPathId;
 }
-
 namespace NKikimr::NReplication::NService {
 
 IActor* CreateTransferWriter(const TString& transformLambda, const TPathId& tablePathId,

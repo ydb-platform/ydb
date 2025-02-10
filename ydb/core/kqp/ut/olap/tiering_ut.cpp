@@ -127,6 +127,23 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         tieringHelper.CheckAllDataInTier("__DEFAULT");
     }
 
+    Y_UNIT_TEST(LoadTtlSettings) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier("tier1");
+        testHelper.SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
+        testHelper.RebootTablets("/Root/olapStore/olapTable");
+
+        tieringHelper.WriteSampleData();
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier("/Root/tier1");
+    }
+
     Y_UNIT_TEST(EvictionWithStrippedEdsPath) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();

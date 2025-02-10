@@ -186,6 +186,15 @@ void TConsole::Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorCon
     TxProcessor->ProcessTx(CreateTxSetConfig(ev), ctx);
 }
 
+bool TConsole::HasTenant(const TString& path) const
+{
+    if (!TenantsManager) {
+        return false;
+    }
+
+    return TenantsManager->HasTenant(path);
+}
+
 IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info)
 {
     return new TConsole(tablet, info);

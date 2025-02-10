@@ -171,7 +171,7 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
 
 void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds,
                   NOlap::TSnapshot snap, ui64 scanId) {
-    auto scan = std::make_unique<TEvColumnShard::TEvScan>();
+    auto scan = std::make_unique<TEvDataShard::TEvKqpScan>();
     auto& record = scan->Record;
 
     record.SetTxId(snap.GetPlanStep());

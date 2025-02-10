@@ -95,6 +95,7 @@ test=[
     "/src/test",
     "/src/test/java",
     "/src/test-integration",
+    "/src/integration-test",
     "/src/testFixtures",
     "/src/intTest",
 ]

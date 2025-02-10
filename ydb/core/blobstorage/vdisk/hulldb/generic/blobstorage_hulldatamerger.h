@@ -61,6 +61,7 @@ namespace NKikimr {
         TCollectTask CollectTask;
         std::vector<THugeBlobWrite> HugeBlobWrites;
         std::vector<THugeBlobMove> HugeBlobMoves;
+        NMatrix::TVectorType PartsToDelete;
 
     public:
         TDataMerger(TBlobStorageGroupType gtype, bool addHeader)
@@ -68,6 +69,7 @@ namespace NKikimr {
             , AddHeader(addHeader)
             , Parts(GType.TotalPartCount())
             , PartsMask(0, GType.TotalPartCount())
+            , PartsToDelete(0, GType.TotalPartCount())
         {}
 
         bool Empty() const {
@@ -84,6 +86,7 @@ namespace NKikimr {
             CollectTask.Clear();
             HugeBlobWrites.clear();
             HugeBlobMoves.clear();
+            PartsToDelete.Clear();
         }
 
         void Add(const TMemRecLogoBlob& memRec, std::variant<const TRope*, const TDiskPart*> dataOrOutbound,
@@ -130,7 +133,7 @@ namespace NKikimr {
             }
         }
 
-        void Finish(bool targetingHugeBlob, const TLogoBlobID& fullId, TBlobType::EType *type, ui32 *inplacedDataSize) {
+        void Finish(bool targetingHugeBlob, const TLogoBlobID& fullId) {
             Y_DEBUG_ABORT_UNLESS(!Finished);
 
             if (!Empty()) {
@@ -158,11 +161,6 @@ namespace NKikimr {
                 } else {
                     producingHugeBlob = targetingHugeBlob;
                 }
-
-                // calculate blob for if we are going to keep it inplace
-                *inplacedDataSize = producingHugeBlob
-                    ? 0
-                    : TDiskBlob::CalculateBlobSize(GType, fullId, PartsMask, AddHeader);
 
                 TDiskBlobMerger merger;
 
@@ -204,13 +202,23 @@ namespace NKikimr {
                 Y_DEBUG_ABORT_UNLESS(!producingHugeBlob || merger.Empty());
                 CollectTask.BlobMerger = merger;
 
-                *type = !producingHugeBlob ? TBlobType::DiskBlob :
-                    PartsMask.CountBits() > 1 ? TBlobType::ManyHugeBlobs : TBlobType::HugeBlob;
-
                 Y_DEBUG_ABORT_UNLESS(SavedHugeBlobs.size() == (producingHugeBlob ? PartsMask.CountBits() : 0));
             }
 
             Finished = true;
+        }
+
+        TBlobType::EType GetType() const {
+            Y_DEBUG_ABORT_UNLESS(Finished);
+            switch (SavedHugeBlobs.size()) {
+                case 0:  return TBlobType::DiskBlob;
+                case 1:  return TBlobType::HugeBlob;
+                default: return TBlobType::ManyHugeBlobs;
+            }
+        }
+
+        ui32 GetInplacedBlobSize(const TLogoBlobID& fullId) const {
+            return Empty() || !SavedHugeBlobs.empty() ? 0 : TDiskBlob::CalculateBlobSize(GType, fullId, PartsMask, AddHeader);
         }
 
         void FinishFromBlob() {
@@ -218,7 +226,7 @@ namespace NKikimr {
             Finished = true;
         }
 
-        void AddHugeBlob(const TDiskPart *begin, const TDiskPart *end, const NMatrix::TVectorType& parts, ui64 circaLsn) {
+        void AddHugeBlob(const TDiskPart *begin, const TDiskPart *end, NMatrix::TVectorType parts, ui64 circaLsn) {
             Y_DEBUG_ABORT_UNLESS(parts.CountBits() == end - begin);
             const TDiskPart *location = begin;
             for (ui8 partIdx : parts) {
@@ -320,8 +328,7 @@ namespace NKikimr {
             Finished = true;
         }
 
-        void FilterLocalParts(NMatrix::TVectorType remainingLocalParts, const TLogoBlobID& fullId,
-                TBlobType::EType *type, ui32 *inplacedDataSize) {
+        void FilterLocalParts(NMatrix::TVectorType remainingLocalParts) {
             Y_DEBUG_ABORT_UNLESS(Finished);
             const NMatrix::TVectorType partsToRemove = PartsMask & ~remainingLocalParts;
             for (ui8 partIdx : partsToRemove) { // local parts to remove
@@ -341,13 +348,29 @@ namespace NKikimr {
                 CollectTask.Reads.end());
 
             PartsMask &= remainingLocalParts;
+        }
 
-            // recalculate memrec data for this new entry
-            *type = SavedHugeBlobs.empty() ? TBlobType::DiskBlob :
-                SavedHugeBlobs.size() == 1 ? TBlobType::HugeBlob : TBlobType::ManyHugeBlobs;
-            if (!Empty() && *type == TBlobType::DiskBlob) {
-                *inplacedDataSize = TDiskBlob::CalculateBlobSize(GType, fullId, PartsMask, AddHeader);
+        void CheckExternalData(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, ui64 lsn) {
+            if (memRec.GetType() != TBlobType::HugeBlob && memRec.GetType() != TBlobType::ManyHugeBlobs) {
+                return;
             }
+
+            TDiskDataExtractor extr;
+            memRec.GetDiskData(&extr, outbound);
+            const NMatrix::TVectorType parts = memRec.GetLocalParts(GType);
+            Y_DEBUG_ABORT_UNLESS(parts.CountBits() == extr.End - extr.Begin);
+            const TDiskPart *location = extr.Begin;
+            for (ui8 partIdx : parts) {
+                Y_DEBUG_ABORT_UNLESS(partIdx < Parts.size());
+                if (auto& part = Parts[partIdx]; !part.HugeBlob.Empty() && part.HugeBlobCircaLsn < lsn && location->ChunkIdx) {
+                    PartsToDelete.Set(partIdx);
+                }
+                ++location;
+            }
+        }
+
+        NMatrix::TVectorType GetRemainingParts() const {
+            return PartsMask - PartsToDelete;
         }
 
     };

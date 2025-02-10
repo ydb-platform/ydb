@@ -49,7 +49,7 @@ public:
 #if defined(_tsan_enabled_)
         TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
-        NSQLTranslation::TErrorCollectorOverIssues collector(newIssues, maxErrors, "");
+        NSQLTranslation::TErrorCollectorOverIssues collector(newIssues, maxErrors, queryName);
         if (Ansi && !Antlr4) {
             NProtoAST::TLexerTokensCollector3<NALPAnsi::SQLv1Lexer> tokensCollector(query, (const char**)NALPAnsi::SQLv1ParserTokenNames, queryName);
             tokensCollector.CollectTokens(collector, onNextToken);

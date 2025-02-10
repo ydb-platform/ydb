@@ -915,6 +915,12 @@ public:
                             "Write transactions between column and row tables are disabled at current time.");
             return false;
         }
+        if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
+            && QueryState->TxCtx->HasOltpTable) {
+            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "SnapshotRW can only be used with olap tables.");
+            return false;
+        }
 
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
         QueryState->TxCtx->ApplyPhysicalQuery(phyQuery);

@@ -140,7 +140,7 @@ TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConf
 }
 
 TString TTargetTransfer::BuildStreamPath() const {
-    return CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName()));
+    return CanonizePath(GetSrcPath());
 }
 
 TTargetTransfer::TTransferConfig::TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda)

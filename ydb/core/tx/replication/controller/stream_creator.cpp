@@ -109,7 +109,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         case TReplication::ETargetKind::IndexTable:
             return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", TString{Changefeed.GetName()}}));
         case TReplication::ETargetKind::Transfer:
-            return CanonizePath(ChildPath(SplitPath(SrcPath), TString{Changefeed.GetName()}));
+            return CanonizePath(SplitPath(SrcPath));
         }
     }
 

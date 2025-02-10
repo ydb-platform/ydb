@@ -461,15 +461,8 @@ private:
             return;
         }
 
-        if (entry.Kind != TNavigate::KindTable && entry.Kind != TNavigate::KindColumnTable) {
-            CheckEntryKind(entry, TNavigate::KindTable);
-            return;
-        }
-
-        if (TableVersion && TableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
-            // TODO ????
-            return CompileTransferLambda();
-        }
+        // TODO support row tables
+        CheckEntryKind(entry, TNavigate::KindColumnTable);
 
         if (entry.Kind == TNavigate::KindColumnTable) {
             TableState = std::make_unique<TColumnTableState>(SelfId(), result);
@@ -507,7 +500,7 @@ private:
         TStringBuilder sb;
         sb << TransformLambda;
         sb << "SELECT $__ydb_transfer_lambda(TableRow()) AS " << RESULT_COLUMN_NAME << " FROM Input;\n";
-        LOG_D("SQL: " << sb);
+        LOG_T("SQL: " << sb);
         return sb;
     }
 
@@ -690,7 +683,6 @@ private:
     const TActorId CompileServiceId;
     TActorId Worker;
 
-    ui64 TableVersion = 0;
     ITableKindState::TPtr TableState;
 
     size_t InFlightCompilationId = 0;

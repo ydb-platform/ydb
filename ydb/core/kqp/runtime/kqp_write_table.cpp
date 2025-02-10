@@ -81,7 +81,7 @@ public:
 
     std::shared_ptr<void> ExtractBatch() override {
         auto r = std::make_shared<std::pair<std::vector<TCell>, std::vector<TCharVectorPtr>>>(Extract());
-        return std::dynamic_pointer_cast<void>(r);
+        return std::reinterpret_pointer_cast<void>(r);
     }
 
     TRowBatch(std::vector<TCell>&& cells, std::vector<TCharVectorPtr>&& data, i64 size, ui32 rows, ui16 columns)

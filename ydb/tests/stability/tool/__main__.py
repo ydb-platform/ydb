@@ -145,7 +145,7 @@ class StabilityCluster:
         for line in traces.split('\n'):
             line = re.sub(r' @ 0x[a-fA-F0-9]+', '', line)
             # Убираем все до текста ошибки или указателя на строку кода
-            match_verify = re.search(r'VERIFY|FAIL|signal 11|signal 6|signal 15|uncaught exception', line)
+            match_verify = re.search(r'VERIFY|FAIL|signal 11|signal 6|signal 15|uncaught exception|ERROR: AddressSanitizer|SIG', line)
             match_code_file_line = re.search(r'\s+(\S+\.cpp:\d+).*', line)
 
             if match_verify:
@@ -198,11 +198,11 @@ class StabilityCluster:
                     trace = trace + line + '\n'
         return traces
 
-    def get_all_errors(self):
+    def get_all_errors(self, mode='all'):
         all_results = []
-        for node in self.kikimr_cluster.nodes.values():
-            result = node.ssh_command("""
-                    ls -ltr /Berkanavt/kikimr*/logs/kikimr* |
+        if mode == 'all' or mode == 'raw' or mode == 'aggr':
+            command = """
+                    ls -ltr /Berkanavt/kikim*/logs/kikimr* |
                     awk '{print $NF}' |
                     while read file; do
                     case "$file" in
@@ -211,16 +211,27 @@ class StabilityCluster:
                         *) cat "$file" ;;
                     esac
                     done |
-                    grep -E 'VERIFY|FAIL |signal 11|signal 6|signal 15|uncaught exception' -A 20
-                                    """, raise_on_error=False)
+                    grep -E 'VERIFY|FAIL |signal 11|signal 6|signal 15|uncaught exception|ERROR: AddressSanitizer|SIG' -A 40 -B 20
+                    """
+        elif mode == 'last':
+            command = """
+                    ls -ltr /Berkanavt/kikim*/logs/kikimr |
+                    awk '{print $NF}' |
+                    while read file; do
+                    cat "$file" | grep -E 'VERIFY|FAIL |signal 11|signal 6|signal 15|uncaught exception|ERROR: AddressSanitizer|SIG' -A 40 -B 20 | tail -120
+                    echo "--"
+                    done
+                    """
+        for node in self.kikimr_cluster.nodes.values():
+            result = node.ssh_command(command, raise_on_error=False)
             if result:
                 all_results.append(result.decode('utf-8'))
         all_results = self.process_lines(all_results)
         return all_results
 
     def get_errors(self, mode='raw'):
-        errors = self.get_all_errors()
-        if mode == 'raw':
+        errors = self.get_all_errors(mode=mode)
+        if mode == 'raw' or mode == 'last':
             print('Traces:')
             for trace in errors:
                 print(f"{trace}\n{'-'*60}")
@@ -237,6 +248,16 @@ class StabilityCluster:
         for node in self.kikimr_cluster.nodes.values():
             result = node.ssh_command('find /coredumps/ -type f | wc -l', raise_on_error=False)
             coredumps_search_results[node.host.split(':')[0]] = int(result.decode('utf-8'))
+        minidumps_search_results = {}
+        for node in self.kikimr_cluster.nodes.values():
+            result = node.ssh_command('''
+            if [ -d "/Berkanavt/minidumps/" ]; then
+                find /Berkanavt/minidumps/ -type f | wc -l
+                else
+                echo 0
+            fi
+            ''', raise_on_error=False)
+            minidumps_search_results[node.host.split(':')[0]] = int(result.decode('utf-8'))
 
         print("SAFETY WARDEN:")
         for i, violation in enumerate(safety_violations):
@@ -253,6 +274,9 @@ class StabilityCluster:
         print("COREDUMPS:")
         for node in coredumps_search_results:
             print(f'    {node}: {coredumps_search_results[node]}')
+        print("MINIDUMPS:")
+        for node in coredumps_search_results:
+            print(f'    {node}: {minidumps_search_results[node]}')
 
     def start_nemesis(self):
         for node in self.kikimr_cluster.nodes.values():
@@ -373,6 +397,8 @@ def parse_args():
         nargs="+",
         choices=[
             "get_errors",
+            "get_errors_aggr",
+            "get_errors_last",
             "get_state",
             "clean_workload",
             "cleanup",
@@ -432,6 +458,10 @@ def main():
         print(f'Start action {action}')
         if action == "get_errors":
             stability_cluster.get_errors(mode='raw')
+        if action == "get_errors_aggr":
+            stability_cluster.get_errors(mode='aggr')
+        if action == "get_errors_last":
+            stability_cluster.get_errors(mode='last')
         if action == "get_state":
             stability_cluster.get_state()
         if action == "deploy_ydb":

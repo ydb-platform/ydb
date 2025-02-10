@@ -81,8 +81,8 @@ void TCommandConfigFetch::Parse(TConfig& config) {
 int TCommandConfigFetch::Run(TConfig& config) {
     if (AllowEmptyDatabase) {
         // explicitly clear database to get cluster database
-        // in `ydb admin cluster config fetch` even if wrong
-        // some database is set
+        // in `ydb admin cluster config fetch` even if
+        // some database is set by mistake
         config.Database.clear();
     }
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));

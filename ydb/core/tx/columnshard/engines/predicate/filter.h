@@ -86,14 +86,40 @@ public:
     static std::shared_ptr<TPKRangesFilter> BuildFromString(
         const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse);
 
+    static TString ToString(const TSerializedCellVec& range) {
+        TStringStream out;
+        bool first = true;
+        for(auto& cell: range.GetCells()) {
+            if (!first) {
+                out << ",";
+            }
+            if (cell.IsNull()) {
+                out << "null";
+            } else {
+                out << "not_null";
+            }
+            first = false;
+        }
+        return out.Str();
+    }
+
     template <class TProto>
     static TConclusion<TPKRangesFilter> BuildFromProto(const TProto& proto, const bool reverse, const std::vector<TNameTypeInfo>& ydbPk) {
         TPKRangesFilter result(reverse);
+
         for (auto& protoRange : proto.GetRanges()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("proto_range", protoRange.ShortDebugString());
             TSerializedTableRange range(protoRange);
             auto fromPredicate = std::make_shared<TPredicate>();
             auto toPredicate = std::make_shared<TPredicate>();
             TSerializedTableRange serializedRange(protoRange);
+            ui32 fromSize = serializedRange.From.GetCells().size();
+            ui32 toSize = serializedRange.To.GetCells().size();
+//            const char* from = fromSize == 0 ? "empty" : serializedRange.From.GetCells()[0].IsNull() ? "is_null" : "is_not_null";
+//            const char* to = toSize == 0 ? "empty" : serializedRange.To.GetCells()[0].IsNull() ? "is_null" : "is_not_null";
+            TString from = ToString(serializedRange.From);
+            TString to = ToString(serializedRange.To);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("serialized_range", "")("from_size", fromSize)("to_size", toSize)("from", from)("to", to)("from_inclusive", serializedRange.FromInclusive)("to_inclusive", serializedRange.ToInclusive);
             std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(serializedRange, ydbPk);
             auto status = result.Add(fromPredicate, toPredicate, NArrow::TStatusValidator::GetValid(NArrow::MakeArrowSchema(ydbPk)));
             if (status.IsFail()) {

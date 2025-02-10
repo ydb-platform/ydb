@@ -3088,6 +3088,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/ColumnShard` (a, b) VALUES
                     (NULL, 3),
+                    (NULL, NULL),
                     (2u, 5),
                     (3u, NULL)
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -3099,60 +3100,123 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
 
             Cerr << "Starting select\n";
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a <= 2");
             auto it = client.StreamExecuteQuery(R"(
                 SELECT
-                    COUNT(*)
+                    a, b
+                FROM `/Root/ColumnShard`
+                WHERE a <= 2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString outputl = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << outputl << Endl;
+
+            Cerr << "Starting select\n";
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a is null");
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    a, b
                 FROM `/Root/ColumnShard`
                 WHERE a IS NULL;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output3 = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << output3 << Endl;
+
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a is null, is null");
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    a, b
+                FROM `/Root/ColumnShard`
+                WHERE a IS NULL AND b IS NULL;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output5 = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << output5 << Endl;
+
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a is null, is not null");
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    a, b
+                FROM `/Root/ColumnShard`
+                WHERE a IS NULL AND b IS NOT NULL;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output6 = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << output6 << Endl;
+
+            Cerr << "Starting select\n";
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a is null and b == 2");
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    a, b
+                FROM `/Root/ColumnShard`
+                WHERE a IS NULL AND b = 3;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output4 = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << output4 << Endl;
+
+            Cerr << "Starting select\n";
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a is not null");
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    a, b
+                FROM `/Root/ColumnShard`
+                WHERE a IS NOT NULL;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            Cerr << "Finished select\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output2 = StreamResultToYson(it);
+            Cerr << "Finished convert\n";
+            Cout << output2 << Endl;
+
+            Cerr << "Starting select\n";
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a is not null and b = 5");
+            it = client.StreamExecuteQuery(R"(
+                SELECT
+                    a, b
+                FROM `/Root/ColumnShard`
+                WHERE a IS NOT NULL AND b = 5;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             Cerr << "Finished select\n";
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             Cerr << "Finished convert\n";
             Cout << output << Endl;
-            CompareYson(output, R"([[1u;]])");
 
-            Cerr << "Starting select\n";
+            Cerr << "Starting select a!=2\n";
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Starting select a != 2");
             it = client.StreamExecuteQuery(R"(
                 SELECT
-                    COUNT(*)
+                    a, b
                 FROM `/Root/ColumnShard`
-                WHERE a IS NULL AND b = 3;
+                WHERE a != 2;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             Cerr << "Finished select\n";
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            output = StreamResultToYson(it);
+            TString output7 = StreamResultToYson(it);
             Cerr << "Finished convert\n";
-            Cout << output << Endl;
-            CompareYson(output, R"([[1u;]])");
+            Cout << output7 << Endl;
 
-            Cerr << "Starting select\n";
-            it = client.StreamExecuteQuery(R"(
-                SELECT
-                    COUNT(*)
-                FROM `/Root/ColumnShard`
-                WHERE a IS NOT NULL;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            Cerr << "Finished select\n";
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            output = StreamResultToYson(it);
-            Cerr << "Finished convert\n";
-            Cout << output << Endl;
-            CompareYson(output, R"([[2u;]])");
-
-            Cerr << "Starting select\n";
-            it = client.StreamExecuteQuery(R"(
-                SELECT
-                    COUNT(*)
-                FROM `/Root/ColumnShard`
-                WHERE a IS NOT NULL AND b = 5;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            Cerr << "Finished select\n";
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            output = StreamResultToYson(it);
-            Cerr << "Finished convert\n";
-            Cout << output << Endl;
-            CompareYson(output, R"([[1u;]])");
+            CompareYson(output, R"([[[2u];[5]]])");
+            CompareYson(outputl, R"([[[2u];[5]]])");
+            CompareYson(output2, R"([[[2u];[5]];[[3u];#]])");
+            CompareYson(output3, R"([[#;#];[#;[3]]])");
+            CompareYson(output4, R"([[#;[3]]])");
+            CompareYson(output5, R"([[#;#]])");
+            CompareYson(output6, R"([[#;[3]]])");
+            CompareYson(output7, R"([[[3u];#]])");
         }
     }
 

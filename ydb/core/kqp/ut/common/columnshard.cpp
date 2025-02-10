@@ -100,6 +100,11 @@ namespace NKqp {
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
         TString result = StreamResultToYson(it, false, opStatus);
         if (opStatus == EStatus::SUCCESS) {
+            if (result != expected) {
+                Cout << "Result: " << result << " expected: " << expected << Endl;
+            } else {
+                Cout << "Result: " << result << Endl;
+            }
             UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
         }
     }

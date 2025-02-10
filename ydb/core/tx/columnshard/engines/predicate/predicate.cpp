@@ -64,10 +64,17 @@ TString FromCells(const TConstArrayRef<TCell>& cells, const std::vector<std::pai
     return NArrow::SerializeBatchNoCompression(batch);
 }
 
+bool IsNull(const TSerializedCellVec& range) {
+    return (range.GetCells().size() > 0) && range.GetCells()[0].IsNull();
+}
+
 std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::DeserializePredicatesRange(
     const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     std::vector<TCell> leftCells;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> leftColumns;
+    bool bothNull = IsNull(range.From) && IsNull(range.To); // && range.FromInclusive && range.ToInclusive;
+    bool notNull = IsNull(range.From) && (range.To.GetCells().size() == 0) && !range.FromInclusive && !range.ToInclusive;
+//    bool leftTrailingNull = false;
     {
         TConstArrayRef<TCell> cells = range.From.GetCells();
         const size_t size = cells.size();
@@ -75,13 +82,22 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
         leftCells.reserve(size);
         leftColumns.reserve(size);
         for (size_t i = 0; i < size; ++i) {
-            leftCells.push_back(cells[i]);
-            leftColumns.push_back(columns[i]);
+            if (bothNull || notNull || !cells[i].IsNull()) {
+                leftCells.push_back(cells[i]);
+                leftColumns.push_back(columns[i]);
+            } else if (!bothNull && !notNull && cells[i].IsNull()) {
+                leftCells.push_back(cells[i]);
+                leftColumns.push_back(columns[i]);
+//                leftTrailingNull = false;
+//            } else {
+//                leftTrailingNull = true;
+            }
         }
     }
 
     std::vector<TCell> rightCells;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> rightColumns;
+    bool rightTrailingNull = false;
     {
         TConstArrayRef<TCell> cells = range.To.GetCells();
         const size_t size = cells.size();
@@ -89,10 +105,18 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
         rightCells.reserve(size);
         rightColumns.reserve(size);
         for (size_t i = 0; i < size; ++i) {
-            rightCells.push_back(cells[i]);
-            rightColumns.push_back(columns[i]);
+            if (bothNull || notNull || !cells[i].IsNull()) {
+                rightCells.push_back(cells[i]);
+                rightColumns.push_back(columns[i]);
+                rightTrailingNull = false;
+            } else {
+                rightTrailingNull = true;
+            }
         }
     }
+
+    const bool fromInclusive = range.FromInclusive; // || leftTrailingNull;
+    const bool toInclusive = range.ToInclusive && !rightTrailingNull;
 
     TString leftBorder = FromCells(leftCells, leftColumns);
     TString rightBorder = FromCells(rightCells, rightColumns);
@@ -101,8 +125,8 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
     auto rightSchema = NArrow::MakeArrowSchema(rightColumns);
     Y_ASSERT(rightSchema.ok());
     return std::make_pair(
-        TPredicate(range.FromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftBorder, leftSchema.ValueUnsafe()),
-        TPredicate(range.ToInclusive ? NKernels::EOperation::LessEqual : NKernels::EOperation::Less, rightBorder, rightSchema.ValueUnsafe()));
+        TPredicate(fromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftBorder, leftSchema.ValueUnsafe()),
+        TPredicate(toInclusive ? NKernels::EOperation::LessEqual : NKernels::EOperation::Less, rightBorder, rightSchema.ValueUnsafe()));
 }
 
 std::shared_ptr<arrow::RecordBatch> TPredicate::CutNulls(const std::shared_ptr<arrow::RecordBatch>& batch) {

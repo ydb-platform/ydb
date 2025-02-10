@@ -5,7 +5,6 @@
 
 namespace NKikimr::NReplication::NTestHelpers {
 
-
 void TTestTopicDescription::SerializeTo(NKikimrSchemeOp::TPersQueueGroupDescription& proto) const {
     proto.SetName(Name);
     proto.SetTotalGroupCount(1);

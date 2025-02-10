@@ -10,7 +10,6 @@
 
 * Добавлена возможность регистрировать [динамический узел](./concepts/glossary.md#dynamic) по сертификату. В [Node Broker](./concepts/glossary.md#node-broker) добавлен флаг `AuthorizeByCertificate` использования сертификата при регистрации.
 * [Добавлены](https://github.com/ydb-platform/ydb/pull/11775) приоритеты проверки аутентификационных тикетов [с использованием стороннего IAM-провайдера](./security/authentication#iam), с самым высоким приоритетом обрабатываются запросы от новых пользователей. Тикеты в кеше обновляют свою информацию с приоритетом ниже.
-* [Добавлена](https://github.com/ydb-platform/ydb/pull/13748) возможность настраивать шаг планирования координатора c помощью [динамически обновляемой настройки](./maintenance/manual/dynamic-config#dynamic-kinds) `immediate_controls_config`.
 
 #### Производительность
 

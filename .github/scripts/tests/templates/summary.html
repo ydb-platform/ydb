@@ -637,7 +637,7 @@
         <td class="test_name">
         {% endif %}
             <span>{{ t.full_name }}</span>
-            {% if status.is_error %}           
+            {% if status.is_error %}
             <div class="button-group">
                 <button class="button" title="Show options">
                     <svg  class="more"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 448 512">
@@ -713,7 +713,7 @@
             <button class="error-button" onclick="toggleError(this)"></button>
             <div style="display: none;" class="error-content">
                 <div class="console-frame" style="display: none;">
-                    <pre><code class="language-python">{{ t.status_description | default("Ошибка недоступна")| replace("\r\n", "\n") }}</code></pre>
+                    <pre><code class="language-python">{{ t.status_description | default("Status description missed") }}</code></pre>
                 </div>
             </div>
             {% endif %}

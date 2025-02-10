@@ -699,7 +699,8 @@ private:
 }; // TTransferWriter
 
 IActor* CreateTransferWriter(const TString& transformLambda, const TPathId& tablePathId,
-    const TActorId& compileServiceId) {
+        const TActorId& compileServiceId)
+{
     return new TTransferWriter(transformLambda, tablePathId, compileServiceId);
 }
 

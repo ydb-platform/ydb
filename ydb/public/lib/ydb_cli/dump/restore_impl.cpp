@@ -630,7 +630,7 @@ TRestoreResult TRestoreClient::RestoreTable(
     }
 
     if (settings.RestoreData_) {
-        const ui32 partitionCount = scheme.partition_at_keys().split_points().size();
+        const ui32 partitionCount = scheme.partition_at_keys().split_points().size() + 1;
         auto result = RestoreData(fsPath, dbPath, settings, withoutIndexesDesc, partitionCount);
         if (!result.IsSuccess()) {
             return result;

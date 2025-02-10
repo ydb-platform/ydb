@@ -21,7 +21,6 @@
 #include <yt/cpp/mapreduce/interface/protobuf_format.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-#include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/http/requests.h>
 #include <yt/cpp/mapreduce/http/retry_request.h>
@@ -37,8 +36,7 @@
 #include <yt/cpp/mapreduce/io/proto_helpers.h>
 #include <yt/cpp/mapreduce/io/skiff_table_reader.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <library/cpp/yson/node/serialize.h>
 
@@ -53,8 +51,6 @@
 
 namespace NYT {
 namespace NDetail {
-
-using namespace NRawClient;
 
 using ::ToString;
 
@@ -226,12 +222,11 @@ TStructuredJobTableList ApplyProtobufColumnFilters(
         return tableList;
     }
 
-    auto isDynamic = BatchTransform(
-        CreateDefaultRequestRetryPolicy(preparer.GetContext().Config),
-        preparer.GetContext(),
+    auto isDynamic = NRawClient::BatchTransform(
+        preparer.GetClient()->GetRawClient(),
         tableList,
-        [&] (TRawBatchRequest& batch, const auto& table) {
-            return batch.Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
+        [&] (IRawBatchRequestPtr batch, const auto& table) {
+            return batch->Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
         });
 
     auto newTableList = tableList;
@@ -283,8 +278,8 @@ TSimpleOperationIo CreateSimpleOperationIo(
         structuredJob,
         preparer,
         options,
-        CanonizeStructuredTableList(preparer.GetContext(), GetStructuredInputs(spec)),
-        CanonizeStructuredTableList(preparer.GetContext(), GetStructuredOutputs(spec)),
+        CanonizeStructuredTableList(preparer.GetClient()->GetRawClient(), GetStructuredInputs(spec)),
+        CanonizeStructuredTableList(preparer.GetClient()->GetRawClient(), GetStructuredOutputs(spec)),
         hints,
         nodeReaderFormat,
         GetColumnsUsedInOperation(spec));
@@ -306,8 +301,8 @@ TSimpleOperationIo CreateSimpleOperationIo(
         }
     };
 
-    auto inputs = CanonizeYPaths(/* retryPolicy */ nullptr, preparer.GetContext(), spec.GetInputs());
-    auto outputs = CanonizeYPaths(/* retryPolicy */ nullptr, preparer.GetContext(), spec.GetOutputs());
+    auto inputs = NRawClient::CanonizeYPaths(preparer.GetClient()->GetRawClient(), spec.GetInputs());
+    auto outputs = NRawClient::CanonizeYPaths(preparer.GetClient()->GetRawClient(), spec.GetOutputs());
 
     VerifyHasElements(inputs, "input");
     VerifyHasElements(outputs, "output");
@@ -320,7 +315,6 @@ TSimpleOperationIo CreateSimpleOperationIo(
             inputs,
             outputs,
             preparer.GetClient()->GetRawClient(),
-            preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
         &inputs,
@@ -349,20 +343,19 @@ TSimpleOperationIo CreateSimpleOperationIo(
 
 TString GetJobStderrWithRetriesAndIgnoreErrors(
     const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TOperationId& operationId,
     const TJobId& jobId,
     const size_t stderrTailSize,
-    const TGetJobStderrOptions& options = TGetJobStderrOptions())
+    const TGetJobStderrOptions& options = {})
 {
     TString jobStderr;
     try {
-        jobStderr = GetJobStderrWithRetries(
+        jobStderr = RequestWithRetry<TString>(
             retryPolicy,
-            context,
-            operationId,
-            jobId,
-            options);
+            [&rawClient, &operationId, &jobId, &options] (TMutationId /*mutationId*/) {
+                return rawClient->GetJobStderr(operationId, jobId, options)->ReadAll();
+            });
     } catch (const TErrorResponse& e) {
         YT_LOG_ERROR("Cannot get job stderr (OperationId: %v, JobId: %v, Error: %v)",
             operationId,
@@ -377,17 +370,19 @@ TString GetJobStderrWithRetriesAndIgnoreErrors(
 
 TVector<TFailedJobInfo> GetFailedJobInfo(
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TOperationId& operationId,
     const TGetFailedJobInfoOptions& options)
 {
-    const auto listJobsResult = ListJobs(
+    const auto listJobsResult = RequestWithRetry<TListJobsResult>(
         clientRetryPolicy->CreatePolicyForGenericRequest(),
-        context,
-        operationId,
-        TListJobsOptions()
-            .State(EJobState::Failed)
-            .Limit(options.MaxJobCount_));
+        [&rawClient, &operationId, &options] (TMutationId /*mutationId*/) {
+            return rawClient->ListJobs(
+                operationId,
+                TListJobsOptions()
+                    .State(EJobState::Failed)
+                    .Limit(options.MaxJobCount_));
+        });
 
     const auto stderrTailSize = options.StderrTailSize_;
 
@@ -405,7 +400,7 @@ TVector<TFailedJobInfo> GetFailedJobInfo(
             // so we ignore all errors and try our luck on other jobs.
             info.Stderr = GetJobStderrWithRetriesAndIgnoreErrors(
                 clientRetryPolicy->CreatePolicyForGenericRequest(),
-                context,
+                rawClient,
                 operationId,
                 *job.Id,
                 stderrTailSize);
@@ -427,15 +422,20 @@ struct TGetJobsStderrOptions
 
 static TVector<TString> GetJobsStderr(
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
+    const IRawClientPtr& rawClient,
     const TOperationId& operationId,
-    const TGetJobsStderrOptions& options = TGetJobsStderrOptions())
+    const TGetJobsStderrOptions& options = {})
 {
-    const auto listJobsResult = ListJobs(
+    const auto listJobsResult = RequestWithRetry<TListJobsResult>(
         clientRetryPolicy->CreatePolicyForGenericRequest(),
-        context,
-        operationId,
-        TListJobsOptions().Limit(options.MaxJobCount_).WithStderr(true));
+        [&rawClient, &operationId, &options] (TMutationId /*mutationId*/) {
+            return rawClient->ListJobs(
+                operationId,
+                TListJobsOptions()
+                    .Limit(options.MaxJobCount_)
+                    .WithStderr(true));
+        });
+
     const auto stderrTailSize = options.StderrTailSize_;
     TVector<TString> result;
     for (const auto& job : listJobsResult.Jobs) {
@@ -447,7 +447,7 @@ static TVector<TString> GetJobsStderr(
             // so we ignore all errors and try our luck on other jobs.
             GetJobStderrWithRetriesAndIgnoreErrors(
                 clientRetryPolicy->CreatePolicyForGenericRequest(),
-                context,
+                rawClient,
                 operationId,
                 *job.Id,
                 stderrTailSize)
@@ -493,7 +493,6 @@ TSimpleOperationIo CreateSimpleOperationIoHelper(
             structuredInputs,
             structuredOutputs,
             preparer.GetClient()->GetRawClient(),
-            preparer.GetContext(),
             preparer.GetClientRetryPolicy(),
             preparer.GetTransactionId()),
         &structuredInputs,
@@ -554,7 +553,6 @@ TSimpleOperationIo CreateSimpleOperationIoHelper(
 EOperationBriefState CheckOperation(
     const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
     const TOperationId& operationId)
 {
     auto attributes = RequestWithRetry<TOperationAttributes>(
@@ -580,7 +578,7 @@ EOperationBriefState CheckOperation(
 
         auto failedJobInfoList = GetFailedJobInfo(
             clientRetryPolicy,
-            context,
+            rawClient,
             operationId,
             TGetFailedJobInfoOptions());
 
@@ -608,7 +606,7 @@ void WaitForOperation(
         : context.Config->OperationTrackerPollPeriod;
 
     while (true) {
-        auto status = CheckOperation(rawClient, clientRetryPolicy, context, operationId);
+        auto status = CheckOperation(rawClient, clientRetryPolicy, operationId);
         if (status == EOperationBriefState::Completed) {
             YT_LOG_INFO("Operation %v completed (%v)",
                 operationId,
@@ -641,7 +639,7 @@ TNode BuildAutoMergeSpec(const TAutoMergeSpec& options)
     return result;
 }
 
-TNode BuildJobProfilerSpec(const TJobProfilerSpec& profilerSpec)
+[[maybe_unused]] TNode BuildJobProfilerSpec(const TJobProfilerSpec& profilerSpec)
 {
     TNode result;
     if (profilerSpec.ProfilingBinary_) {
@@ -704,6 +702,9 @@ void BuildUserJobFluently(
         .Item("file_paths").List(preparer.GetFiles())
         .DoIf(!preparer.GetLayers().empty(), [&] (TFluentMap fluentMap) {
             fluentMap.Item("layer_paths").List(preparer.GetLayers());
+        })
+        .DoIf(userJobSpec.DockerImage_.Defined(), [&] (TFluentMap fluentMap) {
+            fluentMap.Item("docker_image").Value(*userJobSpec.DockerImage_);
         })
         .Item("command").Value(preparer.GetCommand())
         .Item("class_name").Value(preparer.GetClassName())
@@ -966,9 +967,9 @@ void BuildIntermediateDataPart(const TSpec& spec, TNode* nodeSpec)
 
 TNode MergeSpec(TNode dst, TNode spec, const TOperationOptions& options)
 {
-    MergeNodes(dst["spec"], spec);
+    MergeNodes(dst, spec);
     if (options.Spec_) {
-        MergeNodes(dst["spec"], *options.Spec_);
+        MergeNodes(dst, *options.Spec_);
     }
     return dst;
 }
@@ -1126,7 +1127,7 @@ void DoExecuteMap(
     spec.Title_ = spec.Title_.GetOrElse(AddModeToTitleIfDebug(map.GetClassName()));
 
     TNode specNode = BuildYsonNodeFluently()
-    .BeginMap().Item("spec").BeginMap()
+    .BeginMap()
         .Item("mapper").DoMap([&] (TFluentMap fluent) {
             BuildUserJobFluently(
                 map,
@@ -1145,18 +1146,18 @@ void DoExecuteMap(
         .DoIf(spec.Ordered_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("ordered").Value(spec.Ordered_.GetRef());
         })
-    .EndMap().EndMap();
+    .EndMap();
 
-    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode);
 
-    specNode["spec"]["job_io"]["control_attributes"]["enable_row_index"] = TNode(true);
-    specNode["spec"]["job_io"]["control_attributes"]["enable_range_index"] = TNode(true);
+    specNode["job_io"]["control_attributes"]["enable_row_index"] = TNode(true);
+    specNode["job_io"]["control_attributes"]["enable_range_index"] = TNode(true);
     if (!preparer->GetContext().Config->TableWriter.Empty()) {
-        specNode["spec"]["job_io"]["table_writer"] = preparer->GetContext().Config->TableWriter;
+        specNode["job_io"]["table_writer"] = preparer->GetContext().Config->TableWriter;
     }
 
-    BuildCommonUserOperationPart(spec, &specNode["spec"]);
-    BuildJobCountOperationPart(spec, &specNode["spec"]);
+    BuildCommonUserOperationPart(spec, &specNode);
+    BuildJobCountOperationPart(spec, &specNode);
 
     auto startOperation = [
         operation=operation.Get(),
@@ -1165,7 +1166,7 @@ void DoExecuteMap(
         operationIo,
         mapper
     ] () {
-        auto operationId = preparer->StartOperation(operation, "map", spec);
+        auto operationId = preparer->StartOperation(operation, EOperationType::Map, spec);
 
         LogJob(operationId, mapper.Get(), "mapper");
         LogYPaths(operationId, operationIo.Inputs, "input");
@@ -1244,7 +1245,7 @@ void DoExecuteReduce(
     spec.Title_ = spec.Title_.GetOrElse(AddModeToTitleIfDebug(reduce.GetClassName()));
 
     TNode specNode = BuildYsonNodeFluently()
-    .BeginMap().Item("spec").BeginMap()
+    .BeginMap()
         .Item("reducer").DoMap([&] (TFluentMap fluent) {
             BuildUserJobFluently(
                 reduce,
@@ -1277,11 +1278,11 @@ void DoExecuteReduce(
         .DoIf(spec.AutoMerge_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("auto_merge").Value(BuildAutoMergeSpec(*spec.AutoMerge_));
         })
-    .EndMap().EndMap();
+    .EndMap();
 
-    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
-    BuildCommonUserOperationPart(spec, &specNode["spec"]);
-    BuildJobCountOperationPart(spec, &specNode["spec"]);
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode);
+    BuildCommonUserOperationPart(spec, &specNode);
+    BuildJobCountOperationPart(spec, &specNode);
 
     auto startOperation = [
         operation=operation.Get(),
@@ -1290,7 +1291,7 @@ void DoExecuteReduce(
         operationIo,
         reducer
     ] () {
-        auto operationId = preparer->StartOperation(operation, "reduce", spec);
+        auto operationId = preparer->StartOperation(operation, EOperationType::Reduce, spec);
 
         LogJob(operationId, reducer.Get(), "reducer");
         LogYPaths(operationId, operationIo.Inputs, "input");
@@ -1370,7 +1371,7 @@ void DoExecuteJoinReduce(
     spec.Title_ = spec.Title_.GetOrElse(AddModeToTitleIfDebug(reduce.GetClassName()));
 
     TNode specNode = BuildYsonNodeFluently()
-    .BeginMap().Item("spec").BeginMap()
+    .BeginMap()
         .Item("reducer").DoMap([&] (TFluentMap fluent) {
             BuildUserJobFluently(
                 reduce,
@@ -1391,11 +1392,11 @@ void DoExecuteJoinReduce(
                 fluent.Item("table_writer").Value(preparer->GetContext().Config->TableWriter);
             })
         .EndMap()
-    .EndMap().EndMap();
+    .EndMap();
 
-    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
-    BuildCommonUserOperationPart(spec, &specNode["spec"]);
-    BuildJobCountOperationPart(spec, &specNode["spec"]);
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode);
+    BuildCommonUserOperationPart(spec, &specNode);
+    BuildJobCountOperationPart(spec, &specNode);
 
     auto startOperation = [
         operation=operation.Get(),
@@ -1404,7 +1405,7 @@ void DoExecuteJoinReduce(
         reducer,
         operationIo
     ] () {
-        auto operationId = preparer->StartOperation(operation, "join_reduce", spec);
+        auto operationId = preparer->StartOperation(operation, EOperationType::JoinReduce, spec);
 
         LogJob(operationId, reducer.Get(), "reducer");
         LogYPaths(operationId, operationIo.Inputs, "input");
@@ -1502,7 +1503,7 @@ void DoExecuteMapReduce(
     TString title;
 
     TNode specNode = BuildYsonNodeFluently()
-    .BeginMap().Item("spec").BeginMap()
+    .BeginMap()
         .DoIf(hasMapper, [&] (TFluentMap fluent) {
             TJobPreparer map(
                 *preparer,
@@ -1581,18 +1582,18 @@ void DoExecuteMapReduce(
         .Do([&] (TFluentMap) {
             spec.Title_ = spec.Title_.GetOrElse(AddModeToTitleIfDebug(title + "reducer:" + reduce.GetClassName()));
         })
-    .EndMap().EndMap();
+    .EndMap();
 
     if (spec.Ordered_) {
-        specNode["spec"]["ordered"] = *spec.Ordered_;
+        specNode["ordered"] = *spec.Ordered_;
     }
 
-    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
-    BuildCommonUserOperationPart(spec, &specNode["spec"]);
-    BuildMapJobCountOperationPart(spec, &specNode["spec"]);
-    BuildPartitionCountOperationPart(spec, &specNode["spec"]);
-    BuildIntermediateDataPart(spec, &specNode["spec"]);
-    BuildDataSizePerSortJobPart(spec, &specNode["spec"]);
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode);
+    BuildCommonUserOperationPart(spec, &specNode);
+    BuildMapJobCountOperationPart(spec, &specNode);
+    BuildPartitionCountOperationPart(spec, &specNode);
+    BuildIntermediateDataPart(spec, &specNode);
+    BuildDataSizePerSortJobPart(spec, &specNode);
 
     auto startOperation = [
         operation=operation.Get(),
@@ -1604,7 +1605,7 @@ void DoExecuteMapReduce(
         inputs=operationIo.Inputs,
         allOutputs
     ] () {
-        auto operationId = preparer->StartOperation(operation, "map_reduce", spec);
+        auto operationId = preparer->StartOperation(operation, EOperationType::MapReduce, spec);
 
         LogJob(operationId, mapper.Get(), "mapper");
         LogJob(operationId, reduceCombiner.Get(), "reduce_combiner");
@@ -1632,9 +1633,9 @@ void ExecuteMapReduce(
     TMapReduceOperationSpec spec = spec_;
 
     TMapReduceOperationIo operationIo;
-    auto structuredInputs = CanonizeStructuredTableList(preparer->GetContext(), spec.GetStructuredInputs());
-    auto structuredMapOutputs = CanonizeStructuredTableList(preparer->GetContext(), spec.GetStructuredMapOutputs());
-    auto structuredOutputs = CanonizeStructuredTableList(preparer->GetContext(), spec.GetStructuredOutputs());
+    auto structuredInputs = CanonizeStructuredTableList(preparer->GetClient()->GetRawClient(), spec.GetStructuredInputs());
+    auto structuredMapOutputs = CanonizeStructuredTableList(preparer->GetClient()->GetRawClient(), spec.GetStructuredMapOutputs());
+    auto structuredOutputs = CanonizeStructuredTableList(preparer->GetClient()->GetRawClient(), spec.GetStructuredOutputs());
 
     const bool inferOutputSchema = options.InferOutputSchema_.GetOrElse(preparer->GetContext().Config->InferTableSchema);
 
@@ -1685,7 +1686,6 @@ void ExecuteMapReduce(
                 structuredInputs,
                 mapperOutput,
                 preparer->GetClient()->GetRawClient(),
-                preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),
             &structuredInputs,
@@ -1755,7 +1755,6 @@ void ExecuteMapReduce(
                     inputs,
                     outputs,
                     preparer->GetClient()->GetRawClient(),
-                    preparer->GetContext(),
                     preparer->GetClientRetryPolicy(),
                     preparer->GetTransactionId()),
                 &inputs,
@@ -1821,7 +1820,6 @@ void ExecuteMapReduce(
                 structuredInputs,
                 structuredOutputs,
                 preparer->GetClient()->GetRawClient(),
-                preparer->GetContext(),
                 preparer->GetClientRetryPolicy(),
                 preparer->GetTransactionId()),
             &structuredInputs,
@@ -1901,9 +1899,9 @@ void ExecuteRawMapReduce(
     YT_LOG_DEBUG("Starting raw map-reduce operation (PreparationId: %v)",
         preparer->GetPreparationId());
     TMapReduceOperationIo operationIo;
-    operationIo.Inputs = CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.GetInputs());
-    operationIo.MapOutputs = CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.GetMapOutputs());
-    operationIo.Outputs = CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.GetOutputs());
+    operationIo.Inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.GetInputs());
+    operationIo.MapOutputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.GetMapOutputs());
+    operationIo.Outputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.GetOutputs());
 
     VerifyHasElements(operationIo.Inputs, "inputs");
     VerifyHasElements(operationIo.Outputs, "outputs");
@@ -1950,8 +1948,8 @@ void ExecuteSort(
 {
     YT_LOG_DEBUG("Starting sort operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto inputs = CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.Inputs_);
-    auto output = CanonizeYPath(nullptr, preparer->GetContext(), spec.Output_);
+    auto inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.Inputs_);
+    auto output = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.Output_);
 
     if (options.CreateOutputTables_) {
         CheckInputTablesExist(*preparer, inputs);
@@ -1959,19 +1957,19 @@ void ExecuteSort(
     }
 
     TNode specNode = BuildYsonNodeFluently()
-    .BeginMap().Item("spec").BeginMap()
+    .BeginMap()
         .Item("input_table_paths").List(inputs)
         .Item("output_table_path").Value(output)
         .Item("sort_by").Value(spec.SortBy_)
         .DoIf(spec.SchemaInferenceMode_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("schema_inference_mode").Value(ToString(*spec.SchemaInferenceMode_));
         })
-    .EndMap().EndMap();
+    .EndMap();
 
-    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
-    BuildPartitionCountOperationPart(spec, &specNode["spec"]);
-    BuildPartitionJobCountOperationPart(spec, &specNode["spec"]);
-    BuildIntermediateDataPart(spec, &specNode["spec"]);
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode);
+    BuildPartitionCountOperationPart(spec, &specNode);
+    BuildPartitionJobCountOperationPart(spec, &specNode);
+    BuildIntermediateDataPart(spec, &specNode);
 
     auto startOperation = [
         operation=operation.Get(),
@@ -1980,7 +1978,7 @@ void ExecuteSort(
         inputs,
         output
     ] () {
-        auto operationId = preparer->StartOperation(operation, "sort", spec);
+        auto operationId = preparer->StartOperation(operation, EOperationType::Sort, spec);
 
         LogYPaths(operationId, inputs, "input");
         LogYPath(operationId, output, "output");
@@ -1999,8 +1997,8 @@ void ExecuteMerge(
 {
     YT_LOG_DEBUG("Starting merge operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto inputs = CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.Inputs_);
-    auto output = CanonizeYPath(nullptr, preparer->GetContext(), spec.Output_);
+    auto inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.Inputs_);
+    auto output = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.Output_);
 
     if (options.CreateOutputTables_) {
         CheckInputTablesExist(*preparer, inputs);
@@ -2008,7 +2006,7 @@ void ExecuteMerge(
     }
 
     TNode specNode = BuildYsonNodeFluently()
-    .BeginMap().Item("spec").BeginMap()
+    .BeginMap()
         .Item("input_table_paths").List(inputs)
         .Item("output_table_path").Value(output)
         .Item("mode").Value(ToString(spec.Mode_))
@@ -2018,10 +2016,10 @@ void ExecuteMerge(
         .DoIf(spec.SchemaInferenceMode_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("schema_inference_mode").Value(ToString(*spec.SchemaInferenceMode_));
         })
-    .EndMap().EndMap();
+    .EndMap();
 
-    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
-    BuildJobCountOperationPart(spec, &specNode["spec"]);
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode);
+    BuildJobCountOperationPart(spec, &specNode);
 
     auto startOperation = [
         operation=operation.Get(),
@@ -2030,7 +2028,7 @@ void ExecuteMerge(
         inputs,
         output
     ] () {
-        auto operationId = preparer->StartOperation(operation, "merge", spec);
+        auto operationId = preparer->StartOperation(operation, EOperationType::Merge, spec);
 
         LogYPaths(operationId, inputs, "input");
         LogYPath(operationId, output, "output");
@@ -2049,25 +2047,25 @@ void ExecuteErase(
 {
     YT_LOG_DEBUG("Starting erase operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto tablePath = CanonizeYPath(nullptr, preparer->GetContext(), spec.TablePath_);
+    auto tablePath = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.TablePath_);
 
     TNode specNode = BuildYsonNodeFluently()
-    .BeginMap().Item("spec").BeginMap()
+    .BeginMap()
         .Item("table_path").Value(tablePath)
         .Item("combine_chunks").Value(spec.CombineChunks_)
         .DoIf(spec.SchemaInferenceMode_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("schema_inference_mode").Value(ToString(*spec.SchemaInferenceMode_));
         })
-    .EndMap().EndMap();
+    .EndMap();
 
-    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode);
     auto startOperation = [
         operation=operation.Get(),
         spec=MergeSpec(std::move(specNode), preparer->GetContext().Config->Spec, options),
         preparer,
         tablePath
     ] () {
-        auto operationId = preparer->StartOperation(operation, "erase", spec);
+        auto operationId = preparer->StartOperation(operation, EOperationType::Erase, spec);
 
         LogYPath(operationId, tablePath, "table_path");
 
@@ -2085,8 +2083,8 @@ void ExecuteRemoteCopy(
 {
     YT_LOG_DEBUG("Starting remote copy operation (PreparationId: %v)",
         preparer->GetPreparationId());
-    auto inputs = CanonizeYPaths(/* retryPolicy */ nullptr, preparer->GetContext(), spec.Inputs_);
-    auto output = CanonizeYPath(nullptr, preparer->GetContext(), spec.Output_);
+    auto inputs = NRawClient::CanonizeYPaths(preparer->GetClient()->GetRawClient(), spec.Inputs_);
+    auto output = NRawClient::CanonizeYPath(preparer->GetClient()->GetRawClient(), spec.Output_);
 
     if (options.CreateOutputTables_) {
         CreateOutputTable(*preparer, output);
@@ -2095,7 +2093,7 @@ void ExecuteRemoteCopy(
     Y_ENSURE_EX(!spec.ClusterName_.empty(), TApiUsageError() << "ClusterName parameter is required");
 
     TNode specNode = BuildYsonNodeFluently()
-    .BeginMap().Item("spec").BeginMap()
+    .BeginMap()
         .Item("cluster_name").Value(spec.ClusterName_)
         .Item("input_table_paths").List(inputs)
         .Item("output_table_path").Value(output)
@@ -2112,9 +2110,9 @@ void ExecuteRemoteCopy(
                 "doesn't make sense without CopyAttributes == true");
             fluent.Item("attribute_keys").List(spec.AttributeKeys_);
         })
-    .EndMap().EndMap();
+    .EndMap();
 
-    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode);
     auto startOperation = [
         operation=operation.Get(),
         spec=MergeSpec(specNode, preparer->GetContext().Config->Spec, options),
@@ -2122,7 +2120,7 @@ void ExecuteRemoteCopy(
         inputs,
         output
     ] () {
-        auto operationId = preparer->StartOperation(operation, "remote_copy", spec);
+        auto operationId = preparer->StartOperation(operation, EOperationType::RemoteCopy, spec);
 
         LogYPaths(operationId, inputs, "input");
         LogYPath(operationId, output, "output");
@@ -2219,15 +2217,15 @@ void ExecuteVanilla(
     }
 
     TNode specNode = BuildYsonNodeFluently()
-    .BeginMap().Item("spec").BeginMap()
+    .BeginMap()
         .Item("tasks").DoMapFor(spec.Tasks_, addTask)
-    .EndMap().EndMap();
+    .EndMap();
 
-    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode["spec"]);
-    BuildCommonUserOperationPart(spec, &specNode["spec"]);
+    BuildCommonOperationPart(preparer->GetContext().Config, spec, options, &specNode);
+    BuildCommonUserOperationPart(spec, &specNode);
 
     auto startOperation = [operation=operation.Get(), spec=MergeSpec(std::move(specNode), preparer->GetContext().Config->Spec, options), preparer] () {
-        auto operationId = preparer->StartOperation(operation, "vanilla", spec, /* useStartOperationRequest */ true);
+        auto operationId = preparer->StartOperation(operation, EOperationType::Vanilla, spec);
         return operationId;
     };
 
@@ -2340,7 +2338,7 @@ public:
         : OperationImpl_(std::move(operationImpl))
     { }
 
-    void PrepareRequest(TRawBatchRequest* batchRequest) override
+    void PrepareRequest(IRawBatchRequest* batchRequest) override
     {
         auto filter = TOperationAttributeFilter()
             .Add(EOperationAttribute::State)
@@ -2411,7 +2409,8 @@ TString TOperation::TOperationImpl::GetWebInterfaceUrl() const
 
 void TOperation::TOperationImpl::OnPrepared()
 {
-    Y_ABORT_UNLESS(!PreparedPromise_.HasException() && !PreparedPromise_.HasValue());
+    Y_ABORT_IF(PreparedPromise_.HasException());
+    Y_ABORT_IF(PreparedPromise_.HasValue());
     PreparedPromise_.SetValue();
 }
 
@@ -2457,7 +2456,8 @@ bool TOperation::TOperationImpl::IsStarted() const {
 
 void TOperation::TOperationImpl::OnPreparationException(std::exception_ptr e)
 {
-    Y_ABORT_UNLESS(!PreparedPromise_.HasValue() && !PreparedPromise_.HasException());
+    Y_ABORT_IF(PreparedPromise_.HasValue());
+    Y_ABORT_IF(PreparedPromise_.HasException());
     PreparedPromise_.SetException(e);
 }
 
@@ -2744,13 +2744,22 @@ void TOperation::TOperationImpl::UpdateParameters(const TUpdateOperationParamete
 TJobAttributes TOperation::TOperationImpl::GetJob(const TJobId& jobId, const TGetJobOptions& options)
 {
     ValidateOperationStarted();
-    return NYT::NDetail::GetJob(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, *Id_, jobId, options);
+    auto result = RequestWithRetry<NYson::TYsonString>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &jobId, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetJob(*Id_, jobId, options);
+        });
+    return NRawClient::ParseJobAttributes(NodeFromYsonString(result.AsStringBuf()));
 }
 
 TListJobsResult TOperation::TOperationImpl::ListJobs(const TListJobsOptions& options)
 {
     ValidateOperationStarted();
-    return NYT::NDetail::ListJobs(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, *Id_, options);
+    return RequestWithRetry<TListJobsResult>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->ListJobs(*Id_, options);
+        });
 }
 
 struct TAsyncFinishOperationsArgs
@@ -2772,7 +2781,7 @@ void TOperation::TOperationImpl::AsyncFinishOperation(TOperationAttributes opera
 
 void* TOperation::TOperationImpl::SyncFinishOperationProc(void* pArgs)
 {
-    THolder<TAsyncFinishOperationsArgs> args(static_cast<TAsyncFinishOperationsArgs*>(pArgs));
+    std::unique_ptr<TAsyncFinishOperationsArgs> args(static_cast<TAsyncFinishOperationsArgs*>(pArgs));
     args->OperationImpl->SyncFinishOperationImpl(args->OperationAttributes);
     return nullptr;
 }
@@ -2816,7 +2825,7 @@ void TOperation::TOperationImpl::SyncFinishOperationImpl(const TOperationAttribu
         TVector<TFailedJobInfo> failedJobStderrInfo;
         if (*attributes.BriefState == EOperationBriefState::Failed) {
             try {
-                failedJobStderrInfo = NYT::NDetail::GetFailedJobInfo(ClientRetryPolicy_, Context_, *Id_, TGetFailedJobInfoOptions());
+                failedJobStderrInfo = NYT::NDetail::GetFailedJobInfo(ClientRetryPolicy_, RawClient_, *Id_, TGetFailedJobInfoOptions());
             } catch (const std::exception& e) {
                 additionalExceptionText = "Cannot get job stderrs: ";
                 additionalExceptionText += e.what();
@@ -2929,7 +2938,7 @@ void TOperation::OnStatusUpdated(const TString& newStatus)
 
 TVector<TFailedJobInfo> TOperation::GetFailedJobInfo(const TGetFailedJobInfoOptions& options)
 {
-    return NYT::NDetail::GetFailedJobInfo(Client_->GetRetryPolicy(), Client_->GetContext(), GetId(), options);
+    return NYT::NDetail::GetFailedJobInfo(Client_->GetRetryPolicy(), Client_->GetRawClient(), GetId(), options);
 }
 
 EOperationBriefState TOperation::GetBriefState()
@@ -3001,7 +3010,7 @@ struct TAsyncPrepareAndStartOperationArgs
 
 void* SyncPrepareAndStartOperation(void* pArgs)
 {
-    THolder<TAsyncPrepareAndStartOperationArgs> args(static_cast<TAsyncPrepareAndStartOperationArgs*>(pArgs));
+    std::unique_ptr<TAsyncPrepareAndStartOperationArgs> args(static_cast<TAsyncPrepareAndStartOperationArgs*>(pArgs));
     args->PrepareAndStart();
     return nullptr;
 }
@@ -3016,7 +3025,8 @@ void* SyncPrepareAndStartOperation(void* pArgs)
         try {
             prepare();
             operation->OnPrepared();
-        } catch (...) {
+        } catch (const std::exception& ex) {
+            YT_LOG_INFO("Operation preparation failed: %v", ex.what());
             operation->OnPreparationException(std::current_exception());
         }
         if (mode >= TOperationOptions::EStartOperationMode::AsyncStart) {
@@ -3051,7 +3061,7 @@ void WaitIfRequired(const TOperationPtr& operation, const TClientPtr& client, co
         TWaitProxy::Get()->WaitFuture(finishedFuture);
         finishedFuture.GetValue();
         if (context.Config->WriteStderrSuccessfulJobs) {
-            auto stderrs = GetJobsStderr(retryPolicy, context, operation->GetId());
+            auto stderrs = GetJobsStderr(retryPolicy, client->GetRawClient(), operation->GetId());
             for (const auto& jobStderr : stderrs) {
                 if (!jobStderr.empty()) {
                     Cerr << jobStderr << '\n';

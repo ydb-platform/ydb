@@ -1,6 +1,5 @@
 (
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 # prepare python udf
 (let ui64 (DataType 'Uint64))

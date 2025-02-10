@@ -77,7 +77,8 @@ private:
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
     void ReplayEvents(const TString& databaseName, const TActorContext& ctx);
 
-    void MaybeStartTracing(IRequestProxyCtx& ctx);
+    template<class TEvent>
+    void MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& event);
 
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
 
@@ -153,7 +154,7 @@ private:
             return;
         }
 
-        MaybeStartTracing(*requestBaseCtx);
+        MaybeStartTracing(event);
 
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
@@ -436,7 +437,9 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     return false;
 }
 
-void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
+template<class TEvent>
+void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& event) {
+    IRequestProxyCtx& ctx = *event->Get();
     auto isTracingDecided = ctx.IsTracingDecided();
     if (!isTracingDecided) {
         return;
@@ -445,8 +448,12 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
         return;
     }
 
-    TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
-    NWilson::TTraceId traceId = NJaegerTracing::HandleTracing(ctx.GetRequestDiscriminator(), traceparentHeader);
+    NWilson::TTraceId traceId = NWilson::TTraceId(event->TraceId); // Can be not empty in case of internal subrequests // In this case it is part of the big request
+    if (!traceId) {
+        TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
+        traceId = NJaegerTracing::HandleTracing(ctx.GetRequestDiscriminator(), traceparentHeader);
+    }
+
     if (traceId) {
         NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
         if (auto database = ctx.GetDatabaseName()) {

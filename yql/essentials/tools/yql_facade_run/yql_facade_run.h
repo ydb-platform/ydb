@@ -6,6 +6,8 @@
 #include <yql/essentials/core/url_lister/interface/url_lister.h>
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/core/yql_user_data.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/yson/public.h>
@@ -25,7 +27,6 @@ namespace NKikimr::NMiniKQL {
 namespace NYql {
     class TFileStorageConfig;
     class TGatewaysConfig;
-    class TProgramFactory;
 }
 
 namespace NYql::NProto {
@@ -55,6 +56,12 @@ enum class EProgramType {
     Pg      /* "pg" */,
 };
 
+enum class EQPlayerMode {
+    None    /* "none" */,
+    Capture /* "capture" */,
+    Replay  /* "replay" */,
+};
+
 class TFacadeRunOptions {
 public:
     TFacadeRunOptions();
@@ -66,7 +73,11 @@ public:
     TString ProgramFile;
     TString ProgramText;
     TString User;
+    TString Token;
     ui64 MemLimit = 0;
+    EQPlayerMode QPlayerMode = EQPlayerMode::None;
+    TString OperationId;
+    TQContext QPlayerContext;
 
     THashSet<TString> SqlFlags;
     ui16 SyntaxVersion = 1;
@@ -85,20 +96,16 @@ public:
     IOutputStream* TraceOptStream = nullptr;
 
     IOutputStream* ErrStream = &Cerr;
-    THolder<IOutputStream> ErrStreamHolder;
     IOutputStream* PlanStream = nullptr;
-    THolder<IOutputStream> PlanStreamHolder;
     IOutputStream* ExprStream = nullptr;
-    THolder<IOutputStream> ExprStreamHolder;
     IOutputStream* ResultStream = nullptr;
-    THolder<IOutputStream> ResultStreamHolder;
     IOutputStream* StatStream = nullptr;
-    THolder<IOutputStream> StatStreamHolder;
 
     NYql::TUserDataTable DataTable;
     TVector<TString> UdfsPaths;
     TString Params;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::Greedy;
+    TCredentials::TPtr Credentials = MakeIntrusive<TCredentials>();
 
     THashSet<TString> GatewayTypes;
     TString UdfResolverPath;
@@ -118,6 +125,9 @@ public:
     bool TestSqlFormat = false;
     bool ValidateResultFormat = false;
     bool EnableResultPosition = false;
+    bool EnableCredentials = false;
+    bool EnableQPlayer = false;
+    bool OptimizeLibs = true;
 
     void Parse(int argc, const char *argv[]);
 
@@ -139,14 +149,19 @@ private:
     std::vector<std::function<void(NLastGetopt::TOpts&)>> OptExtenders_;
     std::vector<std::function<void(const NLastGetopt::TOptsParseResult&)>> OptHandlers_;
     THashSet<TString> SupportedGateways_;
+    THolder<IOutputStream> ErrStreamHolder_;
+    THolder<IOutputStream> PlanStreamHolder_;
+    THolder<IOutputStream> ExprStreamHolder_;
+    THolder<IOutputStream> ResultStreamHolder_;
+    THolder<IOutputStream> StatStreamHolder_;
+    IQStoragePtr QPlayerStorage_;
 };
 
 class TFacadeRunner {
 public:
-    TFacadeRunner(TString name)
-        : Name_(std::move(name))
-    {
-    }
+    TFacadeRunner(TString name);
+    ~TFacadeRunner();
+
     int Main(int argc, const char *argv[]);
 
     void AddFsDownloadFactory(std::function<NFS::IDownloaderPtr()> factory) {
@@ -180,19 +195,15 @@ public:
     TFileStoragePtr GetFileStorage() const {
         return FileStorage_;
     }
-    TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> GetFuncRegistry() {
-        return FuncRegistry_;
-    }
-    TCredentials::TPtr GetCredentials() {
-        return Credentials_;
-    }
+    TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> GetFuncRegistry();
     TFacadeRunOptions& GetRunOptions() {
         return RunOptions_;
     }
 
-private:
-    int DoMain(int argc, const char *argv[]);
-    int RunProgram(TProgramFactory& factory);
+protected:
+    virtual int DoMain(int argc, const char *argv[]);
+    virtual int DoRun(TProgramFactory& factory);
+    virtual TProgram::TStatus DoRunProgram(TProgramPtr program);
 
 private:
     TString Name_;
@@ -203,7 +214,6 @@ private:
     THolder<TFileStorageConfig> FileStorageConfig_;
     TFileStoragePtr FileStorage_;
     TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> FuncRegistry_;
-    TCredentials::TPtr Credentials_ = MakeIntrusive<TCredentials>();
     TOperationProgressWriter ProgressWriter_;
     IPipelineConfigurator* OptPipelineConfigurator_ = nullptr;
     IPipelineConfigurator* PeepholePipelineConfigurator_ = nullptr;

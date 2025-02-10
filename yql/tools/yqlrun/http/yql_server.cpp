@@ -173,7 +173,7 @@ struct TTableFileHolder {
 
 TProgramPtr MakeFileProgram(const TString& program, TYqlServer& yqlServer,
     const THashMap<TString, TString>& tables, const THashMap<std::pair<TString, TString>,
-    TVector<std::pair<TString, TString>>>& rtmrTableAttributes, const TString& tmpDir) {
+    TVector<std::pair<TString, TString>>>& /* rtmrTableAttributes */, const TString& tmpDir) {
 
     TVector<TDataProviderInitializer> dataProvidersInit;
 

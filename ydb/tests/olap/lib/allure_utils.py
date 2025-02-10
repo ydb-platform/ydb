@@ -3,8 +3,9 @@ import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from urllib.parse import urlencode
-from datetime import datetime, UTC
+from datetime import datetime
 from copy import deepcopy
+from pytz import timezone
 
 
 def _set_monitoring(test_info: dict[str, str], start_time: float, end_time: float) -> None:
@@ -55,10 +56,11 @@ def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: fl
         if node.role == YdbCluster.Node.Role.STORAGE:
             hosts.append(node.host)
     hosts_cmd = ' '.join([f'-H {h}' for h in hosts])
-    start = datetime.fromtimestamp(start_time, UTC).isoformat()
-    end = datetime.fromtimestamp(end_time, UTC).isoformat()
+    tz = timezone('Europe/Moscow')
+    start = datetime.fromtimestamp(start_time, tz).isoformat()
+    end = datetime.fromtimestamp(end_time, tz).isoformat()
     time_cmd = f'-S "{start}" -U "{end}"'
-    cmd = f"parallel-ssh {hosts_cmd} -o . 'unified_agent select {time_cmd} -s kikimr'"
+    cmd = f"parallel-ssh {hosts_cmd} -o . 'ulimit -n 100500;unified_agent select {time_cmd} -s kikimr'"
     test_info['logs_command'] = f'<code>{cmd}</code>'
 
 

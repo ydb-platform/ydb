@@ -307,5 +307,6 @@ i64 GetTotalMmapedBytes();
 template<typename TMmap = TSystemMmap>
 i64 GetTotalFreeListBytes();
 
+size_t GetMemoryMapsCount();
 
 } // NKikimr

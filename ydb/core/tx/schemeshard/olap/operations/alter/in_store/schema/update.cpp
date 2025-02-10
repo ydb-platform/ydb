@@ -41,7 +41,7 @@ NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateI
             return patch;
         }
         TSimpleErrorCollector collector;
-        if (!originalSchema.ValidateTtlSettings(ttl.GetData(), collector)) {
+        if (!originalSchema.ValidateTtlSettings(ttl.GetData(), *context.GetSSOperationContext(), collector)) {
             return TConclusionStatus::Fail("ttl update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
         *description.MutableTtlSettings() = ttl.SerializeToProto();

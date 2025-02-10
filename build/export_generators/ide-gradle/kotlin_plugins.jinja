@@ -59,6 +59,6 @@ noArg {
 {%- if with_kotlin %}
 
 kotlin {
-    jvmToolchain({{ required_jdk }})
+    jvmToolchain({{ jdk_version }})
 }
 {%  endif -%}

@@ -189,6 +189,7 @@ DEALINGS IN THE SOFTWARE.
 
 ====================COPYRIGHT====================
 //  (C) Copyright Bruno Lalande 2008.
+//  (C) Copyright Matt Borland 2024.
 //  Distributed under the Boost Software License, Version 1.0.
 //  (See accompanying file LICENSE_1_0.txt or copy at
 
@@ -279,11 +280,13 @@ DEALINGS IN THE SOFTWARE.
 //  (C) Copyright John Maddock 2006.
 //  (C) Copyright Johan Rade 2006.
 //  (C) Copyright Paul A. Bristow 2011 (added changesign).
+//  (C) Copyright Matt Borland 2024
 
 
 ====================COPYRIGHT====================
 //  (C) Copyright John Maddock 2006.
 //  (C) Copyright Paul A. Bristow 2006.
+//  (C) Copyright Matt Borland 2024
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 
@@ -303,6 +306,7 @@ DEALINGS IN THE SOFTWARE.
 
 ====================COPYRIGHT====================
 //  (C) Copyright John Maddock 2010.
+//  (C) Copyright Matt Borland 2024.
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 
@@ -397,6 +401,7 @@ DEALINGS IN THE SOFTWARE.
 ====================COPYRIGHT====================
 //  Copyright (c) 2006 Xiaogang Zhang
 //  Copyright (c) 2006 John Maddock
+//  Copyright (c) 2024 Matt Borland
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 
@@ -404,12 +409,14 @@ DEALINGS IN THE SOFTWARE.
 ====================COPYRIGHT====================
 //  Copyright (c) 2006 Xiaogang Zhang
 //  Copyright (c) 2017 John Maddock
+//  Copyright (c) 2024 Matt Borland
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 
 
 ====================COPYRIGHT====================
 //  Copyright (c) 2006 Xiaogang Zhang, 2015 John Maddock
+//  Copyright (c) 2024 Matt Borland
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 
@@ -423,6 +430,7 @@ DEALINGS IN THE SOFTWARE.
 
 ====================COPYRIGHT====================
 //  Copyright (c) 2007 John Maddock
+//  Copyright (c) 2024 Matt Borland
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 
@@ -517,6 +525,7 @@ DEALINGS IN THE SOFTWARE.
 ====================COPYRIGHT====================
 //  Copyright John Maddock 2005-2006, 2011.
 //  Copyright Paul A. Bristow 2006-2011.
+//  Copyright Matt Borland 2024.
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 
@@ -530,6 +539,7 @@ DEALINGS IN THE SOFTWARE.
 ====================COPYRIGHT====================
 //  Copyright John Maddock 2005-2008.
 //  Copyright (c) 2006-2008 Johan Rade
+//  Copyright (c) 2024 Matt Borland
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 
@@ -547,6 +557,9 @@ DEALINGS IN THE SOFTWARE.
 ====================COPYRIGHT====================
 //  Copyright John Maddock 2006, 2007.
 //  Copyright Paul A. Bristow 2006, 2007.
+//  Copyright Matt Borland 2024.
+//  Use, modification and distribution are subject to the
+//  Boost Software License, Version 1.0. (See accompanying file
 
 
 ====================COPYRIGHT====================
@@ -560,12 +573,18 @@ DEALINGS IN THE SOFTWARE.
 //  Copyright Paul A. Bristow 2007, 2013-14.
 //  Copyright Nikhar Agrawal 2013-14
 //  Copyright Christopher Kormanyos 2013-14, 2020, 2024
+//  Copyright Matt Borland 2024.
+//  Use, modification and distribution are subject to the
+//  Boost Software License, Version 1.0. (See accompanying file
 
 
 ====================COPYRIGHT====================
 //  Copyright John Maddock 2006.
 //  Copyright Paul A. Bristow 2006, 2012, 2017.
 //  Copyright Thomas Mang 2012.
+//  Copyright Matt Borland 2024.
+//  Use, modification and distribution are subject to the
+//  Boost Software License, Version 1.0. (See accompanying file
 
 
 ====================COPYRIGHT====================
@@ -670,13 +689,22 @@ DEALINGS IN THE SOFTWARE.
 
 
 ====================COPYRIGHT====================
+//  Copyright Takuma Yoshimura 2024.
+//  Copyright Matt Borland 2024.
+//  Use, modification and distribution are subject to the
+//  Boost Software License, Version 1.0. (See accompanying file
+
+
+====================COPYRIGHT====================
 //  Copyright Thijs van den Berg, 2008.
 //  Copyright John Maddock 2008.
 //  Copyright Paul A. Bristow 2008, 2014.
+//  Copyright Matt Borland 2024.
 
 
 ====================COPYRIGHT====================
 // Copyright (c) 2006 Johan Rade
+// Copyright (c) 2024 Matt Borland
 
 
 ====================COPYRIGHT====================
@@ -689,6 +717,13 @@ DEALINGS IN THE SOFTWARE.
 // Copyright 2008 Gautam Sewani
 // Copyright 2008 John Maddock
 // Copyright 2021 Paul A. Bristow
+
+
+====================COPYRIGHT====================
+// Copyright 2008 Gautam Sewani
+// Copyright 2024 Matt Borland
+// Use, modification and distribution are subject to the
+// Boost Software License, Version 1.0.
 
 
 ====================COPYRIGHT====================
@@ -720,7 +755,15 @@ DEALINGS IN THE SOFTWARE.
 
 ====================COPYRIGHT====================
 // Copyright John Maddock 2006.
+// Copyright Paul A. Bristow 2006.
+// Copyright Matt Borland 2023.
+// Copyright Ryan Elandt 2023.
+
+
+====================COPYRIGHT====================
+// Copyright John Maddock 2006.
 // Copyright Paul A. Bristow 2007.
+// Copyright Matt Borland 2024.
 
 
 ====================COPYRIGHT====================
@@ -730,6 +773,7 @@ DEALINGS IN THE SOFTWARE.
 
 ====================COPYRIGHT====================
 // Copyright John Maddock 2012.
+// Copyright Matt Borland 2024.
 // Use, modification and distribution are subject to the
 // Boost Software License, Version 1.0.
 
@@ -737,12 +781,20 @@ DEALINGS IN THE SOFTWARE.
 ====================COPYRIGHT====================
 // Copyright John Maddock 2014.
 // Copyright Paul A. Bristow 2014.
+// Copyright Matt Borland 2024.
 
 
 ====================COPYRIGHT====================
 // Copyright John Maddock 2017.
 // Copyright Paul A. Bristow 2016, 2017, 2018.
 // Copyright Nicholas Thompson 2018
+
+
+====================COPYRIGHT====================
+// Copyright Nick Thompson, 2017
+// Copyright Matt Borland, 2024
+// Use, modification and distribution are subject to the
+// Boost Software License, Version 1.0.
 
 
 ====================COPYRIGHT====================

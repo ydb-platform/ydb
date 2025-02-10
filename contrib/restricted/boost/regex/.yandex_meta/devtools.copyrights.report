@@ -45,7 +45,6 @@ BELONGS ya.make
     Files with this license:
         include/boost/regex/icu.hpp [3:4]
         include/boost/regex/pending/unicode_iterator.hpp [3:4]
-        include/boost/regex/v4/indexed_bit_flag.hpp [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1f04e771ae77a341bbc9ea094604bb99
 BELONGS ya.make
@@ -69,7 +68,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/regex/v4/error_type.hpp [3:4]
         include/boost/regex/v5/error_type.hpp [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3e16d1b440a4ce72af6366ce0b5d944c
@@ -82,7 +80,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/regex/v4/basic_regex.hpp [3:4]
         include/boost/regex/v5/basic_regex.hpp [3:4]
         src/regex.cpp [3:4]
         src/regex_debug.cpp [3:4]
@@ -97,8 +94,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/regex/v4/basic_regex.hpp [3:4]
-        include/boost/regex/v4/cpp_regex_traits.hpp [3:4]
         include/boost/regex/v5/basic_regex.hpp [3:4]
         include/boost/regex/v5/cpp_regex_traits.hpp [3:4]
 
@@ -116,16 +111,6 @@ BELONGS ya.make
         include/boost/regex/mfc.hpp [3:4]
         include/boost/regex/pending/object_cache.hpp [3:4]
         include/boost/regex/pending/static_mutex.hpp [3:4]
-        include/boost/regex/v4/basic_regex_creator.hpp [3:4]
-        include/boost/regex/v4/basic_regex_parser.hpp [3:4]
-        include/boost/regex/v4/c_regex_traits.hpp [3:4]
-        include/boost/regex/v4/cpp_regex_traits.hpp [3:4]
-        include/boost/regex/v4/icu.hpp [3:4]
-        include/boost/regex/v4/object_cache.hpp [3:4]
-        include/boost/regex/v4/protected_call.hpp [3:4]
-        include/boost/regex/v4/regex_traits_defaults.hpp [3:4]
-        include/boost/regex/v4/unicode_iterator.hpp [3:4]
-        include/boost/regex/v4/w32_regex_traits.hpp [3:4]
         include/boost/regex/v5/basic_regex_creator.hpp [3:4]
         include/boost/regex/v5/basic_regex_parser.hpp [3:4]
         include/boost/regex/v5/c_regex_traits.hpp [3:4]
@@ -159,13 +144,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/regex/v4/char_regex_traits.hpp [3:4]
-        include/boost/regex/v4/iterator_category.hpp [3:4]
-        include/boost/regex/v4/mem_block_cache.hpp [2:3]
-        include/boost/regex/v4/perl_matcher.hpp [3:4]
-        include/boost/regex/v4/perl_matcher_common.hpp [3:4]
-        include/boost/regex/v4/perl_matcher_non_recursive.hpp [3:4]
-        include/boost/regex/v4/perl_matcher_recursive.hpp [3:4]
         include/boost/regex/v5/char_regex_traits.hpp [3:4]
         include/boost/regex/v5/iterator_category.hpp [3:4]
         include/boost/regex/v5/mem_block_cache.hpp [2:3]
@@ -191,22 +169,6 @@ BELONGS ya.make
         include/boost/regex/pattern_except.hpp [3:4]
         include/boost/regex/regex_traits.hpp [3:4]
         include/boost/regex/user.hpp [3:4]
-        include/boost/regex/v4/cregex.hpp [3:4]
-        include/boost/regex/v4/iterator_traits.hpp [3:4]
-        include/boost/regex/v4/match_flags.hpp [3:4]
-        include/boost/regex/v4/pattern_except.hpp [3:4]
-        include/boost/regex/v4/primary_transform.hpp [3:4]
-        include/boost/regex/v4/regbase.hpp [3:4]
-        include/boost/regex/v4/regex.hpp [3:4]
-        include/boost/regex/v4/regex_fwd.hpp [3:4]
-        include/boost/regex/v4/regex_grep.hpp [3:4]
-        include/boost/regex/v4/regex_match.hpp [3:4]
-        include/boost/regex/v4/regex_merge.hpp [3:4]
-        include/boost/regex/v4/regex_raw_buffer.hpp [3:4]
-        include/boost/regex/v4/regex_search.hpp [3:4]
-        include/boost/regex/v4/regex_split.hpp [3:4]
-        include/boost/regex/v4/states.hpp [3:4]
-        include/boost/regex/v4/sub_match.hpp [3:4]
         include/boost/regex/v5/cregex.hpp [3:4]
         include/boost/regex/v5/iterator_traits.hpp [3:4]
         include/boost/regex/v5/match_flags.hpp [3:4]
@@ -237,7 +199,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/regex/v4/regex_format.hpp [3:4]
         include/boost/regex/v5/regex_format.hpp [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e242cf22a8569c95827537aca7b8285d
@@ -250,12 +211,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/regex/v4/regex_iterator.hpp [3:4]
-        include/boost/regex/v4/regex_token_iterator.hpp [3:4]
-        include/boost/regex/v4/regex_traits.hpp [3:4]
-        include/boost/regex/v4/syntax_type.hpp [3:4]
-        include/boost/regex/v4/u32regex_iterator.hpp [3:4]
-        include/boost/regex/v4/u32regex_token_iterator.hpp [3:4]
         include/boost/regex/v5/regex_iterator.hpp [3:4]
         include/boost/regex/v5/regex_token_iterator.hpp [3:4]
         include/boost/regex/v5/regex_traits.hpp [3:4]
@@ -273,9 +228,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/regex/v4/match_results.hpp [3:4]
-        include/boost/regex/v4/regex_format.hpp [3:4]
-        include/boost/regex/v4/regex_replace.hpp [3:4]
         include/boost/regex/v5/match_results.hpp [3:4]
         include/boost/regex/v5/regex_format.hpp [3:4]
         include/boost/regex/v5/regex_replace.hpp [3:4]
@@ -290,5 +242,4 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/regex/v4/regex_workaround.hpp [3:4]
         include/boost/regex/v5/regex_workaround.hpp [3:4]

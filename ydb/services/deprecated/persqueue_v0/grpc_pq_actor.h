@@ -25,6 +25,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/lib/base/msgbus_status.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/include/aliases.h>
 #include <ydb/core/kqp/common/kqp.h>
 
 #include <ydb/core/base/ticket_parser.h>

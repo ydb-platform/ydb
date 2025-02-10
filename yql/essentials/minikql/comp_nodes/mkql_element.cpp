@@ -38,7 +38,7 @@ public:
 
             const auto result = PHINode::Create(array->getType(), 2U, "result", done);
             result->addIncoming(ConstantInt::get(array->getType(), 0ULL), block);
-            BranchInst::Create(done, good, IsEmpty(array, block), block);
+            BranchInst::Create(done, good, IsEmpty(array, block, context), block);
 
             block = good;
             const auto elements = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElements>(elementsType, array, ctx.Codegen, block);
@@ -102,7 +102,7 @@ public:
             const auto zero = BasicBlock::Create(context, "zero", ctx.Func);
             const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
-            BranchInst::Create(zero, good, IsEmpty(array, block), block);
+            BranchInst::Create(zero, good, IsEmpty(array, block, context), block);
 
             block = zero;
             new StoreInst(ConstantInt::get(array->getType(), 0ULL), pointer, block);

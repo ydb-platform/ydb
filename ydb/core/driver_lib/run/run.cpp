@@ -4,6 +4,7 @@
 #include "kikimr_services_initializers.h"
 
 #include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -35,8 +36,7 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/log_backend/log_backend.h>
-#include <ydb/core/mon/sync_http_mon.h>
-#include <ydb/core/mon/async_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/mon/crossref.h>
 #include <ydb/core/mon_alloc/profiler.h>
 
@@ -473,11 +473,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         if (ModuleFactories && ModuleFactories->MonitoringFactory) {
             Monitoring = ModuleFactories->MonitoringFactory(std::move(monConfig), appConfig);
         } else {
-            if (appConfig.GetFeatureFlags().GetEnableAsyncHttpMon()) {
-                Monitoring = new NActors::TAsyncHttpMon(std::move(monConfig));
-            } else {
-                Monitoring = new NActors::TSyncHttpMon(std::move(monConfig));
-            }
+            Monitoring = new NActors::TMon(std::move(monConfig));
         }
         if (Monitoring) {
             Monitoring->RegisterCountersPage("counters", "Counters", Counters);
@@ -1783,10 +1779,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     if (enableReleaseNodeNameOnGracefulShutdown) {
         using namespace NKikimr::NNodeBroker;
         using TEvent = TEvNodeBroker::TEvGracefulShutdownRequest;
-        
+
         const ui32 nodeId = ActorSystem->NodeId;
         bool isDynamicNode = AppData->DynamicNameserviceConfig->MinDynamicNodeId <= nodeId;
-        
+
         if (isDynamicNode) {
             NTabletPipe::TClientConfig pipeConfig;
             pipeConfig.RetryPolicy = {.RetryLimitCount = 10};

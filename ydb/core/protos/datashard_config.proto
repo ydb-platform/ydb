@@ -25,4 +25,5 @@ message TDataShardConfig {
     optional bool DisabledOnSchemeShard = 19 [default = false];
     optional uint64 IncrementalRestoreReadAheadLo = 20 [default = 524288];
     optional uint64 IncrementalRestoreReadAheadHi = 21 [default = 1048576];
+    optional uint64 InMemoryStateMigrationTimeoutMs = 24 [default = 1000];
 }

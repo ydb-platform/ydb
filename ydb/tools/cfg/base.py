@@ -264,7 +264,7 @@ def normalize_domain(domain_name):
 
 
 class ClusterDetailsProvider(object):
-    def __init__(self, template, walle_provider, validator=None, database=None):
+    def __init__(self, template, walle_provider, validator=None, database=None, use_new_style_cfg=False):
         if not validator:
             validator = validation.default_validator()
 
@@ -286,7 +286,7 @@ class ClusterDetailsProvider(object):
         self.__racks = {}
         self.__bodies = {}
         self.__dcs = {}
-        self.use_new_style_kikimr_cfg = self.__cluster_description.get("use_new_style_kikimr_cfg", False)
+        self.use_new_style_kikimr_cfg = self.__cluster_description.get("use_new_style_kikimr_cfg", use_new_style_cfg)
         self.need_generate_app_config = self.__cluster_description.get("need_generate_app_config", False)
         self.need_txt_files = self.__cluster_description.get("need_txt_files", True)
         self.use_auto_config = self.__cluster_description.get("use_auto_config", False)
@@ -297,6 +297,8 @@ class ClusterDetailsProvider(object):
         self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
         self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
+        self.memory_controller_config = self.__cluster_description.get("memory_controller_config", {})
+        self.channel_profile_config = self.__cluster_description.get("channel_profile_config")
         self.pdisk_key_config = self.__cluster_description.get("pdisk_key_config", {})
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:
             assert "cannot remove txt files without new style kikimr cfg!"
@@ -353,16 +355,25 @@ class ClusterDetailsProvider(object):
     def _get_datacenter(self, host_description):
         if host_description.get("datacenter") is not None:
             return str(host_description.get("datacenter"))
+        dc = host_description.get("location", {}).get("data_center", None)
+        if dc:
+            return str(dc)
         return str(self._walle.get_datacenter(host_description.get("name", host_description.get("host"))))
 
     def _get_rack(self, host_description):
         if host_description.get("rack") is not None:
             return str(host_description.get("rack"))
+        rack = host_description.get("location", {}).get("rack", None)
+        if rack:
+            return str(rack)
         return str(self._walle.get_rack(host_description.get("name", host_description.get("host"))))
 
     def _get_body(self, host_description):
         if host_description.get("body") is not None:
             return str(host_description.get("body"))
+        body = host_description.get("location", {}).get("body", None)
+        if body:
+            return str(body)
         return str(self._walle.get_body(host_description.get("name", host_description.get("host"))))
 
     def _collect_drives_info(self, host_description):
@@ -555,14 +566,16 @@ class ClusterDetailsProvider(object):
             domain_name = domain.get("domain_name")
 
             storage_pool_kinds = {
-                pool_kind.get("kind"): self.__storage_pool_kind(pool_kind) for pool_kind in domain.get("storage_pool_kinds", [])
+                pool_kind.get("kind"): self.__storage_pool_kind(pool_kind)
+                for pool_kind in domain.get("storage_pool_kinds", [])
             }
             assert len(set(storage_pool_kinds.keys())) == len(
                 storage_pool_kinds.keys()
             ), "required unique kind value in storage_pool_kinds items"
 
             storage_pools = [
-                self.__storage_pool(storage_pool_kinds, pool_instance, domain_name) for pool_instance in domain.get("storage_pools", [])
+                self.__storage_pool(storage_pool_kinds, pool_instance, domain_name)
+                for pool_instance in domain.get("storage_pools", [])
             ]
 
             domains.append(
@@ -604,7 +617,9 @@ class ClusterDetailsProvider(object):
 
     @property
     def fail_domain_type(self):
-        return types.FailDomainType.from_string(str(self.__cluster_description.get("fail_domain_type", DEFAULT_FAIL_DOMAIN_TYPE)))
+        return types.FailDomainType.from_string(
+            str(self.__cluster_description.get("fail_domain_type", DEFAULT_FAIL_DOMAIN_TYPE))
+        )
 
     @property
     def min_fail_domains(self):

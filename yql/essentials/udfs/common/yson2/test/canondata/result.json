@@ -49,6 +49,11 @@
             "uri": "file://test.test_Equals_/results.txt"
         }
     ],
+    "test.test[FromTooManyArgs]": [
+        {
+            "uri": "file://test.test_FromTooManyArgs_/extracted"
+        }
+    ],
     "test.test[From]": [
         {
             "uri": "file://test.test_From_/results.txt"
@@ -157,6 +162,11 @@
     "test.test[Serialize]": [
         {
             "uri": "file://test.test_Serialize_/results.txt"
+        }
+    ],
+    "test.test[StringStrictError]": [
+        {
+            "uri": "file://test.test_StringStrictError_/extracted"
         }
     ],
     "test.test[WeakYsonRest]": [

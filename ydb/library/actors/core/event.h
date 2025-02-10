@@ -2,7 +2,9 @@
 
 #include "defs.h"
 #include "actorid.h"
+#ifdef USE_ACTOR_CALLSTACK
 #include "callstack.h"
+#endif
 #include "event_load.h"
 
 #include <ydb/library/actors/wilson/wilson_trace.h>
@@ -13,7 +15,7 @@
 namespace NActors {
     class TChunkSerializer;
     class IActor;
-    
+
     class IEventBase
         : TNonCopyable {
     protected:
@@ -122,6 +124,7 @@ namespace NActors {
             FlagUseSubChannel = 1 << 3,
             FlagGenerateUnsureUndelivered = 1 << 4,
             FlagExtendedFormat = 1 << 5,
+            FlagDebugTrackReceive = 1 << 6,
         };
         using TEventFlags = ui32;
 
@@ -194,10 +197,34 @@ namespace NActors {
             return OnNondeliveryHolder.Get() ? OnNondeliveryHolder->Recipient : TActorId();
         }
 
+#ifndef NDEBUG
+        static inline thread_local bool TrackNextEvent = false;
+
+        /**
+         * Call this function in gdb before
+         * sending the event you want to debug
+         * and continue execution. __builtin_debugtrap/SIGTRAP
+         * will stop gdb at the receiving point.
+         * Currently, to get to Handle function you
+         * also need to ascend couple frames (up, up) and step to
+         * function you are searching for
+         */
+        static void DoTrackNextEvent();
+
+        static TEventFlags ApplyGlobals(TEventFlags flags) {
+            bool trackNextEvent = std::exchange(TrackNextEvent, false);
+            return flags | (trackNextEvent ? FlagDebugTrackReceive : 0);
+        }
+#else
+        Y_FORCE_INLINE static TEventFlags ApplyGlobals(TEventFlags flags) {
+            return flags;
+        }
+#endif
+
         IEventHandle(const TActorId& recipient, const TActorId& sender, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0,
                      const TActorId* forwardOnNondelivery = nullptr, NWilson::TTraceId traceId = {})
             : Type(ev->Type())
-            , Flags(flags)
+            , Flags(ApplyGlobals(flags))
             , Recipient(recipient)
             , Sender(sender)
             , Cookie(cookie)
@@ -222,7 +249,7 @@ namespace NActors {
                      const TActorId* forwardOnNondelivery = nullptr,
                      NWilson::TTraceId traceId = {})
             : Type(type)
-            , Flags(flags)
+            , Flags(ApplyGlobals(flags))
             , Recipient(recipient)
             , Sender(sender)
             , Cookie(cookie)
@@ -249,7 +276,7 @@ namespace NActors {
                      TScopeId originScopeId,
                      NWilson::TTraceId traceId) noexcept
             : Type(type)
-            , Flags(flags)
+            , Flags(ApplyGlobals(flags))
             , Recipient(recipient)
             , Sender(sender)
             , Cookie(cookie)

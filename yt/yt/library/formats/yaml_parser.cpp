@@ -128,7 +128,7 @@ public:
     {
         ForAllConsumers([] (auto* consumer) { consumer->OnEndAttributes(); });
         --CurrentDepth_;
-        // NB: do not call MaybeFinishAnchorOrRun here, as we do not want to record only
+        // NB: Do not call MaybeFinishAnchorOrRun here, as we do not want to record only
         // attribute map part of the node.
     }
 

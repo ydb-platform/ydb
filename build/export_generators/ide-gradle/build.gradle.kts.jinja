@@ -1,14 +1,3 @@
-{%- macro OutDirs(run, prefix, suffix) -%}
-{%-    if run.args|length and run.out_dir|length -%}
-{%-        for out_dir in run.out_dir -%}
-{%-            set out_dirs = select_by_ends(run.args, "/" + out_dir) -%}
-{%-            if out_dirs|length %}
-{{ prefix }}{{ out_dirs|first }}{{ suffix }}
-{%-            endif -%}
-{%-        endfor -%}
-{%-    endif -%}
-{%- endmacro -%}
-
 {%- include "[generator]/vars.jinja" -%}
 {%- include "[generator]/import.jinja" -%}
 {%- include "[generator]/repositories.jinja" -%}

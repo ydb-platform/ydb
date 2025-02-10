@@ -9,6 +9,11 @@ template <typename TSocketImpl>
 class TIncomingConnectionActor : public TActor<TIncomingConnectionActor<TSocketImpl>>, public TSocketImpl, virtual public THttpConfig {
 public:
     using TBase = TActor<TIncomingConnectionActor<TSocketImpl>>;
+    using TBase::Send;
+    using TBase::Schedule;
+    using TBase::SelfId;
+    using TBase::Become;
+
     static constexpr bool RecycleRequests = true;
 
     std::shared_ptr<TPrivateEndpointInfo> Endpoint;
@@ -23,6 +28,7 @@ public:
     TEvPollerReady* InactivityEvent = nullptr;
 
     TPollerToken::TPtr PollerToken;
+    TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
 
     TIncomingConnectionActor(
             std::shared_ptr<TPrivateEndpointInfo> endpoint,
@@ -61,21 +67,24 @@ public:
         return new IEventHandle(self, parent, new TEvents::TEvBootstrap());
     }
 
-    void Die(const TActorContext& ctx) override {
-        ctx.Send(Endpoint->Owner, new TEvHttpProxy::TEvHttpIncomingConnectionClosed(ctx.SelfID, std::move(RecycledRequests)));
+    void PassAway() override {
+        if (CancelSubscriber) {
+            Send(CancelSubscriber->Sender, new TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
+        }
+        Send(Endpoint->Owner, new TEvHttpProxy::TEvHttpIncomingConnectionClosed(SelfId(), std::move(RecycledRequests)));
         TSocketImpl::Shutdown();
-        TBase::Die(ctx);
+        TBase::PassAway();
     }
 
 protected:
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() {
         InactivityTimer.Reset();
-        ctx.Schedule(Endpoint->InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
-        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") incoming connection opened");
-        OnAccept(ctx);
+        Schedule(Endpoint->InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
+        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") incoming connection opened");
+        OnAccept();
     }
 
-    void OnAccept(const NActors::TActorContext& ctx) {
+    void OnAccept() {
         int res;
         bool read = false, write = false;
         for (;;) {
@@ -86,26 +95,26 @@ protected:
                     }
                     return; // wait for further notifications
                 } else {
-                    LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in Accept: " << strerror(-res));
-                    return Die(ctx);
+                    ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in Accept: " << strerror(-res));
+                    return PassAway();
                 }
             }
             break;
         }
-        TBase::Become(&TIncomingConnectionActor::StateConnected);
-        ctx.Send(ctx.SelfID, new TEvPollerReady(nullptr, true, true));
+        Become(&TIncomingConnectionActor::StateConnected);
+        Send(SelfId(), new TEvPollerReady(nullptr, true, true));
     }
 
-    void HandleAccepting(TEvPollerRegisterResult::TPtr ev, const NActors::TActorContext& ctx) {
+    void HandleAccepting(TEvPollerRegisterResult::TPtr& ev) {
         PollerToken = std::move(ev->Get()->PollerToken);
-        OnAccept(ctx);
+        OnAccept();
     }
 
-    void HandleAccepting(NActors::TEvPollerReady::TPtr, const NActors::TActorContext& ctx) {
-        OnAccept(ctx);
+    void HandleAccepting(NActors::TEvPollerReady::TPtr&) {
+        OnAccept();
     }
 
-    void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
+    void HandleConnected(TEvPollerReady::TPtr& event) {
         if (event->Get()->Read) {
             for (;;) {
                 if (CurrentRequest == nullptr) {
@@ -119,8 +128,8 @@ protected:
                     }
                 }
                 if (!CurrentRequest->EnsureEnoughSpaceAvailable()) {
-                    LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - not enough space available");
-                    return Die(ctx);
+                    ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - not enough space available");
+                    return PassAway();
                 }
                 ssize_t need = CurrentRequest->Avail();
                 bool read = false, write = false;
@@ -132,24 +141,24 @@ protected:
                         Requests.emplace_back(CurrentRequest);
                         CurrentRequest->Timer.Reset();
                         if (CurrentRequest->IsReady()) {
-                            if (Endpoint->RateLimiter.Check(ctx.Now())) {
-                                LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
-                                ctx.Send(Endpoint->Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest));
+                            if (Endpoint->RateLimiter.Check(TActivationContext::Now())) {
+                                ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
+                                Send(Endpoint->Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest));
                                 CurrentRequest = nullptr;
                             } else {
-                                bool success = Respond(CurrentRequest->CreateResponseTooManyRequests(), ctx);
+                                bool success = Respond(CurrentRequest->CreateResponseTooManyRequests());
                                 if (!success) {
                                     return;
                                 }
-                                CurrentRequest = nullptr;
+                                CleanupRequest(CurrentRequest);
                             }
                         } else if (CurrentRequest->IsError()) {
-                            LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -! (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
-                            bool success = Respond(CurrentRequest->CreateResponseBadRequest(), ctx);
+                            ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -! (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
+                            bool success = Respond(CurrentRequest->CreateResponseBadRequest());
                             if (!success) {
                                 return;
                             }
-                            CurrentRequest = nullptr;
+                            CleanupRequest(CurrentRequest);
                         }
                     }
                 } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
@@ -166,38 +175,45 @@ protected:
                     continue;
                 } else if (!res) {
                     // connection closed
-                    LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed");
-                    return Die(ctx);
+                    ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed");
+                    return PassAway();
                 } else {
-                    LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in Receive: " << strerror(-res));
-                    return Die(ctx);
+                    ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in Receive: " << strerror(-res));
+                    return PassAway();
                 }
             }
         }
         if (event->Get() == InactivityEvent) {
             const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
             if (passed >= Endpoint->InactivityTimeout) {
-                LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed by inactivity timeout");
-                return Die(ctx); // timeout
+                ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed by inactivity timeout");
+                return PassAway(); // timeout
             } else {
-                ctx.Schedule(Endpoint->InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
+                Schedule(Endpoint->InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
             }
         }
         if (event->Get()->Write) {
-            FlushOutput(ctx);
+            FlushOutput();
         }
     }
 
-    void HandleConnected(TEvPollerRegisterResult::TPtr ev, const TActorContext& /*ctx*/) {
+    void HandleConnected(TEvPollerRegisterResult::TPtr& ev) {
         PollerToken = std::move(ev->Get()->PollerToken);
         PollerToken->Request(true, true);
     }
 
-    void HandleConnected(TEvHttpProxy::TEvHttpOutgoingResponse::TPtr event, const TActorContext& ctx) {
-        Respond(event->Get()->Response, ctx);
+    void HandleConnected(TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& event) {
+        if (event->Get()->Response->IsDone()) {
+            CancelSubscriber = nullptr;
+        }
+        Respond(event->Get()->Response);
     }
 
-    void HandleConnected(TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr event, const TActorContext& ctx) {
+    void HandleConnected(TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& event) {
+        if (event->Get()->Error) {
+            ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - DataChunk error: " << event->Get()->Error);
+            return PassAway();
+        }
         if (CurrentResponse != nullptr && CurrentResponse == event->Get()->DataChunk->GetResponse()) {
             CurrentResponse->AddDataChunk(event->Get()->DataChunk);
         } else {
@@ -205,29 +221,36 @@ protected:
             if (itResponse != Responses.end() && itResponse->second == event->Get()->DataChunk->GetResponse()) {
                 itResponse->second->AddDataChunk(event->Get()->DataChunk);
             } else {
-                LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - DataChunk request not found");
-                return Die(ctx);
+                ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - DataChunk request not found");
+                return PassAway();
             }
         }
-        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (data chunk "
+        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (data chunk "
             << event->Get()->DataChunk->Size() << (event->Get()->DataChunk->IsEndOfData() ? " bytes, final)" : " bytes)"));
-        FlushOutput(ctx);
+        if (event->Get()->DataChunk->IsEndOfData()) {
+            CancelSubscriber = nullptr;
+        }
+        FlushOutput();
     }
 
-    bool Respond(THttpOutgoingResponsePtr response, const TActorContext& ctx) {
+    void HandleConnected(TEvHttpProxy::TEvSubscribeForCancel::TPtr& event) {
+        CancelSubscriber = std::move(event);
+    }
+
+    bool Respond(THttpOutgoingResponsePtr response) {
         THttpIncomingRequestPtr request = response->GetRequest();
-        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- ("
+        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- ("
             << response->Status << " " << response->Message << (response->IsDone() ? ")" : ") (incomplete)"));
         if (!response->Status.StartsWith('2') && !response->Status.StartsWith('3') && response->Status != "404") {
             static constexpr size_t MAX_LOGGED_SIZE = 1024;
-            LOG_DEBUG_S(ctx, HttpLog,
+            ALOG_DEBUG(HttpLog,
                         "(#"
                         << TSocketImpl::GetRawSocket()
                         << ","
                         << Address
                         << ") Request: "
                         << request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
-            LOG_DEBUG_S(ctx, HttpLog,
+            ALOG_DEBUG(HttpLog,
                         "(#"
                         << TSocketImpl::GetRawSocket()
                         << ","
@@ -236,10 +259,10 @@ protected:
                         << response->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
         }
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
-        ctx.Send(Endpoint->Owner, sensors.Release());
+        Send(Endpoint->Owner, sensors.Release());
         if (request == Requests.front() && CurrentResponse == nullptr) {
             CurrentResponse = response;
-            return FlushOutput(ctx);
+            return FlushOutput();
         } else {
             // we are ahead of our pipeline
             Responses.emplace(request, response);
@@ -247,7 +270,7 @@ protected:
         }
     }
 
-    bool FlushOutput(const TActorContext& ctx) {
+    bool FlushOutput() {
         while (CurrentResponse != nullptr) {
             auto* buffer = CurrentResponse->GetActiveBuffer();
             size_t size = buffer->Size();
@@ -264,14 +287,14 @@ protected:
                             Responses.erase(it);
                             continue;
                         } else {
-                            LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - FlushOutput request not found");
-                            Die(ctx);
+                            ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - FlushOutput request not found");
+                            PassAway();
                             return false;
                         }
                     } else {
                         if (close) {
-                            LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed");
-                            Die(ctx);
+                            ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed");
+                            PassAway();
                             return false;
                         } else {
                             continue;
@@ -284,6 +307,7 @@ protected:
             bool read = false, write = false;
             ssize_t res = TSocketImpl::Send(buffer->Data(), size, read, write);
             if (res > 0) {
+                InactivityTimer.Reset();
                 buffer->ChopHead(res);
             } else if (-res == EINTR) {
                 continue;
@@ -299,28 +323,29 @@ protected:
                 break;
             } else {
                 CleanupResponse(CurrentResponse);
-                LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in FlushOutput: " << strerror(-res));
-                Die(ctx);
+                ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in FlushOutput: " << strerror(-res));
+                PassAway();
                 return false;
             }
         }
         return true;
     }
 
-    STFUNC(StateAccepting) {
+    STATEFN(StateAccepting) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(TEvents::TEvBootstrap::EventType, Bootstrap);
-            HFunc(TEvPollerReady, HandleAccepting);
-            HFunc(TEvPollerRegisterResult, HandleAccepting);
+            cFunc(TEvents::TEvBootstrap::EventType, Bootstrap);
+            hFunc(TEvPollerReady, HandleAccepting);
+            hFunc(TEvPollerRegisterResult, HandleAccepting);
         }
     }
 
-    STFUNC(StateConnected) {
+    STATEFN(StateConnected) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPollerReady, HandleConnected);
-            HFunc(TEvHttpProxy::TEvHttpOutgoingResponse, HandleConnected);
-            HFunc(TEvHttpProxy::TEvHttpOutgoingDataChunk, HandleConnected);
-            HFunc(TEvPollerRegisterResult, HandleConnected);
+            hFunc(TEvPollerReady, HandleConnected);
+            hFunc(TEvHttpProxy::TEvHttpOutgoingResponse, HandleConnected);
+            hFunc(TEvHttpProxy::TEvHttpOutgoingDataChunk, HandleConnected);
+            hFunc(TEvHttpProxy::TEvSubscribeForCancel, HandleConnected);
+            hFunc(TEvPollerRegisterResult, HandleConnected);
         }
     }
 };

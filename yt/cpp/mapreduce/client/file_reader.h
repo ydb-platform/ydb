@@ -11,7 +11,6 @@ class IInputStream;
 
 namespace NYT {
 
-class THttpRequest;
 class TPingableTransaction;
 
 namespace NDetail {
@@ -35,21 +34,18 @@ protected:
 
 protected:
     const IRawClientPtr RawClient_;
-    const TClientContext Context_;
 
 private:
     size_t DoRead(void* buf, size_t len) override;
-    virtual NHttpClient::IHttpResponsePtr Request(const TClientContext& context, const TTransactionId& transactionId, ui64 readBytes) = 0;
-    TString GetActiveRequestId() const;
+    virtual std::unique_ptr<IInputStream> Request(const TTransactionId& transactionId, ui64 readBytes) = 0;
 
 private:
     const IClientRetryPolicyPtr ClientRetryPolicy_;
     TFileReaderOptions FileReaderOptions_;
 
-    NHttpClient::IHttpResponsePtr Response_;
-    IInputStream* Input_ = nullptr;
+    std::unique_ptr<IInputStream> Input_;
 
-    THolder<TPingableTransaction> ReadTransaction_;
+    std::unique_ptr<TPingableTransaction> ReadTransaction_;
 
     ui64 CurrentOffset_ = 0;
 };
@@ -67,17 +63,17 @@ public:
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,
         const TTransactionId& transactionId,
-        const TFileReaderOptions& options = TFileReaderOptions());
+        const TFileReaderOptions& options = {});
 
 private:
-    NHttpClient::IHttpResponsePtr Request(const TClientContext& context, const TTransactionId& transactionId, ui64 readBytes) override;
+    std::unique_ptr<IInputStream> Request(const TTransactionId& transactionId, ui64 readBytes) override;
 
 private:
-    TFileReaderOptions FileReaderOptions_;
-
-    TRichYPath Path_;
     const ui64 StartOffset_;
     const TMaybe<ui64> EndOffset_;
+
+    TFileReaderOptions Options_;
+    TRichYPath Path_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -94,14 +90,16 @@ public:
         ITransactionPingerPtr transactionPinger,
         const TClientContext& context,
         const TTransactionId& transactionId,
-        const TBlobTableReaderOptions& options);
+        const TBlobTableReaderOptions& options = {});
 
 private:
-    NHttpClient::IHttpResponsePtr Request(const TClientContext& context, const TTransactionId& transactionId, ui64 readBytes) override;
+    std::unique_ptr<IInputStream> Request(const TTransactionId& transactionId, ui64 readBytes) override;
 
 private:
+    const ui64 StartOffset_;
     const TKey Key_;
-    const TBlobTableReaderOptions Options_;
+
+    TBlobTableReaderOptions Options_;
     TYPath Path_;
 };
 

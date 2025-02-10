@@ -127,7 +127,7 @@ DEFINE_ENUM(EClientCallStage,
 );
 
 class TChannel
-    : public NYT::NRpc::NGrpc::IGrpcChannel
+    : public NRpc::NGrpc::IGrpcChannel
 {
 public:
     explicit TChannel(TChannelConfigPtr config)

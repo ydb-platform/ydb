@@ -76,22 +76,22 @@ public:
     explicit Entity(size_t line = 0) : type_(EntityType::Null), line_(line) {}
     // Not explicit because do want implicit conversion
     // NOLINTNEXTLINE(google-explicit-constructor)
-    Entity(Bool v, size_t line = 0) : type_(EntityType::Bool), value_(v), line_(line) {}
+    explicit Entity(Bool v, size_t line = 0) : type_(EntityType::Bool), value_(v), line_(line) {}
     // Not explicit because do want implicit conversion
     // NOLINTNEXTLINE(google-explicit-constructor)
-    Entity(Long v, size_t line = 0) : type_(EntityType::Long), value_(v), line_(line) {}
+    explicit Entity(Long v, size_t line = 0) : type_(EntityType::Long), value_(v), line_(line) {}
     // Not explicit because do want implicit conversion
     // NOLINTNEXTLINE(google-explicit-constructor)
-    Entity(Double v, size_t line = 0) : type_(EntityType::Double), value_(v), line_(line) {}
+    explicit Entity(Double v, size_t line = 0) : type_(EntityType::Double), value_(v), line_(line) {}
     // Not explicit because do want implicit conversion
     // NOLINTNEXTLINE(google-explicit-constructor)
-    Entity(const std::shared_ptr<String> &v, size_t line = 0) : type_(EntityType::String), value_(v), line_(line) {}
+    explicit Entity(const std::shared_ptr<String> &v, size_t line = 0) : type_(EntityType::String), value_(v), line_(line) {}
     // Not explicit because do want implicit conversion
     // NOLINTNEXTLINE(google-explicit-constructor)
-    Entity(const std::shared_ptr<Array> &v, size_t line = 0) : type_(EntityType::Arr), value_(v), line_(line) {}
+    explicit Entity(const std::shared_ptr<Array> &v, size_t line = 0) : type_(EntityType::Arr), value_(v), line_(line) {}
     // Not explicit because do want implicit conversion
     // NOLINTNEXTLINE(google-explicit-constructor)
-    Entity(const std::shared_ptr<Object> &v, size_t line = 0) : type_(EntityType::Obj), value_(v), line_(line) {}
+    explicit Entity(const std::shared_ptr<Object> &v, size_t line = 0) : type_(EntityType::Obj), value_(v), line_(line) {}
 
     EntityType type() const { return type_; }
 

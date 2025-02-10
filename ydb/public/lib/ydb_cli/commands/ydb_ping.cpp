@@ -1,7 +1,7 @@
 #include "ydb_ping.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_debug/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb-cpp-sdk/client/debug/client.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 
 #include <library/cpp/time_provider/monotonic.h>
 
@@ -222,6 +222,26 @@ bool TCommandPing::PingKqpSelect1(NQuery::TQueryClient& client, const TString& q
     }
 
     return false;
+}
+
+bool TCommandPing::PingKqpSelect1(NQuery::TSession& session, const TString& query) {
+    NQuery::TExecuteQuerySettings settings;
+
+    // Execute query
+    settings.ExecMode(NQuery::EExecMode::Execute);
+    settings.StatsMode(NQuery::EStatsMode::None);
+
+    settings.Syntax(NQuery::ESyntax::YqlV1);
+
+    // Execute query without parameters
+    auto asyncResult = session.ExecuteQuery(
+        query,
+        NQuery::TTxControl::NoTx(),
+        settings
+    );
+
+    auto result = asyncResult.GetValueSync();
+    return result.IsSuccess();
 }
 
 } // NYdb::NConsoleClient

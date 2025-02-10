@@ -156,9 +156,11 @@ class YQLRun(object):
             '--err-file=%(err_file)s ' \
             '--gateways=%(prov)s ' \
             '--syntax-version=%(syntax_version)d ' \
-            '--tmp-dir=%(res_dir)s ' \
             '--gateways-cfg=%(gateways_cfg_file)s ' \
             '--fs-cfg=%(fs_cfg_file)s ' % locals()
+
+        if prov != 'pure':
+            cmd += '--tmp-dir=%(res_dir)s ' % locals()
 
         if self.udfs_path is not None:
             cmd += '--udfs-dir=%(udfs_dir)s ' % locals()
@@ -166,7 +168,7 @@ class YQLRun(object):
         if ansi_lexer:
             cmd += '--ansi-lexer '
 
-        if self.keep_temp:
+        if self.keep_temp and prov != 'pure':
             cmd += '--keep-temp '
 
         if self.extra_args:

@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         txBody.MutableBackupTask()->SetTableId(tableId);
         txBody.MutableBackupTask()->SetSnapshotStep(backupSnapshot.GetPlanStep());
         txBody.MutableBackupTask()->SetSnapshotTxId(backupSnapshot.GetTxId());
-        txBody.MutableBackupTask()->MutableS3Settings()->SetEndpoint("fake");
+        txBody.MutableBackupTask()->MutableS3Settings()->SetEndpoint("fake.fake");
         txBody.MutableBackupTask()->MutableS3Settings()->SetSecretKey("fakeSecret");
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
         UNIT_ASSERT(ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId));

@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-        UNIT_ASSERT(!to_lower(result.GetIssues().ToString()).Contains("query result"));
+        UNIT_ASSERT(!to_lower(TString{result.GetIssues().ToString()}).Contains("query result"));
     }
 
     Y_UNIT_TEST(KqpMkqlMemoryLimitException) {
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         result.GetIssues().PrintTo(Cerr);
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::OVERLOADED);
-        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetIssues().ToString().contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(ComputeActorMemoryAllocationFailureQueryService) {
@@ -214,8 +214,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto stats = result.GetStats();
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::OVERLOADED);
-        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
-        UNIT_ASSERT(stats.Defined());
+        UNIT_ASSERT_C(result.GetIssues().ToString().contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
+        UNIT_ASSERT(stats.has_value());
 
         Cerr << stats->ToString(true) << Endl;
     }
@@ -418,9 +418,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
-                if (result.GetIssues().ToString().Contains("OUT_OF_SPACE")) {
+                if (result.GetIssues().ToString().contains("OUT_OF_SPACE")) {
                     getOutOfSpace = true;
-                } else if (result.GetIssues().ToString().Contains("WRONG_SHARD_STATE")) {
+                } else if (result.GetIssues().ToString().contains("WRONG_SHARD_STATE")) {
                     // shards are allowed to split
                     continue;
                 }
@@ -544,8 +544,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("exceeds limit");
+            [] (const auto& issue) {
+                return issue.GetMessage().contains("exceeds limit");
         }));
     }
 
@@ -569,8 +569,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("larger than the allowed threshold");
+            [] (const auto& issue) {
+                return issue.GetMessage().contains("larger than the allowed threshold");
         }));
     }
 
@@ -667,8 +667,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-            [] (const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Memory limit exceeded");
+            [] (const auto& issue) {
+                return issue.GetMessage().contains("Memory limit exceeded");
             }));
     }
 
@@ -739,7 +739,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
                 if (result.IsSuccess()) {
                     auto yson = FormatResultSetYson(result.GetResultSet(0));
-                    CompareYson(TString("[") + expected + "]", yson);
+                    CompareYson(TString("[") + expected + "]", TString{yson});
                     expected += createExpectedRow(createKey(i));
                     if (i != maxTimeoutMs)
                         expected += ";";
@@ -759,6 +759,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
 
         WaitForZeroSessions(counters);
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
     void DoCancelAfterRo(bool follower, bool streamLookup, bool dependedRead) {
@@ -869,6 +870,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             UNIT_ASSERT(wasCanceled);
         }
         WaitForZeroSessions(counters);
+
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
+        if (follower) {
+            WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/OneShardWithFolower");
+        }
     }
 
     Y_UNIT_TEST(CancelAfterRoTx) {
@@ -1222,7 +1228,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 SELECT * FROM `/Root/TableTest`;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_C(result.GetIssues().ToString().Contains("result size limit"), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("result size limit"), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(counters.GetTxReplySizeExceededError()->Val(), 1);
         }
     }
@@ -1368,7 +1374,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-        UNIT_ASSERT(!to_lower(result.GetIssues().ToString()).Contains("query result"));
+        UNIT_ASSERT(!to_lower(TString{result.GetIssues().ToString()}).Contains("query result"));
     }
 }
 

@@ -59,10 +59,10 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
+        include/boost/none_t.hpp [4:6]
         include/boost/optional.hpp [3:5]
         include/boost/optional/bad_optional_access.hpp [3:5]
         include/boost/optional/detail/experimental_traits.hpp [3:5]
-        include/boost/optional/detail/old_optional_implementation.hpp [4:6]
         include/boost/optional/detail/optional_aligned_storage.hpp [4:6]
         include/boost/optional/detail/optional_config.hpp [4:6]
         include/boost/optional/detail/optional_factory_support.hpp [4:6]
@@ -71,20 +71,7 @@ BELONGS ya.make
         include/boost/optional/detail/optional_relops.hpp [4:6]
         include/boost/optional/detail/optional_swap.hpp [4:6]
         include/boost/optional/detail/optional_trivially_copyable_base.hpp [3:5]
+        include/boost/optional/detail/optional_utility.hpp [3:5]
         include/boost/optional/optional.hpp [4:6]
         include/boost/optional/optional_fwd.hpp [4:6]
         include/boost/optional/optional_io.hpp [3:5]
-
-KEEP     BSL-1.0              dfcb4a59104a0c22bf3eb471b928b116
-BELONGS ya.make
-    License text:
-        // Use, modification, and distribution is subject to the Boost Software
-        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
-        // http://www.boost.org/LICENSE_1_0.txt)
-    Scancode info:
-        Original SPDX id: BSL-1.0
-        Score           : 96.88
-        Match type      : NOTICE
-        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
-    Files with this license:
-        include/boost/none_t.hpp [4:6]

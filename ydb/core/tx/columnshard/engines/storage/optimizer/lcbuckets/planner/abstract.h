@@ -116,7 +116,7 @@ public:
 class TCompactionTaskData {
 private:
     YDB_ACCESSOR_DEF(std::vector<TPortionInfo::TConstPtr>, Portions);
-    const ui64 TargetCompactionLevel = 0;
+    const TPositiveControlInteger TargetCompactionLevel;
     std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> Predictor =
         NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
     ui64 MemoryUsage = 0;
@@ -135,8 +135,7 @@ private:
 public:
     ui64 GetTargetCompactionLevel() const {
         if (MemoryUsage > ((ui64)1 << 30)) {
-            AFL_VERIFY(TargetCompactionLevel);
-            return TargetCompactionLevel - 1;
+            return TargetCompactionLevel.GetDec();
         } else {
             return TargetCompactionLevel;
         }

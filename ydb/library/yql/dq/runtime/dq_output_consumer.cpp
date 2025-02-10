@@ -328,7 +328,8 @@ public:
     TDqOutputHashPartitionConsumerBlock(TVector<IDqOutput::TPtr>&& outputs, TVector<TColumnInfo>&& keyColumns,
         const  NKikimr::NMiniKQL::TType* outputType,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TMaybe<ui8> minFillPercentage)
+        TMaybe<ui8> minFillPercentage,
+        NUdf::IPgBuilder* pgBuilder)
         : OutputType_(static_cast<const NMiniKQL::TMultiType*>(outputType))
         , HolderFactory_(holderFactory)
         , Outputs_(std::move(outputs))
@@ -336,6 +337,7 @@ public:
         , ScalarColumnHashes_(KeyColumns_.size())
         , OutputWidth_(OutputType_->GetElementsCount())
         , MinFillPercentage_(minFillPercentage)
+        , PgBuilder_(pgBuilder)
     {
         TTypeInfoHelper helper;
         YQL_ENSURE(OutputWidth_ > KeyColumns_.size());
@@ -517,8 +519,7 @@ private:
             auto blockType = static_cast<const NMiniKQL::TBlockType*>(columnType);
             if (blockType->GetShape() == NMiniKQL::TBlockType::EShape::Many) {
                 auto itemType = blockType->GetItemType();
-                YQL_ENSURE(!itemType->IsPg(), "pg types are not supported yet");
-                Builders_.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), maxBlockLen, nullptr, {.MinFillPercentage=MinFillPercentage_}));
+                Builders_.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), maxBlockLen, PgBuilder_, {.MinFillPercentage=MinFillPercentage_}));
             } else {
                 Builders_.emplace_back();
             }
@@ -542,6 +543,8 @@ private:
     TVector<std::unique_ptr<IArrayBuilder>> Builders_;
 
     mutable bool IsWaitingFlag_ = false;
+
+    NUdf::IPgBuilder* PgBuilder_;
 };
 
 class TDqOutputBroadcastConsumer : public IDqOutputConsumer {
@@ -605,7 +608,8 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<IDqOutput::TPtr>&& outputs,
     TVector<TColumnInfo>&& keyColumns, const  NKikimr::NMiniKQL::TType* outputType,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TMaybe<ui8> minFillPercentage)
+    TMaybe<ui8> minFillPercentage,
+    NUdf::IPgBuilder* pgBuilder)
 {
     YQL_ENSURE(!outputs.empty());
     YQL_ENSURE(!keyColumns.empty());
@@ -624,7 +628,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
         return MakeIntrusive<TDqOutputHashPartitionConsumerScalar>(std::move(outputs), std::move(keyColumns), outputType);
     }
 
-    return MakeIntrusive<TDqOutputHashPartitionConsumerBlock>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage);
+    return MakeIntrusive<TDqOutputHashPartitionConsumerBlock>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage, pgBuilder);
 }
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth) {

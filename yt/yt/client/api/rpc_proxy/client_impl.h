@@ -130,9 +130,9 @@ public:
         const TAlterReplicationCardOptions& options = {}) override;
 
     // Distributed table client
-    TFuture<ITableWriterPtr> CreateFragmentTableWriter(
-        const TFragmentWriteCookiePtr& cookie,
-        const TFragmentTableWriterOptions& options) override;
+    TFuture<ITableFragmentWriterPtr> CreateTableFragmentWriter(
+        const TSignedWriteFragmentCookiePtr& cookie,
+        const TTableFragmentWriterOptions& options) override;
 
     // Queues.
     TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
@@ -456,6 +456,10 @@ public:
     TFuture<TRequestRestartResult> RequestRestart(
         const std::string& nodeAddress,
         const TRequestRestartOptions& options) override;
+
+    TFuture<TCollectCoverageResult> CollectCoverage(
+        const std::string& address,
+        const NApi::TCollectCoverageOptions& options) override;
 
     // Query tracker
 

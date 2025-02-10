@@ -2,7 +2,7 @@ import allure
 import pytest
 from .conftest import LoadSuiteBase
 from os import getenv
-from ydb.tests.olap.lib.ydb_cli import WorkloadType, YdbCliHelper
+from ydb.tests.olap.lib.ydb_cli import WorkloadType, YdbCliHelper, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 
@@ -28,8 +28,8 @@ class TestClickbench(LoadSuiteBase):
                         query_num=query_num,
                         iterations=1,
                         workload_type=cls.workload_type,
-                        timeout=cls._get_timeout(query_num),
-                        check_canonical=True
+                        timeout=cls._get_query_settings(query_num).timeout,
+                        check_canonical=CheckCanonicalPolicy.ERROR
                     )
                     cls.process_query_result(result=result, query_num=query_num, iterations=1, upload=False)
             except BaseException:

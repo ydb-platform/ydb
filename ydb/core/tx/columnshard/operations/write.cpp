@@ -31,13 +31,12 @@ void TWriteOperation::Start(
     TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
-    NEvWrite::TWriteMeta writeMeta((ui64)WriteId, GetPathId(), source, GranuleShardingVersionId);
+    NEvWrite::TWriteMeta writeMeta((ui64)WriteId, GetPathId(), source, GranuleShardingVersionId, GetIdentifier());
     writeMeta.SetLockId(LockId);
     writeMeta.SetModificationType(ModificationType);
     NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
         owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR), WritePortions);
-    std::shared_ptr<NConveyor::ITask> task =
-        std::make_shared<NOlap::TBuildBatchesTask>(owner.BufferizationWriteActorId, std::move(writeData), context);
+    std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);
     NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
 
     Status = EOperationStatus::Started;
@@ -128,7 +127,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
 
 void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {
     Y_ABORT_UNLESS(Status != EOperationStatus::Draft);
-
+    StopWriting();
     TBlobGroupSelector dsGroupSelector(owner.Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 

@@ -297,13 +297,13 @@ public:
                     : SimpleLogicalType(GetLogicalType(valueType));
                 Types_.push_back(logicalType);
                 Converters_.push_back(CreateUnversionedValueToYqlConverter(Types_.back(), converterConfig, Consumer_));
-                ValueTypeToTypeIndex_[valueType] = static_cast<int>(Types_.size()) - 1;
+                ValueTypeToTypeIndex_[valueType] = std::ssize(Types_) - 1;
             } else {
                 ValueTypeToTypeIndex_[valueType] = UnknownTypeIndex;
             }
         }
 
-        for (int tableIndex = 0; tableIndex != static_cast<int>(schemas.size()); ++tableIndex) {
+        for (int tableIndex = 0; tableIndex != std::ssize(schemas); ++tableIndex) {
             const auto& schema = schemas[tableIndex];
             for (const auto& column : schema->Columns()) {
                 Types_.push_back(column.LogicalType());
@@ -311,7 +311,7 @@ public:
                     CreateUnversionedValueToYqlConverter(column.LogicalType(), converterConfig, Consumer_));
                 auto [it, inserted] = TableIndexAndColumnNameToTypeIndex_.emplace(
                     std::pair(tableIndex, column.Name()),
-                    static_cast<int>(Types_.size()) - 1);
+                    std::ssize(Types_) - 1);
                 YT_VERIFY(inserted);
             }
         }
@@ -357,7 +357,7 @@ private:
 private:
     int GetTypeIndex(int tableIndex, ui16 columnId, TStringBuf columnName, EValueType valueType)
     {
-        YT_VERIFY(0 <= tableIndex && tableIndex < static_cast<int>(TableIndexToColumnIdToTypeIndex_.size()));
+        YT_VERIFY(0 <= tableIndex && tableIndex < std::ssize(TableIndexToColumnIdToTypeIndex_));
         auto& columnIdToTypeIndex = TableIndexToColumnIdToTypeIndex_[tableIndex];
         if (columnId >= columnIdToTypeIndex.size()) {
             columnIdToTypeIndex.resize(columnId + 1, UnknownTypeIndex);

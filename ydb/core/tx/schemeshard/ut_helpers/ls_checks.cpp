@@ -4,6 +4,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/library/login/protos/login.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -1230,7 +1231,7 @@ TCheckFunc HasColumnTableTtlSettingsTier(const TString& columnName, const TDurat
         UNIT_ASSERT_VALUES_EQUAL(tier.GetApplyAfterSeconds(), evictAfter.Seconds());
         if (storageName) {
             UNIT_ASSERT(tier.HasEvictToExternalStorage());
-            UNIT_ASSERT_VALUES_EQUAL(tier.GetEvictToExternalStorage().GetStorageName(), storageName);
+            UNIT_ASSERT_VALUES_EQUAL(tier.GetEvictToExternalStorage().GetStorage(), storageName);
         } else {
             UNIT_ASSERT(tier.HasDelete());
         }
@@ -1240,6 +1241,22 @@ TCheckFunc HasColumnTableTtlSettingsTier(const TString& columnName, const TDurat
 TCheckFunc HasOwner(const TString& owner) {
     return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSelf().GetOwner(), owner);
+    };
+}
+
+TCheckFunc HasGroup(const TString& group, const TSet<TString> members) {
+    return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        std::optional<TSet<TString>> actualMembers;
+        for (const auto& sid : record.GetPathDescription().GetDomainDescription().GetSecurityState().GetSids()) {
+            if (sid.GetName() == group) {
+                actualMembers.emplace();
+                for (const auto& member : sid.GetMembers()) {
+                    actualMembers->insert(member);
+                }
+            }
+        }
+        UNIT_ASSERT_C(actualMembers.has_value(), "Group " + group + " not found");
+        UNIT_ASSERT_VALUES_EQUAL(members, actualMembers.value());
     };
 }
 
@@ -1263,37 +1280,33 @@ void CheckRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TStr
             }
         }
 
-        UNIT_ASSERT_C(!(has ^ mustHave), "" << (mustHave ? "no " : "") << "ace found"
+        UNIT_ASSERT_C(!(has ^ mustHave), "" << record.GetPath() << "ace check fail"
             << ", got " << src.ShortDebugString()
-            << ", required " << required.ShortDebugString());
+            << ", required " << (mustHave ? "" : "no ") << required.ShortDebugString());
     }
 }
 
 TCheckFunc HasRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckRight(record, right, true, true);
+        CheckRight(record, right, true, false);
     };
 }
 
 TCheckFunc HasNoRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckRight(record, right, false, true);
+        CheckRight(record, right, false, false);
     };
-}
-
-void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
-    CheckRight(record, right, mustHave, true);
 }
 
 TCheckFunc HasEffectiveRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckEffectiveRight(record, right, true);
+        CheckRight(record, right, true, true);
     };
 }
 
 TCheckFunc HasNoEffectiveRight(const TString& right) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        CheckEffectiveRight(record, right, false);
+        CheckRight(record, right, false, true);
     };
 }
 

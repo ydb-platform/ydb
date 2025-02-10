@@ -15,6 +15,7 @@
 
 #include <yt/yt/core/misc/async_expiring_cache.h>
 #include <yt/yt/core/misc/fs.h>
+#include <yt/yt/core/misc/configurable_singleton_def.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -1028,10 +1029,12 @@ public:
 
     bool IsLocalAddress(const TNetworkAddress& address)
     {
-        TNetworkAddress localIP{address, 0};
-
+        if (!address.IsIP()) {
+            return false;
+        }
+        TNetworkAddress candidateAddress(address, /*port*/ 0);
         const auto& localAddresses = GetLocalAddresses();
-        return std::find(localAddresses.begin(), localAddresses.end(), localIP) != localAddresses.end();
+        return std::find(localAddresses.begin(), localAddresses.end(), candidateAddress) != localAddresses.end();
     }
 
     void PurgeCache()

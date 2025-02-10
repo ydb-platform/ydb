@@ -123,7 +123,7 @@ public:
                 // Clear cache after each object because
                 // values allocated on another allocator and should be released
                 Cache.Clear();
-                Worker->GetGraph().Invalidate();
+                Worker->Invalidate();
             };
 
             auto& holderFactory = Worker->GetGraph().GetHolderFactory();

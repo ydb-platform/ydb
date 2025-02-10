@@ -504,6 +504,10 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
 {
     // All code here _MUST_ be async signal safe unless specified otherwise.
 
+    // Actually, it is not okay to hang.
+    ::signal(SIGALRM, NDetail::CrashTimeoutHandler);
+    ::alarm(60);
+
     // When did the crash happen?
     NDetail::DumpTimeInfo();
 
@@ -531,10 +535,6 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
     NDetail::DumpUndumpableBlocksInfo();
 
     WriteToStderr("*** Waiting for logger to shut down\n");
-
-    // Actually, it is not okay to hang.
-    ::signal(SIGALRM, NDetail::CrashTimeoutHandler);
-    ::alarm(5);
 
     NLogging::TLogManager::Get()->Shutdown();
 

@@ -16,7 +16,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/impl/exec_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 using TRetryContextResultAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
 using TRetryContextAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
@@ -47,6 +47,9 @@ static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::Transaction
             break;
         case TTxSettings::TS_SNAPSHOT_RO:
             proto->mutable_snapshot_read_only();
+            break;
+        case TTxSettings::TS_SNAPSHOT_RW:
+            proto->mutable_snapshot_read_write();
             break;
         default:
             throw TContractViolation("Unexpected transaction mode.");
@@ -127,7 +130,7 @@ public:
 
     TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex, const TFetchScriptResultsSettings& settings) {
         auto request = MakeRequest<Ydb::Query::FetchScriptResultsRequest>();
-        request.set_operation_id(NKikimr::NOperationId::ProtoToString(operationId));
+        request.set_operation_id(operationId.ToString());
         request.set_result_set_index(resultSetIndex);
         return FetchScriptResultsImpl(std::move(request), settings);
     }
@@ -338,7 +341,7 @@ public:
         const auto sessionId = resp->session_id();
         request.set_session_id(sessionId);
 
-        auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client);
+        auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client, client);
 
         // Do not pass client timeout here. Session must be alive
         TRpcRequestSettings rpcSettings;

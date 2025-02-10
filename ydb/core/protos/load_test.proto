@@ -42,6 +42,7 @@ message TEvLoadTestRequest {
             optional uint32 MaxWriteBytesInFlight = 5;
             optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 6;
             optional uint32 DelayAfterCompletionSec = 7;
+            optional uint32 CollectedBlobsPerMille = 8;
         }
 
         message TRequestInfo {

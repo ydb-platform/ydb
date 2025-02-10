@@ -78,6 +78,7 @@ private:
 
 private:
     void Init(
+        const IRawClientPtr& rawClient,
         const TClientContext& context,
         const TTransactionId& transactionId,
         TDuration timeout);

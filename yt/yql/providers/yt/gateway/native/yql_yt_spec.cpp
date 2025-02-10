@@ -558,7 +558,34 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
         }
     }
 
+    TVector<std::pair<TString, TString>> mrJobSystemLibs;
+    if (execCtx.Config_->MrJobSystemLibsWithMd5Size() > 0) {
+        mrJobSystemLibs.reserve(execCtx.Config_->MrJobSystemLibsWithMd5Size());
+
+        for (const auto& systemLib : execCtx.Config_->GetMrJobSystemLibsWithMd5()) {
+            mrJobSystemLibs.push_back({systemLib.GetFile(), systemLib.GetMd5()});
+
+            const auto libSize = TFileStat(systemLib.GetFile()).Size;
+            YQL_ENSURE(libSize != 0);
+            fileMemUsage += libSize;
+        }
+
+        spec.AddEnvironment("LD_LIBRARY_PATH", ".");
+    }
+
+
     if (!localRun) {
+        for (size_t i = 0; i < mrJobSystemLibs.size(); i++) {
+            if (!mrJobSystemLibs[i].second) {
+                if (GetEnv("YQL_LOCAL") == "1") {
+                    // do not calculate heavy md5 in local mode (YQL-15353)
+                    mrJobSystemLibs[i].second = MD5::Calc(mrJobSystemLibs[i].first);
+                } else {
+                    mrJobSystemLibs[i].second = MD5::File(mrJobSystemLibs[i].first);
+                }
+            }
+        }
+
         if (mrJobBin.empty()) {
             mrJobBinMd5 = GetPersistentExecPathMd5();
         } else if (!mrJobBinMd5) {
@@ -594,15 +621,42 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
             } else if (!mrJobBin.empty()) {
                 spec.JobBinaryLocalPath(mrJobBin, mrJobBinMd5);
             }
-
         }
+
+        for (size_t i = 0; i < mrJobSystemLibs.size(); i++) {
+            bool useBinCache = false;
+            if (binCacheFolder) {
+                if (auto snapshot = entry->GetBinarySnapshotFromCache(binCacheFolder, mrJobSystemLibs[i].second, mrJobSystemLibs[i].first)) {
+                    spec.AddFile(snapshot->first);
+                    useBinCache = true;
+                }
+            }
+            if (!useBinCache) {
+                if (binTmpFolder) {
+                    const TDuration binExpiration = settings->BinaryExpirationInterval.Get().GetOrElse(TDuration());
+                    auto libSnapshot = entry->GetBinarySnapshot(binTmpFolder, mrJobSystemLibs[i].second, mrJobSystemLibs[i].first, binExpiration);
+                    spec.AddFile(libSnapshot.first);
+                } else {
+                    NYT::TAddLocalFileOptions opts;
+                    opts.MD5CheckSum(mrJobSystemLibs[i].second);
+                    spec.AddLocalFile(mrJobSystemLibs[i].first, opts);
+                }
+            }
+        }
+
     }
     else if (!mrJobBin.empty()) {
         const auto binSize = TFileStat(mrJobBin).Size;
         YQL_ENSURE(binSize != 0);
         spec.JobBinaryLocalPath(mrJobBin, mrJobBinMd5);
+        for (auto file : mrJobSystemLibs) {
+            NYT::TAddLocalFileOptions opts;
+            opts.MD5CheckSum(file.second);
+            spec.AddLocalFile(file.first, opts);
+        }
         fileMemUsage += binSize;
     }
+
     auto defaultMemoryLimit = settings->DefaultMemoryLimit.Get(cluster).GetOrElse(0);
     ui64 tmpFsSize = settings->UseTmpfs.Get(cluster).GetOrElse(false)
         ? (ui64)settings->ExtraTmpfsSize.Get(cluster).GetOrElse(8_MB)

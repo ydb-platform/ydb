@@ -522,6 +522,16 @@ std::pair<
             } else {
                 result[i] = { EOutputRowItemSource::LookupOther, lookupPayloadColumns.at(name) };
             }
+        } else if (leftLabel.empty()) {
+            const auto name = prefixedName;
+            if (auto j = leftJoinColumns.FindPtr(name)) {
+                result[i] = { EOutputRowItemSource::InputKey, lookupKeyColumns.at(rightNames[*j]) };
+            } else if (auto k = inputColumns.FindPtr(name)) {
+                result[i] = { EOutputRowItemSource::InputOther, otherInputIndexes.size() };
+                otherInputIndexes.push_back(*k);
+            } else {
+                Y_ABORT();
+            }
         } else {
             Y_ABORT();
         }

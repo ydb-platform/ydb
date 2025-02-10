@@ -115,6 +115,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 bytesPK1;
         {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+            csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
             auto settings = TKikimrSettings()
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
@@ -127,6 +128,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         }
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
         ui64 rawBytesUnpack1PK = 0;
         ui64 bytesUnpack1PK = 0;
         ui64 rawBytesPackAndUnpack2PK;

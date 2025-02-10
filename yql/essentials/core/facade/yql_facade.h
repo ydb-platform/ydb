@@ -65,14 +65,16 @@ public:
     TProgramPtr Create(
             const TFile& file,
             const TString& sessionId = TString(),
-            const TQContext& qContext = {});
+            const TQContext& qContext = {},
+            TMaybe<TString> gatewaysForMerge = {});
 
     TProgramPtr Create(
             const TString& filename,
             const TString& sourceCode,
             const TString& sessionId = TString(),
             EHiddenMode hiddenMode = EHiddenMode::Disable,
-            const TQContext& qContext = {});
+            const TQContext& qContext = {},
+            TMaybe<TString> gatewaysForMerge = {});
 
     void UnrepeatableRandom();
 private:
@@ -349,7 +351,8 @@ private:
         bool enableRangeComputeFor,
         const IArrowResolver::TPtr& arrowResolver,
         EHiddenMode hiddenMode,
-        const TQContext& qContext);
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
@@ -443,6 +446,7 @@ private:
     TMaybe<TString> LineageStr_;
 
     TQContext QContext_;
+    TMaybe<TString> GatewaysForMerge_;
     TIssues FinalIssues_;
 };
 

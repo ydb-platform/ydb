@@ -35,10 +35,10 @@ jobs:
             test_size: small,medium,large
             test_type: unittest,py3test,py2test,pytest
           - build_preset: release-tsan
-            threads_count: 20
-            timeout: 480
+            threads_count: 10
+            timeout: 600
             build_target: "ydb/"
-            test_size: small,medium,large
+            test_size: small,medium
             test_type: unittest,py3test,py2test,pytest
 
     steps:

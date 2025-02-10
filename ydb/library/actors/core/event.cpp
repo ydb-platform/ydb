@@ -60,4 +60,10 @@ namespace NActors {
         return DoExecute(actor, std::move(eventPtr));
     }
 
+#ifndef NDEBUG
+    void IEventHandle::DoTrackNextEvent() {
+        TrackNextEvent = true;
+    }
+#endif
+
 }

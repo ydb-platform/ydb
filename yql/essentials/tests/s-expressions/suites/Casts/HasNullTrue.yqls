@@ -1,53 +1,52 @@
 (
 
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 (let res_sink (DataSink 'result))
 
 
 # Optional
 (let value (Nothing (OptionalType (DataType 'Int32))))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 (let value (Just (Nothing (OptionalType (DataType 'Int32)))))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 # Null
 (let value (Null))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 (let value (Just (Null)))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 (let value (Nothing (OptionalType (NullType))))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 (let value (Just (Nothing (OptionalType (NullType)))))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 # Tuple
 (let value '((Int32 '1) (String 'test) (Nothing (OptionalType (DataType 'Int32)))))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 # Struct
 (let value (AsStruct '('a (Int32 '1)) '('b (Just (Nothing (OptionalType (DataType 'Int32)))))))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 # Variant
 (let valueType (VariantType (TupleType (DataType 'Int32) (NullType))))
 (let value (Variant (Null) '1 valueType))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 (let valueType (VariantType (StructType '('a (DataType 'Int32)) '('b (OptionalType (DataType 'String))))))
 (let value (Variant (Nothing (OptionalType (DataType 'String))) 'b valueType))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 # List
 (let value (AsList (Null) (Int32 '1) (Int32 '2)))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 (let value (AsList (Int32 '1) (Int32 '2) (Null)))
-(let world (Write! world res_sink (Key) (HasNull value) '()))
+(let world (Write! world res_sink (Key) (HasNull value) '('('type))))
 
 (let world (Commit! world res_sink))
 (return world)

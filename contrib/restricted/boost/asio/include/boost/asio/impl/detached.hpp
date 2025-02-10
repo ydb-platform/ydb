@@ -44,8 +44,8 @@ namespace detail {
 
 #if !defined(GENERATING_DOCUMENTATION)
 
-template <typename... Signatures>
-struct async_result<detached_t, Signatures...>
+template <typename Signature>
+struct async_result<detached_t, Signature>
 {
   typedef boost::asio::detail::detached_handler completion_handler_type;
 

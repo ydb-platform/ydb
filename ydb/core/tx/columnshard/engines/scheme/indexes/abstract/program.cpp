@@ -235,8 +235,10 @@ public:
 class TPackAnd: public IRequestNode {
 private:
     using TBase = IRequestNode;
-    THashMap<TString, std::shared_ptr<arrow::Scalar>> Conditions;
+    THashMap<TString, std::shared_ptr<arrow::Scalar>> Equals;
+    THashMap<TString, TLikeDescription> Likes;
     bool IsEmptyFlag = false;
+
 protected:
     virtual bool DoCollapse() override {
         return false;
@@ -247,10 +249,19 @@ protected:
         if (IsEmptyFlag) {
             result.InsertValue("empty", true);
         }
-        auto& arrJson = result.InsertValue("conditions", NJson::JSON_ARRAY);
-        for (auto&& i : Conditions) {
-            auto& jsonCondition = arrJson.AppendValue(NJson::JSON_MAP);
-            jsonCondition.InsertValue(i.first, i.second->ToString());
+        {
+            auto& arrJson = result.InsertValue("equals", NJson::JSON_ARRAY);
+            for (auto&& i : Equals) {
+                auto& jsonCondition = arrJson.AppendValue(NJson::JSON_MAP);
+                jsonCondition.InsertValue(i.first, i.second->ToString());
+            }
+        }
+        {
+            auto& arrJson = result.InsertValue("likes", NJson::JSON_ARRAY);
+            for (auto&& i : Likes) {
+                auto& jsonCondition = arrJson.AppendValue(NJson::JSON_MAP);
+                jsonCondition.InsertValue(i.first, i.second.ToString());
+            }
         }
         return result;
     }
@@ -259,32 +270,53 @@ protected:
     }
 public:
     TPackAnd(const TPackAnd&) = default;
+
     TPackAnd(const TString& cName, const std::shared_ptr<arrow::Scalar>& value)
         : TBase(GetNextId("PackAnd")) {
-        AddCondition(cName, value);
+        AddEqual(cName, value);
+    }
+
+    TPackAnd(const TString& cName, const TLikePart& part)
+        : TBase(GetNextId("PackAnd")) {
+        AddLike(cName, TLikeDescription(part));
     }
 
     const THashMap<TString, std::shared_ptr<arrow::Scalar>>& GetEquals() const {
-        return Conditions;
+        return Equals;
+    }
+
+    const THashMap<TString, TLikeDescription>& GetLikes() const {
+        return Likes;
     }
 
     bool IsEmpty() const {
         return IsEmptyFlag;
     }
-    void AddCondition(const TString& cName, const std::shared_ptr<arrow::Scalar>& value) {
+    void AddEqual(const TString& cName, const std::shared_ptr<arrow::Scalar>& value) {
         AFL_VERIFY(value);
-        auto it = Conditions.find(cName);
-        if (it == Conditions.end()) {
-            Conditions.emplace(cName, value);
+        auto it = Equals.find(cName);
+        if (it == Equals.end()) {
+            Equals.emplace(cName, value);
         } else if (it->second->Equals(*value)) {
             return;
         } else {
             IsEmptyFlag = true;
         }
     }
+    void AddLike(const TString& cName, const TLikeDescription& value) {
+        auto it = Likes.find(cName);
+        if (it == Likes.end()) {
+            Likes.emplace(cName, value);
+        } else {
+            it->second.Merge(value);
+        }
+    }
     void Merge(const TPackAnd& add) {
-        for (auto&& i : add.Conditions) {
-            AddCondition(i.first, i.second);
+        for (auto&& i : add.Equals) {
+            AddEqual(i.first, i.second);
+        }
+        for (auto&& i : add.Likes) {
+            AddLike(i.first, i.second);
         }
     }
 };
@@ -311,6 +343,26 @@ protected:
         }
         if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::Equals && Children.size() == 2 && Children[1]->Is<TConstantNode>() && Children[0]->Is<TOriginalColumn>()) {
             Parent->Exchange(GetNodeName(), std::make_shared<TPackAnd>(Children[0]->As<TOriginalColumn>()->GetColumnName(), Children[1]->As<TConstantNode>()->GetConstant()));
+            return true;
+        }
+        const bool isLike = (Operation == NYql::TKernelRequestBuilder::EBinaryOp::StringContains ||
+                      Operation == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith ||
+                      Operation == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith);
+        if (isLike && Children.size() == 2 && Children[1]->Is<TConstantNode>() && Children[0]->Is<TOriginalColumn>()) {
+            auto scalar = Children[1]->As<TConstantNode>()->GetConstant();
+            AFL_VERIFY(scalar->type->id() == arrow::binary()->id());
+            auto scalarString = static_pointer_cast<arrow::BinaryScalar>(scalar);
+            std::optional<TLikePart::EOperation> op;
+            if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
+                op = TLikePart::EOperation::Contains;
+            } else if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
+                op = TLikePart::EOperation::EndsWith;
+            } else if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith) {
+                op = TLikePart::EOperation::StartsWith;
+            }
+            AFL_VERIFY(op);
+            TLikePart likePart(*op, TString((const char*)scalarString->value->data(), scalarString->value->size()));
+            Parent->Exchange(GetNodeName(), std::make_shared<TPackAnd>(Children[0]->As<TOriginalColumn>()->GetColumnName(), likePart));
             return true;
         }
         if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::And) {
@@ -407,7 +459,7 @@ public:
             if (arg.IsGenerated()) {
                 auto it = Nodes.find(arg.GetColumnName());
                 if (it == Nodes.end()) {
-                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "program_arg_is_missing")("program", program.DebugString());
+                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "program_arg_is_missing")("program", program.DebugString());
                     return false;
                 }
                 argNodes.emplace_back(it->second);
@@ -442,10 +494,10 @@ public:
 };
 
 std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TProgramContainer& program) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("program", program.DebugString());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("program", program.DebugString());
     auto& steps = program.GetStepsVerified();
     if (!steps.size()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "no_steps_in_program");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "no_steps_in_program");
         return nullptr;
     }
     auto fStep = steps.front();
@@ -459,9 +511,10 @@ std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TP
     if (!rootNode) {
         return nullptr;
     }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("original_program", rootNode->SerializeToJson());
     while (rootNode->Collapse()) {
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("collapsed_program", rootNode->SerializeToJson());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("collapsed_program", rootNode->SerializeToJson());
     if (rootNode->GetChildren().size() != 1) {
         return nullptr;
     }
@@ -470,14 +523,14 @@ std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TP
         if (orNode->GetOperation() == NYql::TKernelRequestBuilder::EBinaryOp::Or) {
             for (auto&& i : orNode->GetChildren()) {
                 if (auto* andPackNode = i->As<TPackAnd>()) {
-                    result->AddBranch(andPackNode->GetEquals());
+                    result->AddBranch(andPackNode->GetEquals(), andPackNode->GetLikes());
                 } else if (auto* operationNode = i->As<TOperationNode>()) {
                     if (operationNode->GetOperation() == NYql::TKernelRequestBuilder::EBinaryOp::And) {
                         TPackAnd* pack = operationNode->FindFirst<TPackAnd>();
                         if (!pack) {
                             return nullptr;
                         }
-                        result->AddBranch(pack->GetEquals());
+                        result->AddBranch(pack->GetEquals(), pack->GetLikes());
                     }
                 } else {
                     return nullptr;
@@ -485,7 +538,7 @@ std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TP
             }
         }
     } else if (auto* andPackNode = rootNode->GetChildren().front()->As<TPackAnd>()) {
-        result->AddBranch(andPackNode->GetEquals());
+        result->AddBranch(andPackNode->GetEquals(), andPackNode->GetLikes());
     } else {
         return nullptr;
     }

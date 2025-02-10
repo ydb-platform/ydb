@@ -17,17 +17,17 @@
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/http_proxy/http_service.h>
 #include <ydb/core/http_proxy/metrics_actor.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_common_client/settings.h>
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/services/ydb/ydb_common_ut.h>
 
@@ -75,6 +75,7 @@ public:
     ~THttpProxyTestMock() = default;
 
     void TearDown(NUnitTest::TTestContext&) override {
+        Monitoring->Stop();
         GRpcServer->Stop();
     }
 
@@ -350,7 +351,9 @@ public:
 
     NJson::TJsonMap SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        if (expectedHttpCode != 0) {
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        }
         NJson::TJsonMap json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         return json;
@@ -404,6 +407,18 @@ public:
         return SendJsonRequest("SetQueueAttributes", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap ListQueueTags(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("ListQueueTags", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap TagQueue(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("TagQueue", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap UntagQueue(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
+        return SendJsonRequest("UntagQueue", request, expectedHttpCode);
+    }
+
     void WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes) {
         WaitQueueAttributes(queueUrl, retries, [&attributes](NJson::TJsonMap json) {
             for (const auto& [k, v] : attributes.GetMapSafe()) {
@@ -446,7 +461,7 @@ private:
         TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
-            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         NYdb::TDriver driver(driverConfig);
         auto tableClient = NYdb::NTable::TTableClient(driver);
 
@@ -533,6 +548,7 @@ private:
         ActorRuntime->SetLogPriority(NKikimrServices::HTTP_PROXY, NLog::PRI_DEBUG);
         ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
         ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        ActorRuntime->SetLogPriority(NKikimrServices::SQS, NLog::PRI_TRACE);
 
         if (enableMetering) {
             ActorRuntime->RegisterService(
@@ -571,6 +587,7 @@ private:
            "Columns { Name: \"Version\"            Type: \"Uint64\"}"
            "Columns { Name: \"DlqName\"            Type: \"Utf8\"}"
            "Columns { Name: \"TablesFormat\"       Type: \"Uint32\"}"
+           "Columns { Name: \"Tags\"               Type: \"Utf8\"}"
            "KeyColumnNames: [\"Account\", \"QueueName\"]"
         );
 
@@ -709,6 +726,7 @@ private:
            "Columns { Name: \"CustomQueueName\"  Type: \"Utf8\"}"
            "Columns { Name: \"EventTimestamp\"   Type: \"Uint64\"}"
            "Columns { Name: \"FolderId\"         Type: \"Utf8\"}"
+           "Columns { Name: \"Labels\"           Type: \"Utf8\"}"
            "KeyColumnNames: [\"Account\", \"QueueName\", \"EventType\"]"
         );
 
@@ -839,7 +857,7 @@ private:
         MonPort = TPortManager().GetPort();
         Counters = new NMonitoring::TDynamicCounters();
 
-        Monitoring.Reset(new NActors::TSyncHttpMon({
+        Monitoring.Reset(new NActors::TMon({
             .Port = MonPort,
             .Address = "127.0.0.1",
             .Threads = 3,
@@ -847,7 +865,7 @@ private:
             .Host = "127.0.0.1",
         }));
         Monitoring->RegisterCountersPage("counters", "Counters", Counters);
-        Monitoring->Start();
+        Monitoring->Start(ActorRuntime->GetAnyNodeActorSystem());
 
         Sleep(TDuration::Seconds(1));
 

@@ -60,20 +60,6 @@ void SkipForValidate(
     in = SkipWS(in, query.end());
     out = SkipWS(out, formattedQuery.end());
 
-    auto skipDeletedToken = [&](const TString& deletedToken, const TVector<TString>& afterTokens) {
-        if (
-            in != query.end() && in->Name == deletedToken &&
-            (out == formattedQuery.end() || out->Name != deletedToken) &&
-            in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
-        ) {
-            in = SkipWS(++in, query.end());
-            return true;
-        }
-        return false;
-    };
-
-    while (skipDeletedToken("SEMICOLON", {"AS", "BEGIN", "LBRACE_CURLY", "SEMICOLON"})) {}
-
     auto inSkippedComments = SkipWSOrComment(in, query.end());
 
     auto skipAddedToken = [&](const TString& addedToken, const TVector<TString>& beforeTokens, const TVector<TString>& afterTokens) {
@@ -95,6 +81,20 @@ void SkipForValidate(
     skipAddedToken("LPAREN", {}, {"EQUALS"});
     skipAddedToken("RPAREN", {"END", "EOF", "SEMICOLON"}, {});
     skipAddedToken("SEMICOLON", {"END", "RBRACE_CURLY"}, {});
+
+    auto skipDeletedToken = [&](const TString& deletedToken, const TVector<TString>& afterTokens) {
+        if (
+            in != query.end() && in->Name == deletedToken &&
+            (out == formattedQuery.end() || out->Name != deletedToken) &&
+            in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
+        ) {
+            in = SkipWS(++in, query.end());
+            return true;
+        }
+        return false;
+    };
+
+    while (skipDeletedToken("SEMICOLON", {"AS", "BEGIN", "LBRACE_CURLY", "SEMICOLON"})) {}
 }
 
 TParsedToken TransformTokenForValidate(TParsedToken token) {
@@ -114,6 +114,12 @@ TStringBuf SkipQuotes(const TString& content) {
     str.ChopSuffix("\"");
     str.SkipPrefix("'");
     str.ChopSuffix("'");
+    return str;
+}
+
+TStringBuf SkipNewline(const TString& content) {
+    TStringBuf str = content;
+    str.ChopSuffix("\n");
     return str;
 }
 
@@ -141,6 +147,10 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
                 if (SkipQuotes(inToken.Content) != SkipQuotes(outToken.Content)) {
                     return false;
                 }
+            } else if (inToken.Name == "COMMENT") {
+                if (SkipNewline(inToken.Content) != SkipNewline(outToken.Content)) {
+                    return false;
+                }
             } else {
                 if (inToken.Content != outToken.Content) {
                     return false;
@@ -153,139 +163,6 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
     SkipForValidate(in, out, query, formattedQuery, parenthesesBalance);
 
     return in == inEnd && out == outEnd && parenthesesBalance == 0;
-}
-
-enum EParenType {
-    Open,
-    Close,
-    None
-};
-
-using TAdvanceCallback = std::function<EParenType(TTokenIterator& curr, TTokenIterator end)>;
-
-TTokenIterator SkipToNextBalanced(TTokenIterator begin, TTokenIterator end, const TAdvanceCallback& advance) {
-    i64 level = 0;
-    TTokenIterator curr = begin;
-    while (curr != end) {
-        switch (advance(curr, end)) {
-            case EParenType::Open: {
-                ++level;
-                break;
-            }
-            case EParenType::Close: {
-                --level;
-                if (level < 0) {
-                    return end;
-                } else if (level == 0) {
-                    return curr;
-                }
-                break;
-            }
-            case EParenType::None:
-                break;
-        }
-    }
-    return curr;
-}
-
-TTokenIterator GetNextStatementBegin(TTokenIterator begin, TTokenIterator end) {
-    TAdvanceCallback advanceLambdaBody = [](TTokenIterator& curr, TTokenIterator end) -> EParenType {
-        Y_UNUSED(end);
-        if (curr->Name == "LBRACE_CURLY") {
-            ++curr;
-            return EParenType::Open;
-        } else if (curr->Name == "RBRACE_CURLY") {
-            ++curr;
-            return EParenType::Close;
-        } else {
-            ++curr;
-            return EParenType::None;
-        }
-    };
-
-    TAdvanceCallback advanceAction = [](TTokenIterator& curr, TTokenIterator end) -> EParenType {
-        auto tmp = curr;
-        if (curr->Name == "DEFINE") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && (curr->Name == "ACTION" || curr->Name == "SUBQUERY")) {
-                ++curr;
-                return EParenType::Open;
-            }
-        } else if (curr->Name == "END") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && curr->Name == "DEFINE") {
-                ++curr;
-                return EParenType::Close;
-            }
-        }
-
-        curr = tmp;
-        ++curr;
-        return EParenType::None;
-    };
-
-    TAdvanceCallback advanceInlineAction = [](TTokenIterator& curr, TTokenIterator end) -> EParenType {
-        auto tmp = curr;
-        if (curr->Name == "DO") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && curr->Name == "BEGIN") {
-                ++curr;
-                return EParenType::Open;
-            }
-        } else if (curr->Name == "END") {
-            ++curr;
-            curr = SkipWSOrComment(curr, end);
-            if (curr != end && curr->Name == "DO") {
-                ++curr;
-                return EParenType::Close;
-            }
-        }
-
-        curr = tmp;
-        ++curr;
-        return EParenType::None;
-    };
-
-    TTokenIterator curr = begin;
-    while (curr != end) {
-        bool matched = false;
-        for (auto cb : {advanceLambdaBody, advanceAction, advanceInlineAction}) {
-            TTokenIterator tmp = curr;
-            if (cb(tmp, end) == EParenType::Open) {
-                curr = SkipToNextBalanced(curr, end, cb);
-                matched = true;
-                if (curr == end) {
-                    return curr;
-                }
-            }
-        }
-        if (matched) {
-            continue;
-        }
-        if (curr->Name == "SEMICOLON") {
-            ++curr;
-            break;
-        }
-        ++curr;
-    }
-
-    return curr;
-}
-
-void SplitByStatements(TTokenIterator begin, TTokenIterator end, TVector<TTokenIterator>& output) {
-    output.clear();
-    if (begin == end) {
-        return;
-    }
-    output.push_back(begin);
-    auto curr = begin;
-    while (curr != end) {
-        curr = GetNextStatementBegin(curr, end);
-        output.push_back(curr);
-    }
 }
 
 enum class EScope {
@@ -600,10 +477,6 @@ private:
             WriteComments(true);
         }
 
-        if (AfterComment && Comments[LastComment - 1].Content.StartsWith("--")) {
-            return;
-        }
-
         if (OutColumn) {
             Out('\n');
         }
@@ -624,6 +497,10 @@ private:
         }
 
         Out(text);
+
+        if (text.StartsWith("--") && !text.EndsWith("\n")) {
+            Out('\n');
+        }
 
         if (!text.StartsWith("--") &&
             TokenIndex < ParsedTokens.size() &&
@@ -818,6 +695,7 @@ private:
             case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
             case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop external data source
             case TRule_sql_stmt_core::kAltSqlStmtCore34: // drop replication
+            case TRule_sql_stmt_core::kAltSqlStmtCore60: // drop transfer
                 return true;
             case TRule_sql_stmt_core::kAltSqlStmtCore3: { // named nodes
                 const auto& stmt = msg.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1();
@@ -1069,11 +947,11 @@ private:
 
     void VisitUpdate(const TRule_update_stmt& msg) {
         NewLine();
-        Visit(msg.GetToken1());
-        Visit(msg.GetRule_simple_table_ref2());
-        switch (msg.GetBlock3().Alt_case()) {
-        case TRule_update_stmt_TBlock3::kAlt1: {
-            const auto& alt = msg.GetBlock3().GetAlt1();
+        Visit(msg.GetToken2());
+        Visit(msg.GetRule_simple_table_ref3());
+        switch (msg.GetBlock4().Alt_case()) {
+        case TRule_update_stmt_TBlock4::kAlt1: {
+            const auto& alt = msg.GetBlock4().GetAlt1();
             NewLine();
             Visit(alt.GetToken1());
             const auto& choice = alt.GetRule_set_clause_choice2();
@@ -1160,8 +1038,8 @@ private:
             PopCurrentIndent();
             break;
         }
-        case TRule_update_stmt_TBlock3::kAlt2: {
-            const auto& alt = msg.GetBlock3().GetAlt2();
+        case TRule_update_stmt_TBlock4::kAlt2: {
+            const auto& alt = msg.GetBlock4().GetAlt2();
             NewLine();
             Visit(alt.GetToken1());
             Visit(alt.GetRule_into_values_source2());
@@ -1174,19 +1052,19 @@ private:
 
     void VisitDelete(const TRule_delete_stmt& msg) {
         NewLine();
-        Visit(msg.GetToken1());
         Visit(msg.GetToken2());
-        Visit(msg.GetRule_simple_table_ref3());
-        if (msg.HasBlock4()) {
-            switch (msg.GetBlock4().Alt_case()) {
-            case TRule_delete_stmt_TBlock4::kAlt1: {
-                const auto& alt = msg.GetBlock4().GetAlt1();
+        Visit(msg.GetToken3());
+        Visit(msg.GetRule_simple_table_ref4());
+        if (msg.HasBlock5()) {
+            switch (msg.GetBlock5().Alt_case()) {
+            case TRule_delete_stmt_TBlock5::kAlt1: {
+                const auto& alt = msg.GetBlock5().GetAlt1();
                 NewLine();
                 Visit(alt);
                 break;
             }
-            case TRule_delete_stmt_TBlock4::kAlt2: {
-                const auto& alt = msg.GetBlock4().GetAlt2();
+            case TRule_delete_stmt_TBlock5::kAlt2: {
+                const auto& alt = msg.GetBlock5().GetAlt2();
                 NewLine();
                 Visit(alt);
                 break;
@@ -1524,6 +1402,21 @@ private:
     void VisitDropAsyncReplication(const TRule_drop_replication_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_drop_replication_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitCreateTransfer(const TRule_create_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_create_transfer_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterTransfer(const TRule_alter_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_alter_transfer_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropTransfer(const TRule_drop_transfer_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_drop_transfer_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateResourcePool(const TRule_create_resource_pool_stmt& msg) {
@@ -3092,6 +2985,9 @@ TStaticData::TStaticData()
         {TRule_create_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateAsyncReplication)},
         {TRule_alter_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterAsyncReplication)},
         {TRule_drop_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropAsyncReplication)},
+        {TRule_create_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTransfer)},
+        {TRule_alter_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTransfer)},
+        {TRule_drop_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTransfer)},
         {TRule_create_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTopic)},
         {TRule_alter_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTopic)},
         {TRule_drop_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTopic)},
@@ -3173,53 +3069,23 @@ public:
         }
 
         auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
-        TParsedTokenList allTokens;
-        auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
-            if (token.Name != "EOF") {
-                allTokens.push_back(token);
-            }
-        };
-
-        if (!lexer->Tokenize(query, "Query", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+        TVector<TString> statements;
+        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues)) {
             return false;
         }
 
-        TVector<TTokenIterator> statements;
-        SplitByStatements(allTokens.begin(), allTokens.end(), statements);
         TStringBuilder finalFormattedQuery;
         bool prevAddLine = false;
         TMaybe<ui32> prevStmtCoreAltCase;
-        for (size_t i = 1; i < statements.size(); ++i) {
-            TStringBuilder currentQueryBuilder;
-            for (auto it = statements[i - 1]; it != statements[i]; ++it) {
-                currentQueryBuilder << it->Content;
-            }
-
-            TString currentQuery = currentQueryBuilder;
-            currentQuery = StripStringLeft(currentQuery);
-            bool isBlank = true;
-            for (auto c : currentQuery) {
-                if (c != ';') {
-                    isBlank = false;
-                    break;
-                }
-            };
-
-            if (isBlank) {
-                continue;
-            }
-
+        for (const TString& currentQuery : statements) {
             TVector<NSQLTranslation::TParsedToken> comments;
             TParsedTokenList parsedTokens, stmtTokens;
-            bool hasTrailingComments = false;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtTokens.push_back(token);
                 if (token.Name == "COMMENT") {
                     comments.emplace_back(std::move(token));
-                    hasTrailingComments = true;
                 } else if (token.Name != "WS" && token.Name != "EOF") {
                     parsedTokens.emplace_back(std::move(token));
-                    hasTrailingComments = false;
                 }
             };
 
@@ -3267,11 +3133,6 @@ public:
 
             finalFormattedQuery << currentFormattedQuery;
             if (parsedTokens.back().Name != "SEMICOLON") {
-                if (hasTrailingComments
-                     && !comments.back().Content.EndsWith("\n")
-                     && comments.back().Content.StartsWith("--")) {
-                    finalFormattedQuery << "\n";
-                }
                 finalFormattedQuery << ";\n";
             }
         }

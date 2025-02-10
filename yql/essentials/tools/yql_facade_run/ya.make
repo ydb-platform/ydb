@@ -21,6 +21,8 @@ PEERDIR(
     yql/essentials/core/url_lister
     yql/essentials/core/url_preprocessing
     yql/essentials/core/peephole_opt
+    yql/essentials/core/qplayer/storage/interface
+    yql/essentials/core/qplayer/storage/file
     yql/essentials/core
     yql/essentials/minikql/invoke_builtins
     yql/essentials/minikql

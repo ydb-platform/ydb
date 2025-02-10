@@ -684,6 +684,11 @@ namespace NYql {
              * Get time provider
              */
             virtual ITimeProvider* GetTimeProvider() const = 0;
+
+            /**
+             * Release all input data from worker state
+             */
+            virtual void Invalidate() = 0;
         };
 
         /**

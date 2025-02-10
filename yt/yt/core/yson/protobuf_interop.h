@@ -66,11 +66,11 @@ struct TProtobufMessageElement
 
 struct TProtobufScalarElement
 {
-    YT_DEFINE_STRONG_TYPEDEF(TType, int);
-    TType Type;
+    TProtobufElementType Type;
 
     // Meaningful only when TYPE == TYPE_ENUM.
     EEnumYsonStorageType EnumStorageType;
+    const TProtobufEnumType* EnumType;
 };
 
 struct TProtobufAttributeDictionaryElement

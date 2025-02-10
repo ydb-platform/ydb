@@ -401,7 +401,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     template <typename T>
-    void Resize(::google::protobuf::RepeatedPtrField<T>* repeatedField, ui64 size) {
+    static void Resize(::google::protobuf::RepeatedPtrField<T>* repeatedField, ui64 size) {
         while (size--) repeatedField->Add();
     }
 

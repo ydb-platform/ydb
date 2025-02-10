@@ -24,7 +24,6 @@ int main(int argc, char **argv) {
     }
     catch (const NYdb::NStatusHelpers::TYdbErrorException& e) {
         Cerr << e;
-        
         return EXIT_FAILURE;
     }
     catch (const yexception& e) {

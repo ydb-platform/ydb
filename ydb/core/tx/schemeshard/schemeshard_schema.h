@@ -2080,6 +2080,7 @@ struct Schema : NIceDb::Schema {
         KMeansTreeProgress,
         KMeansTreeSample
         DataErasure
+        DataErasureScheduler
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

@@ -363,8 +363,9 @@ public:
     TTenantDataErasureQueue* TenantDataErasureQueue = nullptr;
 
     ui64 DataErasureGeneration = 0;
-    THashMap<TPathId, bool> RequestedDataErasureForTenants;
-    THashMap<TPathId, TActorId> RunningDataErasureForTenants;
+    THashMap<TPathId, bool> RunningDataErasureForTenants;
+    THashMap<TPathId, TActorId> ActiveDataErasureTenants;
+    THashMap<TShardIdx, TActorId> ActiveDataErasureShards;
 
     TAutoPtr<TDataErasureScheduler> DataErasureScheduler;
 
@@ -1243,6 +1244,7 @@ public:
     void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvRunDataErasure::TPtr& ev, const TActorContext& ctx);
 

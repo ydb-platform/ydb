@@ -23,14 +23,14 @@ class TSchemeShard;
 class TDataErasureScheduler {
 public:
     struct TRestoreValues {
-        bool IsInitialized = true;
+        bool IsInitialized = false;
         ui64 Generation = 0;
         bool DataErasureInFlight = false;
         TDuration DataErasureDuration;
     };
 
 private:
-    static constexpr TDuration DATA_ERASURE_INTERVAL = TDuration::Days(7);
+    static constexpr TDuration DATA_ERASURE_INTERVAL = TDuration::Seconds(2); //TDuration::Days(7);
 
 public:
     TDataErasureScheduler(const NActors::TActorId& schemeShardId);
@@ -56,7 +56,7 @@ private:
     bool DataErasureWakeupScheduled;
     ui64 Generation = 0;
     TDuration CurrentWakeupInterval;
-    bool IsInitialized = true;
+    bool IsInitialized = false;
 };
 
 } // NKikimr::NSchemeShard

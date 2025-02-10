@@ -13,6 +13,7 @@ RECURSE_FOR_TESTS(
     ut_column_build
     ut_compaction
     ut_continuous_backup
+    ut_data_erasure
     ut_export
     ut_export_reboots_s3
     ut_external_data_source

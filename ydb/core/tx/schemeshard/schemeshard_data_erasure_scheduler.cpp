@@ -26,6 +26,8 @@ void TDataErasureScheduler::Handle(TEvSchemeShard::TEvCompleteDataErasurePtr& ev
 void TDataErasureScheduler::Handle(TEvSchemeShard::TEvWakeupToRunDataErasurePtr& ev, const NActors::TActorContext& ctx) {
     Y_UNUSED(ev);
     DataErasureWakeupScheduled = false;
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "+++ TDataErasureScheduler: Handle(TEvWakeupToRunDataErasurePtr)");
     StartDataErasure(ctx);
 }
 
@@ -34,6 +36,8 @@ void TDataErasureScheduler::StartDataErasure(const NActors::TActorContext& ctx) 
         return;
     }
     Generation++;
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "+++ TDataErasureScheduler: StartDataErasure. generation# " << Generation);
     ctx.Send(SchemeShardId, new TEvSchemeShard::TEvRunDataErasure(Generation));
     DataErasureInFlight = true;
     StartTime = AppData(ctx)->TimeProvider->Now();
@@ -49,6 +53,8 @@ void TDataErasureScheduler::ScheduleDataErasureWakeup(const NActors::TActorConte
         return;
     }
 
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "+++ TDataErasureScheduler: ScheduleDataErasureWakeup# " << CurrentWakeupInterval.Seconds() << " s");
     ctx.Schedule(CurrentWakeupInterval, new TEvSchemeShard::TEvWakeupToRunDataErasure);
     DataErasureWakeupScheduled = true;
 }

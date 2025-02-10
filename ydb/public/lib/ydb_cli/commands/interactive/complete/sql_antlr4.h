@@ -14,12 +14,17 @@ namespace NSQLComplete {
 
     constexpr TTokenId TOKEN_EOF = antlr4::Token::EOF;
 
-    const antlr4::dfa::Vocabulary& GetVocabulary(ESqlSyntaxMode mode);
+    class ISqlGrammar {
+    public:
+        using TPtr = ISqlGrammar*;
 
-    std::unordered_set<TTokenId> GetAllTokens(ESqlSyntaxMode mode);
+        virtual const antlr4::dfa::Vocabulary& GetVocabulary() = 0;
+        virtual const std::unordered_set<TTokenId>& GetAllTokens() = 0;
+        virtual const std::unordered_set<TTokenId>& GetKeywordTokens() = 0;
+        virtual const TVector<TRuleId>& GetKeywordRules() = 0;
+        virtual ~ISqlGrammar() = default;
+    };
 
-    std::unordered_set<TTokenId> GetKeywordTokens(ESqlSyntaxMode mode);
-
-    const TVector<TRuleId>& GetKeywordRules(ESqlSyntaxMode mode);
+    ISqlGrammar::TPtr MakeSqlGrammar(ESqlSyntaxMode mode);
 
 } // namespace NSQLComplete

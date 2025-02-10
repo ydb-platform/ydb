@@ -13,7 +13,8 @@
 
 namespace NSQLComplete {
 
-    class TSqlCompletionEngine : public ISqlCompletionEngine {
+    template <ESqlSyntaxMode M>
+    class TSpecializedSqlCompletionEngine: public ISqlCompletionEngine {
     private:
         using TDefaultYQLGrammar = TAntlrGrammar<
             NALPDefaultAntlr4::SQLv1Antlr4Lexer,
@@ -23,55 +24,53 @@ namespace NSQLComplete {
             NALPAnsiAntlr4::SQLv1Antlr4Lexer,
             NALPAnsiAntlr4::SQLv1Antlr4Parser>;
 
+        using G = std::conditional_t<
+            M == ESqlSyntaxMode::Default,
+            TDefaultYQLGrammar,
+            TAnsiYQLGrammar>;
+
     public:
-        TSqlCompletionEngine()
-            : DefaultEngine(GetC3Config(ESqlSyntaxMode::Default))
-            , AnsiEngine(GetC3Config(ESqlSyntaxMode::ANSI))
-            , DefaultKeywordTokens(NSQLComplete::GetKeywordTokens(ESqlSyntaxMode::Default))
-            , AnsiKeywordTokens(NSQLComplete::GetKeywordTokens(ESqlSyntaxMode::ANSI))
+        TSpecializedSqlCompletionEngine()
+            : Grammar(MakeSqlGrammar(M))
+            , C3(ComputeC3Config())
         {
         }
 
         TCompletionContext Complete(TCompletionInput input) override {
             auto prefix = input.Text.Head(input.CursorPosition);
-            auto mode = QuerySyntaxMode(TString(prefix));
-
-            auto& c3 = GetEngine(mode);
-
-            auto tokens = c3.Complete(prefix);
-            FilterIdKeywords(tokens, mode);
-
+            auto tokens = C3.Complete(prefix);
+            FilterIdKeywords(tokens);
             return {
-                .Keywords = SiftedKeywords(tokens, mode),
+                .Keywords = SiftedKeywords(tokens),
             };
         }
 
     private:
-        static IC3Engine::TConfig GetC3Config(ESqlSyntaxMode mode) {
+        IC3Engine::TConfig ComputeC3Config() {
             return {
-                .IgnoredTokens = GetIgnoredTokens(mode),
-                .PreferredRules = GetPreferredRules(mode),
+                .IgnoredTokens = ComputeIgnoredTokens(),
+                .PreferredRules = ComputePreferredRules(),
             };
         }
 
-        static std::unordered_set<TTokenId> GetIgnoredTokens(ESqlSyntaxMode mode) {
-            auto ignoredTokens = GetAllTokens(mode);
-            for (auto keywordToken : NSQLComplete::GetKeywordTokens(mode)) {
+        std::unordered_set<TTokenId> ComputeIgnoredTokens() {
+            auto ignoredTokens = Grammar->GetAllTokens();
+            for (auto keywordToken : Grammar->GetKeywordTokens()) {
                 ignoredTokens.erase(keywordToken);
             }
             return ignoredTokens;
         }
 
-        static std::unordered_set<TRuleId> GetPreferredRules(ESqlSyntaxMode mode) {
-            const auto& keywordRules = NSQLComplete::GetKeywordRules(mode);
+        std::unordered_set<TRuleId> ComputePreferredRules() {
+            const auto& keywordRules = Grammar->GetKeywordRules();
 
             std::unordered_set<TRuleId> preferredRules;
             preferredRules.insert(std::begin(keywordRules), std::end(keywordRules));
             return preferredRules;
         }
 
-        static void FilterIdKeywords(TVector<TSuggestedToken>& tokens, ESqlSyntaxMode mode) {
-            const auto& keywordRules = GetKeywordRules(mode);
+        void FilterIdKeywords(TVector<TSuggestedToken>& tokens) {
+            const auto& keywordRules = Grammar->GetKeywordRules();
             std::ranges::remove_if(tokens, [&](const TSuggestedToken& token) {
                 return AnyOf(token.ParserCallStack, [&](TRuleId rule) {
                     return Find(keywordRules, rule) != std::end(keywordRules);
@@ -79,18 +78,9 @@ namespace NSQLComplete {
             });
         }
 
-        IC3Engine& GetEngine(ESqlSyntaxMode mode) {
-            switch (mode) {
-            case ESqlSyntaxMode::Default:
-                return DefaultEngine;
-            case ESqlSyntaxMode::ANSI:
-                return AnsiEngine;
-            }
-        }
-
-        TVector<std::string> SiftedKeywords(const TVector<TSuggestedToken>& tokens, ESqlSyntaxMode mode) {
-            const auto& vocabulary = GetVocabulary(mode);
-            const auto& keywordTokens = GetKeywordTokens(mode);
+        TVector<std::string> SiftedKeywords(const TVector<TSuggestedToken>& tokens) {
+            const auto& vocabulary = Grammar->GetVocabulary();
+            const auto& keywordTokens = Grammar->GetKeywordTokens();
 
             TVector<std::string> keywords;
             for (const auto& token : tokens) {
@@ -100,21 +90,31 @@ namespace NSQLComplete {
             }
             return keywords;
         }
-        
-        const std::unordered_set<TTokenId>& GetKeywordTokens(ESqlSyntaxMode mode) {
+
+        ISqlGrammar::TPtr Grammar;
+        TC3Engine<G> C3;
+    };
+
+    class TSqlCompletionEngine: public ISqlCompletionEngine {
+    public:
+        TCompletionContext Complete(TCompletionInput input) override {
+            auto mode = QuerySyntaxMode(TString(input.Text));
+            auto& engine = GetSpecializedEngine(mode);
+            return engine.Complete(std::move(input));
+        }
+
+    private:
+        ISqlCompletionEngine& GetSpecializedEngine(ESqlSyntaxMode mode) {
             switch (mode) {
                 case ESqlSyntaxMode::Default:
-                    return DefaultKeywordTokens;
+                    return DefaultEngine;
                 case ESqlSyntaxMode::ANSI:
-                    return AnsiKeywordTokens;
+                    return AnsiEngine;
             }
         }
 
-        TC3Engine<TDefaultYQLGrammar> DefaultEngine;
-        TC3Engine<TAnsiYQLGrammar> AnsiEngine;
-
-        std::unordered_set<TTokenId> DefaultKeywordTokens;
-        std::unordered_set<TTokenId> AnsiKeywordTokens;
+        TSpecializedSqlCompletionEngine<ESqlSyntaxMode::Default> DefaultEngine;
+        TSpecializedSqlCompletionEngine<ESqlSyntaxMode::ANSI> AnsiEngine;
     };
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine() {

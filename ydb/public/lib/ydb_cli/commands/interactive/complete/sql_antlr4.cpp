@@ -16,69 +16,103 @@
 
 namespace NSQLComplete {
 
-    // Returning a reference is okay as vocabulary storage is static
-    const antlr4::dfa::Vocabulary& GetVocabulary(ESqlSyntaxMode mode) {
+    class TSqlGrammar: public ISqlGrammar {
+    public:
+        TSqlGrammar(ESqlSyntaxMode mode)
+            : Vocabulary([&] { // Taking a reference is okay as vocabulary storage is static
+                switch (mode) {
+                    case ESqlSyntaxMode::Default:
+                        return &NALPDefaultAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
+                    case ESqlSyntaxMode::ANSI:
+                        return &NALPAnsiAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
+                }
+            }())
+            , AllTokens(ComputeAllTokens())
+            , KeywordTokens(ComputeKeywordTokens())
+        {
+        }
+
+        const antlr4::dfa::Vocabulary& GetVocabulary() override {
+            return *Vocabulary;
+        }
+
+        const std::unordered_set<TTokenId>& GetAllTokens() override {
+            return AllTokens;
+        }
+
+        const std::unordered_set<TTokenId>& GetKeywordTokens() override {
+            return KeywordTokens;
+        }
+
+        const TVector<TRuleId>& GetKeywordRules() override {
+            static const TVector<TRuleId> KeywordRules = {
+                RULE(Keyword),
+                RULE(Keyword_expr_uncompat),
+                RULE(Keyword_table_uncompat),
+                RULE(Keyword_select_uncompat),
+                RULE(Keyword_alter_uncompat),
+                RULE(Keyword_in_uncompat),
+                RULE(Keyword_window_uncompat),
+                RULE(Keyword_hint_uncompat),
+                RULE(Keyword_as_compat),
+                RULE(Keyword_compat),
+            };
+
+            STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword);
+            STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_expr_uncompat);
+            STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_table_uncompat);
+            STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_select_uncompat);
+            STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_alter_uncompat);
+            STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_in_uncompat);
+            STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_window_uncompat);
+            STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_hint_uncompat);
+            STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_as_compat);
+            STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_compat);
+
+            return KeywordRules;
+        }
+
+    private:
+        std::unordered_set<TTokenId> ComputeAllTokens() {
+            const auto& vocabulary = GetVocabulary();
+
+            std::unordered_set<TTokenId> allTokens;
+
+            for (size_t type = 1; type <= vocabulary.getMaxTokenType(); ++type) {
+                allTokens.emplace(type);
+            }
+
+            return allTokens;
+        }
+
+        std::unordered_set<TTokenId> ComputeKeywordTokens() {
+            const auto& vocabulary = GetVocabulary();
+            const auto keywords = NSQLFormat::GetKeywords();
+
+            auto keywordTokens = GetAllTokens();
+            std::erase_if(keywordTokens, [&](TTokenId token) {
+                return !keywords.contains(vocabulary.getSymbolicName(token));
+            });
+            keywordTokens.erase(TOKEN_EOF);
+
+            return keywordTokens;
+        }
+
+        const antlr4::dfa::Vocabulary* Vocabulary;
+        std::unordered_set<TTokenId> AllTokens;
+        std::unordered_set<TTokenId> KeywordTokens;
+    };
+
+    ISqlGrammar::TPtr MakeSqlGrammar(ESqlSyntaxMode mode) {
+        static TSqlGrammar defaultSqlGrammar(mode);
+        static TSqlGrammar ansiSqlGrammar(mode);
+
         switch (mode) {
             case ESqlSyntaxMode::Default:
-                return NALPDefaultAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
+                return &defaultSqlGrammar;
             case ESqlSyntaxMode::ANSI:
-                return NALPAnsiAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
+                return &ansiSqlGrammar;
         }
-    }
-
-    std::unordered_set<TTokenId> GetAllTokens(ESqlSyntaxMode mode) {
-        const auto& vocabulary = GetVocabulary(mode);
-
-        std::unordered_set<TTokenId> allTokens;
-
-        for (size_t type = 1; type <= vocabulary.getMaxTokenType(); ++type) {
-            allTokens.emplace(type);
-        }
-
-        return allTokens;
-    }
-
-    std::unordered_set<TTokenId> GetKeywordTokens(ESqlSyntaxMode mode) {
-        const auto& vocabulary = GetVocabulary(mode);
-        const auto keywords = NSQLFormat::GetKeywords();
-
-        auto keywordTokens = GetAllTokens(mode);
-        std::erase_if(keywordTokens, [&](TTokenId token) {
-            return !keywords.contains(vocabulary.getSymbolicName(token));
-        });
-        keywordTokens.erase(TOKEN_EOF);
-
-        return keywordTokens;
-    }
-
-    const TVector<TRuleId>& GetKeywordRules(ESqlSyntaxMode mode) {
-        static const TVector<TRuleId> KeywordRules = {
-            RULE(Keyword),
-            RULE(Keyword_expr_uncompat),
-            RULE(Keyword_table_uncompat),
-            RULE(Keyword_select_uncompat),
-            RULE(Keyword_alter_uncompat),
-            RULE(Keyword_in_uncompat),
-            RULE(Keyword_window_uncompat),
-            RULE(Keyword_hint_uncompat),
-            RULE(Keyword_as_compat),
-            RULE(Keyword_compat),
-        };
-
-        Y_UNUSED(mode);
-
-        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword);
-        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_expr_uncompat);
-        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_table_uncompat);
-        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_select_uncompat);
-        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_alter_uncompat);
-        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_in_uncompat);
-        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_window_uncompat);
-        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_hint_uncompat);
-        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_as_compat);
-        STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Keyword_compat);
-
-        return KeywordRules;
     }
 
 } // namespace NSQLComplete

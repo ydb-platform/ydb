@@ -1638,7 +1638,7 @@ public:
     }
 
     bool HasAnythingToLoad() const {
-        return LoadingBucket >= NumberOfSpillingBuckets_;
+        return LoadingBucket < NumberOfSpillingBuckets_;
     }
 
     ui64 LoadingBucket = 0;

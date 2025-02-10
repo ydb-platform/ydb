@@ -33,6 +33,8 @@ SRCS(
     sort.h
     swap_bytes.cpp
     swap_bytes.h
+    tty.cpp
+    tty.h
     url_builder.cpp
     utf8.cpp
     yql_panic.cpp

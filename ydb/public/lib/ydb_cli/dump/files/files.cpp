@@ -9,6 +9,7 @@ enum EFilesType {
     TOPIC_DESCRIPTION,
     CREATE_TOPIC,
     CREATE_COORDINATION_NODE,
+    CREATE_RATE_LIMITER,
     INCOMPLETE_DATA,
     INCOMPLETE,
     EMPTY,
@@ -22,6 +23,7 @@ static constexpr TFileInfo FILES_INFO[] = {
     {"topic_description.pb", "topic"},
     {"create_topic.pb", "topic"},
     {"create_coordination_node.pb", "coordination node"},
+    {"create_rate_limiter.pb", "rate limiter"},
     {"incomplete.csv", "incomplete"},
     {"incomplete", "incomplete"},
     {"empty_dir", "empty_dir"},
@@ -50,6 +52,10 @@ const TFileInfo& CreateTopic() {
 
 const TFileInfo& CreateCoordinationNode() {
     return FILES_INFO[CREATE_COORDINATION_NODE];
+}
+
+const TFileInfo& CreateRateLimiter() {
+    return FILES_INFO[CREATE_RATE_LIMITER];
 }
 
 const TFileInfo& IncompleteData() {

@@ -884,9 +884,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
     }
     LWPROBE(Heartbeat, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
     LOG_ROW_DISPATCHER_TRACE("Received TEvHeartbeat from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
-    if (ev->Cookie != it->second->Generation) {
-        LOG_ROW_DISPATCHER_WARN("Wrong message generation (TEvHeartbeat), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << it->second->Generation << ", query id " << it->second->QueryId); 
-    }
+    CheckSession(it->second, ev);
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
@@ -983,7 +981,7 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbea
     if (needSend) {
         LOG_ROW_DISPATCHER_TRACE("Send TEvHeartbeat to " << sessionInfo->ReadActorId << " query id " << sessionInfo->QueryId);
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvHeartbeat>();
-        Send(new IEventHandle(sessionInfo->ReadActorId, SelfId(), event.release(), 0, sessionInfo->Generation));
+        sessionInfo->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvHeartbeat(), sessionInfo->Generation);
     }
 }
 

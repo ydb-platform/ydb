@@ -9,6 +9,53 @@
 
 namespace NYdb::inline V3::NRateLimiter {
 
+template <class TDerived>
+THierarchicalDrrSettings<TDerived>::THierarchicalDrrSettings(const Ydb::RateLimiter::HierarchicalDrrSettings& proto) {
+    if (proto.max_units_per_second()) {
+        MaxUnitsPerSecond_ = proto.max_units_per_second();
+    }
+
+    if (proto.max_burst_size_coefficient()) {
+        MaxBurstSizeCoefficient_ = proto.max_burst_size_coefficient();
+    }
+
+    if (proto.prefetch_coefficient()) {
+        PrefetchCoefficient_ = proto.prefetch_coefficient();
+    }
+
+    if (proto.prefetch_watermark()) {
+        PrefetchWatermark_ = proto.prefetch_watermark();
+    }
+}
+
+template <class TDerived>
+void THierarchicalDrrSettings<TDerived>::SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings& proto) const {
+    if (MaxUnitsPerSecond_) {
+        proto.set_max_units_per_second(*MaxUnitsPerSecond_);
+    }
+
+    if (MaxBurstSizeCoefficient_) {
+        proto.set_max_burst_size_coefficient(*MaxBurstSizeCoefficient_);
+    }
+
+    if (PrefetchCoefficient_) {
+        proto.set_prefetch_coefficient(*PrefetchCoefficient_);
+    }
+
+    if (PrefetchWatermark_) {
+        proto.set_prefetch_watermark(*PrefetchWatermark_);
+    }
+}
+
+template struct THierarchicalDrrSettings<TCreateResourceSettings>;
+template struct THierarchicalDrrSettings<TAlterResourceSettings>;
+template struct THierarchicalDrrSettings<TDescribeResourceResult::THierarchicalDrrProps>;
+
+TCreateResourceSettings::TCreateResourceSettings(const Ydb::RateLimiter::CreateResourceRequest& proto)
+    : THierarchicalDrrSettings(proto.resource().hierarchical_drr())
+{
+}
+
 TListResourcesResult::TListResourcesResult(TStatus status, std::vector<std::string> paths)
     : TStatus(std::move(status))
     , ResourcePaths_(std::move(paths))
@@ -22,40 +69,9 @@ TDescribeResourceResult::TDescribeResourceResult(TStatus status, const Ydb::Rate
 {
 }
 
-TDescribeResourceResult::THierarchicalDrrProps::THierarchicalDrrProps(const Ydb::RateLimiter::HierarchicalDrrSettings& settings) {
-    if (settings.max_units_per_second()) {
-        MaxUnitsPerSecond_ = settings.max_units_per_second();
-    }
-
-    if (settings.max_burst_size_coefficient()) {
-        MaxBurstSizeCoefficient_ = settings.max_burst_size_coefficient();
-    }
-
-    if (settings.prefetch_coefficient()) {
-        PrefetchCoefficient_ = settings.prefetch_coefficient();
-    }
-
-    if (settings.prefetch_watermark()) {
-        PrefetchWatermark_ = settings.prefetch_watermark();
-    }
-}
-
-void TDescribeResourceResult::THierarchicalDrrProps::THierarchicalDrrProps::SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings& settings) const {
-    if (MaxUnitsPerSecond_) {
-        settings.set_max_units_per_second(*MaxUnitsPerSecond_);
-    }
-
-    if (MaxBurstSizeCoefficient_) {
-        settings.set_max_burst_size_coefficient(*MaxBurstSizeCoefficient_);
-    }
-
-    if (PrefetchCoefficient_) {
-        settings.set_prefetch_coefficient(*PrefetchCoefficient_);
-    }
-
-    if (PrefetchWatermark_) {
-        settings.set_prefetch_watermark(*PrefetchWatermark_);
-    }
+TDescribeResourceResult::THierarchicalDrrProps::THierarchicalDrrProps(const Ydb::RateLimiter::HierarchicalDrrSettings& settings)
+    : THierarchicalDrrSettings<THierarchicalDrrProps>(settings)
+{
 }
 
 class TRateLimiterClient::TImpl : public TClientImplCommon<TRateLimiterClient::TImpl> {

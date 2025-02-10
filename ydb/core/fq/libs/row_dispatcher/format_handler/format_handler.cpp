@@ -17,8 +17,10 @@ namespace {
 class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public ITopicFormatHandler, public TTypeParser {
     using TBase = NActors::TActor<TTopicFormatHandler>;
 
+public:
     static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_FORMAT_HANDLER";
 
+private:
     struct TCounters {
         TCountersDesc Desc;
 

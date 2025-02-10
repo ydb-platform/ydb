@@ -58,7 +58,7 @@ namespace NYql {
                 return TStatus::Error;
             }
 
-            if (!EnsureListType(*input->Child(TGenTable::idx_Splits), ctx)) {
+            if (!TCoAtomList::Match(input->Child(TGenTable::idx_Splits))) {
                 return TStatus::Error;
             }
 

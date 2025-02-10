@@ -15,7 +15,22 @@ namespace NYql {
     struct TGenericState: public TThrRefBase {
         using TPtr = TIntrusivePtr<TGenericState>;
 
-        using TTableAddress = std::pair<TString, TString>; // std::pair<clusterName, tableName>
+        struct TTableAddress {
+            TString ClusterName;
+            TString TableName;
+
+            TString String() const { 
+                return TStringBuilder() << "`" << ClusterName << "`.`" << TableName << "`";
+            }
+
+            bool operator==(const TTableAddress& other) const {
+                return ClusterName == other.ClusterName && TableName == other.TableName;
+            }
+
+            explicit operator size_t() const {
+                return std::hash<TString>()(String());
+            }
+        };
 
         struct TTableMeta {
             const TStructExprType* ItemType = nullptr;
@@ -50,7 +65,7 @@ namespace NYql {
             Configuration->Init(gatewayConfig, databaseResolver, DatabaseAuth, types->Credentials);
         }
 
-        void AddTable(const TStringBuf& clusterName, const TStringBuf& tableName, TTableMeta&& tableMeta);
+        void AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta);
         TGetTableResult GetTable(const TStringBuf& clusterName, const TStringBuf& tableName) const;
 
         TTypeAnnotationContext* Types;

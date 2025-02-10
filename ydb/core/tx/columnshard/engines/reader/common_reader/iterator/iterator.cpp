@@ -4,11 +4,11 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const TReadMetadata::TConstPtr& readMetadata)
+TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context)
     : Context(context)
-    , ReadMetadata(readMetadata)
+    , ReadMetadata(context->GetReadMetadataPtrVerifiedAs<TReadMetadata>())
     , ReadyResults(context->GetCounters()) {
-    IndexedData = readMetadata->BuildReader(Context);
+    IndexedData = ReadMetadata->BuildReader(Context);
     Y_ABORT_UNLESS(Context->GetReadMetadata()->IsSorted());
 }
 

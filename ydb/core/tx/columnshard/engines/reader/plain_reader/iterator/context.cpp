@@ -41,7 +41,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         switch (source->GetUsageClass()) {
             case TPKRangeFilter::EUsageClass::PartialUsage:
                 return true;
-            case TPKRangeFilter::EUsageClass::DontUsage:
+            case TPKRangeFilter::EUsageClass::NoUsage:
                 return true;
             case TPKRangeFilter::EUsageClass::FullUsage:
                 return false;

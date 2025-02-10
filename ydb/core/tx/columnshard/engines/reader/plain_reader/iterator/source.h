@@ -148,8 +148,8 @@ public:
         , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
         , StartReplaceKey(start)
         , FinishReplaceKey(finish) {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(GetStartReplaceKey(), GetFinishReplaceKey());
-        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::DontUsage);
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(GetStartReplaceKey(), GetFinishReplaceKey());
+        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);

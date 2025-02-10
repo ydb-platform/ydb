@@ -255,8 +255,8 @@ public:
         , Start(context->GetReadMetadata()->IsDescSorted() ? finish : start, context->GetReadMetadata()->IsDescSorted())
         , Finish(context->GetReadMetadata()->IsDescSorted() ? start : finish, context->GetReadMetadata()->IsDescSorted()) {
         StageData = std::make_unique<TFetchedData>(true);
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(start, finish);
-        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::DontUsage);
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start, finish);
+        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())(
             "finish", Finish.DebugString());
         Y_ABORT_UNLESS(Start.Compare(Finish) != std::partial_ordering::greater);

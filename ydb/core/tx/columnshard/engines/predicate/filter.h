@@ -10,7 +10,6 @@ namespace NKikimr::NOlap {
 
 class TPKRangesFilter {
 private:
-    bool FakeRanges = true;
     std::deque<TPKRangeFilter> SortedRanges;
     bool ReverseFlag = false;
 
@@ -35,7 +34,7 @@ public:
     TString SerializeToString(const std::shared_ptr<arrow::Schema>& pkSchema) const;
 
     bool IsEmpty() const {
-        return SortedRanges.empty() || FakeRanges;
+        return SortedRanges.empty();
     }
 
     bool IsReverse() const {
@@ -59,8 +58,14 @@ public:
         return SortedRanges.end();
     }
 
-    bool IsPortionInUsage(const TPortionInfo& info) const;
-    TPKRangeFilter::EUsageClass IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
+    bool IsUsed(const TPortionInfo& info) const {
+        return IsUsed(info.IndexKeyStart(), info.IndexKeyEnd());
+    }
+
+    bool IsUsed(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+        return GetUsageClass(start, end) != TPKRangeFilter::EUsageClass::NoUsage;
+    }
+    TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
     bool CheckPoint(const NArrow::TReplaceKey& point) const;
 
     NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
@@ -90,11 +95,9 @@ public:
     static TConclusion<TPKRangesFilter> BuildFromProto(const TProto& proto, const bool reverse, const std::vector<TNameTypeInfo>& ydbPk) {
         TPKRangesFilter result(reverse);
         for (auto& protoRange : proto.GetRanges()) {
-            TSerializedTableRange range(protoRange);
             auto fromPredicate = std::make_shared<TPredicate>();
             auto toPredicate = std::make_shared<TPredicate>();
-            TSerializedTableRange serializedRange(protoRange);
-            std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(serializedRange, ydbPk);
+            std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(TSerializedTableRange{protoRange}, ydbPk);
             auto status = result.Add(fromPredicate, toPredicate, NArrow::TStatusValidator::GetValid(NArrow::MakeArrowSchema(ydbPk)));
             if (status.IsFail()) {
                 return status;

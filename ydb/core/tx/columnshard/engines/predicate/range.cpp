@@ -39,11 +39,11 @@ NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const arrow::Datum& d
     return result.And(PredicateFrom.BuildFilter(data));
 }
 
-bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
-    return IsPortionInPartialUsage(info.IndexKeyStart(), info.IndexKeyEnd()) != TPKRangeFilter::EUsageClass::DontUsage;
+bool TPKRangeFilter::IsUsed(const TPortionInfo& info) const {
+    return GetUsageClass(info.IndexKeyStart(), info.IndexKeyEnd()) != TPKRangeFilter::EUsageClass::NoUsage;
 }
 
-TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
     {
         std::partial_ordering equalityStartWithFrom = std::partial_ordering::greater;
         if (const auto& from = PredicateFrom.GetReplaceKey()) {
@@ -66,12 +66,12 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow
     if (const auto& from = PredicateFrom.GetReplaceKey()) {
         const std::partial_ordering equalityEndWithFrom = end.ComparePartNotNull(*from, from->Size());
         if (equalityEndWithFrom == std::partial_ordering::less) {
-            return EUsageClass::DontUsage;
+            return EUsageClass::NoUsage;
         } else if (equalityEndWithFrom == std::partial_ordering::equivalent) {
             if (PredicateFrom.IsInclude()) {
                 return EUsageClass::PartialUsage;
             } else {
-                return EUsageClass::DontUsage;
+                return EUsageClass::NoUsage;
             }
         }
     }
@@ -79,12 +79,12 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow
     if (const auto& to = PredicateTo.GetReplaceKey()) {
         const std::partial_ordering equalityStartWithTo = start.ComparePartNotNull(*to, to->Size());
         if (equalityStartWithTo == std::partial_ordering::greater) {
-            return EUsageClass::DontUsage;
+            return EUsageClass::NoUsage;
         } else if (equalityStartWithTo == std::partial_ordering::equivalent) {
             if (PredicateTo.IsInclude()) {
                 return EUsageClass::PartialUsage;
             } else {
-                return EUsageClass::DontUsage;
+                return EUsageClass::NoUsage;
             }
         }
     }

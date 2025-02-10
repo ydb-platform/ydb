@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/base/defs.h>
-#include <ydb/core/protos/replication.pb.h>
 
 #include <util/generic/string.h>
 

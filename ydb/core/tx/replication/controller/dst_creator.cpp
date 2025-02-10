@@ -634,6 +634,7 @@ public:
         case TReplication::ETargetKind::IndexTable:
         case TReplication::ETargetKind::Transfer:
             // indexed table will be created along with its indexes
+            // transfer works with an existing table
             return SubscribeDstPath();
         }
     }

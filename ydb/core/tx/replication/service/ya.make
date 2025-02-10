@@ -3,22 +3,21 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
 PEERDIR(
+    library/cpp/json
     ydb/core/base
     ydb/core/change_exchange
+    ydb/core/fq/libs/row_dispatcher/events
+    ydb/core/io_formats/cell_maker
+    ydb/core/persqueue/purecalc
     ydb/core/protos
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/tablet_flat
-    ydb/core/io_formats/cell_maker
     ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
+    ydb/core/wrappers
     ydb/library/actors/core
     ydb/library/services
-    ydb/core/wrappers
-    library/cpp/json
-
-    ydb/core/fq/libs/row_dispatcher/events
-    ydb/core/persqueue/purecalc
 )
 
 SRCS(

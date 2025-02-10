@@ -662,7 +662,7 @@ private:
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::REPLICATION_S3_WRITER;
+        return NKikimrServices::TActivity::REPLICATION_TRANSFER_WRITER;
     }
 
     explicit TTransferWriter(

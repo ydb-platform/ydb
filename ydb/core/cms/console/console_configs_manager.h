@@ -302,6 +302,7 @@ public:
 private:
     TConsole &Self;
     TConfigsConfig Config;
+    TString DomainName;
     // All config items by id.
     TConfigIndex ConfigIndex;
     ui64 NextConfigItemId;

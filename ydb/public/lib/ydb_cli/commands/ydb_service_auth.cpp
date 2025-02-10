@@ -27,13 +27,17 @@ bool TCommandGetToken::Prompt(TConfig& config) {
     if (!config.AssumeYes) {
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         Cout << colors.RedColor() << "Caution: Your auth token will be printed to console." << colors.OldColor()
-            << " Use \"--force\" (\"-f\") option to print without prompting." << Endl
-            << "Do you want to proceed (y/n)? : ";
-        if (!AskYesOrNo()) {
-            return EXIT_FAILURE;
+            << " Use \"--force\" (\"-f\") option to print without prompting." << Endl;
+
+        if (!AskPrompt("Do you want to proceed?", false)) {
+            return false;
         }
     }
 
+    return true;
+}
+
+int TCommandGetToken::Run(TConfig& config) {
     auto credentialsProviderFactory = config.GetSingletoneCredentialsProviderFactory();
     if (credentialsProviderFactory) {
         auto driver = CreateDriver(config);

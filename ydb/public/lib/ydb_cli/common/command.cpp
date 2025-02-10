@@ -100,7 +100,10 @@ namespace {
 
 std::shared_ptr<ICredentialsProviderFactory> TClientCommand::TConfig::GetSingletoneCredentialsProviderFactory() {
     if (!SingletoneCredentialsProviderFactory) {
-        SingletoneCredentialsProviderFactory = std::make_shared<TSingleProviderFactory>(CredentialsGetter(*this));
+        auto credentialsGetterResult = CredentialsGetter(*this);
+        if (credentialsGetterResult) {
+            SingletoneCredentialsProviderFactory = std::make_shared<TSingleProviderFactory>(credentialsGetterResult);
+        }
     }
     return SingletoneCredentialsProviderFactory;
 }

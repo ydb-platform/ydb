@@ -3,6 +3,7 @@
 #include <ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb::RateLimiter {
+class CreateResourceRequest;
 class DescribeResourceResult;
 class HierarchicalDrrSettings;
 } // namespace Ydb::RateLimiter
@@ -11,8 +12,13 @@ namespace NYdb::inline V3::NRateLimiter {
 
 // Settings for hierarchical deficit round robin (HDRR) algorithm.
 template <class TDerived>
-struct THierarchicalDrrSettings : public TOperationRequestSettings<TDerived> {
+struct THierarchicalDrrSettings {
     using TSelf = TDerived;
+
+    THierarchicalDrrSettings() = default;
+    THierarchicalDrrSettings(const Ydb::RateLimiter::HierarchicalDrrSettings&);
+
+    void SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings&) const;
 
     // Resource consumption speed limit.
     // Value is required for root resource.
@@ -43,11 +49,19 @@ struct THierarchicalDrrSettings : public TOperationRequestSettings<TDerived> {
 };
 
 // Settings for create resource request.
-struct TCreateResourceSettings : public THierarchicalDrrSettings<TCreateResourceSettings> {
+struct TCreateResourceSettings
+    : public TOperationRequestSettings<TCreateResourceSettings>
+    , public THierarchicalDrrSettings<TCreateResourceSettings>
+{
+    TCreateResourceSettings() = default;
+    TCreateResourceSettings(const Ydb::RateLimiter::CreateResourceRequest&);
 };
 
 // Settings for alter resource request.
-struct TAlterResourceSettings : public THierarchicalDrrSettings<TAlterResourceSettings> {
+struct TAlterResourceSettings
+    : public TOperationRequestSettings<TAlterResourceSettings>
+    , public THierarchicalDrrSettings<TAlterResourceSettings>
+{
 };
 
 // Settings for drop resource request.
@@ -89,9 +103,10 @@ using TAsyncListResourcesResult = NThreading::TFuture<TListResourcesResult>;
 
 // Result for describe resource request.
 struct TDescribeResourceResult : public TStatus {
-    struct THierarchicalDrrProps {
+    // Note for YDB developers: THierarchicalDrrProps wrapper class exists for compatibility with older client code.
+    // Newer code should use the THierarchicalDrrSettings class directly.
+    struct THierarchicalDrrProps : public THierarchicalDrrSettings<THierarchicalDrrProps> {
         THierarchicalDrrProps(const Ydb::RateLimiter::HierarchicalDrrSettings&);
-        void SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings&) const;
 
         // Resource consumption speed limit.
         std::optional<double> GetMaxUnitsPerSecond() const {
@@ -113,12 +128,6 @@ struct TDescribeResourceResult : public TStatus {
         std::optional<double> GetPrefetchWatermark() const {
             return PrefetchWatermark_;
         }
-
-    private:
-        std::optional<double> MaxUnitsPerSecond_;
-        std::optional<double> MaxBurstSizeCoefficient_;
-        std::optional<double> PrefetchCoefficient_;
-        std::optional<double> PrefetchWatermark_;
     };
 
     TDescribeResourceResult(TStatus status, const Ydb::RateLimiter::DescribeResourceResult& result);

@@ -142,14 +142,21 @@ void MakeSimpleTest(std::function<void(const std::unique_ptr<etcdserverpb::KV::S
     etcd(kv, lease);
 }
 
-void Put(const std::string_view &key, const std::string_view &value, const std::unique_ptr<etcdserverpb::KV::Stub> &stub, const i64 lease = 0LL)
+void Put(std::string_view key, std::optional<std::string_view> value, const std::unique_ptr<etcdserverpb::KV::Stub> &stub, const std::optional<i64> lease = 0LL)
 {
     grpc::ClientContext writeCtx;
     etcdserverpb::PutRequest putRequest;
     putRequest.set_key(key);
-    putRequest.set_value(value);
-    if (lease)
-        putRequest.set_lease(lease);
+
+    if (!value)
+        putRequest.set_ignore_value(true);
+    else if (!value->empty())
+        putRequest.set_value(*value);
+
+    if (!lease)
+        putRequest.set_ignore_lease(true);
+    else if (const auto l = *lease)
+        putRequest.set_lease(l);
 
     etcdserverpb::PutResponse putResponse;
     stub->Put(&writeCtx, putRequest, &putResponse);
@@ -397,6 +404,42 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 UNIT_ASSERT_VALUES_EQUAL(map["key7"], "value7");
             }
         });
+    }
+
+    Y_UNIT_TEST(UpdateWithIgnoreValue) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            Put("my_key", "my_val", etcd);
+
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("my_key");
+
+                etcdserverpb::RangeResponse rangeResponse;
+                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 1U);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "my_key");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).value(), "my_val");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).version(), 1LL);
+            }
+
+            Put("my_key", std::nullopt, etcd);
+
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("my_key");
+
+                etcdserverpb::RangeResponse rangeResponse;
+                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 1U);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "my_key");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).value(), "my_val");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).version(), 2LL);
+            }
+         });
     }
 } // Y_UNIT_TEST_SUITE(Etcd_KV)
 

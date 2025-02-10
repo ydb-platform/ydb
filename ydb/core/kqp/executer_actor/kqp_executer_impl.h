@@ -212,6 +212,7 @@ protected:
         auto& reply = *ev->Get();
 
         KqpShardsResolverId = {};
+        ShardsResolved = true;
 
         // TODO: count resolve time in CpuTime
 
@@ -417,7 +418,7 @@ protected:
                     auto& extraData = ExtraData[computeActor];
                     extraData.TaskId = taskId;
                     extraData.Data.Swap(state.MutableExtraData());
-                    
+
 
                     Stats->AddComputeActorStats(
                         computeActor.NodeId(),
@@ -1013,7 +1014,7 @@ protected:
         return result;
     }
 
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const bool shardsResolved, const bool limitTasksPerNode) {
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const bool limitTasksPerNode) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -1048,7 +1049,7 @@ protected:
             if (nodeId) {
                 task.Meta.NodeId = *nodeId;
             } else {
-                YQL_ENSURE(!shardsResolved);
+                YQL_ENSURE(!ShardsResolved);
                 task.Meta.ShardId = taskLocation;
             }
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
@@ -1144,15 +1145,14 @@ protected:
                 ? TMaybe<ui64>{*nodeIdPtr}
                 : Nothing();
 
-            YQL_ENSURE(!shardsResolved || nodeId);
+            YQL_ENSURE(!ShardsResolved || nodeId);
             YQL_ENSURE(Stats);
 
             if (shardId) {
                 Stats->AffectedShards.insert(*shardId);
             }
 
-            if (limitTasksPerNode) {
-                YQL_ENSURE(shardsResolved);
+            if (limitTasksPerNode && ShardsResolved) {
                 const auto maxScanTasksPerNode = GetScanTasksPerNode(stageInfo, /* isOlapScan */ false, *nodeId);
                 auto& nodeTasks = nodeIdToTasks[*nodeId];
                 if (nodeTasks.size() < maxScanTasksPerNode) {
@@ -1944,6 +1944,7 @@ protected:
     TActorId Target;
     ui64 TxId = 0;
 
+    bool ShardsResolved = false;
     TKqpTasksGraph TasksGraph;
 
     TActorId KqpTableResolverId;

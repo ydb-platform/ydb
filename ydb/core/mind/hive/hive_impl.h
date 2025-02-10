@@ -54,6 +54,7 @@
 #include "sequencer.h"
 #include "boot_queue.h"
 #include "object_distribution.h"
+#include "data_center_info.h"
 
 #define DEPRECATED_CTX (ActorContext())
 #define DEPRECATED_NOW (TActivationContext::Now())
@@ -239,6 +240,7 @@ protected:
     friend class TTxUpdateTabletGroups;
     friend class TTxMonEvent_TabletAvailability;
     friend class TLoggedMonTransaction;
+    friend class TTxProcessUpdateFollowers;
 
     friend class TDeleteTabletActor;
 
@@ -301,8 +303,10 @@ protected:
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
     ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr event = {});
+    ITransaction* CreateProcessUpdateFollowers();
     ITransaction* CreateDeleteNode(TNodeId nodeId);
     ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
+    ITransaction* CreateUpdateDcFollowers(const TDataCenterId& dc);
 
 public:
     TDomainsView DomainsView;
@@ -331,8 +335,6 @@ protected:
     ui32 ConfigurationGeneration = 0;
     ui64 TabletsTotal = 0;
     ui64 TabletsAlive = 0;
-    ui32 DataCenters = 1;
-    ui32 RegisteredDataCenters = 1;
     TObjectDistributions ObjectDistributions;
     double StorageScatter = 0;
     std::set<TTabletTypes::EType> SeenTabletTypes;
@@ -402,6 +404,7 @@ protected:
     bool ProcessPendingOperationsScheduled = false;
     bool LogTabletMovesScheduled = false;
     bool ProcessStorageBalancerScheduled = false;
+    bool ProcessFollowerUpdatesScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
     TInstant LastResourceChangeReaction;
@@ -419,6 +422,7 @@ protected:
     std::vector<TActorId> ActorsWaitingToMoveTablets;
     std::queue<TActorId> NodePingQueue;
     std::unordered_set<TNodeId> NodePingsInProgress;
+    TFollowerUpdates PendingFollowerUpdates;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -450,7 +454,7 @@ protected:
     TDuration NodeBrokerEpoch;
     std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit> TabletLimit; // built from CurrentConfig
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
-    std::unordered_map<TDataCenterId, std::unordered_set<TNodeId>> RegisteredDataCenterNodes;
+    std::unordered_map<TDataCenterId, TDataCenterInfo> DataCenters;
     std::unordered_set<TNodeId> ConnectedNodes;
 
     // normalized to be sorted list of unique values
@@ -579,6 +583,8 @@ protected:
     void Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev);
     void Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr& ev);
     void Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev);
+    void Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev);
+    void Handle(TEvPrivate::TEvUpdateFollowers::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -683,8 +689,6 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
     void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
     ui32 GetDataCenters();
-    ui32 GetRegisteredDataCenters();
-    void UpdateRegisteredDataCenters();
     void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void QueuePing(const TActorId& local);
@@ -697,7 +701,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void StopTablet(const TActorId& local, const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, TFullTabletId tabletId);
     void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
-    void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
+    void CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     TDuration GetBalancerCooldown(EBalancerType balancerType) const;
     void UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff);
     ui64 GetObjectImbalance(TFullObjectId object);

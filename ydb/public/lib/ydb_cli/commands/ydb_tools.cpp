@@ -84,10 +84,6 @@ void TCommandDump::Config(TConfig& config) {
         .DefaultValue(defaults.Ordered_).StoreTrue(&Ordered);
 }
 
-void TCommandDump::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
-}
-
 void TCommandDump::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     AdjustPath(config);
@@ -417,10 +413,6 @@ void TCommandPgConvert::Config(TConfig& config) {
 
     config.Opts->AddLongOption('i', "input", "Path to input SQL file. Read from stdin if not specified.").StoreResult(&Path);
     config.Opts->AddLongOption("ignore-unsupported", "Comment unsupported statements in result dump file if specified.").StoreTrue(&IgnoreUnsupported);
-}
-
-void TCommandPgConvert::Parse(TConfig& config) {
-    TToolsCommand::Parse(config);
 }
 
 int TCommandPgConvert::Run(TConfig& config) {

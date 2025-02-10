@@ -32,7 +32,6 @@ class TCommandDump : public TToolsCommand, public TCommandWithPath {
 public:
     TCommandDump();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
     virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
@@ -115,7 +114,6 @@ class TCommandPgConvert : public TToolsCommand {
 public:
     TCommandPgConvert();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:

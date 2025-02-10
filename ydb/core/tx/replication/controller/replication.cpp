@@ -122,10 +122,9 @@ public:
                 switch (target->GetKind()) {
                 case ETargetKind::Table:
                 case ETargetKind::IndexTable:
-                case ETargetKind::Transfer: {
+                case ETargetKind::Transfer:
                     TargetTablePaths.push_back(target->GetDstPath());
                     break;
-                }
                 }
             }
         }

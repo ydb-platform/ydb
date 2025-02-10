@@ -80,7 +80,7 @@ public:
     }
 
     std::shared_ptr<void> ExtractBatch() override {
-        auto r = std::make_shared<std::pair<std::vector<TCell>, std::vector<TCharVectorPtr>>>(Extract());
+        auto r = std::make_shared<std::pair<std::vector<TCell>, std::vector<TCharVectorPtr>>>(std::move(Extract()));
         return std::reinterpret_pointer_cast<void>(r);
     }
 

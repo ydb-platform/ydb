@@ -55,7 +55,7 @@ void TCommandAdmin::Config(TConfig& config) {
            << "Commands in this subtree may damage your cluster if used wrong" << Endl
            << "Due to dangerous nature of this commands ALL global parameters must be set explicitly" << Endl
            << "Profiles are disabled by default, and used only if set explicitly (--profile <profile-name>)" << Endl
-           << "Some commands do not require global options which required otherwise"
+           << "Some commands do not require global options that are required otherwise"
            << colors.OldColor();
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl

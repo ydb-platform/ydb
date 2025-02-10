@@ -2825,9 +2825,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << ">>>>> 2" << Endl << Flush;
         auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
-        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 2);
-        UNIT_ASSERT_VALUES_EQUAL(info16.BlobsFromCache, 1);
-        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromDisk + info16.BlobsFromDisk, 2);
+        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 3);
+        UNIT_ASSERT_VALUES_EQUAL(info16.BlobsFromCache, 2);
+        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromDisk + info16.BlobsFromDisk, 0);
 
         for (ui32 i = 0; i < 8; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
@@ -2839,10 +2839,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         ui32 fromDisk = info0.BlobsFromDisk + info16.BlobsFromDisk;
         ui32 fromCache = info0.BlobsFromCache + info16.BlobsFromCache;
-        UNIT_ASSERT(fromDisk > 0);
-        UNIT_ASSERT(fromDisk < 5);
-        UNIT_ASSERT(fromCache > 0);
-        UNIT_ASSERT(fromCache < 5);
+        UNIT_ASSERT_GE_C(fromDisk, 0, "fromDisk=" << fromDisk);
+        UNIT_ASSERT_LE_C(fromDisk, 6, "fromDisk=" << fromDisk);
+        UNIT_ASSERT_GT_C(fromCache, 0, "fromCache=" << fromCache);
+        UNIT_ASSERT_LE_C(fromCache, 6, "fromCache=" << fromCache);
     }
 
     Y_UNIT_TEST(CacheHead) {

@@ -83,7 +83,6 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserial
 }
 
 TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const {
-    AFL_VERIFY(batch->ValidateFull().ok())("error", batch->ValidateFull().ToString());
     arrow::ipc::IpcPayload payload;
     // Build payload. Compression if set up performed here.
     TStatusValidator::Validate(arrow::ipc::GetRecordBatchPayload(*batch, Options, &payload));

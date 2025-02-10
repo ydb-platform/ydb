@@ -161,7 +161,6 @@ NYT::TNode CreateOptionalTypeNode(const TString& fieldType) {
         .Add(CreateTypeNode(fieldType));
 }
 
-
 void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
     node.Add(
         NYT::TNode::CreateList()

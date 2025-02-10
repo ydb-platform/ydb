@@ -52,7 +52,7 @@ struct TScheme {
 };
 
 struct TOutputType {
-    TOutputType(ui32 width)
+    explicit TOutputType(ui32 width)
         : Data(width) {
     }
 

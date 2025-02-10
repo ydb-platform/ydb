@@ -395,14 +395,18 @@ struct TCompare {
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
-    void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) const {
+    // return default value if key is absent.
+    bool MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) const {
         static constexpr std::string_view Fields[] = {"version"sv, "created"sv, "modified"sv, "value"sv, "lease"sv};
         static constexpr std::string_view Comparator[] = {"="sv, ">"sv, "<"sv, "!="sv};
-        sql << '`' << Fields[Target] << '`' << Comparator[Result];
+        sql << '`' << Fields[Target] << '`' << ' ' << Comparator[Result] << ' ';
         if (const auto val = std::get_if<std::string>(&Value))
             sql << AddParam("Value", params, *val, paramsCounter);
-        else if (const auto val = std::get_if<i64>(&Value))
+        else if (const auto val = std::get_if<i64>(&Value)) {
             sql << AddParam("Arg", params, *val, paramsCounter);
+            return !*val && Target < 3U;
+        }
+        return false;
     }
 };
 
@@ -473,20 +477,21 @@ struct TTxn : public TOperation {
         sql << cmpResultSetName << " = ";
 
         if (manyRanges)
-            sql << "select bool_and(`cmp`) ?? false as `cmp` from (" << Endl;
+            sql << "select nvl(bool_and(`cmp`), false) as `cmp` from (" << Endl;
 
         for (auto i = map.cbegin(); map.cend() != i; ++i) {
             if (map.cbegin() != i)
                 sql << Endl << "union all" << Endl;
 
-            sql << "select bool_and(";
+            sql << "select nvl(bool_and(";
             const auto& compares = i->second;
+            bool def = true;
             for (auto j = compares.cbegin(); compares.cend() != j; ++j) {
                 if (compares.cbegin() != j)
                     sql << " and ";
-                j->MakeQueryWithParams(sql, params, paramsCounter);
+                def = j->MakeQueryWithParams(sql, params, paramsCounter) && def;
             }
-            sql << ") ?? false as `cmp` from `huidig` where ";
+            sql << "), " << (def ? "true" : "false") << ") as `cmp` from `huidig` where ";
             MakeSimplePredicate(i->first.first, i->first.second, sql, params, paramsCounter);
         }
 

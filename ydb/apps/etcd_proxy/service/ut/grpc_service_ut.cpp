@@ -142,7 +142,7 @@ void MakeSimpleTest(std::function<void(const std::unique_ptr<etcdserverpb::KV::S
     etcd(kv, lease);
 }
 
-void Put(std::string_view key, std::optional<std::string_view> value, const std::unique_ptr<etcdserverpb::KV::Stub> &stub, const std::optional<i64> lease = 0LL)
+i64 Put(std::string_view key, std::optional<std::string_view> value, const std::unique_ptr<etcdserverpb::KV::Stub> &stub, const std::optional<i64> lease = 0LL)
 {
     grpc::ClientContext writeCtx;
     etcdserverpb::PutRequest putRequest;
@@ -161,6 +161,7 @@ void Put(std::string_view key, std::optional<std::string_view> value, const std:
     etcdserverpb::PutResponse putResponse;
     stub->Put(&writeCtx, putRequest, &putResponse);
     UNIT_ASSERT(!putResponse.has_prev_kv());
+    return putResponse.header().revision();
 }
 
 i64 Delete(const std::string_view &key, const std::unique_ptr<etcdserverpb::KV::Stub> &stub, const std::string_view &rangeEnd = {})
@@ -438,6 +439,172 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "my_key");
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).value(), "my_val");
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).version(), 2LL);
+            }
+         });
+    }
+
+    Y_UNIT_TEST(OptimisticCreate) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            const auto key = "new_key"sv;
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                const auto compare = txnRequest.add_compare();
+                compare->set_result(etcdserverpb::Compare_CompareResult_EQUAL);
+                compare->set_target(etcdserverpb::Compare_CompareTarget_MOD);
+                compare->set_key(key);
+                compare->set_mod_revision(0LL);
+
+                const auto put = txnRequest.add_success()->mutable_request_put();
+                put->set_key(key);
+                put->set_value("new_value");
+
+                etcdserverpb::TxnResponse txnResponse;
+                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+
+                UNIT_ASSERT(txnResponse.succeeded());
+            }
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                const auto compare = txnRequest.add_compare();
+                compare->set_result(etcdserverpb::Compare_CompareResult_EQUAL);
+                compare->set_target(etcdserverpb::Compare_CompareTarget_MOD);
+                compare->set_key(key);
+                compare->set_mod_revision(0LL);
+
+                const auto put = txnRequest.add_success()->mutable_request_put();
+                put->set_key(key);
+                put->set_value("-----");
+
+                etcdserverpb::TxnResponse txnResponse;
+                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+
+                UNIT_ASSERT(!txnResponse.succeeded());
+            }
+         });
+    }
+
+    Y_UNIT_TEST(OptimisticUpdate) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            const auto key = "other_key"sv;
+            const auto first = Put(key, "eerste", etcd);
+            const auto second = Put(key, "twede", etcd);
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                const auto compare = txnRequest.add_compare();
+                compare->set_result(etcdserverpb::Compare_CompareResult_EQUAL);
+                compare->set_target(etcdserverpb::Compare_CompareTarget_MOD);
+                compare->set_key(key);
+                compare->set_mod_revision(first);
+
+                const auto put = txnRequest.add_success()->mutable_request_put();
+                put->set_key(key);
+                put->set_value("changed_value");
+
+                const auto range = txnRequest.add_failure()->mutable_request_range();
+                range->set_key(key);
+
+                etcdserverpb::TxnResponse txnResponse;
+                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+
+                UNIT_ASSERT(!txnResponse.succeeded());
+                const auto& resp = txnResponse.responses(0).response_range();
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs().size(), 1U);
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).key(), key);
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).value(), "twede");
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).version(), 2LL);
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).create_revision(), first);
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).mod_revision(), second);
+            }
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                const auto compare = txnRequest.add_compare();
+                compare->set_result(etcdserverpb::Compare_CompareResult_EQUAL);
+                compare->set_target(etcdserverpb::Compare_CompareTarget_MOD);
+                compare->set_key(key);
+                compare->set_mod_revision(second);
+
+                const auto put = txnRequest.add_success()->mutable_request_put();
+                put->set_key(key);
+                put->set_value("changed_value");
+
+                const auto range = txnRequest.add_failure()->mutable_request_range();
+                range->set_key(key);
+
+                etcdserverpb::TxnResponse txnResponse;
+                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+
+                UNIT_ASSERT(txnResponse.succeeded());
+            }
+         });
+    }
+
+    Y_UNIT_TEST(OptimisticDelete) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            const auto key = "useless_key"sv;
+            const auto first = Put(key, "eerste", etcd);
+            const auto second = Put(key, "twede", etcd);
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                const auto compare = txnRequest.add_compare();
+                compare->set_result(etcdserverpb::Compare_CompareResult_EQUAL);
+                compare->set_target(etcdserverpb::Compare_CompareTarget_MOD);
+                compare->set_key(key);
+                compare->set_mod_revision(first);
+
+                const auto put = txnRequest.add_success()->mutable_request_delete_range();
+                put->set_key(key);
+
+                const auto range = txnRequest.add_failure()->mutable_request_range();
+                range->set_key(key);
+
+                etcdserverpb::TxnResponse txnResponse;
+                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+
+                UNIT_ASSERT(!txnResponse.succeeded());
+                const auto& resp = txnResponse.responses(0).response_range();
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs().size(), 1U);
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).key(), key);
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).value(), "twede");
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).version(), 2LL);
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).create_revision(), first);
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).mod_revision(), second);
+            }
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                const auto compare = txnRequest.add_compare();
+                compare->set_result(etcdserverpb::Compare_CompareResult_EQUAL);
+                compare->set_target(etcdserverpb::Compare_CompareTarget_MOD);
+                compare->set_key(key);
+                compare->set_mod_revision(second);
+
+                const auto put = txnRequest.add_success()->mutable_request_delete_range();
+                put->set_key(key);
+
+                const auto range = txnRequest.add_failure()->mutable_request_range();
+                range->set_key(key);
+
+                etcdserverpb::TxnResponse txnResponse;
+                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+
+                UNIT_ASSERT(txnResponse.succeeded());
+                UNIT_ASSERT_VALUES_EQUAL(txnResponse.responses(0).response_delete_range().deleted(), 1LL);
             }
          });
     }

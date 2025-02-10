@@ -456,6 +456,7 @@ public:
                 tablet.NeedToReleaseFromParent = tabletRowset.GetValueOrDefault<Schema::Tablet::NeedToReleaseFromParent>();
                 tablet.ChannelProfileReassignReason = tabletRowset.GetValueOrDefault<Schema::Tablet::ReassignReason>();
                 tablet.Statistics = tabletRowset.GetValueOrDefault<Schema::Tablet::Statistics>();
+                tablet.StoppedByTenant = tabletRowset.GetValueOrDefault<Schema::Tablet::StoppedByTenant>();
 
                 TDomainInfo* domain = Self->FindDomain(objectDomain);
                 if (domain) {

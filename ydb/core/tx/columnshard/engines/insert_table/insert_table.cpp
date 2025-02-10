@@ -153,7 +153,7 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<
         if (lockId || data.GetSnapshot() <= reqSnapshot) {
             auto start = data.GetMeta().GetFirstPK(pkSchema);
             auto finish = data.GetMeta().GetLastPK(pkSchema);
-            if (pkRangesFilter && pkRangesFilter->GetUsageClass(start, finish) == TPKRangeFilter::EUsageClass::NoUsage) {
+            if (pkRangesFilter && !pkRangesFilter->IsUsed(start, finish)) {
                 continue;
             }
             result.emplace_back(TCommittedBlob(data.GetBlobRange(), data.GetSnapshot(), data.GetInsertWriteId(), data.GetSchemaVersion(), data.GetMeta().GetRecordsCount(),

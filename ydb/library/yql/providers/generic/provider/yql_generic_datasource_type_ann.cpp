@@ -58,6 +58,10 @@ namespace NYql {
                 return TStatus::Error;
             }
 
+            if (!EnsureListType(*input->Child(TGenTable::idx_Splits), ctx)) {
+                return TStatus::Error;
+            }
+
             input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
             return TStatus::Ok;
         }

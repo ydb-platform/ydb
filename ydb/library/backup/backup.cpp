@@ -623,38 +623,38 @@ NCoordination::TNodeDescription DescribeCoordinationNode(TDriver driver, const T
     return status.ExtractResult();
 }
 
-std::vector<std::string> ListResources(NRateLimiter::TRateLimiterClient& client, const std::string& coordinationNodePath) {
+std::vector<std::string> ListRateLimiters(NRateLimiter::TRateLimiterClient& client, const std::string& coordinationNodePath) {
     const auto settings = NRateLimiter::TListResourcesSettings().Recursive(true);
     const std::string AllRootResourcesTag = "";
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.ListResources(coordinationNodePath, AllRootResourcesTag, settings).ExtractValueSync();
     });
-    VerifyStatus(status, "list coordination node's resources");
+    VerifyStatus(status, "list rate limiters");
     return status.GetResourcePaths();
 }
 
-NRateLimiter::TDescribeResourceResult::THierarchicalDrrProps DescribeResource(
-    NRateLimiter::TRateLimiterClient& client, const std::string& coordinationNodePath, const std::string& resourcePath)
+NRateLimiter::TDescribeResourceResult::THierarchicalDrrProps DescribeRateLimiter(
+    NRateLimiter::TRateLimiterClient& client, const std::string& coordinationNodePath, const std::string& rateLimiterPath)
 {
     auto status = NConsoleClient::RetryFunction([&]() {
-        return client.DescribeResource(coordinationNodePath, resourcePath).ExtractValueSync();
+        return client.DescribeResource(coordinationNodePath, rateLimiterPath).ExtractValueSync();
     });
-    VerifyStatus(status, "describe coordination node's resource");
+    VerifyStatus(status, "describe rate limiter");
     return status.GetHierarchicalDrrProps();
 }
 
 void BackupDependentResources(TDriver driver, const std::string& coordinationNodePath, const TFsPath& fsBackupFolder) {
     NRateLimiter::TRateLimiterClient client(driver);
-    const auto resources = ListResources(client, coordinationNodePath);
+    const auto rateLimiters = ListRateLimiters(client, coordinationNodePath);
 
-    for (const auto& resourcePath : resources) {
-        const auto properties = DescribeResource(client, coordinationNodePath, resourcePath);
+    for (const auto& rateLimiterPath : rateLimiters) {
+        const auto description = DescribeRateLimiter(client, coordinationNodePath, rateLimiterPath);
         Ydb::RateLimiter::CreateResourceRequest creationRequest;
-        properties.SerializeTo(*creationRequest.mutable_resource()->mutable_hierarchical_drr());
+        description.SerializeTo(*creationRequest.mutable_resource()->mutable_hierarchical_drr());
 
-        TFsPath childFolderPath = fsBackupFolder.Child(TString{resourcePath});
+        TFsPath childFolderPath = fsBackupFolder.Child(TString{rateLimiterPath});
         childFolderPath.MkDirs();
-        WriteProtoToFile(creationRequest, childFolderPath, NDump::NFiles::CreateResource());
+        WriteProtoToFile(creationRequest, childFolderPath, NDump::NFiles::CreateRateLimiter());
     }
 }
 

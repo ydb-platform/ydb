@@ -210,6 +210,7 @@ namespace NYql {
                 }
                 case EListSplits:
                 {
+                    // Handle ListSplits responses and make new nodes
                     TNodeOnNodeOwnedMap replaces(reads.size());
                     for (const auto& r: reads) {
                         auto issues = HandleListSplitsResponse(r, ctx, replaces);
@@ -344,6 +345,7 @@ namespace NYql {
                     auto& it = result.Iterator;
                     while(true) {
                         auto result = it->ReadNext().GetValueSync();
+                        Cerr << result.Status.ToDebugString() << Endl;
                         if (!result.Status.Ok()) {
                             tableSplits->Issues.AddIssue(TIssue(position, result.Status.ToDebugString()));
                             promise.SetValue();
@@ -364,7 +366,6 @@ namespace NYql {
                             std::back_inserter(tableSplits->Splits),
                             [](auto&& split) { return std::move(split); }
                         );
-                        promise.SetValue();
                     }
                 }
             );

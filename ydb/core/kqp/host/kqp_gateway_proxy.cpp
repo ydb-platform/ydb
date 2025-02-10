@@ -633,9 +633,34 @@ public:
     }
 
     TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) override {
-        Y_UNUSED(cluster);
-        Y_UNUSED(settings);
-        return {};
+        CHECK_PREPARED_DDL(AlterDatabase);
+
+        if (IsPrepare()) {
+            auto alterDatabasePromise = NewPromise<TGenericResult>();
+
+            const auto& databaseFullPath = settings.DatabasePath;
+            size_t pos = databaseFullPath.rfind('/');
+            TString dirname = databaseFullPath.substr(0, pos);
+            TString basename = databaseFullPath.substr(pos + 1);
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
+            schemeTx.SetWorkingDir(dirname);
+            schemeTx.MutableModifyACL()->SetNewOwner(settings.Owner.value());
+            schemeTx.MutableModifyACL()->SetName(basename);
+
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            phyTx.MutableSchemeOperation()->MutableModifyPermissions()->Swap(&schemeTx);
+            TGenericResult result;
+            result.SetSuccess();
+            alterDatabasePromise.SetValue(result);
+            return alterDatabasePromise.GetFuture();
+        } else {
+            return Gateway->AlterDatabase(cluster, settings);
+        }
     }
 
     TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {

@@ -133,6 +133,12 @@ public:
         return Target;
     }
 
+    TString GetDatabasePath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Database);
+        return Target;
+    }
+
     TString GetTopicPath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Topic);

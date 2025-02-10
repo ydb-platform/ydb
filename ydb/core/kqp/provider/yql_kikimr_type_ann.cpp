@@ -1907,8 +1907,24 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) override {
-        Y_UNUSED(node);
-        Y_UNUSED(ctx);
+        const THashSet<TString> supportedSettings = {
+            "owner"
+        };
+
+        for (const auto& setting : node.Settings()) {
+            auto name = setting.Name().Value();
+
+            if (!supportedSettings.contains(name)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown create user setting: " << name));
+                return TStatus::Error;
+            }
+
+            if (!EnsureAtom(setting.Value().Ref(), ctx)) {
+                return TStatus::Error;
+            }
+        }
+
         return TStatus::Ok;
     }
 

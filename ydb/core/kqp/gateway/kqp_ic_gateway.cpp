@@ -900,8 +900,44 @@ public:
     }
 
     TFuture<TGenericResult> AlterDatabase(const TString& cluster, const NYql::TAlterDatabaseSettings& settings) override {
-        Y_UNUSED(cluster);
-        Y_UNUSED(settings);
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            auto alterDatabasePromise = NewPromise<TGenericResult>();
+
+            auto ev = MakeHolder<TRequest>();
+            // ev->Record.SetDatabaseName(Database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
+            }
+
+            const auto& databaseFullPath = settings.DatabasePath;
+            size_t pos = databaseFullPath.rfind('/');
+            TString dirname = databaseFullPath.substr(0, pos);
+            TString basename = databaseFullPath.substr(pos + 1);
+
+            NKikimrSchemeOp::TModifyScheme* modifyScheme = ev->Record.MutableTransaction()->MutableModifyScheme();
+            modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
+            modifyScheme->SetWorkingDir(dirname);
+            modifyScheme->MutableModifyACL()->SetNewOwner(settings.Owner.value());
+            modifyScheme->MutableModifyACL()->SetName(basename);
+
+            SendSchemeRequest(ev.Release()).Apply(
+                [alterDatabasePromise](const TFuture<TGenericResult>& future) mutable {
+                    alterDatabasePromise.SetValue(future.GetValue());
+                }
+            );
+
+            return alterDatabasePromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+
         return NotImplemented<TGenericResult>();
     }
 
@@ -1428,8 +1464,8 @@ public:
 
             SendSchemeRequest(ev.Release()).Apply(
                 [alterUserPromise](const TFuture<TGenericResult>& future) mutable {
-                alterUserPromise.SetValue(future.GetValue());
-            }
+                    alterUserPromise.SetValue(future.GetValue());
+                }
             );
 
             return alterUserPromise.GetFuture();

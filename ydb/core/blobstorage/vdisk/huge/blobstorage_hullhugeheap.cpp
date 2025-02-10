@@ -474,13 +474,32 @@ namespace NKikimr {
             }
         }
 
+        bool TAllChains::IsOldMinHugeBlobSizeCompatible() const {
+            for (const auto &x : ChainDelegators) {
+                if (x.SlotSize < OldMinHugeBlobSizeInBytes && x.HaveBeenUsed()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         void TAllChains::Save(IOutputStream *s) const {
-            ui32 size = ChainDelegators.size();
+            bool oldCompatible = IsOldMinHugeBlobSizeCompatible();
+            Cerr << VDiskLogPrefix << "Saving all chains, oldCompatible# " << oldCompatible << Endl;
+
+            std::vector<const TChainDelegator*> delegatorsToSave;
+            for (auto& d: ChainDelegators) {
+                if (!oldCompatible || d.SlotSize >= OldMinHugeBlobSizeInBytes) {
+                    delegatorsToSave.push_back(&d);
+                }
+            }
+
+            ui32 size = delegatorsToSave.size();
             ::Save(s, size);
             Cerr << VDiskLogPrefix <<  "Saving all chains, size = " << size << Endl;
-            for (auto& d : ChainDelegators) {
-                Cerr << VDiskLogPrefix << "Chain slot size = " << d.SlotSize << Endl;
-                ::Save(s, d);
+            for (auto d : delegatorsToSave) {
+                Cerr << VDiskLogPrefix << "Chain slot size = " << d->SlotSize << Endl;
+                ::Save(s, *d);
             }
             Cerr << VDiskLogPrefix << VDiskLogPrefix << " Saved" << Endl;
         }
@@ -502,6 +521,8 @@ namespace NKikimr {
                 // map size has been changed, run migration
                 StartMode = EStartMode::Loaded;
                 using TIt = TAllChainDelegators::iterator;
+                TIt loadedIt = ChainDelegators.begin();
+                TIt loadedEnd = ChainDelegators.end();
 
                 for (ui32 i = 0; i < size; ++i) {
                     TChainDelegator c(VDiskLogPrefix, 1, 1, ChunkSize, AppendBlockSize);
@@ -509,12 +530,15 @@ namespace NKikimr {
 
                     Cerr << VDiskLogPrefix << "Loading chain, SlotsInChunk = " << c.ChainPtr->SlotsInChunk << Endl;
 
-                    for (TIt it = ChainDelegators.begin(); it != ChainDelegators.end(); ++it) {
-                        if (it->SlotsInChunk == c.ChainPtr->SlotsInChunk) {
-                            it->ChainPtr = std::move(c.ChainPtr);
+                    bool inserted = false;
+                    for (; loadedIt != loadedEnd; ++loadedIt) {
+                        if (loadedIt->SlotsInChunk == c.ChainPtr->SlotsInChunk) {
+                            loadedIt->ChainPtr = std::move(c.ChainPtr);
+                            inserted = true;
                             break;
                         }
                     }
+                    Y_VERIFY_S(inserted, "unable to insert loaded chain with SlotsInChunk#" << c.ChainPtr->SlotsInChunk);
                 }
             } else {
                 // entry point size rollback case

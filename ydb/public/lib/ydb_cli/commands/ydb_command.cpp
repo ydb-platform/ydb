@@ -19,11 +19,11 @@ TYdbCommand::TYdbCommand(const TString& name, const std::initializer_list<TStrin
     : TLeafCommand(name, aliases, description)
 {}
 
-TDriverConfig TYdbCommand::CreateDriverConfig(const TConfig& config) {
+TDriverConfig TYdbCommand::CreateDriverConfig(TConfig& config) {
     auto driverConfig = TDriverConfig()
         .SetEndpoint(config.Address)
         .SetDatabase(config.Database)
-        .SetCredentialsProviderFactory(config.CredentialsGetter(config))        ;
+        .SetCredentialsProviderFactory(config.GetSingletonCredentialsProviderFactory());
 
     if (config.EnableSsl)
         driverConfig.UseSecureConnection(config.CaCerts);
@@ -33,11 +33,11 @@ TDriverConfig TYdbCommand::CreateDriverConfig(const TConfig& config) {
     return driverConfig;
 }
 
-TDriver TYdbCommand::CreateDriver(const TConfig& config) {
+TDriver TYdbCommand::CreateDriver(TConfig& config) {
     return TDriver(CreateDriverConfig(config));
 }
 
-TDriver TYdbCommand::CreateDriver(const TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend) {
+TDriver TYdbCommand::CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend) {
     auto driverConfig = CreateDriverConfig(config);
     driverConfig.SetLog(std::move(loggingBackend));
 

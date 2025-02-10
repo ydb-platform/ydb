@@ -150,6 +150,7 @@ public:
         bool AssumeYes = false;
 
         TCredentialsGetter CredentialsGetter;
+        std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
 
         TConfig(int argc, char** argv)
             : ArgC(argc)
@@ -173,6 +174,8 @@ public:
                 return CreateInsecureCredentialsProviderFactory();
             };
         }
+
+        std::shared_ptr<ICredentialsProviderFactory> GetSingletonCredentialsProviderFactory();
 
         bool HasHelpCommand() const {
             return HasArgs({ "--help" }) || HasArgs({ "-h" }) || HasArgs({ "-?" }) || HasArgs({ "--help-ex" });

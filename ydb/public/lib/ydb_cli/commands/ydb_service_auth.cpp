@@ -38,8 +38,7 @@ bool TCommandGetToken::Prompt(TConfig& config) {
 }
 
 int TCommandGetToken::Run(TConfig& config) {
-    auto credentialsProviderFactory = config.CredentialsGetter(config);
-
+    auto credentialsProviderFactory = config.GetSingletonCredentialsProviderFactory();
     if (credentialsProviderFactory) {
         auto driver = CreateDriver(config);
         TDummyClient client(driver);

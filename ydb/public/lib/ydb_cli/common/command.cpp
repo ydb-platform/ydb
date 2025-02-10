@@ -73,6 +73,41 @@ size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv
     return cnt;
 }
 
+namespace {
+    class TSingleProviderFactory : public ICredentialsProviderFactory {
+    public:
+        TSingleProviderFactory(std::shared_ptr<ICredentialsProviderFactory> originalFactory)
+        : OriginalFactory(originalFactory)
+        {}
+    virtual std::shared_ptr<ICredentialsProvider> CreateProvider() const override {
+        if (!provider) {
+            provider = OriginalFactory->CreateProvider();
+        }
+        return provider;
+    }
+    virtual std::shared_ptr<ICredentialsProvider> CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
+        if (!provider) {
+            provider = OriginalFactory->CreateProvider(facility);
+        }
+        return provider;
+    }
+
+    private:
+        std::shared_ptr<ICredentialsProviderFactory> OriginalFactory;
+        mutable TCredentialsProviderPtr provider = nullptr;
+    };
+}
+
+std::shared_ptr<ICredentialsProviderFactory> TClientCommand::TConfig::GetSingletonCredentialsProviderFactory() {
+    if (!SingletonCredentialsProviderFactory) {
+        auto credentialsGetterResult = CredentialsGetter(*this);
+        if (credentialsGetterResult) {
+            SingletonCredentialsProviderFactory = std::make_shared<TSingleProviderFactory>(credentialsGetterResult);
+        }
+    }
+    return SingletonCredentialsProviderFactory;
+}
+
 TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {
     int _argc = 1;
     int levels = 1;

@@ -137,7 +137,7 @@ private:
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         batch->Finished = true;
         // It's a mandatory condition to keep sorted PK here
-        for (const auto& [name, config]: std::map(resourcePoolsIt->second.begin(), resourcePoolsIt->second.end())) {
+        for (const auto& [name, config] : std::map(resourcePoolsIt->second.begin(), resourcePoolsIt->second.end())) {
             if (!IsInRange(name)) {
                 continue;
             }

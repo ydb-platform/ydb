@@ -101,8 +101,17 @@ namespace {
     }
 
     TAlterDatabaseSettings ParseAlterDatabaseSettings(TKiAlterDatabase alterDatabase) {
-        Y_UNUSED(alterDatabase);
         TAlterDatabaseSettings alterDatabaseSettings;
+        alterDatabaseSettings.DatabasePath = alterDatabase.DatabasePath().Value();
+
+        for (auto setting : alterDatabase.Settings()) {
+            const auto& name = setting.Name().Value();
+
+            if (name == "owner") {
+                alterDatabaseSettings.Owner = setting.Value().Cast<TCoAtom>().StringValue();
+            }
+        }
+
         return alterDatabaseSettings;
     }
 
@@ -112,7 +121,7 @@ namespace {
         createUserSettings.CanLogin = true;
 
         for (auto setting : createUser.Settings()) {
-            auto name = setting.Name().Value();
+            const auto& name = setting.Name().Value();
             if (name == "password") {
                 createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "nullPassword") {
@@ -136,7 +145,7 @@ namespace {
         alterUserSettings.UserName = TString(alterUser.UserName());
 
         for (auto setting : alterUser.Settings()) {
-            auto name = setting.Name().Value();
+            const auto& name = setting.Name().Value();
             if (name == "password") {
                 alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "nullPassword") {

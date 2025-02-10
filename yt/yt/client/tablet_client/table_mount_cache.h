@@ -133,6 +133,8 @@ struct TTableMountInfo final
 
     bool EnableDetailedProfiling = false;
 
+    NTableClient::ETabletTransactionSerializationType SerializationType = NTableClient::ETabletTransactionSerializationType::Coarse;
+
     bool IsSorted() const;
     bool IsOrdered() const;
     bool IsReplicated() const;

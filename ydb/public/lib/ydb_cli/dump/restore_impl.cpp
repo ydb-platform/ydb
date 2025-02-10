@@ -20,6 +20,7 @@
 #include <util/generic/vector.h>
 #include <util/stream/file.h>
 #include <util/string/join.h>
+#include <util/system/info.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -629,7 +630,8 @@ TRestoreResult TRestoreClient::RestoreTable(
     }
 
     if (settings.RestoreData_) {
-        auto result = RestoreData(fsPath, dbPath, settings, withoutIndexesDesc);
+        const ui32 partitionCount = scheme.partition_at_keys().split_points().size();
+        auto result = RestoreData(fsPath, dbPath, settings, withoutIndexesDesc, partitionCount);
         if (!result.IsSuccess()) {
             return result;
         }
@@ -715,6 +717,7 @@ THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(
         const TString& dbPath,
         const TRestoreSettings& settings,
         const TTableDescription& desc,
+        ui32 partitionCount,
         const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators)
 {
     THolder<NPrivate::IDataWriter> writer;
@@ -727,7 +730,7 @@ THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(
         }
 
         case TRestoreSettings::EMode::ImportData: {
-            writer.Reset(CreateImportDataWriter(dbPath, desc, ImportClient, TableClient, accumulators, settings, Log));
+            writer.Reset(CreateImportDataWriter(dbPath, desc, partitionCount, ImportClient, TableClient, accumulators, settings, Log));
             break;
         }
     }
@@ -742,7 +745,11 @@ TRestoreResult TRestoreClient::CreateDataAccumulators(
         const TTableDescription& desc,
         ui32 dataFilesCount)
 {
-    const ui32 accumulatorsCount = std::min(settings.InFly_, dataFilesCount);
+    size_t accumulatorsCount = settings.MaxInFlight_;
+    if (!accumulatorsCount) {
+        accumulatorsCount = Min<size_t>(dataFilesCount, NSystemInfo::CachedNumberOfCpus());
+    }
+
     outAccumulators.resize(accumulatorsCount);
 
     switch (settings.Mode_) {
@@ -773,7 +780,8 @@ TRestoreResult TRestoreClient::RestoreData(
         const TFsPath& fsPath,
         const TString& dbPath,
         const TRestoreSettings& settings,
-        const TTableDescription& desc)
+        const TTableDescription& desc,
+        ui32 partitionCount)
 {
     // Threads can access memory owned by this vector through pointers during restore operation
     TVector<TFsPath> dataFiles = CollectDataFiles(fsPath);
@@ -788,7 +796,7 @@ TRestoreResult TRestoreClient::RestoreData(
         return res;
     }
 
-    THolder<NPrivate::IDataWriter> writer = CreateDataWriter(dbPath, settings, desc, accumulators);
+    THolder<NPrivate::IDataWriter> writer = CreateDataWriter(dbPath, settings, desc, partitionCount, accumulators);
 
     TVector<TFuture<TRestoreResult>> accumulatorResults(Reserve(accumulators.size()));
     TThreadPool accumulatorWorkers(TThreadPool::TParams().SetBlocking(true));
@@ -881,7 +889,7 @@ TRestoreResult TRestoreClient::RestoreData(
         }
 
         if (dataFound) {
-            writer = CreateDataWriter(dbPath, settings, desc, accumulators);
+            writer = CreateDataWriter(dbPath, settings, desc, partitionCount, accumulators);
             for (auto& acc : accumulators) {
                 while (acc->Ready(true)) {
                     if (!writer->Push(acc->GetData(true))) {

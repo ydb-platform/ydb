@@ -67,7 +67,7 @@ private:
     TString RowsPerRequest;
     TString BytesPerRequest;
     TString RequestUnitsPerRequest;
-    ui32 InFly;
+    ui32 InFlight;
     bool UseBulkUpsert = false;
     bool UseImportData = false;
 };

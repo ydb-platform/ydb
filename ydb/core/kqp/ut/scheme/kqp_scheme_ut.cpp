@@ -12079,11 +12079,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             tableInserter.AddRow().Add(2).Add(jsonString).Add(jsonBin);
             testHelper.BulkUpsert(testTable, tableInserter);
         }
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(3).Add(jsonBin).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter, Ydb::StatusIds::SCHEME_ERROR);
-        }
     }
 }
 

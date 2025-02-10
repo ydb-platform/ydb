@@ -4,8 +4,6 @@
 #include <yt/cpp/mapreduce/interface/fwd.h>
 #include <yt/cpp/mapreduce/interface/node.h>
 
-#include <yt/cpp/mapreduce/http/requests.h>
-
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/ptr.h>
@@ -18,7 +16,6 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TResponseInfo;
 class TClient;
 using TClientPtr = ::TIntrusivePtr<TClient>;
 

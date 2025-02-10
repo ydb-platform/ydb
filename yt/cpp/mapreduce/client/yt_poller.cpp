@@ -9,6 +9,7 @@
 #include <yt/cpp/mapreduce/http/retry_request.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
@@ -20,9 +21,11 @@ using namespace NRawClient;
 ////////////////////////////////////////////////////////////////////////////////
 
 TYtPoller::TYtPoller(
-    TClientContext context,
+    IRawClientPtr rawClient,
+    const TConfigPtr& config,
     const IClientRetryPolicyPtr& retryPolicy)
-    : Context_(std::move(context))
+    : RawClient_(std::move(rawClient))
+    , Config_(config)
     , ClientRetryPolicy_(retryPolicy)
     , WaiterThread_(&TYtPoller::WatchLoopProc, this)
 {
@@ -83,7 +86,7 @@ void TYtPoller::WatchLoop()
             {
                 auto ug = Unguard(Lock_);  // allow adding new items into Pending_
                 TWaitProxy::Get()->SleepUntil(nextRequest);
-                nextRequest = TInstant::Now() + Context_.Config->WaitLockPollInterval;
+                nextRequest = TInstant::Now() + Config_->WaitLockPollInterval;
             }
             if (!Pending_.empty()) {
                 InProgress_.splice(InProgress_.end(), Pending_);
@@ -91,14 +94,14 @@ void TYtPoller::WatchLoop()
             Y_ABORT_UNLESS(!InProgress_.empty());
         }
 
-        THttpRawBatchRequest rawBatchRequest(Context_, ClientRetryPolicy_->CreatePolicyForGenericRequest());
+        auto rawBatchRequest = RawClient_->CreateRawBatchRequest();
 
         for (auto& item : InProgress_) {
-            item->PrepareRequest(&rawBatchRequest);
+            item->PrepareRequest(rawBatchRequest.Get());
         }
 
         try {
-            rawBatchRequest.ExecuteBatch();
+            rawBatchRequest->ExecuteBatch();
         } catch (const std::exception& ex) {
             YT_LOG_ERROR("Exception while executing batch request: %v", ex.what());
         }

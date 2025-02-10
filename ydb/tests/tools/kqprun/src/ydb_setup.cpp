@@ -14,6 +14,7 @@
 
 #include <yql/essentials/utils/log/log.h>
 
+using namespace NKikimrRun;
 
 namespace NKqpRun {
 
@@ -147,18 +148,7 @@ private:
 
     void SetLoggerSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
         auto loggerInitializer = [this](NActors::TTestActorRuntime& runtime) {
-            if (Settings_.AppConfig.GetLogConfig().HasDefaultLevel()) {
-                auto priority = NActors::NLog::EPriority(Settings_.AppConfig.GetLogConfig().GetDefaultLevel());
-                auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
-                for (int i = 0; i < descriptor->value_count(); ++i) {
-                    runtime.SetLogPriority(static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number()), priority);
-                }
-            }
-
-            for (const auto& setting : Settings_.AppConfig.GetLogConfig().get_arr_entry()) {
-                runtime.SetLogPriority(GetLogService(setting.GetComponent()), NActors::NLog::EPriority(setting.GetLevel()));
-            }
-
+            InitLogSettings(Settings_.AppConfig.GetLogConfig(), runtime);
             runtime.SetLogBackendFactory([this]() { return CreateLogBackend(); });
         };
 
@@ -694,32 +684,6 @@ private:
     TFsPath StorageMetaPath_;
     NKqpRun::TStorageMeta StorageMeta_;
 };
-
-
-//// TRequestResult
-
-TRequestResult::TRequestResult()
-    : Status(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
-{}
-
-TRequestResult::TRequestResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
-    : Status(status)
-    , Issues(issues)
-{}
-
-TRequestResult::TRequestResult(Ydb::StatusIds::StatusCode status, const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues)
-    : Status(status)
-{
-    NYql::IssuesFromMessage(issues, Issues);
-}
-
-bool TRequestResult::IsSuccess() const {
-    return Status == Ydb::StatusIds::SUCCESS;
-}
-
-TString TRequestResult::ToString() const {
-    return TStringBuilder() << "Request finished with status: " << Status << "\nIssues:\n" << Issues.ToString() << "\n";
-}
 
 
 //// TYdbSetup

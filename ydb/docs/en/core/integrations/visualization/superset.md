@@ -2,11 +2,11 @@
 
 Apache Superset is a modern data exploration and data visualization platform.
 
-## Installation of needed dependencies
+## Installation of dependencies
 
-To work with {{ ydb-short-name }} via Superset it is required to install driver [ydb-sqlalchemy](https://pypi.org/project/ydb-sqlalchemy).
+To work with {{ ydb-short-name }} via Superset, you need to install the [ydb-sqlalchemy](https://pypi.org/project/ydb-sqlalchemy) driver.
 
-Depending on Superset installation it is possible to do it several ways, refer to [official documentation](https://superset.apache.org/docs/configuration/databases/#installing-drivers-in-docker-images) for more details.
+The installation method depends on how Superset is set up. For detailed guidance, refer to the [official documentation](https://superset.apache.org/docs/configuration/databases/#installing-drivers-in-docker-images).
 
 ## Adding a database connection to {{ ydb-short-name }} {#add-database-connection}
 
@@ -29,7 +29,7 @@ To connect to {{ ydb-short-name }} from Apache Superset, follow these steps:
 
 1. To save the database connection, click **FINISH**.
 
-For additional info about configuration of {{ ydb-short-name }} connection, please refer to [YDB section on official documentation](https://superset.apache.org/docs/configuration/databases#ydb).
+For more information about configuring a {{ ydb-short-name }} connection, refer to the [{{ ydb-short-name }} section in the official documentation](https://superset.apache.org/docs/configuration/databases#ydb).
 
 ## Creating a dataset {#create-dataset}
 

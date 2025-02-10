@@ -13,9 +13,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
     Y_UNIT_TEST(Fake) {
     }
 
-    Y_UNIT_TEST_FLAG(BaseCase, AlterDatabaseCreateHiveFirst) {
+    Y_UNIT_TEST(BaseCase) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -106,17 +106,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(0)});
 
-        // Check that shards of ServerLess0 db are gone after its deletion.
-        //
-        // SharedDB contains:
-        //  - 3 of its own shards: SchemeShard, Coordinator, Mediator
-        //  - 4 of ServerLess0's shards: SchemeShard, Coordinator, Mediator, 1 x DataShard of the table0
-        //
-
-        //NOTE: AlterDatabaseCreateHiveFirst create system tablets in a tenant hive, otherwise they are created in the root hive
-        ui64 sharedHiveTablets = TTestTxConfig::FakeHiveTablets + (AlterDatabaseCreateHiveFirst ? TFakeHiveState::TABLETS_PER_CHILD_HIVE : 1)
-            + 3  // shards of SharedDB
-        ;
+        ui64 sharedHiveTablets = TTestTxConfig::FakeHiveTablets + NKikimr::TFakeHiveState::TABLETS_PER_CHILD_HIVE;
         env.TestWaitTabletDeletion(runtime, xrange(sharedHiveTablets, sharedHiveTablets + 4), sharedHive);
     }
 
@@ -309,7 +299,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         UNIT_ASSERT(sharedDbSchemeShard != 0
                     && sharedDbSchemeShard != (ui64)-1
                     && sharedDbSchemeShard != TTestTxConfig::SchemeShard);
-
+                    
         TestDescribeResult(DescribePath(runtime, sharedDbSchemeShard, "/MyRoot/SharedDB"),
                            {NLs::PathExist,
                             NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeUnspecified)});
@@ -318,7 +308,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2
+                    PathId: 2 
                 }
                 Name: "ServerLess0"
             )",
@@ -358,7 +348,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLess0"),
                            {NLs::PathExist,
                             NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared)});
-
+        
         auto checkServerlessComputeResourcesMode = [&](EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
             TString alterData = Sprintf(
                 R"(
@@ -416,7 +406,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2
+                    PathId: 2 
                 }
                 Name: "ServerLess0"
             )",
@@ -497,7 +487,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2
+                    PathId: 2 
                 }
                 Name: "ServerLess0"
             )",

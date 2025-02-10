@@ -98,14 +98,14 @@ namespace {
     };
 }
 
-std::shared_ptr<ICredentialsProviderFactory> TClientCommand::TConfig::GetSingletoneCredentialsProviderFactory() {
-    if (!SingletoneCredentialsProviderFactory) {
+std::shared_ptr<ICredentialsProviderFactory> TClientCommand::TConfig::GetSingletonCredentialsProviderFactory() {
+    if (!SingletonCredentialsProviderFactory) {
         auto credentialsGetterResult = CredentialsGetter(*this);
         if (credentialsGetterResult) {
-            SingletoneCredentialsProviderFactory = std::make_shared<TSingleProviderFactory>(credentialsGetterResult);
+            SingletonCredentialsProviderFactory = std::make_shared<TSingleProviderFactory>(credentialsGetterResult);
         }
     }
-    return SingletoneCredentialsProviderFactory;
+    return SingletonCredentialsProviderFactory;
 }
 
 TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {

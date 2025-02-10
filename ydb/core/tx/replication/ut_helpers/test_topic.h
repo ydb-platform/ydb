@@ -1,9 +1,7 @@
 #pragma once
 
-#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
 
 namespace NKikimrSchemeOp {
     class TPersQueueGroupDescription;

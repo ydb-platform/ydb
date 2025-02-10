@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(5.6.3)
+VERSION(5.6.4)
 
-ORIGINAL_SOURCE(https://github.com/tukaani-project/xz/archive/v5.6.3.tar.gz)
+ORIGINAL_SOURCE(https://github.com/tukaani-project/xz/archive/v5.6.4.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/lzma/liblzma/api

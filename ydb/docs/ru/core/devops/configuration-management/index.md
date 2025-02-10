@@ -6,7 +6,7 @@
 
 {% note info %}
 
- Начиная с версии v25.1 {{ ydb-short-name }} поддерживает механизм управления кластером, называемый [распределённой конфигурацией](../../concepts/glossary.md#distributed-configuration).
+ Начиная с версии v25.1 {{ ydb-short-name }} поддерживает механизм управления кластером, называемый [распределённой конфигурацией](../../concepts/glossary.md#distributed-configuration). Если ваш кластер был развёрнут до версии v25.1, то для перехода на неё вы можете обратиться к соответствующей [инструкции](../deployment-options/manual/migration/migration-to-autoconfiguration.md).
 
 {% endnote %}
 

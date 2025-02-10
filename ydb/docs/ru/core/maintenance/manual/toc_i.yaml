@@ -1,6 +1,4 @@
 items:
-- name: Обновление конфигурации
-  href: ../../devops/deployment-options/manual/update-config.md
 - name: Расширение кластера
   href: cluster_expansion.md
 - name: Добавление групп хранения

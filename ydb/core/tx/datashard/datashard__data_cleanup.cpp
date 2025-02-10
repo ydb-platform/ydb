@@ -5,7 +5,10 @@ namespace NKikimr::NDataShard {
 void TDataShard::Handle(TEvDataShard::TEvForceDataCleanup::TPtr& ev, const TActorContext& ctx) {
     // TODO: implement
     const auto& record = ev->Get()->Record;
-    auto result = MakeHolder<TEvDataShard::TEvForceDataCleanupResult>(record.GetDataCleanupGeneration());
+    auto result = MakeHolder<TEvDataShard::TEvForceDataCleanupResult>(
+        record.GetDataCleanupGeneration(),
+        TabletID(),
+        NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
     ctx.Send(ev->Sender, std::move(result));
 }
 

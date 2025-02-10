@@ -338,13 +338,8 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             return Reply(false, "Cannot parse сhangefeed");
         }
 
-        if (IndexDownloadedChangefeed == item.Changefeeds.ChangefeedsSize()) {
-            *item.Changefeeds.MutableChangefeeds()->Add()->MutableChangefeed() = std::move(changefeed);
-        } else {
-            *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableChangefeed() = std::move(changefeed);
-        }
+        *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableChangefeed() = std::move(changefeed);
         
-
         auto nextStep = [this]() {
             Become(&TThis::StateDownloadTopics);
             HeadObject(TopicDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));
@@ -401,8 +396,13 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     void ListObjects(const TString& prefix) {
         auto request = Model::ListObjectsRequest()
             .WithPrefix(prefix);
-
+        
         Send(Client, new TEvExternalStorage::TEvListObjectsRequest(request));
+    }
+
+    template <typename T>
+    void Resize(::google::protobuf::RepeatedPtrField<T>* repeatedField, ui64 size) {
+        while (size--) repeatedField->Add();
     }
 
     void HandleChangefeeds(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {
@@ -427,6 +427,9 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         if (!ChangefeedsKeys.empty()) {
+            auto& item = ImportInfo->Items.at(ItemIdx);
+            Resize(item.Changefeeds.MutableChangefeeds(), ChangefeedsKeys.size());
+
             Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsKeys.size());
             HeadObject(ChangefeedDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));
         } else {

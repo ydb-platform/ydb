@@ -95,9 +95,11 @@ namespace NYql {
                 columnSet.insert(child->Content());
             }
 
-            auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));
-            if (issue.has_value()) {
-                ctx.AddError(issue.value());
+            auto [tableMeta, issues] = State_->GetTable(clusterName, tableName);
+            if (issues) {
+                for (const auto& issue : issues) {
+                    ctx.AddError(issue);
+                }
                 return TStatus::Error;
             }
 
@@ -186,9 +188,11 @@ namespace NYql {
             const auto tableName = table.Name().StringValue();
 
             // Extract table metadata
-            auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));
-            if (issue.has_value()) {
-                ctx.AddError(issue.value());
+            auto [tableMeta, issues] = State_->GetTable(clusterName, tableName);
+            if (issues) {
+                for (const auto& issue : issues) {
+                    ctx.AddError(issue);
+                }
                 return TStatus::Error;
             }
 

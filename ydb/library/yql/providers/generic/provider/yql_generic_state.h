@@ -19,12 +19,17 @@ namespace NYql {
 
         struct TTableMeta {
             const TStructExprType* ItemType = nullptr;
-            TVector<TString> ColumnOrder;
-            NYql::NConnector::NApi::TSchema Schema;
-            NYql::TGenericDataSourceInstance DataSourceInstance;
+            // TODO: check why is it important
+            TVector<TString> ColumnOrder; 
+            // External datasource description
+            NYql::TGenericDataSourceInstance DataSourceInstance; 
+            // External table schema
+            NYql::NConnector::NApi::TSchema Schema; 
+            // Contains some binary description of table splits (partitions) produced by Connector
+            TVector<TString> Splits; 
         };
 
-        using TGetTableResult = std::pair<std::optional<const TTableMeta*>, std::optional<TIssue>>;
+        using TGetTableResult = std::pair<std::optional<const TTableMeta*>, TIssues>;
 
         TGenericState() = delete;
 
@@ -47,7 +52,6 @@ namespace NYql {
 
         void AddTable(const TStringBuf& clusterName, const TStringBuf& tableName, TTableMeta&& tableMeta);
         TGetTableResult GetTable(const TStringBuf& clusterName, const TStringBuf& tableName) const;
-        TGetTableResult GetTable(const TStringBuf& clusterName, const TStringBuf& tableName, const TPosition& position) const;
 
         TTypeAnnotationContext* Types;
         TGenericConfiguration::TPtr Configuration = MakeIntrusive<TGenericConfiguration>();

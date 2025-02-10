@@ -70,12 +70,13 @@ namespace NYql {
                             const auto& read = maybe.Cast();
 
                             // Get table metadata
-                            const auto [tableMeta, issue] = State_->GetTable(
+                            const auto [tableMeta, issues] = State_->GetTable(
                                 read.DataSource().Cluster().Value(),
-                                read.Table().Name().Value(),
-                                ctx.GetPosition(node.Pos()));
-                            if (issue.has_value()) {
-                                ctx.AddError(issue.value());
+                                read.Table().Name().Value());
+                            if (issues) {
+                                for (const auto& issue : issues) {
+                                    ctx.AddError(issue);
+                                }
                                 return node;
                             }
 

@@ -135,9 +135,9 @@ namespace NYql {
 
                     const auto& columns = settings.Columns();
 
-                    auto [tableMeta, issue] = State_->GetTable(clusterName, table);
-                    if (issue.has_value()) {
-                        ythrow yexception() << "Get table metadata: " << issue.value();
+                    auto [tableMeta, issues] = State_->GetTable(clusterName, table);
+                    if (issues) {
+                        ythrow yexception() << "Get table metadata: " << issues.ToOneLineString();
                     }
 
                     // prepare select
@@ -279,9 +279,9 @@ namespace NYql {
                     << ", table: " << table
                     << ", endpoint: " << endpoint.ShortDebugString();
 
-                auto [tableMeta, issue] = State_->GetTable(clusterName, table);
-                if (issue.has_value()) {
-                    ythrow yexception() << "Get table metadata: " << issue.value();
+                auto [tableMeta, issues] = State_->GetTable(clusterName, table);
+                if (issues) {
+                    ythrow yexception() << "Get table metadata: " << issues;
                 }
 
                 Generic::TLookupSource source;

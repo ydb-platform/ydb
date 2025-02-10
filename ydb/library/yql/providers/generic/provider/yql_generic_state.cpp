@@ -8,21 +8,13 @@ namespace NYql {
     TGenericState::TGetTableResult TGenericState::GetTable(const TStringBuf& clusterName, const TStringBuf& tableName) const {
         auto result = Tables_.FindPtr(TTableAddress(clusterName, tableName));
         if (result) {
-            return std::make_pair(result, std::nullopt);
+            return std::make_pair(result, TIssues{});
         }
 
-        return std::make_pair(
-            std::nullopt,
-            TIssue(TStringBuilder() << "no metadata for table " << clusterName << "." << tableName));
+        TIssues issues;
+        issues.AddIssue(TIssue(TStringBuilder() << "no metadata for table " << clusterName << "." << tableName));
+
+        return std::make_pair( std::nullopt, std::move(issues));
     };
-
-    TGenericState::TGetTableResult TGenericState::GetTable(const TStringBuf& clusterName, const TStringBuf& tableName, const TPosition& position) const {
-        auto pair = TGenericState::GetTable(clusterName, tableName);
-        if (pair.second.has_value()) {
-            pair.second->Position = position;
-        }
-
-        return pair;
-    }
 
 } // namespace NYql

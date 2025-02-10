@@ -177,14 +177,12 @@ namespace NYql {
                 return false;
             });
 
-            TNodeOnNodeOwnedMap replaces(reads.size());
-
             switch (Phase_) {
                 case EDescribeTable:
                 {
                     // Handle all the DescribeTable responses
                     for (const auto& r: reads) {
-                        TIssues issues = HandleDescribeTableResponse(r, ctx, replaces);
+                        TIssues issues = HandleDescribeTableResponse(r, ctx);
                         if (issues) {
                             for (const auto& issue : issues) {
                                 ctx.AddError(issue);
@@ -194,74 +192,45 @@ namespace NYql {
                         }
                     }
 
+                    // If table descriptions have been successfully obtained,
+                    // run the next phase - splits listing.
+                    Phase_ = EListSplits;
+
                     std::vector<NThreading::TFuture<void>> handles;
                     handles.reserve(DescribeTableResults_.size());
                     ListSplitsResults_.reserve(DescribeTableResults_.size());
                     auto position = ctx.GetPosition(input->Pos());
 
                     for (const auto& [tableAddress, description]: DescribeTableResults_) {
-                        auto promise = NThreading::NewPromise();
-                        handles.emplace_back(promise.GetFuture());
-
-                        NConnector::NApi::TListSplitsRequest request;
-                        auto select = request.add_selects();
-                        select->mutable_data_source_instance()->CopyFrom(description->DataSourceInstance); 
-                        select->mutable_from()->set_table(tableAddress.second);
-
-                        auto tableSplits = std::make_shared<TTableSplits>();
-                        ListSplitsResults_[tableAddress] = tableSplits;
-
-                        auto result = State_->GenericClient->ListSplits(request).Subscribe(
-                            [position, tableSplits, promise = std::move(promise)](const NConnector::TListSplitsStreamIteratorAsyncResult& f1) mutable {
-                                NConnector::TListSplitsStreamIteratorAsyncResult f2(f1);
-                                auto result = f2.ExtractValueSync();
-
-                                if (!result.Status.Ok()) {
-                                    tableSplits->Issues.AddIssue(TIssue(position, result.Status.ToDebugString()));
-                                    promise.SetValue();
-                                    return; 
-                                }
-
-                                auto& it = result.Iterator;
-                                while(true) {
-                                    auto result = it->ReadNext().GetValueSync();
-                                    if (!result.Status.Ok()) {
-                                        tableSplits->Issues.AddIssue(TIssue(position, result.Status.ToDebugString()));
-                                        promise.SetValue();
-                                        return; 
-                                    }
-
-                                    Y_ENSURE(result.Response);
-
-                                    if (!NConnector::IsSuccess(*result.Response)) {
-                                        tableSplits->Issues.AddIssues(NConnector::ErrorToIssues(result.Response->error()));
-                                        promise.SetValue();
-                                        return;
-                                    }
-
-                                    std::transform(
-                                        std::make_move_iterator(result.Response->splits().begin()),
-                                        std::make_move_iterator(result.Response->splits().end()),
-                                        std::back_inserter(tableSplits->Splits),
-                                        [](auto&& split) { return std::move(split); }
-                                    );
-                                    promise.SetValue();
-                                }
-                            }
-                        );
+                        RunListSplitsRequest(tableAddress, description, handles, position);
                     }
 
-                    Phase_ = EListSplits;
                     AsyncFuture_ = NThreading::WaitExceptionOrAll(handles);
                     return TStatus::Async;
                 }
                 case EListSplits:
+                {
+                    TNodeOnNodeOwnedMap replaces(reads.size());
+                    for (const auto& r: reads) {
+                        auto issues = HandleListSplitsResponse(r, ctx, replaces);
+                        if (issues) {
+                            for (const auto& issue : issues) {
+                                ctx.AddError(issue);
+                            }
+
+                            return TStatus::Error;
+                        }
+                    }
+
+                    return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
+                }
                 default:
-                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Unexpected phase"));
+                {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unexpected phase " << int(Phase_ )));
                     return TStatus::Error;
+                }
             }
 
-            return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
         }
 
         void Rewind() final {
@@ -272,8 +241,7 @@ namespace NYql {
     private:
         TIssues HandleDescribeTableResponse(
             const TIntrusivePtr<TExprNode>& read,
-            TExprContext& ctx,
-            TNodeOnNodeOwnedMap& replaces
+            TExprContext& ctx
         ) {
             const TGenRead genRead(read);
             const auto clusterName = genRead.DataSource().Cluster().StringValue();
@@ -285,7 +253,7 @@ namespace NYql {
             if (it == DescribeTableResults_.cend()) {
                 TIssues issues;
                 issues.AddIssue(TIssue(ctx.GetPosition(genRead.Pos()), TStringBuilder()
-                                << "Not found result for " << clusterName << '.' << tableName));
+                                << "DescribeTable response not found for " << clusterName << '.' << tableName));
                 return issues;
             }
 
@@ -305,10 +273,6 @@ namespace NYql {
             auto issues = ParseTableMeta(ctx, ctx.GetPosition(read->Pos()), clusterName, tableName, tableMeta);
             if (issues) {
                 return issues;
-            }
-
-            if (const auto ins = replaces.emplace(genRead.Raw(), TExprNode::TPtr()); ins.second) {
-                ins.first->second = MakeTableMetaNode(ctx, genRead, tableName);
             }
 
             State_->AddTable(clusterName, tableName, std::move(tableMeta));
@@ -349,10 +313,108 @@ namespace NYql {
             return issues;
         }
 
+        void RunListSplitsRequest(
+            const TGenericState::TTableAddress& tableAddress,
+            const std::shared_ptr<TTableDescription>& description,
+            std::vector<NThreading::TFuture<void>>& handles,
+            const TPosition& position
+        ) {
+            auto promise = NThreading::NewPromise();
+            handles.emplace_back(promise.GetFuture());
+
+            NConnector::NApi::TListSplitsRequest request;
+            auto select = request.add_selects();
+            select->mutable_data_source_instance()->CopyFrom(description->DataSourceInstance); 
+            select->mutable_from()->set_table(tableAddress.second);
+
+            auto tableSplits = std::make_shared<TTableSplits>();
+            ListSplitsResults_[tableAddress] = tableSplits;
+
+            auto result = State_->GenericClient->ListSplits(request).Subscribe(
+                [position, tableSplits, promise = std::move(promise)](const NConnector::TListSplitsStreamIteratorAsyncResult& f1) mutable {
+                    NConnector::TListSplitsStreamIteratorAsyncResult f2(f1);
+                    auto result = f2.ExtractValueSync();
+
+                    if (!result.Status.Ok()) {
+                        tableSplits->Issues.AddIssue(TIssue(position, result.Status.ToDebugString()));
+                        promise.SetValue();
+                        return; 
+                    }
+
+                    auto& it = result.Iterator;
+                    while(true) {
+                        auto result = it->ReadNext().GetValueSync();
+                        if (!result.Status.Ok()) {
+                            tableSplits->Issues.AddIssue(TIssue(position, result.Status.ToDebugString()));
+                            promise.SetValue();
+                            return; 
+                        }
+
+                        Y_ENSURE(result.Response);
+
+                        if (!NConnector::IsSuccess(*result.Response)) {
+                            tableSplits->Issues.AddIssues(NConnector::ErrorToIssues(result.Response->error()));
+                            promise.SetValue();
+                            return;
+                        }
+
+                        std::transform(
+                            std::make_move_iterator(result.Response->splits().begin()),
+                            std::make_move_iterator(result.Response->splits().end()),
+                            std::back_inserter(tableSplits->Splits),
+                            [](auto&& split) { return std::move(split); }
+                        );
+                        promise.SetValue();
+                    }
+                }
+            );
+        }
+
+        TIssues HandleListSplitsResponse(
+            const TIntrusivePtr<TExprNode>& read,
+            TExprContext& ctx,
+            TNodeOnNodeOwnedMap& replaces
+        ) {
+            const TGenRead genRead(read);
+            const auto clusterName = genRead.DataSource().Cluster().StringValue();
+            const auto& keyArg = TExprBase(genRead.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
+            const auto tableName = TString(keyArg.Tail().Head().Content());
+            const TGenericState::TTableAddress tableAddress = std::make_pair(clusterName, tableName);
+
+            TIssues issues;
+
+            // find appropriate response
+            auto iter = ListSplitsResults_.find(tableAddress);
+            if (iter == ListSplitsResults_.end()) {
+                issues.AddIssue(
+                    TIssue(ctx.GetPosition(genRead.Pos()), 
+                            TStringBuilder() << "ListSplits response not found for " << tableAddress.first << '.' << tableAddress.second)
+                );
+
+                return issues;
+            }
+
+            auto& response = iter->second;
+
+            // If some errors occured, add them to issues
+            issues.AddIssues(response->Issues);
+            if (issues) {
+                return issues;
+            }
+            
+            // Fill AST for each requested table
+            if (const auto ins = replaces.emplace(genRead.Raw(), TExprNode::TPtr()); ins.second) {
+                ins.first->second = MakeTableMetaNode(ctx, genRead, tableName, response->Splits);
+            }
+
+            return issues;
+        }
+
         TExprNode::TPtr MakeTableMetaNode(
             TExprContext& ctx,
             const TGenRead& read,
-            const TString& tableName 
+            const TString& tableName,
+            const std::vector<NConnector::NApi::TSplit>& srcSplits
         ) {
             // clang-format off
             auto row = Build<TCoArgument>(ctx, read.Pos())
@@ -366,9 +428,19 @@ namespace NYql {
                     .Build()
                 .Done().Ptr();
 
+            TExprNode::TListType splitsList;
+            splitsList.reserve(srcSplits.size());
+            std::transform(srcSplits.cbegin(), srcSplits.cend(), std::back_inserter(splitsList),
+                [&](const NConnector::NApi::TSplit& split) {
+                    return ctx.NewAtom(read.Pos(), split.description());
+                }
+            );
+            auto splitsNode = ctx.NewList(read.Pos(), std::move(splitsList));
+
             auto table = Build<TGenTable>(ctx, read.Pos())
                 .Name().Value(tableName).Build()
-                .Splits<TCoVoid>().Build().Done();
+                .Splits(std::move(splitsNode))
+            .Done();
 
             return Build<TGenReadTable>(ctx, read.Pos())
                 .World(read.World())

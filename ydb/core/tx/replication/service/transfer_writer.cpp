@@ -211,7 +211,6 @@ public:
             Sql,
             NYql::NPureCalc::ETranslationMode::SQL
         );
-
     }
 
     NYql::NPureCalc::TPullListProgram<NYdb::NTopic::NPurecalc::TMessageInputSpec, TMessageOutputSpec>* GetProgram() {

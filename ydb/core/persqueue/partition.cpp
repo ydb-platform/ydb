@@ -2044,7 +2044,6 @@ void TPartition::RunPersist() {
         //Done with counters.
 
         DumpKeyValueRequest(PersistRequest->Record);
-        PQ_LOG_D("HaveWriteMsg=" << HaveWriteMsg);
 
         PersistRequestSpan.Attribute("bytes", static_cast<i64>(PersistRequest->Record.ByteSizeLong()));
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());

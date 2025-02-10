@@ -1,10 +1,10 @@
 Y_UNIT_TEST(Pragma) {
     TCases cases = {
-        {"pragma user = user;","PRAGMA user = user;\n"},
-        {"pragma user = default;","PRAGMA user = default;\n"},
-        {"pragma user.user = user;","PRAGMA user.user = user;\n"},
-        {"pragma user.user(user);","PRAGMA user.user(user);\n"},
-        {"pragma user.user(user, user);","PRAGMA user.user(user, user);\n"},
+        {"pragma user = user;", "PRAGMA user = user;\n"},
+        {"pragma user = default;", "PRAGMA user = default;\n"},
+        {"pragma user.user = user;", "PRAGMA user.user = user;\n"},
+        {"pragma user.user(user);", "PRAGMA user.user(user);\n"},
+        {"pragma user.user(user, user);", "PRAGMA user.user(user, user);\n"},
     };
 
     TSetup setup;
@@ -14,6 +14,15 @@ Y_UNIT_TEST(Pragma) {
 Y_UNIT_TEST(DotAfterDigits) {
     TCases cases = {
         {"select a.1 .b from plato.foo;","SELECT\n\ta.1 .b\nFROM\n\tplato.foo\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(AlterDatabase) {
+    TCases cases {
+        {"use plato;alter database `/Root/test` owner to user1;", "USE plato;\n\nALTER DATABASE `/Root/test` OWNER TO user1;\n"},
     };
 
     TSetup setup;
@@ -1015,6 +1024,8 @@ Y_UNIT_TEST(TableHints) {
             "SELECT\n\t*\nFROM\n\tplato.T WITH SCHEMA struct<foo: integer, Bar: list<string?>>\nWHERE\n\tkey < 0\n;\n"},
         {"select * from plato.T with (foo=bar, x=$y, a=(a, b, c), u='aaa', schema (foo int32, bar list<string>))",
             "SELECT\n\t*\nFROM\n\tplato.T WITH (\n\t\tfoo = bar,\n\t\tx = $y,\n\t\ta = (a, b, c),\n\t\tu = 'aaa',\n\t\tSCHEMA (foo int32, bar list<string>)\n\t)\n;\n"},
+        {"select * from plato.T with schema struct<\nfoo:int32,\nbar:double\n> as a",
+            "SELECT\n\t*\nFROM\n\tplato.T WITH SCHEMA struct<\n\t\tfoo: int32,\n\t\tbar: double\n\t> AS a\n;\n"},
     };
 
     TSetup setup;
@@ -1510,6 +1521,16 @@ Y_UNIT_TEST(Union) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(Comment) {
+    TCases cases = {
+        {"/*\nmulti\nline\ncomment\n*/\npragma foo = \"true\";\npragma bar = \"1\"",
+            "/*\nmulti\nline\ncomment\n*/\nPRAGMA foo = 'true';\nPRAGMA bar = '1';\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(CommentAfterLastSelect) {
     TCases cases = {
         {"SELECT 1--comment\n",
@@ -1620,6 +1641,14 @@ Y_UNIT_TEST(OperatorNewlines) {
             "$x = 1\n\t>>|\n\t2;\n"},
         {"$x = 1\n?? 2 ??\n3\n??\n4 +\n5\n*\n6 +\n7 ??\n8;",
             "$x = 1 ??\n\t2 ??\n\t3\n\t??\n\t4\n\t+ 5\n\t*\n\t6\n\t+ 7 ??\n\t8;\n"},
+        {"select 1 ??\n2 ?? 3,\n4;",
+            "SELECT\n\t1 ??\n\t\t2 ?? 3,\n\t4\n;\n"},
+        {"select 1\n?? 2 ?? 3,\n4;",
+            "SELECT\n\t1 ??\n\t\t2 ?? 3,\n\t4\n;\n"},
+        {"select 1\n?? 2 ??\n3 ?? 4,\n5;",
+            "SELECT\n\t1 ??\n\t\t2 ??\n\t\t3 ?? 4,\n\t5\n;\n"},
+        {"select 1\n?? 2 ?? 3 ??\n4 ?? 5,\n6;",
+            "SELECT\n\t1 ??\n\t\t2 ?? 3 ??\n\t\t4 ?? 5,\n\t6\n;\n"},
     };
 
     TSetup setup;

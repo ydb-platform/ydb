@@ -64,20 +64,15 @@ static constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
 static std::tuple<ui32, ui32, ui32> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
     const auto& kmeans = buildInfo.KMeans;
     Y_ASSERT(kmeans.K != 0);
-    Y_ASSERT((kmeans.K & (kmeans.K - 1)) == 0);
     const auto count = TIndexBuildInfo::TKMeans::BinPow(kmeans.K, kmeans.Level);
     ui32 step = 1;
     auto parts = count;
     auto shards = tableInfo.GetShard2PartitionIdx().size();
-    if (!buildInfo.KMeans.NeedsAnotherLevel() || shards <= 1) {
-        shards = 1;
-        parts = 1;
+    if (!buildInfo.KMeans.NeedsAnotherLevel() || count <= 1 || shards <= 1) {
+        return {1, 1, 1};
     }
-    for (; shards < parts; parts /= 2) {
+    for (; 2 * shards <= parts; parts = (parts + 1) / 2) {
         step *= 2;
-    }
-    for (; parts < shards / 2; parts *= 2) {
-        Y_ASSERT(step == 1);
     }
     return {count, parts, step};
 }
@@ -341,7 +336,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
-    const char* suffix = buildInfo.KMeans.Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
+    std::string_view suffix = buildInfo.KMeans.Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
     op = CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
 
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
@@ -351,25 +346,24 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
 
     auto& policy = *config.MutablePartitioningPolicy();
     policy.SetSizeToSplit(0); // disable auto split/merge
-    policy.SetMinPartitionsCount(parts);
-    policy.SetMaxPartitionsCount(parts);
     policy.ClearFastSplitSettings();
     policy.ClearSplitByLoadSettings();
 
     op.ClearSplitBoundary();
-    if (parts <= 1) {
-        return propose;
-    }
-    auto i = buildInfo.KMeans.Parent;
-    for (const auto end = i + count;;) {
-        i += step;
-        if (i >= end) {
-            Y_ASSERT(op.SplitBoundarySize() == std::min(count, parts) - 1);
-            break;
+    static constexpr std::string_view LogPrefix = "Create build table boundaries for ";
+    LOG_D(buildInfo.Id << " table " << suffix
+        << ", count: " << count << ", parts: " << parts << ", step: " << step
+        << ", kmeans: " << buildInfo.KMeansTreeToDebugStr());
+    if (parts > 1) {
+        const auto parentFrom = buildInfo.KMeans.ParentEnd + 1;
+        for (auto i = parentFrom + step, e = parentFrom + count; i < e; i += step) {
+            LOG_D(buildInfo.Id << " table " << suffix << " value: " << i);
+            auto cell = TCell::Make(i);
+            op.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize({&cell, 1}));
         }
-        auto cell = TCell::Make(i);
-        op.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize({&cell, 1}));
     }
+    policy.SetMinPartitionsCount(op.SplitBoundarySize() + 1);
+    policy.SetMaxPartitionsCount(op.SplitBoundarySize() + 1);
     return propose;
 }
 
@@ -574,7 +568,7 @@ private:
         auto& clusters = *ev->Record.MutableClusters();
         clusters.Reserve(buildInfo.Sample.Rows.size());
         for (const auto& [_, row] : buildInfo.Sample.Rows) {
-            *clusters.Add() = row;
+            *clusters.Add() = TSerializedCellVec::ExtractCell(row, 0).AsBuf();
         }
 
         ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());

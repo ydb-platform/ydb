@@ -3667,10 +3667,18 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
 
         for (auto& tx : event.GetTransactions()) {
             Y_ABORT_UNLESS(tx.HasTxId());
-            Y_ABORT_UNLESS(tx.HasAckTo());
 
             txIds.push_back(tx.GetTxId());
-            txAcks[ActorIdFromProto(tx.GetAckTo())].push_back(tx.GetTxId());
+
+            // Note: we plan to remove AckTo in the future
+            if (tx.HasAckTo()) {
+                TActorId txOwner = ActorIdFromProto(tx.GetAckTo());
+                // Note: when mediators ack transactions on their own they also
+                // specify an empty AckTo. Sends to empty actors are a no-op anyway.
+                if (txOwner) {
+                    txAcks[txOwner].push_back(tx.GetTxId());
+                }
+            }
         }
 
         if (step >= PlanStep) {

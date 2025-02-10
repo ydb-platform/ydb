@@ -126,6 +126,29 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         }));
     }
 
+    Y_UNIT_TEST(DecimalKeys) {
+        TEnv env;
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
+
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Decimal(1,0)"},
+                {.Name = "value", .Type = "Decimal(35,10)"},
+            },
+        }));
+
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter(env.GetPathId("/Root/Table")));
+        env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
+
+        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData("TestSource", {
+            TRecord(1, R"({"key":["1.0"], "update":{"value":"155555555555555.321"}})"),
+            TRecord(2, R"({"key":["2.0"], "update":{"value":"255555555555555.321"}})"),
+            TRecord(3, R"({"key":["3.0"], "update":{"value":"355555555555555.321"}})"),
+        }));
+    }    
+
     THolder<TEvService::TEvTxIdResult> MakeTxIdResult(const TMap<TRowVersion, ui64>& result) {
         auto ev = MakeHolder<TEvService::TEvTxIdResult>();
 

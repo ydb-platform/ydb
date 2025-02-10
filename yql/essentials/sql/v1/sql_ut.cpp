@@ -969,6 +969,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["primarykey"]);
     }
 
+    Y_UNIT_TEST(AlterDatabaseAst) {
+        NYql::TAstParseResult request = SqlToYql("USE plato; ALTER DATABASE `/Root/test` OWNER TO user1;");
+        UNIT_ASSERT(request.IsOk());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
+                R"(let world (Write! world sink '('('mode 'alterDatabase) '('dbPath '/Root/test) '('owner ''"user1"))))"
+            ));
+        };
+
+        TWordCountHive elementStat({TString("\'mode \'alterDatabase")});
+        VerifyProgram(request, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alterDatabase"]);
+    }
+
     Y_UNIT_TEST(CreateTableNonNullableYqlTypeAstCorrect) {
         NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE t (a int32 not null);");
         UNIT_ASSERT(res.Root);
@@ -8160,5 +8177,44 @@ Y_UNIT_TEST_SUITE(QuerySplit) {
         return /* Comment 5 */ $x;
         -- Comment 6
         };)");
+    }
+}
+
+Y_UNIT_TEST_SUITE(MatchRecognizeMeasuresAggregation) {
+    Y_UNIT_TEST(InsideSelect) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(0), LAST(1);
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:30: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(OutsideSelect) {
+        ExpectFailWithError(R"sql(
+            $lambda = ($x) -> (FIRST($x) + LAST($x));
+            SELECT $lambda(x) FROM plato.Input;
+            )sql",
+            "<main>:2:32: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:44: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(AsAggregateFunction) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(x), LAST(x) FROM plato.Input;
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:30: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
+    }
+
+    Y_UNIT_TEST(AsWindowFunction) {
+        ExpectFailWithError(R"sql(
+            SELECT FIRST(x) OVER(), LAST(x) OVER() FROM plato.Input;
+            )sql",
+            "<main>:2:20: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+            "<main>:2:37: Error: Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context\n"
+        );
     }
 }

@@ -184,8 +184,15 @@ const std::vector<TConsumer>& TTopicDescription::GetConsumers() const {
 }
 
 void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) const {
-    Y_UNUSED(request);
-    Y_ABORT("Not implemented");
+    *request.mutable_partitioning_settings() = Proto_.partitioning_settings();
+    *request.mutable_retention_period() = Proto_.retention_period();
+    request.set_retention_storage_mb(Proto_.retention_storage_mb());
+    *request.mutable_supported_codecs() = Proto_.supported_codecs();
+    request.set_partition_write_speed_bytes_per_second(Proto_.partition_write_speed_bytes_per_second());
+    request.set_partition_write_burst_bytes(Proto_.partition_write_burst_bytes());
+    *request.mutable_attributes() = Proto_.attributes();
+    *request.mutable_consumers() = Proto_.consumers();
+    request.set_metering_mode(Proto_.metering_mode());
 }
 
 const Ydb::Topic::DescribeTopicResult& TTopicDescription::GetProto() const {
@@ -227,6 +234,13 @@ TPartitioningSettings::TPartitioningSettings(const Ydb::Topic::PartitioningSetti
     , AutoPartitioningSettings_(settings.auto_partitioning_settings())
 {}
 
+void TPartitioningSettings::SerializeTo(Ydb::Topic::PartitioningSettings& proto) const {
+    proto.set_min_active_partitions(MinActivePartitions_);
+    proto.set_max_active_partitions(MaxActivePartitions_);
+    proto.set_partition_count_limit(PartitionCountLimit_);
+    AutoPartitioningSettings_.SerializeTo(*proto.mutable_auto_partitioning_settings());
+}
+
 uint64_t TPartitioningSettings::GetMinActivePartitions() const {
     return MinActivePartitions_;
 }
@@ -249,6 +263,14 @@ TAutoPartitioningSettings::TAutoPartitioningSettings(const Ydb::Topic::AutoParti
     , DownUtilizationPercent_(settings.partition_write_speed().down_utilization_percent())
     , UpUtilizationPercent_(settings.partition_write_speed().up_utilization_percent())
 {}
+
+void TAutoPartitioningSettings::SerializeTo(Ydb::Topic::AutoPartitioningSettings& proto) const {
+    proto.set_strategy(static_cast<Ydb::Topic::AutoPartitioningStrategy>(Strategy_));
+    auto& writeSpeed = *proto.mutable_partition_write_speed();
+    writeSpeed.mutable_stabilization_window()->set_seconds(StabilizationWindow_.Seconds());
+    writeSpeed.set_down_utilization_percent(DownUtilizationPercent_);
+    writeSpeed.set_up_utilization_percent(UpUtilizationPercent_);
+}
 
 EAutoPartitioningStrategy TAutoPartitioningSettings::GetStrategy() const {
     return Strategy_;
@@ -533,6 +555,111 @@ std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSess
 TAsyncStatus TTopicClient::CommitOffset(const std::string& path, uint64_t partitionId, const std::string& consumerName, uint64_t offset,
     const TCommitOffsetSettings& settings) {
     return Impl_->CommitOffset(path, partitionId, consumerName, offset, settings);
+}
+
+namespace {
+
+Ydb::Topic::SupportedCodecs SerializeCodecs(const std::vector<ECodec>& codecs) {
+    Ydb::Topic::SupportedCodecs proto;
+    for (ECodec codec : codecs) {
+        proto.add_codecs(static_cast<Ydb::Topic::Codec>(codec));
+    }
+    return proto;
+}
+
+std::vector<ECodec> DeserializeCodecs(const Ydb::Topic::SupportedCodecs& proto) {
+    std::vector<ECodec> codecs;
+    codecs.reserve(proto.codecs_size());
+    for (int codec : proto.codecs()) {
+        codecs.emplace_back(static_cast<ECodec>(codec));
+    }
+    return codecs;
+}
+
+google::protobuf::Map<TStringType, TStringType> SerializeAttributes(const std::map<std::string, std::string>& attributes) {
+    google::protobuf::Map<TStringType, TStringType> proto;
+    for (const auto& [key, value] : attributes) {
+        proto[key] = value;
+    }
+    return proto;
+}
+
+std::map<std::string, std::string> DeserializeAttributes(const google::protobuf::Map<TStringType, TStringType>& proto) {
+    std::map<std::string, std::string> attributes;
+    for (const auto& [key, value] : proto) {
+        attributes.emplace(key, value);
+    }
+    return attributes;
+}
+
+template <typename TSettings>
+google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer> SerializeConsumers(const std::vector<TConsumerSettings<TSettings>>& consumers) {
+    google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer> proto;
+    proto.Reserve(consumers.size());
+    for (const auto& consumer : consumers) {
+        consumer.SerializeTo(*proto.Add());
+    }
+    return proto;
+}
+
+template <typename TSettings>
+std::vector<TConsumerSettings<TSettings>> DeserializeConsumers(TSettings& parent, const google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer>& proto) {
+    std::vector<TConsumerSettings<TSettings>> consumers;
+    consumers.reserve(proto.size());
+    for (const auto& consumer : proto) {
+        consumers.emplace_back(TConsumerSettings<TSettings>(parent, consumer));
+    }
+    return consumers;
+}
+
+}
+
+template <typename TSettings>
+TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::Topic::Consumer& proto)
+    : ConsumerName_(proto.name())
+    , Important_(proto.important())
+    , ReadFrom_(TInstant::Seconds(proto.read_from().seconds()))
+    , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
+    , Attributes_(DeserializeAttributes(proto.attributes()))
+    , Parent_(parent)
+{
+}
+
+template <typename TSettings>
+void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) const {
+    proto.set_name(ConsumerName_);
+    proto.set_important(Important_);
+    proto.mutable_read_from()->set_seconds(ReadFrom_.Seconds());
+    *proto.mutable_supported_codecs() = SerializeCodecs(SupportedCodecs_);
+    *proto.mutable_attributes() = SerializeAttributes(Attributes_);
+}
+
+template struct TConsumerSettings<TCreateTopicSettings>;
+template struct TConsumerSettings<TAlterTopicSettings>;
+
+TCreateTopicSettings::TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest& proto)
+    : PartitioningSettings_(TPartitioningSettings(proto.partitioning_settings()))
+    , RetentionPeriod_(TDuration::Seconds(proto.retention_period().seconds()))
+    , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
+    , RetentionStorageMb_(proto.retention_storage_mb())
+    , MeteringMode_(TProtoAccessor::FromProto(proto.metering_mode()))
+    , PartitionWriteSpeedBytesPerSecond_(proto.partition_write_speed_bytes_per_second())
+    , PartitionWriteBurstBytes_(proto.partition_write_burst_bytes())
+    , Attributes_(DeserializeAttributes(proto.attributes()))
+{
+    Consumers_ = DeserializeConsumers(*this, proto.consumers());
+}
+
+void TCreateTopicSettings::SerializeTo(Ydb::Topic::CreateTopicRequest& request) const {
+    PartitioningSettings_.SerializeTo(*request.mutable_partitioning_settings());
+    request.mutable_retention_period()->set_seconds(RetentionPeriod_.Seconds());
+    *request.mutable_supported_codecs() = SerializeCodecs(SupportedCodecs_);
+    request.set_retention_storage_mb(RetentionStorageMb_);
+    request.set_metering_mode(TProtoAccessor::GetProto(MeteringMode_));
+    request.set_partition_write_speed_bytes_per_second(PartitionWriteSpeedBytesPerSecond_);
+    request.set_partition_write_burst_bytes(PartitionWriteBurstBytes_);
+    *request.mutable_consumers() = SerializeConsumers(Consumers_);
+    *request.mutable_attributes() = SerializeAttributes(Attributes_);
 }
 
 } // namespace NYdb::NTopic

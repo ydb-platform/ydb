@@ -15,6 +15,7 @@
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
+#include <yt/yt/client/scheduler/spec_patch.h>
 
 #include <yt/yt/client/signature/signature.h>
 
@@ -316,6 +317,13 @@ TFuture<void> TClient::UnfreezeTable(
     ToProto(req->mutable_tablet_range_options(), options);
 
     return req->Invoke().As<void>();
+}
+
+TFuture<void> TClient::CancelTabletTransition(
+    NTabletClient::TTabletId /*tabletId*/,
+    const TCancelTabletTransitionOptions& /*options*/)
+{
+    ThrowUnimplemented("CancelTabletTransition");
 }
 
 TFuture<void> TClient::ReshardTable(
@@ -1207,6 +1215,25 @@ TFuture<void> TClient::UpdateOperationParameters(
     return req->Invoke().As<void>();
 }
 
+TFuture<void> TClient::PatchOperationSpec(
+    const TOperationIdOrAlias& operationIdOrAlias,
+    const NScheduler::TSpecPatchList& patches,
+    const TPatchOperationSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PatchOperationSpec();
+    SetTimeoutOptions(*req, options);
+
+    NScheduler::ToProto(req, operationIdOrAlias);
+
+    for (const auto& patch : patches) {
+        NScheduler::ToProto(req->add_patches(), patch);
+    }
+
+    return req->Invoke().As<void>();
+}
+
 TFuture<TOperation> TClient::GetOperation(
     const TOperationIdOrAlias& operationIdOrAlias,
     const TGetOperationOptions& options)
@@ -1495,6 +1522,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     }
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
+    }
+    if (options.OperationIncarnation) {
+        req->set_operation_incarnation(*options.OperationIncarnation);
     }
     if (options.FromTime) {
         req->set_from_time(NYT::ToProto(*options.FromTime));

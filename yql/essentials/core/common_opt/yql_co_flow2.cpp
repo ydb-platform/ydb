@@ -18,8 +18,8 @@ using namespace NNodes;
 
 bool AllowSubsetFieldsForNode(const TExprNode& node, const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const TString multiUsageFlags = to_lower(TString("FieldSubsetEnableMultiusage"));
-    return optCtx.IsSingleUsage(node) || optCtx.Types->OptimizerFlags.contains(multiUsageFlags);
+    static const char flag[] = "FieldSubsetEnableMultiusage";
+    return !IsOptimizerDisabled<flag>(*optCtx.Types) || optCtx.IsSingleUsage(node);
 }
 
 bool AllowComplexFiltersOverAggregatePushdown(const TOptimizeContext& optCtx) {
@@ -1837,7 +1837,11 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map["ExtractMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoExtractMembers self(node);
-        if (!optCtx.IsSingleUsage(self.Input())) {
+        const bool optInput = self.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
+        static const char splitFlag[] = "ExtractMembersSplitOnOptional";
+        YQL_ENSURE(optCtx.Types);
+        const bool split = IsOptimizerEnabled<splitFlag>(*optCtx.Types) && !IsOptimizerDisabled<splitFlag>(*optCtx.Types);
+        if (!optCtx.IsSingleUsage(self.Input()) && (!optInput || !split)) {
             return node;
         }
 

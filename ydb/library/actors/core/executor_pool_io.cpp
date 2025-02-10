@@ -1,5 +1,6 @@
 #include "executor_pool_io.h"
 #include "actor.h"
+#include "thread_context.h"
 #include "config.h"
 #include "mailbox.h"
 #include <ydb/library/actors/util/affinity.h>
@@ -30,8 +31,9 @@ namespace NActors {
             ;
     }
 
-    TMailbox* TIOExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
-        i16 workerId = wctx.WorkerId;
+    TMailbox* TIOExecutorPool::GetReadyActivation(ui64 revolvingCounter) {
+        Y_ABORT_UNLESS(TlsThreadContext, "TlsThreadContext is nullptr");
+        i16 workerId = TlsThreadContext->WorkerId();
         Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
         const TAtomic semaphoreRaw = AtomicDecrement(Semaphore);
@@ -39,18 +41,21 @@ namespace NActors {
             TExecutorThreadCtx& threadCtx = Threads[workerId];
             ThreadQueue.Push(workerId + 1, revolvingCounter);
 
+            TExecutionStats *stats = TlsThreadContext->ExecutionStats;
+            TThreadActivityContext *activityCtx = &TlsThreadContext->ActivityContext;
+
             NHPTimer::STime hpnow = GetCycleCountFast();
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            TlsThreadContext->ElapsingActorActivity.store(Max<ui64>(), std::memory_order_release);
-            wctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
+            activityCtx->ElapsingActorActivity.store(SleepActivity, std::memory_order_release);
+            stats->AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
 
             if (threadCtx.WaitingPad.Park())
                 return 0;
 
             hpnow = GetCycleCountFast();
             hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
-            wctx.AddParkedCycles(hpnow - hpprev);
+            activityCtx->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
+            stats->AddParkedCycles(hpnow - hpprev);
         }
 
         while (!StopFlag.load(std::memory_order_acquire)) {
@@ -111,7 +116,7 @@ namespace NActors {
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
 
         for (i16 i = 0; i != PoolThreads; ++i) {
-            Threads[i].Thread.reset(new TExecutorThread(i, 0, actorSystem, this, MailboxTable.Get(), PoolName));
+            Threads[i].Thread.reset(new TExecutorThread(i, actorSystem, this, PoolName));
         }
 
         *scheduleReaders = &ScheduleQueue->Reader;
@@ -166,5 +171,13 @@ namespace NActors {
 
     TString TIOExecutorPool::GetName() const {
         return PoolName;
+    }
+
+    ui64 TIOExecutorPool::TimePerMailboxTs() const {
+        return NHPTimer::GetClockRate() * TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat();
+    }
+
+    ui32 TIOExecutorPool::EventsPerMailbox() const {
+        return TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
     }
 }

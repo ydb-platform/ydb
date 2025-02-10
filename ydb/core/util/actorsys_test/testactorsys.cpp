@@ -4,6 +4,7 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
@@ -64,13 +65,17 @@ public:
         , NodeId(nodeId)
     {}
 
-    TMailbox* GetReadyActivation(TWorkerContext& /*wctx*/, ui64 /*revolvingCounter*/) override {
+    TMailbox* GetReadyActivation(ui64 /*revolvingCounter*/) override {
         Y_ABORT();
     }
 
     TMailbox* ResolveMailbox(ui32 hint) override {
         const auto it = Context->Mailboxes.find({NodeId, PoolId, hint});
         return it != Context->Mailboxes.end() ? &it->second : nullptr;
+    }
+
+    TMailboxTable* GetMailboxTable() const override {
+        return Context->PerNodeInfo[NodeId].MailboxTable.get();
     }
 
     void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, NActors::TWorkerId /*workerId*/) override {
@@ -147,6 +152,14 @@ public:
 
     bool Cleanup() override {
         return true;
+    }
+
+    ui64 TimePerMailboxTs() const override {
+        return TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat() * NHPTimer::GetClockRate();
+    }
+
+    ui32 EventsPerMailbox() const override {
+        return TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
     }
 
     TAffinity* Affinity() const override {

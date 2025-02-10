@@ -56,7 +56,7 @@ public:
             return result;
         }
 
-        if (acl) {
+        if (acl && AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
             NACLib::TDiffACL diffACL(acl);
             for (const NACLibProto::TDiffACE& diffACE : diffACL.GetDiffACE()) {
                 if (static_cast<NACLib::EDiffType>(diffACE.GetDiffType()) == NACLib::EDiffType::Add) {
@@ -68,7 +68,7 @@ public:
                 } // remove diff type is allowed in any case
             }
         }
-        if (owner) {
+        if (owner && AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
             if (!CheckSidExistsOrIsNonYdb(context.SS->LoginProvider.Sids, owner)) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
                     TStringBuilder() << "Owner SID " << owner << " not found");

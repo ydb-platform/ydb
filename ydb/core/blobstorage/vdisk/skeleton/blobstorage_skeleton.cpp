@@ -107,7 +107,9 @@ namespace NKikimr {
                          OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0,
                          state,
                          replicated,
-                         outOfSpaceFlags));
+                         outOfSpaceFlags,
+                         OverloadHandler ? OverloadHandler->IsThrottling() : false,
+                         OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0));
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }
@@ -1353,7 +1355,7 @@ namespace NKikimr {
                 actorId = RunInBatchPool(ctx, CreateMonStreamActor(Hull->GetIndexSnapshot(), ev));
                 ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
-            ctx.ExecutorThread.ActorSystem->Send(ev->Forward(actorId));
+            ctx.Send(ev->Forward(actorId));
         }
 
         void Handle(TEvBlobStorage::TEvMonStreamActorDeathNote::TPtr& ev, const TActorContext& /*ctx*/) {
@@ -1967,7 +1969,7 @@ namespace NKikimr {
                 // create Hull
                 Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, HugeBlobCtx, MinHugeBlobInBytes,
                     Db->SkeletonID, Config->BalancingEnableDelete, std::move(*ev->Get()->Uncond),
-                    ctx.ExecutorThread.ActorSystem, Config->BarrierValidation, Db->HugeKeeperID);
+                    TActivationContext::ActorSystem(), Config->BarrierValidation, Db->HugeKeeperID);
                 ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
                     Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
 
@@ -2659,8 +2661,17 @@ namespace NKikimr {
         void HandleShred(NPDisk::TEvPreShredCompactVDisk::TPtr ev) {
             STLOG(PRI_DEBUG, BS_SHRED, BSSV01, VCtx->VDiskLogPrefix << "processing TEvPreShredCompactVDisk",
                 (ShredGeneration, ev->Get()->ShredGeneration));
-            Send(ev->Sender, new NPDisk::TEvPreShredCompactVDiskResult(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
-                ev->Get()->ShredGeneration, NKikimrProto::OK, TString()), 0, ev->Cookie);
+
+            VDiskCompactionState->Setup(TActivationContext::AsActorContext(), LoggedRecsVault.GetLastLsnInFlight(), {
+                .CompactLogoBlobs = true,
+                .CompactBlocks = false,
+                .CompactBarriers = false,
+                .Mode = TEvCompactVDisk::EMode::FULL,
+                .ClientId = ev->Sender,
+                .ClientCookie = ev->Cookie,
+                .Reply = std::make_unique<NPDisk::TEvPreShredCompactVDiskResult>(PDiskCtx->Dsk->Owner,
+                    PDiskCtx->Dsk->OwnerRound, ev->Get()->ShredGeneration, NKikimrProto::OK, TString()),
+            });
         }
 
         void HandleShred(NPDisk::TEvShredVDisk::TPtr ev) {

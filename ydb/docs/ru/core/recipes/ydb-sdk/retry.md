@@ -268,7 +268,7 @@
   * `CompletableFuture<Status> supplyStatus` - выполнение операции, возвращающей статус. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Status>> fn`
   * `CompletableFuture<Result<T>> supplyResult` - выполнение операции, возвращающей данные. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Result<T>>> fn`
 
-  При использовании класса `SessionRetryContext` нужно учитывать, что повторное исполнение операции будет выполнятся в следующих случаях:
+  При использовании класса `SessionRetryContext` нужно учитывать, что повторное исполнение операции будет выполняться в следующих случаях:
 
   * Лямбда вернула [retryable](../../reference/ydb-sdk/error_handling.md) код ошибки
   * В рамках исполнения лямбды была вызвано `UnexpectedResultException` c [retryable](../../reference/ydb-sdk/error_handling.md) кодом ошибки

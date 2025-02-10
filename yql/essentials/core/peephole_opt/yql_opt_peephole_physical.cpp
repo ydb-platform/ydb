@@ -3269,10 +3269,64 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
+TExprNode::TPtr MakeWideTableSource(const TExprNode& tableSource, TExprContext& ctx, TVector<TString>* narrowMapColumns = nullptr) {
+    // TODO check wide limit
+    if (tableSource.GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
+        return nullptr;
+    }
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Generate WideTableSource";
+    auto structType = tableSource.GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<TString> columns;
+    for (const auto& item : structType->GetItems()) {
+        columns.push_back(TString(item->GetName()));
+    }
+
+    auto innerFlow = ctx.NewCallable(tableSource.Pos(), "ToFlow", { tableSource.HeadPtr() });
+    auto expandMap = MakeExpandMap(tableSource.Pos(), columns, innerFlow, ctx);
+    auto source = ctx.NewCallable(tableSource.Pos(), "WideTableSource", { expandMap });
+    if (narrowMapColumns) {
+        *narrowMapColumns = columns;
+        return source;
+    } else {
+        return MakeNarrowMap(tableSource.Pos(), columns, source, ctx);
+    }
+}
+
+TExprNode::TPtr OptimizeExtend(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (node->ChildrenSize() > 0 && AllOf(node->Children(), [](const auto& x) { return x->IsCallable("TableSource");})) {
+        TExprNodeList wideChildren;
+        bool allWide = true;
+        TVector<TString> columns;
+        for (const auto& x : node->Children()) {
+            if (auto wide = MakeWideTableSource(*x, ctx, &columns)) {
+                wideChildren.push_back(wide);
+            } else {
+                allWide = false;
+                break;
+            }
+        }
+
+        if (allWide) {
+            return ctx.NewCallable(node->Pos(), "Collect", {
+                MakeNarrowMap(node->Pos(), columns, ctx.NewCallable(node->Pos(), "Extend", std::move(wideChildren)), ctx)
+            });
+        }
+    }
+
+    return node;
+}
+
 TExprNode::TPtr OptimizeSkip(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable({"Map", "OrderedMap", "ExpandMap", "WideMap", "NarrowMap"})) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
         return ctx.SwapWithHead(*node);
+    }
+
+    if (node->Head().IsCallable("TableSource")) {
+        if (auto wide = MakeWideTableSource(node->Head(), ctx)) {
+            return ctx.NewCallable(node->Pos(), "Collect", { ctx.ChangeChild(*node, 0, std::move(wide)) });
+        }
     }
 
     return node;
@@ -4763,6 +4817,12 @@ TExprNode::TPtr OptimizeTopOrSort(const TExprNode::TPtr& node, TExprContext& ctx
                     .Build()
                 .Lambda(input.TailPtr())
                 .Done().Ptr();
+        }
+    }
+
+    if (node->Head().IsCallable("TableSource")) {
+        if (auto wide = MakeWideTableSource(node->Head(), ctx)) {
+            return ctx.NewCallable(node->Pos(), "Collect", { ctx.ChangeChild(*node, 0, std::move(wide)) });
         }
     }
 
@@ -6664,7 +6724,7 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal()
                 .Build();
-        } else if (input.IsCallable({"WideTakeBlocks", "WideSkipBlocks", "BlockExpandChunked"})) {
+        } else if (input.IsCallable({"WideTakeBlocks", "WideSkipBlocks"})) {
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
             return ctx.Builder(node->Pos())
                 .Callable(node->Content())
@@ -8320,6 +8380,17 @@ TExprNode::TPtr DropToFlowDeps(const TExprNode::TPtr& node, TExprContext& ctx) {
     return ctx.ChangeChildren(*node, std::move(children));
 }
 
+TExprNode::TPtr OptimizeFromFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    const auto& input = node->Head();
+    if (input.IsCallable("ToFlow")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop FromFlow over ToFlow";
+        return ctx.NewCallable(node->Pos(), "ToStream", input.ChildrenList());
+    }
+
+    return node;
+}
+
 TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->ChildrenSize() == 1 && node->Head().IsCallable("FromFlow")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop ToFlow over FromFlow";
@@ -8327,20 +8398,16 @@ TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
 
-    if (node->Head().IsCallable("TableSource")) {
-        if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
-            // TODO check wide limit
-            YQL_CLOG(DEBUG, CorePeepHole) << "Generate WideTableSource";
-            auto structType = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-            TVector<TString> columns;
-            for (const auto& item : structType->GetItems()) {
-                columns.push_back(TString(item->GetName()));
-            }
+    if (node->ChildrenSize() == 1 && node->Head().IsCallable("TableSource")) {
+        if (auto wide = MakeWideTableSource(node->Head(), ctx)) {
+            return wide;
+        }
+    }
 
-            auto innerFlow = ctx.NewCallable(node->Pos(), "ToFlow", { node->Head().HeadPtr() });
-            auto expandMap = MakeExpandMap(node->Pos(), columns, innerFlow, ctx);
-            auto source = ctx.NewCallable(node->Pos(), "WideTableSource", { expandMap });
-            return MakeNarrowMap(node->Pos(), columns, source, ctx);
+    if (node->ChildrenSize() == 1 && node->Head().IsCallable("Iterator")
+        && node->Head().ChildrenSize() == 1 && node->Head().Head().IsCallable("TableSource")) {
+        if (auto wide = MakeWideTableSource(node->Head().Head(), ctx)) {
+            return wide;
         }
     }
 
@@ -8582,6 +8649,7 @@ struct TPeepHoleRules {
     };
 
     const TPeepHoleOptimizerMap FinalStageRules = {
+        {"Extend", &OptimizeExtend},
         {"Take", &OptimizeTake},
         {"Skip", &OptimizeSkip},
         {"GroupByKey", &PeepHoleConvertGroupBySingleKey},
@@ -8640,6 +8708,7 @@ struct TPeepHoleRules {
         {"TopSort", &OptimizeTopOrSort<true, true>},
         {"Sort", &OptimizeTopOrSort<true, false>},
         {"ToFlow", &OptimizeToFlow},
+        {"FromFlow", &OptimizeFromFlow},
         {"Coalesce", &OptimizeCoalesce},
     };
 

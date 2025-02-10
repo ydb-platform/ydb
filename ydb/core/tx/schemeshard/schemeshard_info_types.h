@@ -105,7 +105,7 @@ struct TSplitSettings {
     TForceShardSplitSettings GetForceShardSplitSettings() const {
         return TForceShardSplitSettings{
             .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
-            .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
+            .DisableForceShardSplit = true,
         };
     }
 };
@@ -3680,17 +3680,32 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     }
 
     float CalcProgressPercent() const {
+        const auto total = Shards.size();
+        const auto done = DoneShards.size();
         if (IsBuildVectorIndex()) {
+            const auto inProgress = InProgressShards.size();
+            const auto toUpload = ToUploadShards.size();
             Y_ASSERT(KMeans.Level != 0);
-            // TODO(mbkkt) better calculation for vector index
-            return KMeans.Level * 100.0 / KMeans.Levels;
+            if (!KMeans.NeedsAnotherLevel() && !KMeans.NeedsAnotherParent()
+                && toUpload == 0 && inProgress == 0) {
+                return 100.f;
+            }
+            auto percent = static_cast<float>(KMeans.Level - 1) / KMeans.Levels;
+            auto multiply = 1.f / KMeans.Levels;
+            if (KMeans.State == TKMeans::MultiLocal) {
+                percent += (multiply * (total - inProgress - toUpload)) / total;
+            } else {
+                const auto parentSize = KMeans.BinPow(KMeans.K, KMeans.Level - 1);
+                const auto parentFrom = KMeans.ParentEnd - parentSize + 1;
+                percent += (multiply * (KMeans.Parent - parentFrom)) / parentSize;
+            }
+            return 100.f * percent;
         }
         if (Shards) {
-            float totalShards = Shards.size();
-            return 100.0 * DoneShards.size() / totalShards;
+            return (100.f * done) / total;
         }
         // No shards - no progress
-        return 0.0;
+        return 0.f;
     }
 
     void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;

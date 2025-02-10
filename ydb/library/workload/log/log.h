@@ -2,26 +2,9 @@
 
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 
-#include <cctype>
-
 namespace NYdbWorkload {
 
 namespace NLog {
-
-enum LogWorkloadConstants : ui64 {
-    MIN_PARTITIONS = 40,
-    MAX_PARTITIONS = 1000,
-    PARTITION_SIZE_MB = 2000,
-    STRING_LEN = 8,
-    STR_COLUMNS_CNT = 1,
-    INT_COLUMNS_CNT = 1,
-    KEY_COLUMNS_CNT = 1,
-    ROWS_CNT = 1,
-    PARTITIONS_BY_LOAD = true,
-
-    TIMESTAMP_STANDARD_DEVIATION_MINUTES = 0,
-    TIMESTAMP_TTL_MIN = 60,
-};
 
 class TLogWorkloadParams : public TWorkloadParams {
 public:
@@ -33,49 +16,43 @@ public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
-    ui64 MinPartitions = LogWorkloadConstants::MIN_PARTITIONS;
-    ui64 MaxPartitions = LogWorkloadConstants::MAX_PARTITIONS;
-    ui64 PartitionSizeMb = LogWorkloadConstants::PARTITION_SIZE_MB;
-    ui64 StringLen = LogWorkloadConstants::STRING_LEN;
-    ui64 StrColumnsCnt = LogWorkloadConstants::STR_COLUMNS_CNT;
-    ui64 IntColumnsCnt = LogWorkloadConstants::INT_COLUMNS_CNT;
-    ui64 KeyColumnsCnt = LogWorkloadConstants::KEY_COLUMNS_CNT;
-    ui64 TimestampStandardDeviationMinutes = LogWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES;
-    ui64 TimestampTtlMinutes = LogWorkloadConstants::TIMESTAMP_STANDARD_DEVIATION_MINUTES;
-    ui64 RowsCnt = LogWorkloadConstants::ROWS_CNT;
-    bool PartitionsByLoad = LogWorkloadConstants::PARTITIONS_BY_LOAD;
+    ui64 MinPartitions = 40;
+    ui64 MaxPartitions = 1000;
+    ui64 PartitionSizeMb = 2000;
+    ui64 StringLen = 8;
+    ui64 StrColumnsCnt = 0;
+    ui64 IntColumnsCnt = 0;
+    ui64 KeyColumnsCnt = 0;
+    ui64 TimestampStandardDeviationMinutes = 0;
+    ui64 TimestampTtlMinutes = 0;
+    ui64 RowsCnt = 1;
+    ui32 NullPercent = 10;
+    bool PartitionsByLoad = true;
 
     std::string TableName = "log_writer_test";
 
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
+    TWorkloadDataInitializer::TList CreateDataInitializers() const override;
 };
 
 class TLogGenerator final: public TWorkloadQueryGeneratorBase<TLogWorkloadParams> {
 public:
     using TBase = TWorkloadQueryGeneratorBase<TLogWorkloadParams>;
     struct TRow {
+        std::string LogId;
         TInstant Ts;
+        i32 Level;
+        std::string ServiceName;
+        std::string Component;
+        std::string Message;
+        std::string RequestId;
+        std::string Metadata;
+        TInstant IngestedAt;
         TVector<ui64> Ints;
         TVector<TString> Strings;
-
-        TString ToString() const {
-            std::stringstream ss;
-            ss << "( ";
-            for (auto i : Ints) {
-                ss << i << " ";
-            }
-            for (auto s : Strings) {
-                ss << s << " ";
-            }
-            ss << ")";
-            return ss.str();
-        }
-
-        bool operator == (const TRow &other) const {
-            return Ts == other.Ts && Ints == other.Ints && Strings == other.Strings;
-        }
     };
-    TLogGenerator(const TLogWorkloadParams* params);
+
+    using TBase::TBase;
 
     std::string GetDDLQueries() const override;
 
@@ -90,16 +67,15 @@ public:
         Insert,
         Upsert,
         BulkUpsert,
+        Select,
     };
 
 private:
-    TQueryInfoList WriteRows(TString operation, TVector<TRow>&& rows);
-    TQueryInfoList Insert(TVector<TRow>&& rows);
-    TQueryInfoList Upsert(TVector<TRow>&& rows);
-    TQueryInfoList BulkUpsert(TVector<TRow>&& rows);
-    TVector<TRow> GenerateRandomRows();
-
-    const ui64 TotalColumnsCnt;
+    TQueryInfoList WriteRows(TString operation, TVector<TRow>&& rows) const;
+    TQueryInfoList Insert(TVector<TRow>&& rows) const;
+    TQueryInfoList Upsert(TVector<TRow>&& rows) const;
+    TQueryInfoList BulkUpsert(TVector<TRow>&& rows) const;
+    TQueryInfoList Select() const;
 };
 
 } // namespace NLog

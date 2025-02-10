@@ -14,7 +14,7 @@ namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 NWrappers::NExternalStorage::IExternalStorageOperator::TPtr TOperator::GetCurrentOperator() const {
     TGuard<TSpinLock> changeLock(ChangeOperatorLock);
-    return ExternalStorageOperator;
+    return ExternalStorageOperator->Get();
 }
 
 std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAction(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) {
@@ -41,7 +41,7 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_pt
         }
         categories = GetSharedBlobs()->BuildRemoveCategories(std::move(deleteBlobIds));
     }
-    auto gcTask = std::make_shared<TGCTask>(GetStorageId(), std::move(draftBlobIds), GetCurrentOperator(), std::move(categories), counters);
+    auto gcTask = std::make_shared<TGCTask>(GetStorageId(), std::move(draftBlobIds), ExternalStorageOperator, std::move(categories), counters);
     if (gcTask->IsEmpty()) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "start_gc_skipped")("reason", "task_empty");
         return nullptr;
@@ -56,55 +56,60 @@ void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) c
 }
 
 void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* tierManager) {
-    NWrappers::NExternalStorage::IExternalStorageOperator::TPtr extStorageOperator;
-    std::optional<NKikimrSchemeOp::TS3Settings> settings;
-
-    if (tierManager && tierManager->IsReady()) {
-        settings = tierManager->GetS3Settings();
+    if (auto op = NYDBTest::TControllers::GetColumnShardController()->GetStorageOperatorOverride(GetStorageId())) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "override_external_operator")("storage", GetStorageId());
+        DoInitNewExternalOperator(op, std::nullopt);
+    } else if (tierManager && tierManager->IsReady()) {
+        const NKikimrSchemeOp::TS3Settings& settings = tierManager->GetS3Settings();
         {
             TGuard<TSpinLock> changeLock(ChangeOperatorLock);
-            if (CurrentS3Settings && CurrentS3Settings->SerializeAsString() == settings->SerializeAsString()) {
+            if (CurrentS3Settings && CurrentS3Settings->SerializeAsString() == settings.SerializeAsString()) {
                 return;
             }
         }
-        auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(*settings);
+        auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(settings);
         AFL_VERIFY(extStorageConfig);
-        extStorageOperator = extStorageConfig->ConstructStorageOperator(false);
+        DoInitNewExternalOperator(extStorageConfig->ConstructStorageOperator(false), settings);
     } else {
-        extStorageOperator = std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
-            NWrappers::NExternalStorage::TUnavailableExternalStorageOperator(
-                "tier_unavailable", TStringBuilder() << "Tier is not configured: " << GetStorageId()));
+        DoInitNewExternalOperator(std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
+                                      NWrappers::NExternalStorage::TUnavailableExternalStorageOperator(
+                                          "tier_unavailable", TStringBuilder() << "Tier is not configured: " << GetStorageId())),
+            std::nullopt);
     }
-
-    extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(GetStorageId()));
-    TGuard<TSpinLock> changeLock(ChangeOperatorLock);
-    CurrentS3Settings = settings;
-    ExternalStorageOperator = extStorageOperator;
 }
 
 void TOperator::InitNewExternalOperator() {
     AFL_VERIFY(InitializationConfig);
-    auto extStorageOperator = InitializationConfig->ConstructStorageOperator(false);
-    extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(GetStorageId()));
-    TGuard<TSpinLock> changeLock(ChangeOperatorLock);
-    ExternalStorageOperator = extStorageOperator;
+    DoInitNewExternalOperator(InitializationConfig->ConstructStorageOperator(false), std::nullopt);
 }
 
-TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
+void TOperator::DoInitNewExternalOperator(const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& storageOperator,
+    const std::optional<NKikimrSchemeOp::TS3Settings>& settings) {
+    storageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(GetStorageId()));
+    {
+        TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+        CurrentS3Settings = settings;
+    }
+    ExternalStorageOperator->Emplace(storageOperator);
+}
+
+TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard,
+    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
     : TBase(storageId, storageSharedBlobsManager)
     , TabletActorId(shard.SelfId())
     , Generation(shard.Executor()->Generation())
-{
+    , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>()) {
     InitNewExternalOperator(shard.GetTierManagerPointer(storageId));
 }
 
-TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
+TOperator::TOperator(const TString& storageId, const TActorId& shardActorId,
+    const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
     const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation)
     : TBase(storageId, storageSharedBlobsManager)
     , TabletActorId(shardActorId)
     , Generation(generation)
     , InitializationConfig(storageConfig)
-{
+    , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>()) {
     InitNewExternalOperator();
 }
 

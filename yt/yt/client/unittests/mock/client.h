@@ -10,6 +10,8 @@
 
 #include <yt/yt/client/chaos_client/replication_card_cache.h>
 
+#include <yt/yt/client/scheduler/spec_patch.h>
+
 #include <yt/yt/client/table_client/name_table.h>
 
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
@@ -63,7 +65,7 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options),
         (override));
 
@@ -118,7 +120,7 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options),
         (override));
 
@@ -401,6 +403,11 @@ public:
         const TUnfreezeTableOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<void>, CancelTabletTransition, (
+        NTabletClient::TTabletId tabletId,
+        const TCancelTabletTransitionOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, ReshardTable, (
         const NYPath::TYPath& path,
         const std::vector<NTableClient::TLegacyOwningKey>& pivotKeys,
@@ -597,6 +604,12 @@ public:
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const NYson::TYsonString& parameters,
         const TUpdateOperationParametersOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, PatchOperationSpec, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patch,
+        const TPatchOperationSpecOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TOperation>, GetOperation, (

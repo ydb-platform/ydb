@@ -416,6 +416,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool OrderedColumns = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
+    THashSet<TString> PeepholeFlags;
     bool StreamLookupJoin = false;
     ui32 MaxAggPushdownPredicates = 6; // algorithm complexity is O(2^N)
 

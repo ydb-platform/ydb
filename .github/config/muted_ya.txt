@@ -62,6 +62,7 @@ ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryWithResourcePoolClassifier
 ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*]+chunk+chunk
 ydb/core/kqp/ut/spilling KqpScanSpilling.SelfJoinQueryService
+ydb/core/kqp/ut/tx KqpSinkTx.OlapInvalidateOnError
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.*Olap*
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.*Oltp*
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce

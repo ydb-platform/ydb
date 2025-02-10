@@ -1579,7 +1579,7 @@ public:
             switch (status) {
                 case Ydb::StatusIds::ABORTED: {
                     if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
-                        issues.AddIssue(*QueryState->TxCtx->TxManager->GetLockIssue());
+                        YQL_ENSURE(!issues.Empty());
                     } else if (ev->BrokenLockPathId) {
                         YQL_ENSURE(!QueryState->TxCtx->TxManager);
                         issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));

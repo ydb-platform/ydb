@@ -25,11 +25,11 @@ public:
         const TString& description = TString()
     );
 
-    static TDriver CreateDriver(const TConfig& config);
-    static TDriver CreateDriver(const TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend);
+    static TDriver CreateDriver(TConfig& config);
+    static TDriver CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend);
 
 private:
-    static TDriverConfig CreateDriverConfig(const TConfig& config);
+    static TDriverConfig CreateDriverConfig(TConfig& config);
 };
 
 class TYdbReadOnlyCommand : public TYdbCommand {

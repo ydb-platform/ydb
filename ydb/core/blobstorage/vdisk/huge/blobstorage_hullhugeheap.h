@@ -214,6 +214,7 @@ namespace NKikimr {
             void BuildLayout();
             inline ui32 SizeToBlocks(ui32 size) const;
             inline ui32 GetEndBlocks() const;
+            bool IsOldMinHugeBlobSizeCompatible() const;
 
             enum class EStartMode {
                 Empty = 1,

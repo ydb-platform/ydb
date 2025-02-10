@@ -46,7 +46,7 @@ public:
     void SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings&) const;
 
 private:
-    std::variant<TReplicatedBucketSettings> Behavior_;
+    std::variant<TReplicatedBucketSettings> BehaviorSettings_;
 };
 
 // Settings for hierarchical deficit round robin (HDRR) algorithm.

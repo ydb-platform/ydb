@@ -27,21 +27,21 @@ void TReplicatedBucketSettings::SerializeTo(Ydb::RateLimiter::ReplicatedBucketSe
 }
 
 TLeafBehavior::EBehavior TLeafBehavior::GetBehavior() const {
-    return static_cast<EBehavior>(Behavior_.index());
+    return static_cast<EBehavior>(BehaviorSettings_.index());
 }
 
 TLeafBehavior::TLeafBehavior(const TReplicatedBucketSettings& replicatedBucket)
-    : Behavior_(replicatedBucket)
+    : BehaviorSettings_(replicatedBucket)
 {
 }
 
 TLeafBehavior::TLeafBehavior(const Ydb::RateLimiter::ReplicatedBucketSettings& replicatedBucket)
-    : Behavior_(replicatedBucket)
+    : BehaviorSettings_(replicatedBucket)
 {
 }
 
 const TReplicatedBucketSettings& TLeafBehavior::GetReplicatedBucket() const {
-    return std::get<TReplicatedBucketSettings>(Behavior_);
+    return std::get<TReplicatedBucketSettings>(BehaviorSettings_);
 }
 
 void TLeafBehavior::SerializeTo(Ydb::RateLimiter::HierarchicalDrrSettings& proto) const {

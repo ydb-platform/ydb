@@ -3,6 +3,7 @@
 #include <ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb::Cms {
+    class CreateDatabaseRequest;
     class ListDatabasesResult;
     class GetDatabaseStatusResult;
 
@@ -34,9 +35,7 @@ private:
 
 using TAsyncListDatabasesResult = NThreading::TFuture<TListDatabasesResult>;
 
-struct TGetDatabaseStatusSettings : public TOperationRequestSettings<TGetDatabaseStatusSettings> {
-    FLUENT_SETTING(std::string, Path);
-};
+struct TGetDatabaseStatusSettings : public TOperationRequestSettings<TGetDatabaseStatusSettings> {};
 
 enum class EState {
     StateUnspecified = 0,
@@ -165,6 +164,9 @@ public:
     const TDatabaseQuotas& GetDatabaseQuotas() const;
     const TScaleRecommenderPolicies& GetScaleRecommenderPolicies() const;
 
+    // Fills CreateDatabaseRequest proto from this database status
+    void SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const;
+
 private:
     std::string Path_;
     EState State_;
@@ -184,8 +186,9 @@ public:
     explicit TCmsClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
     TAsyncListDatabasesResult ListDatabases(const TListDatabasesSettings& settings = TListDatabasesSettings());
-    TAsyncGetDatabaseStatusResult GetDatabaseStatus(const TGetDatabaseStatusSettings& settings = TGetDatabaseStatusSettings());
-    
+    TAsyncGetDatabaseStatusResult GetDatabaseStatus(const std::string& path,
+        const TGetDatabaseStatusSettings& settings = TGetDatabaseStatusSettings());
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;

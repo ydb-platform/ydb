@@ -161,7 +161,7 @@ void TClientCommand::SaveParseResult(TConfig& config) {
 }
 
 void TClientCommand::Prepare(TConfig& config) {
-    config.ArgsSettings.Reset(new TConfig::TArgSettings());
+    config.ArgsSettings = TConfig::TArgSettings();
     config.Opts = &Opts;
     Config(config);
     CheckForExecutableOptions(config);

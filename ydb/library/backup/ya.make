@@ -12,6 +12,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump/util
     ydb/public/lib/yson_value
     ydb/public/lib/ydb_cli/dump/files
+    ydb/public/sdk/cpp/src/client/cms
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/driver

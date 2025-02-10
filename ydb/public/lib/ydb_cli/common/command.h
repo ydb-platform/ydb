@@ -104,7 +104,7 @@ public:
         THashSet<TString> ExecutableOptions;
         bool HasExecutableOptions = false;
         TString Path;
-        THolder<TArgSettings> ArgsSettings;
+        TArgSettings ArgsSettings;
         TString Address;
         TString Database;
         TString CaCerts;
@@ -185,18 +185,18 @@ public:
         }
 
         void SetFreeArgsMin(size_t value) {
-            ArgsSettings->Min.Set(value);
+            ArgsSettings.Min.Set(value);
             Opts->SetFreeArgsMin(value);
         }
 
         void SetFreeArgsMax(size_t value) {
-            ArgsSettings->Max.Set(value);
+            ArgsSettings.Max.Set(value);
             Opts->SetFreeArgsMax(value);
         }
 
         void SetFreeArgsNum(size_t minValue, size_t maxValue) {
-            ArgsSettings->Min.Set(minValue);
-            ArgsSettings->Max.Set(maxValue);
+            ArgsSettings.Min.Set(minValue);
+            ArgsSettings.Max.Set(maxValue);
             Opts->SetFreeArgsNum(minValue, maxValue);
         }
 
@@ -209,10 +209,10 @@ public:
             if (HasHelpCommand() || HasExecutableOptions) {
                 return;
             }
-            bool minSet = ArgsSettings->Min.GetIsSet();
-            size_t minValue = ArgsSettings->Min.Get();
-            bool maxSet = ArgsSettings->Max.GetIsSet();
-            size_t maxValue = ArgsSettings->Max.Get();
+            bool minSet = ArgsSettings.Min.GetIsSet();
+            size_t minValue = ArgsSettings.Min.Get();
+            bool maxSet = ArgsSettings.Max.GetIsSet();
+            size_t maxValue = ArgsSettings.Max.Get();
             bool minFailed = minSet && count < minValue;
             bool maxFailed = maxSet && count > maxValue;
             if (minFailed || maxFailed) {

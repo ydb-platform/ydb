@@ -255,7 +255,6 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     return result;
 }
 
-
 class ITableKindState {
 public:
     using TPtr = std::unique_ptr<ITableKindState>;

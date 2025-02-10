@@ -136,6 +136,10 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::Iceberg),
             BuildIcebergSource(hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::Solomon),
+            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {}, hostnamePatternsRegEx)
         }
     },
     availableExternalDataSources); 

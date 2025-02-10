@@ -7,11 +7,11 @@ import yql_utils
 
 
 class KqpRun(object):
-    def __init__(self, udfs_dir=None):
+    def __init__(self, config_file, scheme_file, udfs_dir=None):
         self.kqprun_binary = yql_utils.yql_binary_path('ydb/tests/tools/kqprun/kqprun')
 
-        self.config_file = yql_utils.yql_source_path(os.path.join('ydb/tests/fq/yt/cfg', 'kqprun_config.conf'))
-        self.scheme_file = yql_utils.yql_source_path(os.path.join('ydb/tests/fq/yt/cfg', 'kqprun_scheme.sql'))
+        self.config_file = yql_utils.yql_source_path(config_file)
+        self.scheme_file = yql_utils.yql_source_path(scheme_file)
 
         self.res_dir = yql_utils.get_yql_dir(prefix='kqprun_')
 
@@ -23,7 +23,7 @@ class KqpRun(object):
     def __res_file_path(self, name):
         return os.path.join(self.res_dir, name)
 
-    def yql_exec(self, program=None, program_file=None, verbose=False, check_error=True, tables=None):
+    def yql_exec(self, program=None, program_file=None, verbose=False, check_error=True, var_templates=None, tables=None):
         udfs_dir = self.udfs_dir
 
         config_file = self.config_file
@@ -48,6 +48,10 @@ class KqpRun(object):
             '--result-format full-proto '
             '--result-rows-limit 0 ' % locals()
         )
+
+        if var_templates is not None:
+            for var_template in var_templates:
+                cmd += '--var-template %s ' % var_template
 
         if tables is not None:
             for table in tables:
@@ -80,7 +84,7 @@ class KqpRun(object):
 
         return yql_utils.YQLExecResult(
             proc_result.std_out,
-            yql_utils.normalize_source_code_path(err.replace(self.res_dir, '<tmp_path>')),
+            proc_result.std_err,
             results,
             results_file,
             None,

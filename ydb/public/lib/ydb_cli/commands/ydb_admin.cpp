@@ -53,7 +53,7 @@ void TCommandDatabaseDump::Parse(TConfig& config) {
 }
 
 int TCommandDatabaseDump::Run(TConfig& config) {
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));

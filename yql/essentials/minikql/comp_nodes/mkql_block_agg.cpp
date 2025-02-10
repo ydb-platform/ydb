@@ -1306,6 +1306,7 @@ public:
         InMemory,
         Spilling,
         Restoring,
+        ProcessRestored,
         Done
     };
 
@@ -1326,7 +1327,7 @@ public:
     }
 
     void PrepareForSpilling() {
-        std::cerr << "Preparing for spilling" << std::endl;
+        std::cerr << "Preparing for spilling. Spiller factory: " << (bool)SpillerFactory_ << std::endl;
         SpillingBuckets_.resize(NumberOfSpillingBuckets_);
         auto spiller = SpillerFactory_->CreateSpiller();
         for (auto &b: SpillingBuckets_) {
@@ -1354,6 +1355,10 @@ public:
             }
             case EOperatingMode::Restoring: {
                 YQL_LOG(INFO) << "switching Memory mode to Restoring";
+                break;
+            }
+            case EOperatingMode::ProcessRestored: {
+                YQL_LOG(INFO) << "switching Memory mode to ProcessRestored";
                 break;
             }
             case EOperatingMode::Done: {
@@ -1397,8 +1402,17 @@ public:
             }
             case EOperatingMode::Restoring: {
                 if (!LoadNextBucket()) return true;
-                SwitchMode(EOperatingMode::Done);
+                SwitchMode(EOperatingMode::ProcessRestored);
                 return false;
+            }
+            case EOperatingMode::ProcessRestored: {
+                if (HasAnythingToLoad()) {
+                    SwitchMode(EOperatingMode::Restoring);
+                    return CheckSpillingAndWait();
+                } else {
+                    SwitchMode(EOperatingMode::Done);
+                    return false;
+                }
             }
             case EOperatingMode::Done: {
                 return false;
@@ -2432,9 +2446,6 @@ private:
         Done,
     };
 
-    TSpillingState spillingState = TSpillingState::InMemory;
-
-
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             TState& state = *static_cast<TState*>(State_.AsBoxed().Get());
@@ -2451,7 +2462,6 @@ private:
                         if (state.HasAnythingToLoad()) {
                             state.Clear();
                             state.IsFinished_ = false;
-                            spillingState = TSpillingState::Restoring;
 
                         } else {
                             return NUdf::EFetchStatus::Finish;

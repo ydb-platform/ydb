@@ -1339,6 +1339,7 @@ class BaseTestClusterBackupInFiles(object):
             [
                 backup_bin(),
                 "--verbose",
+                "--assume-yes",
                 "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
             ]
             + command

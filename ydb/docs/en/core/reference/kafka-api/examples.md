@@ -40,21 +40,21 @@ For examples of how to set up authentication, see [Authentication examples](#aut
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-  {% include [index.md](../../../_includes/bash/kafka-api-console-read-no-auth.md) %}
+  {% include [index.md](_includes/bash/kafka-api-console-read-no-auth.md) %}
 
 - kcat
 
-  {% include [index.md](../../../_includes/bash/kafka-api-kcat-read-no-auth.md) %}
+  {% include [index.md](_includes/bash/kafka-api-kcat-read-no-auth.md) %}
 
 - Java
 
-  {% include [index.md](../../../_includes/java/kafka-api-java-read-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-java-read-no-auth.md) %}
 
 - Spark
 
   {% include [index.md](_includes/spark-constraints.md) %}
 
-  {% include [index.md](../../../_includes/java/kafka-api-spark-read-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-spark-read-no-auth.md) %}
 
   {% include [index.md](_includes/spark-version-notice.md) %}
 
@@ -62,7 +62,7 @@ For examples of how to set up authentication, see [Authentication examples](#aut
 
   {% include [index.md](_includes/flink-constraints.md) %}
 
-  {% include [index.md](../../../_includes/java/kafka-api-flink-read-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-flink-read-no-auth.md) %}
 
   {% include [index.md](_includes/flink-version-notice.md) %}
 
@@ -102,21 +102,21 @@ Otherwise, writing to Apache Kafka and {{ ydb-short-name }} Topics through Kafka
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-  {% include [index.md](../../../_includes/bash/kafka-api-console-write-no-auth.md) %}
+  {% include [index.md](_includes/bash/kafka-api-console-write-no-auth.md) %}
 
 - kcat
 
-  {% include [index.md](../../../_includes/bash/kafka-api-kcat-write-no-auth.md) %}
+  {% include [index.md](_includes/bash/kafka-api-kcat-write-no-auth.md) %}
 
 - Java
 
-  {% include [index.md](../../../_includes/java/kafka-api-java-write-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-java-write-no-auth.md) %}
 
 - Spark
 
   {% include [index.md](_includes/spark-constraints.md) %}
 
-  {% include [index.md](../../../_includes/java/kafka-api-spark-write-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-spark-write-no-auth.md) %}
 
   {% include [index.md](_includes/spark-version-notice.md) %}
 
@@ -124,17 +124,17 @@ Otherwise, writing to Apache Kafka and {{ ydb-short-name }} Topics through Kafka
 
   {% include [index.md](_includes/flink-constraints.md) %}
 
-  {% include [index.md](../../../_includes/java/kafka-api-flink-write-no-auth.md) %}
+  {% include [index.md](_includes/java/kafka-api-flink-write-no-auth.md) %}
 
   {% include [index.md](_includes/flink-version-notice.md) %}
 
 - Logstash
 
-  {% include [index.md](../../../_includes/logs-to-kafka/kafka-api-logstash.md) %}
+  {% include [index.md](_includes/logs-to-kafka/kafka-api-logstash.md) %}
 
 - Fluent Bit
 
-  {% include [index.md](../../../_includes/logs-to-kafka/kafka-api-fluent-bit.md) %}
+  {% include [index.md](_includes/logs-to-kafka/kafka-api-fluent-bit.md) %}
 
 {% endlist %}
 
@@ -170,14 +170,14 @@ Examples are shown for reading, but the same configuration parameters work for w
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-  {% include [index.md](../../../_includes/bash/kafka-api-console-read-with-sasl-creds-on-prem.md) %}
+  {% include [index.md](_includes/bash/kafka-api-console-read-with-sasl-creds-on-prem.md) %}
 
 - kcat
 
-  {% include [index.md](../../../_includes/bash/kafka-api-kcat-read-with-sasl-creds-on-prem.md) %}
+  {% include [index.md](_includes/bash/kafka-api-kcat-read-with-sasl-creds-on-prem.md) %}
 
 - Java
 
-  {% include [index.md](../../../_includes/java/kafka-api-java-read-with-sasl-creds-on-prem.md) %}
+  {% include [index.md](_includes/java/kafka-api-java-read-with-sasl-creds-on-prem.md) %}
 
 {% endlist %}

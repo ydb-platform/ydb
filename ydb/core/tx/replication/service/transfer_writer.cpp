@@ -51,7 +51,6 @@ struct TScheme {
     std::vector<ui32> WriteIndex;
 };
 
-
 struct TOutputType {
     TOutputType(ui32 width)
         : Data(width) {

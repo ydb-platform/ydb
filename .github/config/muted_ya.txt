@@ -63,8 +63,18 @@ ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*]+chunk+chunk
 ydb/core/kqp/ut/spilling KqpScanSpilling.SelfJoinQueryService
 ydb/core/kqp/ut/tx KqpSinkTx.OlapInvalidateOnError
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.*Olap*
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.*Oltp*
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOlap
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltp
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltpNoSink
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOlap
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltp
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltpNoSink
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOlap
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltp
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltpNoSink
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOlap
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
+ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/mind/hive/ut THiveTest.TestReassignUseRelativeSpace
 ydb/core/persqueue/ut [*/*] chunk chunk
@@ -160,6 +170,8 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[36]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[67]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
 ydb/tests/olap/scenario sole chunk chunk
+ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
+ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
 ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhenAlterTtl.test
 ydb/tests/olap/ttl_tiering sole chunk chunk
@@ -240,7 +252,6 @@ ydb/tests/sql sole chunk chunk
 ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_upsert_delete_and_read_tpch_tx
 ydb/tests/sql/large test_tiering.py.TestYdbS3TTL.test_basic_tiering_operations
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_classifier_init[False]
-ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_classifier_without_init_timeout
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-False]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit

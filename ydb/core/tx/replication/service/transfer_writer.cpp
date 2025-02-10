@@ -668,13 +668,12 @@ public:
     }
 
     explicit TTransferWriter(
-        const TString& transformLambda,
-        const TPathId& tablePathId,
-        const TActorId& compileServiceId)
+            const TString& transformLambda,
+            const TPathId& tablePathId,
+            const TActorId& compileServiceId)
         : TransformLambda(transformLambda)
         , TablePathId(tablePathId)
         , CompileServiceId(compileServiceId)
-        
     {}
 
 private:

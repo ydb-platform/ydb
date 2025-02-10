@@ -1173,6 +1173,7 @@ public:
                     return Build<TKiAlterDatabase>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
+                        .DatabasePath().Build(key.GetDatabasePath())
                         .Settings(settings.Other)
                         .Done()
                         .Ptr();

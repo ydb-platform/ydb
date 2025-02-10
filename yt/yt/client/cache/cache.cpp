@@ -82,17 +82,20 @@ IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const 
 }
 
 IClientsCachePtr CreateClientsCache(
-    const TConnectionConfigPtr& config,
+    const TConnectionConfigPtr& connectionConfig,
     const NApi::TClientOptions& options)
 {
-    auto clustersConfig = New<TClientsCacheConfig>();
-    clustersConfig->DefaultConnection = CloneYsonStruct(config, /*postprocess*/ false, /*setDefaults*/ false);
-    return CreateClientsCache(clustersConfig, options);
+    auto config = New<TClientsCacheConfig>();
+    config->DefaultConnection = CloneYsonStruct(connectionConfig, /*postprocess*/ false, /*setDefaults*/ false);
+    if (config->DefaultConnection->ClusterName) {
+        config->PerClusterConnection[*config->DefaultConnection->ClusterName] = config->DefaultConnection;
+    }
+    return CreateClientsCache(config, options);
 }
 
-IClientsCachePtr CreateClientsCache(const TConnectionConfigPtr& config)
+IClientsCachePtr CreateClientsCache(const TConnectionConfigPtr& connectionConfig)
 {
-    return CreateClientsCache(config, NApi::GetClientOptionsFromEnvStatic());
+    return CreateClientsCache(connectionConfig, NApi::GetClientOptionsFromEnvStatic());
 }
 
 IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options)

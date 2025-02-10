@@ -1,6 +1,8 @@
 #include <yt/yt/client/cache/cache.h>
 #include <yt/yt/client/cache/config.h>
 
+#include <yt/yt/core/ytree/convert.h>
+
 #include <library/cpp/testing/gtest/gtest.h>
 
 #include <library/cpp/yt/string/format.h>
@@ -44,6 +46,26 @@ TEST(TClientsCacheTest, GetClientWithProxyRole)
     // It's because we don't actually create YT Server.
     client1->GetConnection()->Terminate();
     client2->GetConnection()->Terminate();
+}
+
+TEST(TClientsCacheTest, GetClientByClusteName)
+{
+    SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    auto connectionConfig = New<NApi::NRpcProxy::TConnectionConfig>();
+    connectionConfig->ClusterName = "test";
+    connectionConfig->ClusterUrl = "localhost";
+    auto cache = CreateClientsCache(connectionConfig);
+    auto client = cache->GetClient("test");
+    auto connection = client->GetConnection();
+
+    EXPECT_EQ("test", connection->GetClusterName());
+    auto newConnectionConfig = NYTree::ConvertTo<NApi::NRpcProxy::TConnectionConfigPtr>(connection->GetConfigYson());
+    EXPECT_EQ("localhost", newConnectionConfig->ClusterUrl);
+
+    // This is needed for TConnection.OnProxyUpdate to stop
+    // and to remove references to TConnection that it's holding.
+    // It's because we don't actually create YT Server.
+    connection->Terminate();
 }
 
 TEST(TClientsCacheTest, MultiThreads)

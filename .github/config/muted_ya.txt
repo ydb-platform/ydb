@@ -2,6 +2,7 @@ ydb/apps/ydb/ut YdbWorkloadTopic.Full_Statistics_UseTx
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Clean_Without_Init
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Init_Clean
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
+ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusErrorWith_1_2_VdiskErrors
 ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_VdiskErrors
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction

@@ -10,6 +10,7 @@ namespace NKikimr {
         const TActorId Sender;
         const ui64 Cookie;
         const ui64 ShredGeneration;
+        THashSet<ui32> ChunksShredded;
         THashSet<ui32> ChunksToShred;
         TPDiskCtxPtr PDiskCtx;
         const TActorId HugeKeeperId;
@@ -128,9 +129,26 @@ namespace NKikimr {
 
         void Handle(TEvNotifyChunksDeleted::TPtr ev) {
             for (ui32 chunkId : ev->Get()->Chunks) {
-                ChunksToShred.erase(chunkId);
+                if (ChunksToShred.erase(chunkId)) {
+                    ChunksShredded.insert(chunkId);
+                }
             }
             CheckIfDone();
+        }
+
+        void Handle(NMon::TEvHttpInfo::TPtr ev) {
+            std::vector<TChunkIdx> chunksToShred(ChunksToShred.begin(), ChunksToShred.end());
+            std::ranges::sort(chunksToShred);
+
+            std::vector<TChunkIdx> chunksShredded(ChunksShredded.begin(), ChunksShredded.end());
+            std::ranges::sort(chunksShredded);
+
+            TStringStream s;
+            s << "ShredGeneration# " << ShredGeneration
+                << " ChunksToShred# " << FormatList(chunksToShred)
+                << " ChunksShredded# " << FormatList(chunksShredded)
+                << "<br/>";
+            Send(ev->Sender, new NMon::TEvHttpInfoRes(s.Str(), ev->Get()->SubRequestId));
         }
 
         void PassAway() override {
@@ -144,6 +162,8 @@ namespace NKikimr {
             cFunc(TEvBlobStorage::EvHugeShredNotifyResult, HandleHugeShredNotifyResult)
             cFunc(TEvBlobStorage::EvHullShredDefragResult, HandleHullShredDefragResult)
             hFunc(TEvTakeHullSnapshotResult, Handle)
+            hFunc(TEvNotifyChunksDeleted, Handle)
+            hFunc(NMon::TEvHttpInfo, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
         )
     };

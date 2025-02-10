@@ -2165,6 +2165,74 @@ namespace NKikimr {
                         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("defrag actor is not started", subrequest));
                     }
                     break;
+                case TDbMon::Shred: {
+                    class TShredCollector : public TActorBootstrapped<TShredCollector> {
+                        const THashSet<TActorId> Actors;
+                        NMon::TEvHttpInfo::TPtr Ev;
+                        TActorId ParentId;
+                        ui32 PendingReplies = 0;
+                        TStringStream Response;
+
+                    public:
+                        TShredCollector(const THashSet<TActorId>& actors, NMon::TEvHttpInfo::TPtr ev)
+                            : Actors(actors)
+                            , Ev(ev)
+                        {}
+
+                        void Bootstrap(TActorId parentId) {
+                            ParentId = parentId;
+                            for (TActorId actorId : Actors) {
+                                Send(actorId, new NMon::TEvHttpInfo(Ev->Get()->Request, Ev->Get()->SubRequestId),
+                                    IEventHandle::FlagTrackDelivery);
+                                ++PendingReplies;
+                            }
+                            Become(&TThis::StateFunc);
+                            CheckIfDone();
+                        }
+
+                        void Handle(NMon::TEvHttpInfoRes::TPtr ev) {
+                            auto *msg = dynamic_cast<NMon::TEvHttpInfoRes*>(ev->Get());
+                            Y_ABORT_UNLESS(msg);
+                            Response << msg->Answer;
+                            --PendingReplies;
+                            CheckIfDone();
+                        }
+
+                        void Handle(TEvents::TEvUndelivered::TPtr /*ev*/) {
+                            --PendingReplies;
+                            CheckIfDone();
+                        }
+
+                        void CheckIfDone() {
+                            if (!PendingReplies) {
+                                TStringStream str;
+                                HTML(str) {
+                                    DIV_CLASS("panel panel-info") {
+                                        DIV_CLASS("panel-heading") {
+                                            str << "Shred State";
+                                        }
+                                        DIV_CLASS("panel-body") {
+                                            str << Response.Str();
+                                        }
+                                    }
+                                }
+
+                                Send(Ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), Ev->Get()->SubRequestId));
+                                Send(ParentId, new TEvents::TEvGone);
+                                PassAway();
+                            }
+                        }
+
+                        STRICT_STFUNC(StateFunc,
+                            hFunc(NMon::TEvHttpInfoRes, Handle)
+                            hFunc(TEvents::TEvUndelivered, Handle)
+                            cFunc(TEvents::TSystem::Poison, PassAway)
+                        )
+                    };
+                    ActiveActors.Insert(ctx.Register(new TShredCollector(ShredActors, ev)), __FILE__, __LINE__, ctx,
+                        NKikimrServices::BLOBSTORAGE);
+                    break;
+                }
                 default:
                     break;
             }
@@ -2465,7 +2533,7 @@ namespace NKikimr {
             UpdateWhiteboard(ctx);
         }
 
-        void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
             ShredActors.erase(ev->Sender);
@@ -2779,7 +2847,7 @@ namespace NKikimr {
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
             fFunc(TEvBlobStorage::EvRecoverBlob, ForwardToScrubActor)
@@ -2831,7 +2899,7 @@ namespace NKikimr {
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
@@ -2902,7 +2970,7 @@ namespace NKikimr {
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             fFunc(TEvBlobStorage::EvReplDone, HandleReplDone)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
@@ -2930,7 +2998,7 @@ namespace NKikimr {
             HFunc(TEvVDiskStatRequest, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvVGenerationChange, Handle)
             CFunc(TEvBlobStorage::EvReplDone, Ignore)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)

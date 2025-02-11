@@ -23,6 +23,9 @@ struct TClientSettings {
     TMaybe<bool> UseExportToYt;
     // Whether to mention user account in --help command or not
     TMaybe<bool> MentionUserAccount;
+    // A storage url to get latest YDB CLI version and to update from
+    // If not set, than no updates nor latest version checks will be available
+    std::optional<std::string> StorageUrl = std::nullopt;
     // Name of a directory in user home directory to save profile config
     TString YdbDir;
 };

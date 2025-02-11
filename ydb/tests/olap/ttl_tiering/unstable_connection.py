@@ -86,7 +86,8 @@ class TestUnstableConnection(TllTieringTestBase):
         if self.s3_client.get_bucket_stat(self.cold_bucket) != (0, 0):
             raise Exception("Bucket for cold data is not empty")
 
-        self.ydb_client.query(f"""
+        self.ydb_client.query(
+            f"""
             CREATE TABLE `{table_path}` (
                 ts Timestamp NOT NULL,
                 s String,
@@ -132,7 +133,6 @@ class TestUnstableConnection(TllTieringTestBase):
         """
         logger.info(stmt)
         self.ydb_client.query(stmt)
-
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_writers+self.num_readers+2) as executor:
             stop_event = threading.Event()

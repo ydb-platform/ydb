@@ -4,7 +4,6 @@ from .base import TllTieringTestBase, ColumnTableHelper
 import ydb
 import concurrent
 import random
-import base64
 import datetime
 
 logger = logging.getLogger(__name__)

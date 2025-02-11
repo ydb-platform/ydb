@@ -29,36 +29,41 @@ async def async_retry_operation(callee, retry_settings=None, *args, **kwargs):
                 next_opt.set_exception(e)
 
 
-async def async_execute_serializable_job(pool: ydb.aio.SessionPool, query, parameters):
+async def async_execute_serializable_job(pool: ydb.aio.QuerySessionPool, query, parameters):
     async def calle(pool, query, parameters):
         async with pool.checkout() as session:
-            prepared_query = await session.prepare(query)
-            with session.transaction(ydb.SerializableReadWrite()) as tx:
-                result = await tx.execute(prepared_query, parameters=parameters, commit_tx=True)
+            # prepared_query = await session.prepare(query)
+            async with await session.transaction(ydb.QuerySerializableReadWrite()).execute(query, parameters=parameters, commit_tx=True) as result:
+                # result = await tx.execute(prepared_query, parameters=parameters, commit_tx=True)
+                # result = await tx.execute(query, parameters=parameters, commit_tx=True)
                 return result
     return await async_retry_operation(calle, robust_retries, pool, query, parameters)
 
 
-async def async_execute_stale_ro_job(pool: ydb.aio.SessionPool, query, parameters):
+async def async_execute_stale_ro_job(pool: ydb.aio.QuerySessionPool, query, parameters):
     async def calle(pool, query, parameters):
         async with pool.checkout() as session:
-            prepared_query = await session.prepare(query)
-            with session.transaction(ydb.StaleReadOnly()) as tx:
-                result = await tx.execute(
-                    prepared_query,
-                    parameters=parameters,
-                    commit_tx=True
-                )
+            # prepared_query = await session.prepare(query)
+            async with await session.transaction(ydb.QueryStaleReadOnly()).execute(query, parameters=parameters, commit_tx=True) as result:
+                # result = await tx.execute(
+                #     query,
+                #     parameters=parameters,
+                #     commit_tx=True
+                # )
                 return result
     return await async_retry_operation(calle, robust_retries, pool, query, parameters)
 
 
-async def async_scheme_job(pool: ydb.SessionPool, query):
+async def async_scheme_job(pool: ydb.QuerySessionPool, query):
     async def calle(pool, query):
         async with pool.checkout() as session:
-            result = await session.execute_scheme(query)
-            return result
+            async with await session.transaction(ydb.QuerySerializableReadWrite()).execute(query, commit_tx=True) as result:
+                # result = await tx.execute(query, commit_tx=True)
+                return result
+            # result = await session.execute_scheme(query)
+            # return result
     return await async_retry_operation(calle, robust_retries, pool, query)
+
 
 
 async def async_repeat_n_times(calle, count, *args, **kwargs):

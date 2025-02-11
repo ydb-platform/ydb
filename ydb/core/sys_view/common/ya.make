@@ -10,6 +10,7 @@ SRCS(
     schema.cpp
     utils.h
     processor_scan.h
+    common.cpp
 )
 
 PEERDIR(

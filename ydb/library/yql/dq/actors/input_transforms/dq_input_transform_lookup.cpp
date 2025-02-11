@@ -70,8 +70,7 @@ public:
         , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(cacheLimit, lookupKeyType))
         , MaxDelayedRows(maxDelayedRows)
         , CacheTtl(cacheTtl)
-        , MinimumRowSize(OutputRowColumnOrder.size()*sizeof(NUdf::TUnboxedValuePod))
-        , PayloadExtraSize(0)
+        , EstimatedReadySize(0)
         , ReadyQueue(OutputRowType)
         , LastLruSize(0)
     {
@@ -132,10 +131,10 @@ private: //events
                         Y_ABORT();
                         break;
                 }
-                if (outputRowItems[i].IsString()) {
-                    PayloadExtraSize += outputRowItems[i].AsStringRef().size();
-                }
             }
+            auto estimatedRowSize = TDqDataSerializer::EstimateSize(outputRow, OutputRowType);
+            if (estimatedRowSize < 1) estimatedRowSize = 1;
+            EstimatedReadySize += estimatedRowSize;
             ReadyQueue.PushRow(outputRowItems, OutputRowType->GetElementsCount());
     }
 
@@ -305,12 +304,7 @@ private: //IDqComputeActorAsyncInput
             // (value is NOT used for used space accounting)
             return !AwaitingQueue.empty();
         } else {
-            // Attempt to estimate actual byte size;
-            // May be over-estimated for shared strings;
-            // May be under-estimated for complex types;
-            auto usedSpace = batch.RowCount() * MinimumRowSize + PayloadExtraSize;
-            PayloadExtraSize = 0;
-            return usedSpace;
+            return std::exchange(EstimatedReadySize, 0);
         }
     }
 
@@ -387,8 +381,7 @@ protected:
     using TInputKeyOtherPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
     using TAwaitingQueue = std::deque<TInputKeyOtherPair, NKikimr::NMiniKQL::TMKQLAllocator<TInputKeyOtherPair>>; //input row split in two parts: key columns and other columns
     TAwaitingQueue AwaitingQueue;
-    size_t MinimumRowSize; // only account for unboxed parts
-    size_t PayloadExtraSize; // non-embedded part of strings in ReadyQueue
+    size_t EstimatedReadySize;
     NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
     NYql::NDq::TDqAsyncStats IngressStats;
     std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;

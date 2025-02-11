@@ -84,10 +84,6 @@ void TCommandDump::Config(TConfig& config) {
         .DefaultValue(defaults.Ordered_).StoreTrue(&Ordered);
 }
 
-void TCommandDump::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
-}
-
 void TCommandDump::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     AdjustPath(config);
@@ -199,8 +195,8 @@ void TCommandRestore::Config(TConfig& config) {
     config.Opts->MutuallyExclusive("import-data", "bulk-upsert");
 }
 
-void TCommandRestore::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandRestore::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     AdjustPath(config);
 }
 
@@ -283,6 +279,10 @@ void TCommandCopy::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
+
+void TCommandCopy::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);
@@ -373,6 +373,10 @@ void TCommandRename::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
+
+void TCommandRename::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);
@@ -409,10 +413,6 @@ void TCommandPgConvert::Config(TConfig& config) {
 
     config.Opts->AddLongOption('i', "input", "Path to input SQL file. Read from stdin if not specified.").StoreResult(&Path);
     config.Opts->AddLongOption("ignore-unsupported", "Comment unsupported statements in result dump file if specified.").StoreTrue(&IgnoreUnsupported);
-}
-
-void TCommandPgConvert::Parse(TConfig& config) {
-    TToolsCommand::Parse(config);
 }
 
 int TCommandPgConvert::Run(TConfig& config) {

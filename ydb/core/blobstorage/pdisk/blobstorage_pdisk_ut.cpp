@@ -1448,6 +1448,21 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         vdisk.SendEvLogSync();
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
+        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
+        UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
+    }
+    Y_UNIT_TEST(SimpleShredDirtyChunks) {
+        ui64 shredGeneration = 1;
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        vdisk.MarkCommitedChunksDirty();
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
         THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
@@ -1474,6 +1489,9 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        vdisk.MarkCommitedChunksDirty();
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         THolder<NPDisk::TEvShredVDisk> evReq = testCtx.Recv<NPDisk::TEvShredVDisk>();
@@ -1494,11 +1512,18 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         vdisk2.InitFull();
         vdisk2.SendEvLogSync();
         testCtx.RestartPDiskSync();
+
         vdisk.InitFull();
         vdisk.SendEvLogSync();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        vdisk.MarkCommitedChunksDirty();
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         vdisk2.InitFull();
+        vdisk2.ReserveChunk();
+        vdisk2.CommitReservedChunks();
+        vdisk2.MarkCommitedChunksDirty();
         vdisk2.SendEvLogSync();
         vdisk2.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
@@ -1513,6 +1538,9 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        vdisk.MarkCommitedChunksDirty();
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         THolder<NPDisk::TEvPreShredCompactVDisk> evReq = testCtx.Recv<NPDisk::TEvPreShredCompactVDisk>();
         UNIT_ASSERT_VALUES_UNEQUAL(evReq.Get(), nullptr);
@@ -1530,6 +1558,9 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        vdisk.MarkCommitedChunksDirty();
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         THolder<NPDisk::TEvShredVDisk> evReq = testCtx.Recv<NPDisk::TEvShredVDisk>();

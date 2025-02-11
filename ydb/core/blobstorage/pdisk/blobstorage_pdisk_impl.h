@@ -157,7 +157,13 @@ public:
     };
     EShredState ShredState = EShredStateDefault;
     ui64 ShredGeneration = 0;
+    TChunkIdx ChunkBeingShredded = 0;
+    ui64 ChunkBeingShreddedIteration = 0;
+    ui64 ChunkBeingShreddedNextSectorIdx = 0;
+    ui64 ShredReqIdx = 0;
+    std::atomic<ui64> ChunkBeingShreddedInFlight = 0;
     std::deque<std::tuple<TActorId, ui64>> ShredRequesters;
+    THolder<TAlignedData> ShredPayload[2];
 
     // Chunks that are owned by killed owner, but have operations InFlight
     TVector<TChunkIdx> QuarantineChunks;
@@ -399,11 +405,13 @@ public:
     void HandleNextWriteMetadata();
     void ProcessWriteMetadataResult(TWriteMetadataResult& request);
 
+    TChunkIdx GetUnshreddedFreeChunk();
     void ProgressShredState();
     void ProcessShredPDisk(TShredPDisk& request);
     void ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& request);
     void ProcessShredVDiskResult(TShredVDiskResult& request);
     void ProcessMarkDirty(TMarkDirty& request);
+    void ProcessChunkShredResult(TChunkShredResult& request);
 
     void DropAllMetadataRequests();
 

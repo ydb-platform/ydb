@@ -126,7 +126,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_VERIFY(preset);
             AFL_VERIFY(preset->Id == versionInfo.GetSchemaPresetId())("preset", preset->Id)("table", versionInfo.GetSchemaPresetId());
 
-            if (!table.IsDropped()) {
+            if (!table.IsDropped() && versionInfo.HasTtlSettings()) {
                 auto& ttlSettings = versionInfo.GetTtlSettings();
                 auto vIt = lastVersion.find(pathId);
                 if (vIt == lastVersion.end()) {

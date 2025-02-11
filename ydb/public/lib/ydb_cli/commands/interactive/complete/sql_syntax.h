@@ -9,9 +9,9 @@ namespace NSQLComplete {
         ANSI,
     };
 
-    ESqlSyntaxMode QuerySyntaxMode(const TString& queryUtf8);
+    ESqlSyntaxMode QuerySyntaxMode(const TString& query);
 
     // Permits invalid special comments
-    bool IsAnsiQuery(const TString& queryUtf8);
+    bool IsAnsiQuery(const TString& query);
 
 } // namespace NSQLComplete

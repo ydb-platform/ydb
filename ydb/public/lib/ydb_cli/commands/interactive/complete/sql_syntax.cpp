@@ -9,17 +9,17 @@ namespace NSQLComplete {
     using NSQLTranslation::TTranslationSettings;
     using NYql::TIssues;
 
-    ESqlSyntaxMode QuerySyntaxMode(const TString& queryUtf8) {
-        if (IsAnsiQuery(queryUtf8)) {
+    ESqlSyntaxMode QuerySyntaxMode(const TString& query) {
+        if (IsAnsiQuery(query)) {
             return ESqlSyntaxMode::ANSI;
         }
         return ESqlSyntaxMode::Default;
     }
 
-    bool IsAnsiQuery(const TString& queryUtf8) {
+    bool IsAnsiQuery(const TString& query) {
         TTranslationSettings settings;
         TIssues issues;
-        ParseTranslationSettings(queryUtf8, settings, issues);
+        ParseTranslationSettings(query, settings, issues);
         return settings.AnsiLexer;
     }
 

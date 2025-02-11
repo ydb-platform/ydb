@@ -50,7 +50,7 @@ struct TValueHistory {
         HARMONIZER_HISTORY_PRINT("Accumulate iteration, acc = ", acc, ", idx = ", static_cast<ui16>(idx), ", leftSeconds = ", static_cast<ui16>(leftSeconds));
         while (leftSeconds) {
             leftSeconds--;
-            if (idx == 0)
+            if (idx == 0) {
                 idx = HistoryBufferSize - 1;
             } else {
                 idx--;

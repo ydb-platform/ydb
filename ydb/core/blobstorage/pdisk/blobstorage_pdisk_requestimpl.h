@@ -1018,6 +1018,36 @@ public:
     }
 };
 
+//
+// TChunkShredResult
+//
+class TChunkShredResult : public TRequestBase {
+public:
+    TChunkIdx Chunk;
+    ui32 SectorIdx;
+    ui64 ShredSize;
+
+    TChunkShredResult(TChunkIdx chunk, ui32 sectorIdx, ui64 shredSize, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::ChunkShredResult, reqIdx), OwnerSystem, 0, NPriInternal::Other, {})
+        , Chunk(chunk)
+        , SectorIdx(sectorIdx)
+        , ShredSize(shredSize)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkShredResult;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TChunkShredResult { Chunk# " << Chunk
+        << " SectorIdx# " << SectorIdx
+        << " ShredSize# " << ShredSize << "}";
+        return str.Str();
+    }
+};
+
+
 class TStopDevice : public TRequestBase {
 public:
     TStopDevice(TAtomicBase reqIdx)

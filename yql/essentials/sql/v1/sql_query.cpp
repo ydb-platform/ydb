@@ -1949,6 +1949,19 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, stmt);
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore62: {
+            // show_create_table_stmt: SHOW CREATE TABLE table_ref
+            Ctx.BodyPart();
+            const auto& rule = core.GetAlt_sql_stmt_core62().GetRule_show_create_table_stmt1();
+
+            TTableRef tr;
+            if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref4(), tr)) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildShowCreate(Ctx.Pos(), tr, Ctx.Scoped));
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);

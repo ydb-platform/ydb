@@ -2946,6 +2946,26 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         }
     }
 
+    Y_UNIT_TEST(ShowCreateTable) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            SHOW CREATE TABLE user;
+        )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Read") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("showCreateTable"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Read"), 0}, {TString("showCreateTable"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Read"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["showCreateTable"]);
+    }
+
     Y_UNIT_TEST(OptionalAliases) {
         UNIT_ASSERT(SqlToYql("USE plato; SELECT foo FROM (SELECT key foo FROM Input);").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; SELECT a.x FROM Input1 a JOIN Input2 b ON a.key = b.key;").IsOk());

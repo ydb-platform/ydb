@@ -50,12 +50,11 @@ namespace {
     const TString osArch = GetOsArchitecture();
     const TString defaultConfigFile = TStringBuilder() << homeDir << "/ydb/bin/config.json";
     const TString defaultTempFile = TStringBuilder() << homeDir << "/ydb/install/" << binaryName;
-    const TString storageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/release/";
-    const TString versionUrl = TStringBuilder() << storageUrl << "stable";
 }
 
-TYdbUpdater::TYdbUpdater()
+TYdbUpdater::TYdbUpdater(std::string storageUrl)
     : MyVersion(StripString(NResource::Find(TStringBuf(VersionResourceName))))
+    , StorageUrl(storageUrl)
 {
     LoadConfig();
 }
@@ -103,7 +102,7 @@ int TYdbUpdater::Update(bool forceUpdate) {
     if (!tmpPathToBinary.Parent().Exists()) {
         tmpPathToBinary.Parent().MkDirs();
     }
-    const TString downloadUrl = TStringBuilder() << storageUrl << LatestVersion << '/' << osVersion
+    const TString downloadUrl = TStringBuilder() << StorageUrl << '/' << LatestVersion << '/' << osVersion
         << '/' << osArch << '/' << binaryName;
     Cout << "Downloading binary from url " << downloadUrl << Endl;
     TShellCommand curlCmd(TStringBuilder() << "curl --max-time 60 " << downloadUrl << " -o " << tmpPathToBinary.GetPath());
@@ -218,7 +217,7 @@ bool TYdbUpdater::GetLatestVersion() {
     if (LatestVersion) {
         return true;
     }
-
+    std::string versionUrl = StorageUrl + "/stable";
     TShellCommand curlCmd(TStringBuilder() << "curl --silent --max-time 10 " << versionUrl);
     curlCmd.Run().Wait();
 

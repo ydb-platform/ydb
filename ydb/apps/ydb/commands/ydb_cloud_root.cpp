@@ -1,13 +1,11 @@
 #include "ydb_cloud_root.h"
+#include "ydb_update.h"
 #include "ydb_version.h"
 
 #include <ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
-#ifndef DISABLE_UPDATE
-#include "ydb_update.h"
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
-#endif
 
 #include <filesystem>
 
@@ -59,9 +57,9 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
 TYCloudClientCommandRoot::TYCloudClientCommandRoot(const TString& name, const TClientSettings& settings)
     : TClientCommandRoot(name, settings)
 {
-#ifndef DISABLE_UPDATE
-    AddCommand(std::make_unique<TCommandUpdate>());
-#endif
+    if (settings.StorageUrl.has_value()) {
+        AddCommand(std::make_unique<TCommandUpdate>());
+    }
     AddCommand(std::make_unique<TCommandVersion>());
 }
 
@@ -84,9 +82,8 @@ void TYCloudClientCommandRoot::Config(TConfig& config) {
 }
 
 int TYCloudClientCommandRoot::Run(TConfig& config) {
-#ifndef DISABLE_UPDATE
-    if (config.NeedToCheckForUpdate) {
-        TYdbUpdater updater;
+    if (config.StorageUrl.has_value() && config.NeedToCheckForUpdate) {
+        TYdbUpdater updater(config.StorageUrl.value());
         if (config.ForceVersionCheck) {
             Cout << "Force checking if there is a newer version..." << Endl;
         }
@@ -101,7 +98,6 @@ int TYCloudClientCommandRoot::Run(TConfig& config) {
                 << colors.OldColor() << Endl;
         }
     }
-#endif
 
     return TClientCommandRoot::Run(config);
 }
@@ -116,6 +112,7 @@ int NewYCloudClient(int argc, char** argv) {
     settings.UseOauth2TokenExchange = true;
     settings.UseExportToYt = false;
     settings.MentionUserAccount = false;
+    //settings.StorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/release";
     settings.YdbDir = "ydb";
 
     auto commandsRoot = MakeHolder<TYCloudClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);

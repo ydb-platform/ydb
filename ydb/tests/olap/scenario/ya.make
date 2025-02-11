@@ -21,7 +21,6 @@ PY3TEST()
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
         contrib/python/boto3
-        contrib/python/pandas
         contrib/python/requests
         contrib/python/moto
         contrib/python/Flask

@@ -281,9 +281,9 @@
     ],
     "test.test[binding-compact_named_with_subq_contexts--Debug]": [
         {
-            "checksum": "6ae122590fa1a3740afe06c807082844",
-            "size": 1096,
-            "uri": "https://{canondata_backend}/1925821/db505909f0fb5dcb9a1c2635b652923e2e5d33c8/resource.tar.gz#test.test_binding-compact_named_with_subq_contexts--Debug_/opt.yql"
+            "checksum": "5fbd0bbbfed9dceb14486930c58f6d2a",
+            "size": 1135,
+            "uri": "https://{canondata_backend}/1889210/9d6331356a8b5731f25d9bf2d510824a0256baa0/resource.tar.gz#test.test_binding-compact_named_with_subq_contexts--Debug_/opt.yql"
         }
     ],
     "test.test[binding-compact_named_with_subq_contexts--Results]": [

@@ -8,8 +8,6 @@
 namespace NYql {
 namespace NFastCheck {
 
-const TSet<TString>& ListChecks();
-
 enum class ESyntax {
     SExpr,
     YQL,
@@ -49,6 +47,8 @@ struct TChecksResponse {
     TVector<TCheckResponse> Checks;
 };
 
+TVector<TCheckFilter> ParseChecks(const TString& checks);
+TSet<TString> ListChecks(const TMaybe<TVector<TCheckFilter>>& filters = Nothing());
 TChecksResponse RunChecks(const TChecksRequest& request);
 
 }

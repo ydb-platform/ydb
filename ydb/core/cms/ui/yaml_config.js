@@ -242,7 +242,7 @@ class YamlConfigState {
             $('#yaml-version').text(data.Response.identity.version);
 
             if (this.config !== data.Response.config) {
-                this.codeMirror.setValue((data.Response.config !== undefined) ? data.Response.config : "");
+                this.codeMirror.setValue((data.Response.config !== undefined) ? data.Response.config[0] : "");
                 this.codeMirror.trigger('fold', 'editor.foldLevel2');
                 this.config = data.Response.config;
             }

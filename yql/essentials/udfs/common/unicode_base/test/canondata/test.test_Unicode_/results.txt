@@ -18,16 +18,6 @@
                                 ]
                             ];
                             [
-                                "normalize";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Utf8"
-                                    ]
-                                ]
-                            ];
-                            [
                                 "is";
                                 [
                                     "DataType";
@@ -175,9 +165,6 @@
                         [
                             "Eyl\xC3\xBCl"
                         ];
-                        [
-                            "Eyl\xC3\xBCl"
-                        ];
                         %true;
                         [
                             "5"
@@ -218,9 +205,6 @@
                         #
                     ];
                     [
-                        [
-                            "\xD0\xB6\xD0\xBD\xD1\x96\xD1\x9E\xD0\xBD\xD1\x8F"
-                        ];
                         [
                             "\xD0\xB6\xD0\xBD\xD1\x96\xD1\x9E\xD0\xBD\xD1\x8F"
                         ];
@@ -268,9 +252,6 @@
                         [
                             "\xC3\xBAnora"
                         ];
-                        [
-                            "\xC3\xBAnora"
-                        ];
                         %true;
                         [
                             "5"
@@ -311,9 +292,6 @@
                         #
                     ];
                     [
-                        [
-                            "Ci\xD1\x87 Ci\xD1\x87"
-                        ];
                         [
                             "Ci\xD1\x87 Ci\xD1\x87"
                         ];
@@ -359,9 +337,6 @@
                         #
                     ];
                     [
-                        [
-                            "\xD0\xBF\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82 \xD0\xBF\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82"
-                        ];
                         [
                             "\xD0\xBF\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82 \xD0\xBF\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82"
                         ];
@@ -424,9 +399,6 @@
                         [
                             "6"
                         ];
-                        [
-                            "6"
-                        ];
                         %true;
                         [
                             "1"
@@ -463,9 +435,6 @@
                         #
                     ];
                     [
-                        [
-                            ""
-                        ];
                         [
                             ""
                         ];

@@ -5,6 +5,7 @@
 #include <ydb/core/persqueue/cluster_tracker.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb-cpp-sdk/client/driver/driver.h>
@@ -858,6 +859,44 @@ public:
             } catch (TEmptyEventQueueException&) {
             }
         }
+    }
+
+    TVector<TString> GetPQTabletKeys(TTestActorRuntime* runtime, const TString& topic, ui32 partitionId) {
+        ui64 tabletId = Max<ui64>();
+
+        auto res = Ls("/Root/PQ/" + topic);
+        const auto& pq = res->Record.GetPathDescription().GetPersQueueGroup();
+        for (ui32 i = 0; i < pq.PartitionsSize(); ++i) {
+            const auto& partition = pq.GetPartitions(i);
+            if (partition.GetPartitionId() == partitionId) {
+                tabletId = partition.GetTabletId();
+                break;
+            }
+        }
+
+        Y_ABORT_UNLESS(tabletId != Max<ui64>());
+
+        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        auto* cmd = request->Record.AddCmdReadRange();
+        auto* range = cmd->MutableRange();
+        range->SetFrom("\x00");
+        range->SetTo("\xFF");
+
+        TActorId sender = runtime->AllocateEdgeActor();
+        ForwardToTablet(*runtime, tabletId, sender, request.Release(), 0);
+        auto response = runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+
+        TVector<TString> keys;
+
+        for (size_t i = 0; i < response->Record.ReadRangeResultSize(); ++i) {
+            const auto& result = response->Record.GetReadRangeResult(i);
+            for (size_t j = 0; j < result.PairSize(); ++j) {
+                const auto& pair = result.GetPair(j);
+                keys.push_back(pair.GetKey());
+            }
+        }
+
+        return keys;
     }
 
     bool IsTopicDeleted(const TString& name) {

@@ -124,7 +124,7 @@ namespace NKikimr {
                 SendVDiskResponse(ctx, BatcherCtx->OrigEv->Sender, Result.release(), BatcherCtx->OrigEv->Cookie, QueryCtx->HullCtx->VCtx);
             }
 
-            ctx.Send(ParentId, new TEvents::TEvActorDied);
+            ctx.Send(ParentId, new TEvents::TEvGone);
             self->Die(ctx);
         }
     };

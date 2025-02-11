@@ -33,6 +33,16 @@ public:
         return client.Restore(fsPath, dbPath, settings);
     }
 
+    TDumpResult DumpCluster(const TString& fsPath) {
+        auto client = TDumpClient(Driver, Log);
+        return client.DumpCluster(fsPath);
+    }
+
+    TDumpResult DumpDatabase(const TString& database, const TString& fsPath) {
+        auto client = TDumpClient(Driver, Log);
+        return client.DumpDatabase(database, fsPath);
+    }
+
 private:
     const TDriver Driver;
     std::shared_ptr<TLog> Log;
@@ -65,6 +75,14 @@ TDumpResult TClient::Dump(const TString& dbPath, const TString& fsPath, const TD
 
 TRestoreResult TClient::Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
     return Impl_->Restore(fsPath, dbPath, settings);
+}
+
+TDumpResult TClient::DumpCluster(const TString& fsPath) {
+    return Impl_->DumpCluster(fsPath);
+}
+
+TDumpResult TClient::DumpDatabase(const TString& database, const TString& fsPath) {
+    return Impl_->DumpDatabase(database, fsPath);
 }
 
 } // NDump

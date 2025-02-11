@@ -1243,6 +1243,8 @@ namespace Tests {
                     queryServiceConfig.GetGeneric(),
                     queryServiceConfig.GetYt(),
                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
+                    queryServiceConfig.GetSolomon(),
+                    Settings->SolomonGateway ? Settings->SolomonGateway : NYql::CreateSolomonGateway(queryServiceConfig.GetSolomon()),
                     Settings->ComputationFactory
                 );
             }

@@ -1813,7 +1813,7 @@ namespace NKikimr {
         }
 
     private:
-        void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
         }
@@ -1870,7 +1870,7 @@ namespace NKikimr {
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
@@ -1917,7 +1917,7 @@ namespace NKikimr {
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
@@ -1961,7 +1961,7 @@ namespace NKikimr {
             hFunc(TEvGetLogoBlobRequest, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
@@ -2129,7 +2129,7 @@ namespace NKikimr {
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)

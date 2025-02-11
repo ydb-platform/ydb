@@ -326,6 +326,7 @@ def normalize_result_nodes(result):
                                            'NetworkUtilization',
                                            'NetworkUtilizationMin',
                                            'NetworkUtilizationMax',
+                                           'NetworkWriteThroughput',
                                            'PingTimeUs',
                                            'PingTimeMinUs',
                                            'PingTimeMaxUs',
@@ -375,6 +376,7 @@ def normalize_result_schema(result):
                                           'ACL',
                                           'EffectiveACL',
                                           'CreateTxId',
+                                          'PathId',
                                           ])
 
 

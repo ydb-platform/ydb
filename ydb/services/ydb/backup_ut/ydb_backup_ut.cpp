@@ -3,6 +3,7 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
 #include <ydb/public/api/protos/draft/ydb_view.pb.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -12,6 +13,7 @@
 #include <ydb-cpp-sdk/client/import/import.h>
 #include <ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/value/value.h>
 
@@ -26,6 +28,7 @@
 
 using namespace NYdb;
 using namespace NYdb::NOperation;
+using namespace NYdb::NRateLimiter;
 using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 using namespace NYdb::NView;
@@ -42,6 +45,34 @@ bool operator==(const TKeyBound& lhs, const TKeyBound& rhs) {
 
 bool operator==(const TKeyRange& lhs, const TKeyRange& rhs) {
     return lhs.From() == lhs.From() && lhs.To() == rhs.To();
+}
+
+}
+
+namespace NYdb::NRateLimiter {
+
+bool operator==(
+    const Ydb::RateLimiter::HierarchicalDrrSettings& lhs,
+    const Ydb::RateLimiter::HierarchicalDrrSettings& rhs
+) {
+    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
+}
+
+bool operator==(
+    const TDescribeResourceResult::THierarchicalDrrProps& lhs,
+    const TDescribeResourceResult::THierarchicalDrrProps& rhs
+) {
+    Ydb::RateLimiter::HierarchicalDrrSettings left;
+    lhs.SerializeTo(left);
+    Ydb::RateLimiter::HierarchicalDrrSettings right;
+    rhs.SerializeTo(right);
+    return left == right;
+}
+
+bool operator==(const TDescribeResourceResult& lhs, const TDescribeResourceResult& rhs) {
+    UNIT_ASSERT_C(lhs.IsSuccess(), lhs.GetIssues().ToString());
+    UNIT_ASSERT_C(rhs.IsSuccess(), rhs.GetIssues().ToString());
+    return lhs.GetHierarchicalDrrProps() == rhs.GetHierarchicalDrrProps();
 }
 
 }
@@ -747,8 +778,8 @@ void TestTopicSettingsArePreserved(
 }
 
 void CreateCoordinationNode(
-    NCoordination::TClient& client, const std::string& path, const NCoordination::TCreateNodeSettings& settings)
-{
+    NCoordination::TClient& client, const std::string& path, const NCoordination::TCreateNodeSettings& settings
+) {
     const auto result = client.CreateNode(path, settings).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
@@ -794,6 +825,72 @@ void TestCoordinationNodeSettingsArePreserved(
 
     restore();
     checkDescription(DescribeCoordinationNode(nodeClient, path), DEBUG_HINT);
+}
+
+void CreateRateLimiter(
+    TRateLimiterClient& client,
+    const std::string& coordinationNodePath,
+    const std::string& rateLimiterPath,
+    const TCreateResourceSettings& settings = {}
+) {
+    const auto result = client.CreateResource(coordinationNodePath, rateLimiterPath, settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+TDescribeResourceResult DescribeRateLimiter(
+    TRateLimiterClient& client,
+    const std::string& coordinationNodePath,
+    const std::string& rateLimiterPath
+) {
+    const auto result = client.DescribeResource(coordinationNodePath, rateLimiterPath).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return result;
+}
+
+void DropRateLimiter(
+    TRateLimiterClient& client,
+    const std::string& coordinationNodePath,
+    const std::string& rateLimiterPath
+) {
+    const auto result = client.DropResource(coordinationNodePath, rateLimiterPath).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void TestCoordinationNodeResourcesArePreserved(
+    const std::string& coordinationNodePath,
+    NCoordination::TClient& nodeClient,
+    TRateLimiterClient& rateLimiterClient,
+    TBackupFunction&& backup,
+    TRestoreFunction&& restore
+) {
+    constexpr std::array rateLimiters = { "root", "root/firstChild", "root/secondChild" };
+    CreateCoordinationNode(nodeClient, coordinationNodePath, {});
+    // required settings
+    const auto settings = TCreateResourceSettings().MaxUnitsPerSecond(5);
+    for (const auto& rateLimiter : rateLimiters) {
+        CreateRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiter, settings);
+    }
+
+    std::vector<TDescribeResourceResult> originalDescriptions;
+    for (const auto& rateLimiter : rateLimiters) {
+        originalDescriptions.emplace_back(DescribeRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiter));
+    }
+
+    backup();
+
+    for (int i = 2; i >= 0; --i) {
+        DropRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiters[i]);
+    }
+    DropCoordinationNode(nodeClient, coordinationNodePath);
+
+    restore();
+    for (int i = 0; i < 3; ++i) {
+        UNIT_ASSERT_EQUAL_C(
+            DescribeRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiters[i]),
+            originalDescriptions[i],
+            "i: " << i
+        );
+    }
 }
 
 }
@@ -1032,6 +1129,25 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             session,
             CreateBackupLambda(driver, pathToBackup, alice),
             CreateRestoreLambda(driver, pathToBackup, bob)
+        );
+    }
+
+    Y_UNIT_TEST(RestoreKesusResources) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NCoordination::TClient nodeClient(driver);
+        TRateLimiterClient rateLimiterClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        const std::string kesus = "/Root/kesus";
+
+        TestCoordinationNodeResourcesArePreserved(
+            kesus,
+            nodeClient,
+            rateLimiterClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
         );
     }
 

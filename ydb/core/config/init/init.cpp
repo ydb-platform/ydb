@@ -40,11 +40,6 @@ class TDefaultProtoConfigFileProvider
 private:
     TMap<TString, TSimpleSharedPtr<TFileConfigOptions>> Opts;
 
-    static bool IsFileExists(const fs::path& p) {
-        std::error_code ec;
-        return fs::exists(p, ec) && !ec;
-    }
-
     static bool IsFileReadable(const fs::path& p) {
         std::error_code ec; // For noexcept overload usage.
         auto perms = fs::status(p, ec).permissions();

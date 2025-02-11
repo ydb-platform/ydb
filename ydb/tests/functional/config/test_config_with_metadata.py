@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
 import logging
-import time
 from hamcrest import assert_that
 
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
-from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
@@ -31,13 +29,11 @@ class AbstractKiKiMRTest(object):
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
-                                             additional_log_configs={'CMS': LogLevels.DEBUG},
                                              metadata_section=cls.metadata_section,
                                              )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
 
-        time.sleep(120)
         cms.request_increase_ratio_limit(cls.cluster.client)
         host = cls.cluster.nodes[1].host
         mon_port = cls.cluster.nodes[1].mon_port
@@ -46,6 +42,18 @@ class AbstractKiKiMRTest(object):
     @classmethod
     def teardown_class(cls):
         cls.cluster.stop()
+
+    def check_kikimr_is_operational(self, table_path, tablet_ids):
+        for partition_id, tablet_id in enumerate(tablet_ids):
+            write_resp = self.cluster.kv_client.kv_write(
+                table_path, partition_id, "key", value_for("key", tablet_id)
+            )
+            assert_that(write_resp.operation.status == StatusIds.SUCCESS)
+
+            read_resp = self.cluster.kv_client.kv_read(
+                table_path, partition_id, "key"
+            )
+            assert_that(read_resp.operation.status == StatusIds.SUCCESS)
 
 
 class TestKiKiMRWithMetadata(AbstractKiKiMRTest):
@@ -64,15 +72,9 @@ class TestKiKiMRWithMetadata(AbstractKiKiMRTest):
             self.swagger_client,
             number_of_tablets,
             table_path,
-            timeout_seconds=120
+            timeout_seconds=10
         )
-
-        for partition_id, tablet_id in enumerate(tablet_ids):
-            resp = self.cluster.kv_client.kv_write(table_path, partition_id, "key", value_for("key", tablet_id))
-            assert_that(resp.operation.status == StatusIds.SUCCESS)
-
-            resp = self.cluster.kv_client.kv_read(table_path, partition_id, "key")
-            assert_that(resp.operation.status == StatusIds.SUCCESS)
+        self.check_kikimr_is_operational(table_path, tablet_ids)
 
 
 class TestKiKiMRWithoutMetadata(AbstractKiKiMRTest):
@@ -87,15 +89,9 @@ class TestKiKiMRWithoutMetadata(AbstractKiKiMRTest):
             self.swagger_client,
             number_of_tablets,
             table_path,
-            timeout_seconds=120
+            timeout_seconds=10
         )
-
-        for partition_id, tablet_id in enumerate(tablet_ids):
-            resp = self.cluster.kv_client.kv_write(table_path, partition_id, "key", value_for("key", tablet_id))
-            assert_that(resp.operation.status == StatusIds.SUCCESS)
-
-            resp = self.cluster.kv_client.kv_read(table_path, partition_id, "key")
-            assert_that(resp.operation.status == StatusIds.SUCCESS)
+        self.check_kikimr_is_operational(table_path, tablet_ids)
 
 
 class TestConfigWithMetadataBlock(TestKiKiMRWithMetadata):
@@ -112,3 +108,36 @@ class TestConfigWithMetadataMirrorMax(TestKiKiMRWithMetadata):
 
 class TestConfigWithoutMetadataMirror(TestKiKiMRWithoutMetadata):
     erasure = Erasure.MIRROR_3_DC
+
+
+class TestKiKiMRAutoConfDir(AbstractKiKiMRTest):
+    erasure = Erasure.BLOCK_4_2
+
+    @classmethod
+    def setup_class(cls):
+        nodes_count = 8
+        configurator = KikimrConfigGenerator(
+            erasure=cls.erasure,
+            nodes=nodes_count,
+            use_in_memory_pdisks=False,
+            use_config_store=True
+        )
+        cls.cluster = KiKiMR(configurator=configurator)
+        cls.cluster.start()
+        cms.request_increase_ratio_limit(cls.cluster.client)
+        host = cls.cluster.nodes[1].host
+        mon_port = cls.cluster.nodes[1].mon_port
+        cls.swagger_client = SwaggerClient(host, mon_port)
+
+    def test_cluster_works_with_config_store(self):
+        table_path = '/Root/mydb/mytable_config_store'
+        number_of_tablets = 3
+        tablet_ids = create_kv_tablets_and_wait_for_start(
+            self.cluster.client,
+            self.cluster.kv_client,
+            self.swagger_client,
+            number_of_tablets,
+            table_path,
+            timeout_seconds=10
+        )
+        self.check_kikimr_is_operational(table_path, tablet_ids)

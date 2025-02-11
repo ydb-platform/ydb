@@ -1010,6 +1010,10 @@ public:
         return Tenants.contains(path);
     }
 
+    TString GetDomainName() const {
+        return Domain->Name;
+    }
+
 private:
     TConsole &Self;
     TDomainsInfo::TDomain::TPtr Domain;

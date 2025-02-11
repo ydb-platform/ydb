@@ -128,7 +128,7 @@ public:
         Y_ENSURE(dataAccumulator);
 
         TUploader::TOptions opts;
-        opts.InFly = settings.InFly_;
+        opts.InFly = settings.MaxInFlight_;
         opts.Rate = settings.RateLimiterSettings_.Rate_;
         opts.Interval = settings.RateLimiterSettings_.Interval_;
         opts.ReactionTime = settings.RateLimiterSettings_.ReactionTime_;

@@ -22,16 +22,40 @@ TString WrapYaml(const TString& yaml) {
     return out.Str();
 }
 
-TCommandConfig::TCommandConfig()
+TCommandConfig::TCommandConfig(
+        TCommandFlagsOverrides commandFlagsOverrides,
+        bool allowEmptyDatabase)
     : TClientCommandTree("config", {}, "Dynamic config")
+    , CommandFlagsOverrides(commandFlagsOverrides)
 {
-    AddCommand(std::make_unique<TCommandConfigFetch>());
-    AddCommand(std::make_unique<TCommandConfigReplace>());
+    AddCommand(std::make_unique<TCommandConfigFetch>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandConfigReplace>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
 }
 
-TCommandConfigFetch::TCommandConfigFetch()
-    : TYdbCommand("fetch", {"get", "dump"}, "Fetch main dynamic-config")
+TCommandConfig::TCommandConfig(bool allowEmptyDatabase)
+    : TCommandConfig(TCommandFlagsOverrides{}, allowEmptyDatabase)
+{}
+
+void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
+    TClientCommand::PropagateFlags(flags);
+
+    if (CommandFlagsOverrides.OnlyExplicitProfile) {
+        OnlyExplicitProfile = *CommandFlagsOverrides.OnlyExplicitProfile;
+    }
+
+    if (CommandFlagsOverrides.Dangerous) {
+        Dangerous = *CommandFlagsOverrides.Dangerous;
+    }
+
+    for (auto& [_, cmd] : SubCommands) {
+        cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
+    }
+}
+
+TCommandConfigFetch::TCommandConfigFetch(bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("fetch", {"get", "dump"}, "Fetch main dynamic-config")
+    , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
 
@@ -45,6 +69,7 @@ void TCommandConfigFetch::Config(TConfig& config) {
         .NoArgument().SetFlag(&StripMetadata);
     config.SetFreeArgsNum(0);
 
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.Opts->MutuallyExclusive("all", "strip-metadata");
     config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }
@@ -54,6 +79,12 @@ void TCommandConfigFetch::Parse(TConfig& config) {
 }
 
 int TCommandConfigFetch::Run(TConfig& config) {
+    if (AllowEmptyDatabase) {
+        // explicitly clear database to get cluster database
+        // in `ydb admin cluster config fetch` even if
+        // some database is set by mistake
+        config.Database.clear();
+    }
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
     auto result = client.GetConfig().GetValueSync();
@@ -105,9 +136,10 @@ int TCommandConfigFetch::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TCommandConfigReplace::TCommandConfigReplace()
+TCommandConfigReplace::TCommandConfigReplace(bool allowEmptyDatabase)
     : TYdbCommand("replace", {}, "Replace dynamic config")
     , IgnoreCheck(false)
+    , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
 
@@ -123,6 +155,7 @@ void TCommandConfigReplace::Config(TConfig& config) {
         .NoArgument().SetFlag(&AllowUnknownFields);
     config.Opts->AddLongOption("force", "Ignore metadata on config replacement")
         .NoArgument().SetFlag(&Force);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
 
@@ -166,7 +199,7 @@ int TCommandConfigReplace::Run(TConfig& config) {
 }
 
 TCommandConfigResolve::TCommandConfigResolve()
-    : TYdbCommand("resolve", {}, "Resolve config")
+    : TYdbReadOnlyCommand("resolve", {}, "Resolve config")
 {
 }
 
@@ -613,7 +646,6 @@ void TCommandConfigVolatileFetch::Config(TConfig& config) {
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config(s)")
         .NoArgument().SetFlag(&StripMetadata);
     config.SetFreeArgsNum(0);
-
     config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }
 

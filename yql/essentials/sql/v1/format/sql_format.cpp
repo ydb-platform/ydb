@@ -3071,7 +3071,7 @@ public:
         }
 
         if (mode == EFormatMode::Obfuscate) {
-            auto message = NSQLTranslationV1::SqlAST(query, "Query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
             if (!message) {
                 return false;
             }
@@ -3082,7 +3082,7 @@ public:
 
         auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
         TVector<TString> statements;
-        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues)) {
+        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File)) {
             return false;
         }
 
@@ -3101,12 +3101,12 @@ public:
                 }
             };
 
-            if (!lexer->Tokenize(currentQuery, "Query", onNextRawToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+            if (!lexer->Tokenize(currentQuery, parsedSettings.File, onNextRawToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
                 return false;
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, parsedSettings.Arena);
             if (!message) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
@@ -3127,7 +3127,7 @@ public:
                 stmtFormattedTokens.push_back(token);
             };
 
-            if (!lexer->Tokenize(currentFormattedQuery, "Query", onNextFormattedToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+            if (!lexer->Tokenize(currentFormattedQuery, parsedSettings.File, onNextFormattedToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
                 return false;
             }
 
@@ -3178,7 +3178,7 @@ TString MutateQuery(const TString& query, const NSQLTranslation::TTranslationSet
         }
     };
 
-    if (!lexer->Tokenize(query, "Query", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+    if (!lexer->Tokenize(query, parsedSettings.File, onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
         throw yexception() << issues.ToString();
     }
 

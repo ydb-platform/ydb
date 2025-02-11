@@ -4,10 +4,14 @@
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
 
+#include <util/string/split.h>
+
 #include <functional>
 
 namespace NYql {
 namespace NFastCheck {
+
+namespace {
 
 class TCheckRunnerFactory : public ICheckRunnerFactory {
 public:
@@ -41,22 +45,13 @@ private:
     TSet<TString> CheckNames_;
 };
 
-TCheckRunnerFactory& GetCheckRunnerFactory() {
-    return *Singleton<TCheckRunnerFactory>();
-};
-
-const TSet<TString>& ListChecks() {
-    return GetCheckRunnerFactory().ListChecks();
-}
-
-TChecksResponse RunChecks(const TChecksRequest& request) {
-    auto filters = request.Filters.GetOrElse(TVector<TCheckFilter>(1, TCheckFilter{.Include = true, .CheckNameGlob = "*"}));
-    const auto& fullChecks = ListChecks();
+TSet<TString> GetEnabledChecks(const TSet<TString>& allChecks, const TMaybe<TVector<TCheckFilter>>& filters) {
+    auto usedFilters = filters.GetOrElse(TVector<TCheckFilter>(1, TCheckFilter{.Include = true, .CheckNameGlob = "*"}));
     TSet<TString> enabledChecks;
-    for (const auto& f : filters) {
+    for (const auto& f : usedFilters) {
         if (f.CheckNameGlob == "*") {
             if (f.Include) {
-                enabledChecks = fullChecks;
+                enabledChecks = allChecks;
             } else {
                 enabledChecks.clear();
             }
@@ -65,7 +60,7 @@ TChecksResponse RunChecks(const TChecksRequest& request) {
             Y_ENSURE(f.CheckNameGlob.find('*') == TString::npos);
             Y_ENSURE(f.CheckNameGlob.find('?') == TString::npos);
             if (f.Include) {
-                if (fullChecks.contains(f.CheckNameGlob)) {
+                if (allChecks.contains(f.CheckNameGlob)) {
                     enabledChecks.insert(f.CheckNameGlob);
                 }
             } else {
@@ -74,6 +69,37 @@ TChecksResponse RunChecks(const TChecksRequest& request) {
         }
     }
 
+    return enabledChecks;
+}
+
+TCheckRunnerFactory& GetCheckRunnerFactory() {
+    return *Singleton<TCheckRunnerFactory>();
+};
+
+}
+
+TVector<TCheckFilter> ParseChecks(const TString& checks) {
+    TVector<TCheckFilter> res;
+    for (TStringBuf one: StringSplitter(checks).SplitByString(",")) {
+        TCheckFilter f;
+        TStringBuf afterPrefix = one;
+        if (one.AfterPrefix("-", afterPrefix)) {
+            f.Include = false;
+        }
+
+        f.CheckNameGlob = afterPrefix;
+        res.push_back(f);
+    }
+
+    return res;
+}
+
+TSet<TString> ListChecks(const TMaybe<TVector<TCheckFilter>>& filters) {
+    return GetEnabledChecks(GetCheckRunnerFactory().ListChecks(), filters);
+}
+
+TChecksResponse RunChecks(const TChecksRequest& request) {
+    auto enabledChecks = GetEnabledChecks(GetCheckRunnerFactory().ListChecks(), request.Filters);
     TChecksResponse res;
     for (const auto& c : enabledChecks) {
         auto checkRunner = GetCheckRunnerFactory().MakeRunner(c);

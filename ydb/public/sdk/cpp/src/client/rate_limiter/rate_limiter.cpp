@@ -115,7 +115,7 @@ TMetric::TMetric(const Ydb::RateLimiter::MeteringConfig_Metric& proto) {
         Labels_[k] = v;
     }
     if (proto.has_metric_fields()) {
-        TString jsonStr;
+        TStringType jsonStr;
         if (auto st = google::protobuf::util::MessageToJsonString(proto.metric_fields(), &jsonStr); st.ok()) {
             MetricFieldsJson_ = jsonStr;
         }

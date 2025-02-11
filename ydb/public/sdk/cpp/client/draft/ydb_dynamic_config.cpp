@@ -338,6 +338,32 @@ public:
 
         return promise.GetFuture();
     }
+
+    TAsyncFetchStartupConfigResult FetchStartupConfig(const TClusterConfigSettings& settings = {}) {
+        auto request = MakeOperationRequest<Ydb::DynamicConfig::FetchStartupConfigRequest>(settings);
+
+        auto promise = NThreading::NewPromise<TFetchStartupConfigResult>();
+
+        auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
+                TString config;
+                if (Ydb::DynamicConfig::FetchStartupConfigResult result; any && any->UnpackTo(&result)) {
+                    config = result.config();
+                }
+
+                TFetchStartupConfigResult val(TStatus(std::move(status)), std::move(config));
+                promise.SetValue(std::move(val));
+            };
+
+        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::FetchStartupConfigRequest, Ydb::DynamicConfig::FetchStartupConfigResponse>(
+            std::move(request),
+            extractor,
+            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncFetchStartupConfig,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+
+        return promise.GetFuture();
+    }
 };
 
 TDynamicConfigClient::TDynamicConfigClient(const TDriver& driver)
@@ -431,6 +457,10 @@ TAsyncVerboseResolveConfigResult TDynamicConfigClient::VerboseResolveConfig(
     const TMap<ui64, TString>& volatileConfigs,
     const TClusterConfigSettings& settings) {
     return Impl_->VerboseResolveConfig(config, volatileConfigs, settings);
+}
+
+TAsyncFetchStartupConfigResult TDynamicConfigClient::FetchStartupConfig(const TClusterConfigSettings& settings) {
+    return Impl_->FetchStartupConfig(settings);
 }
 
 } // namespace NYdb::NDynamicConfig

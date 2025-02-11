@@ -124,4 +124,11 @@ private:
     bool StripMetadata = false;
 };
 
+class TCommandGenerateDynamicConfig : public TYdbCommand {
+public:
+    TCommandGenerateDynamicConfig();
+    void Config(TConfig&) override;
+    int Run(TConfig&) override;
+};
+
 } // namespace NYdb::NConsoleClient::NDynamicConfig

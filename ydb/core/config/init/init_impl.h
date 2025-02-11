@@ -1396,6 +1396,7 @@ public:
         servicesMask = ServicesMask;
         clusterName = ClusterName;
         configsDispatcherInitInfo.InitialConfig = appConfig;
+        configsDispatcherInitInfo.StartupConfigYaml = appConfig.GetStartupConfigYaml();
         configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
         configsDispatcherInitInfo.Labels = Labels;
         configsDispatcherInitInfo.DebugInfo = TDebugInfo {

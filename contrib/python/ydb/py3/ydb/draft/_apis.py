@@ -29,3 +29,4 @@ class DynamicConfigService(object):
     SetConfig = "SetConfig"
     GetConfig = "GetConfig"
     GetNodeLabels = "GetNodeLabels"
+    FetchStartupConfig = "FetchStartupConfig"

@@ -801,6 +801,11 @@ bool IsDatabaseConfig(const TString& config) {
     return IsConfigKindEquals(config, "DatabaseConfig");
 }
 
+bool IsStaticConfig(const TString& config) {
+    auto doc = NFyaml::TDocument::Parse(config);
+    return !doc.Root().Map().Has("metadata");
+}
+
 TString StripMetadata(const TString& config) {
     auto doc = NFyaml::TDocument::Parse(config);
 

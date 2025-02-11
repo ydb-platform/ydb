@@ -485,7 +485,6 @@ namespace NKikimr {
 
         void TAllChains::Save(IOutputStream *s) const {
             bool oldCompatible = IsOldMinHugeBlobSizeCompatible();
-            Cerr << VDiskLogPrefix << "Saving all chains, oldCompatible# " << oldCompatible << Endl;
 
             std::vector<const TChainDelegator*> delegatorsToSave;
             for (auto& d: ChainDelegators) {
@@ -496,12 +495,9 @@ namespace NKikimr {
 
             ui32 size = delegatorsToSave.size();
             ::Save(s, size);
-            Cerr << VDiskLogPrefix <<  "Saving all chains, size = " << size << Endl;
             for (auto d : delegatorsToSave) {
-                Cerr << VDiskLogPrefix << "Chain slot size = " << d->SlotSize << Endl;
                 ::Save(s, *d);
             }
-            Cerr << VDiskLogPrefix << VDiskLogPrefix << " Saved" << Endl;
         }
 
         void TAllChains::Load(IInputStream *s) {
@@ -509,15 +505,12 @@ namespace NKikimr {
             // load array size
             ::Load(s, size);
             if (size == ChainDelegators.size()) {
-                Cerr << VDiskLogPrefix << "Loading all chains (simple), size = " << size << Endl;
                 StartMode = EStartMode::Loaded;
                 // load map and current map are of the same size, just load it
                 for (auto &x : ChainDelegators) {
                     ::Load(s, x);
                 }
             } else if (size < ChainDelegators.size()) {
-                Cerr << VDiskLogPrefix << "Loading all chains (migration), size = " << size << Endl;
-
                 // map size has been changed, run migration
                 StartMode = EStartMode::Loaded;
                 using TIt = TAllChainDelegators::iterator;
@@ -527,8 +520,6 @@ namespace NKikimr {
                 for (ui32 i = 0; i < size; ++i) {
                     TChainDelegator c(VDiskLogPrefix, 1, 1, ChunkSize, AppendBlockSize);
                     ::Load(s, c);
-
-                    Cerr << VDiskLogPrefix << "Loading chain, SlotsInChunk = " << c.ChainPtr->SlotsInChunk << Endl;
 
                     bool inserted = false;
                     for (; loadedIt != loadedEnd; ++loadedIt) {
@@ -549,7 +540,6 @@ namespace NKikimr {
                         << " loadedSize# " << size
                         << " curChainDelegatorsSize# " << curChainDelegatorsSize);
             }
-            Cerr << VDiskLogPrefix <<  "Loaded" << Endl;
         }
 
         void TAllChains::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {

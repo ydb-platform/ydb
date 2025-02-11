@@ -686,9 +686,11 @@ namespace TEvSchemeShard {
 
     struct TEvRunDataErasure : TEventLocal<TEvRunDataErasure, EvRunDataErasure> {
         const ui64 Generation;
+        const TInstant StartTime;
 
-        TEvRunDataErasure(ui64 generation)
+        TEvRunDataErasure(ui64 generation, const TInstant& startTime)
             : Generation(generation)
+            , StartTime(startTime)
         {}
     };
 

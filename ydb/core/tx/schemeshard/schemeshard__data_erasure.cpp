@@ -82,6 +82,8 @@ void TSchemeShard::EnqueueDataErasure(const TPathId& pathId) {
 }
 
 void TSchemeShard::DataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) {
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ Disconnect to tablet: " << tabletId
+        << ", at schemeshard: " << TabletID());
     const auto shardIdx = GetShardIdx(tabletId);
     if (!ShardInfos.contains(shardIdx)) {
         return;
@@ -168,10 +170,12 @@ void TSchemeShard::UpdateDataErasureQueueMetrics() {
 
 struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
     ui64 RequestedGeneration;
+    TInstant StartTime;
 
-    TTxRunDataErasure(TSelf *self, ui64 generation)
+    TTxRunDataErasure(TSelf *self, ui64 generation, const TInstant& startTime)
         : TRwTxBase(self)
         , RequestedGeneration(generation)
+        , StartTime(startTime)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_RUN_DATA_ERASURE; }
@@ -197,9 +201,11 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
                 }
                 Self->DataErasureQueue->Enqueue(pathId);
                 Self->RunningDataErasureForTenants[pathId] = false;
-                db.Table<Schema::DataErasure>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::DataErasure::IsCompleted>(false);
+                db.Table<Schema::DataErasureScheduler>().Key(Self->DataErasureGeneration).Update<Schema::DataErasureScheduler::IsCompleted,
+                                                                                                 Schema::DataErasureScheduler::StartTime>(false, StartTime.MicroSeconds());
+                db.Table<Schema::ActiveDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::ActiveDataErasureTenants::IsCompleted>(false);
             }
-        } else {
+        } else if (Self->DataErasureGeneration == RequestedGeneration) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "+++TTxRunDataErasure Execute. Known generation# " << RequestedGeneration);
             Self->DataErasureQueue->Clear();
@@ -210,11 +216,14 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
             }
         }
     }
-    void DoComplete(const TActorContext& /*ctx*/) override {}
+    void DoComplete(const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "+++TTxRunDataErasure Complete at schemeshard: " << Self->TabletID());
+    }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxRunDataErasure(ui64 generation) {
-    return new TTxRunDataErasure(this, generation);
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxRunDataErasure(ui64 generation, const TInstant& startTime) {
+    return new TTxRunDataErasure(this, generation, startTime);
 }
 
 struct TSchemeShard::TTxCompleteDataErasure : public TSchemeShard::TRwTxBase {
@@ -237,7 +246,7 @@ struct TSchemeShard::TTxCompleteDataErasure : public TSchemeShard::TRwTxBase {
             record.GetPathId().GetOwnerId(),
             record.GetPathId().GetLocalId());
         Self->RunningDataErasureForTenants[pathId] = true;
-        db.Table<Schema::DataErasure>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::DataErasure::IsCompleted>(true);
+        db.Table<Schema::ActiveDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::ActiveDataErasureTenants::IsCompleted>(true);
     }
 
     void DoComplete(const TActorContext& /*ctx*/) override {}
@@ -254,13 +263,16 @@ struct TSchemeShard::TTxDataErasureSchedulerInit : public TSchemeShard::TRwTxBas
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxDataErasureSchedulerInit Execute at schemeshard: " << Self->TabletID());
+            "+++ TTxDataErasureSchedulerInit Execute at schemeshard: " << Self->TabletID());
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::DataErasureScheduler>().Key(0).Update<Schema::DataErasureScheduler::IsCompleted,
                                                                Schema::DataErasureScheduler::StartTime>(true, AppData(ctx)->TimeProvider->Now().MicroSeconds());
     }
 
-    void DoComplete(const TActorContext& /*ctx*/) override {}
+    void DoComplete(const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "+++ TTxDataErasureSchedulerInit Complete at schemeshard: " << Self->TabletID());
+    }
 };
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDataErasureSchedulerInit() {

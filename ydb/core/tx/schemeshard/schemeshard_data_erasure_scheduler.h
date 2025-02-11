@@ -26,7 +26,7 @@ public:
         bool IsInitialized = false;
         ui64 Generation = 0;
         bool DataErasureInFlight = false;
-        TDuration DataErasureDuration;
+        TInstant StartTime;
     };
 
 private:
@@ -45,7 +45,7 @@ public:
     ui64 GetGeneration() const;
     bool NeedInitialize() const;
 
-    void Restore(const TRestoreValues& restoreValues);
+    void Restore(const TRestoreValues& restoreValues, const NActors::TActorContext& ctx);
 
 private:
     const NActors::TActorId SchemeShardId;

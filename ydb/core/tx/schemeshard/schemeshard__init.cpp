@@ -1870,55 +1870,85 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         // Read Running data erasure for tenants
         {
             if (Self->IsDomainSchemeShard) {
-                auto rowset = db.Table<Schema::DataErasureScheduler>().Range().Select();
-                if (!rowset.IsReady()) {
-                    return false;
+                {
+                    auto rowset = db.Table<Schema::DataErasureScheduler>().Range().Select();
+                    if (!rowset.IsReady()) {
+                        return false;
+                    }
+                    if (rowset.EndOfSet()) {
+                        Self->DataErasureScheduler->Restore({.IsInitialized = false, .StartTime = AppData(ctx)->TimeProvider->Now()}, ctx);
+                        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ DataErasureScheduler is not initialized");
+                    } else {
+                        ui64 currentGeneration = 0;
+                        TInstant startTime;
+                        bool isCompleted = true;
+                        while (!rowset.EndOfSet()) {
+                            ui64 generation = rowset.GetValue<Schema::DataErasureScheduler::Generation>();
+                            if (generation >= currentGeneration) {
+                                currentGeneration = generation;
+                                startTime = TInstant::FromValue(rowset.GetValue<Schema::DataErasureScheduler::StartTime>());
+                                isCompleted = rowset.GetValue<Schema::DataErasureScheduler::IsCompleted>();
+                            }
+                        }
+                        Self->DataErasureScheduler->Restore({.IsInitialized = true,
+                                                            .Generation = currentGeneration,
+                                                            .DataErasureInFlight = !isCompleted,
+                                                            .StartTime = startTime}, ctx);
+                        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ DataErasureScheduler: generation# " << currentGeneration
+                                                                                << ", DataErasureInFlight# " << !isCompleted
+                                                                                << ", DataErasureStartTime# " << startTime);
+                        Self->DataErasureGeneration = currentGeneration;
+                    }
                 }
-                if (rowset.EndOfSet()) {
-                    Self->DataErasureScheduler->Restore({.IsInitialized = false});
-                    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ DataErasureScheduler is not initialized");
-                } else {
-                    ui64 currentGeneration = 0;
-                    TInstant startTime;
-                    bool isCompleted = true;
+
+                {
+                    auto rowset = db.Table<Schema::ActiveDataErasureTenants>().Range().Select();
+                    if (!rowset.IsReady())
+                        return false;
                     while (!rowset.EndOfSet()) {
-                        ui64 generation = rowset.GetValue<Schema::DataErasureScheduler::Generation>();
-                        if (generation >= currentGeneration) {
-                            currentGeneration = generation;
-                            startTime = TInstant::FromValue(rowset.GetValue<Schema::DataErasureScheduler::StartTime>());
-                            isCompleted = rowset.GetValue<Schema::DataErasureScheduler::IsCompleted>();
+                        TOwnerId ownerPathId = rowset.GetValue<Schema::ActiveDataErasureTenants::OwnerPathId>();
+                        TLocalPathId localPathId = rowset.GetValue<Schema::ActiveDataErasureTenants::LocalPathId>();
+                        TPathId pathId(ownerPathId, localPathId);
+                        Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
+                        TPathElement::TPtr path = Self->PathsById.at(pathId);
+                        Y_VERIFY_S(path->IsDomainRoot(), "Path is not a subdomain, pathId: " << pathId);
+
+                        Y_ABORT_UNLESS(Self->SubDomains.contains(pathId));
+
+                        bool isCompleted = rowset.GetValue<Schema::ActiveDataErasureTenants::IsCompleted>();
+
+                        Self->RunningDataErasureForTenants[pathId] = isCompleted;
+                    }
+                }
+            } else {
+                {
+                    auto rowset = db.Table<Schema::TenantDataErasure>().Range().Select();
+                    if (!rowset.IsReady()) {
+                        return false;
+                    }
+                    while (!rowset.EndOfSet()) {
+                        ui64 generation = rowset.GetValue<Schema::TenantDataErasure::Generation>();
+                        if (generation > Self->DataErasureGeneration) {
+                            Self->DataErasureGeneration = generation;
+                            Self->IsDataErasureCompleted = rowset.GetValue<Schema::TenantDataErasure::IsCompleted>();
                         }
                     }
-                    Self->DataErasureScheduler->Restore({.IsInitialized = true,
-                                                         .Generation = currentGeneration,
-                                                         .DataErasureInFlight = !isCompleted,
-                                                         .DataErasureDuration = AppData(ctx)->TimeProvider->Now() - startTime});
-                    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ DataErasureScheduler: generation# " << currentGeneration
-                                                                            << ", DataErasureInFlight# " << !isCompleted
-                                                                            << ", DataErasureDuration# " << AppData(ctx)->TimeProvider->Now() - startTime);
                 }
 
+                {
+                    auto rowset = db.Table<Schema::ActiveDataErasureShards>().Range().Select();
+                    if (!rowset.IsReady()) {
+                        return false;
+                    }
+                    while (!rowset.EndOfSet()) {
+                        TOwnerId ownerId = rowset.GetValue<Schema::ActiveDataErasureShards::OwnerShardIdx>();
+                        TLocalShardIdx localShardId = rowset.GetValue<Schema::ActiveDataErasureShards::LocalShardIdx>();
+                        TShardIdx shardId(ownerId, localShardId);
 
-                // auto rowset = db.Table<Schema::DataErasure>().Range().Select();
-                // if (!rowset.IsReady())
-                //     return false;
-                // while (!rowset.EndOfSet()) {
-                //     TOwnerId ownerPathId = rowset.GetValue<Schema::DataErasure::OwnerPathId>();
-                //     TLocalPathId localPathId = rowset.GetValue<Schema::DataErasure::LocalPathId>();
-                //     TPathId pathId(ownerPathId, localPathId);
-                //     Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
-                //     TPathElement::TPtr path = Self->PathsById.at(pathId);
-                //     Y_VERIFY_S(path->IsDomainRoot(), "Path is not a subdomain, pathId: " << pathId);
-
-                //     Y_ABORT_UNLESS(Self->SubDomains.contains(pathId));
-
-                //     bool isCompleted = rowset.GetValue<Schema::DataErasure::IsCompleted>();
-
-                //     Self->RequestedDataErasureForTenants[pathId] = isCompleted;
-
-                //     ui64 generation = rowset.GetValue<Schema::DataErasure::Generation>();
-                //     Self->DataErasureGeneration = Max(generation, Self->DataErasureGeneration);
-                // }
+                        bool isCompleted = rowset.GetValue<Schema::ActiveDataErasureShards::IsCompleted>();
+                        Self->RunningDataErasureShards[shardId] = isCompleted;
+                    }
+                }
             }
         }
 

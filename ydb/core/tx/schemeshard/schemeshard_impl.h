@@ -363,8 +363,10 @@ public:
     TTenantDataErasureQueue* TenantDataErasureQueue = nullptr;
 
     ui64 DataErasureGeneration = 0;
+    bool IsDataErasureCompleted = false;
     THashMap<TPathId, bool> RunningDataErasureForTenants;
     THashMap<TPathId, TActorId> ActiveDataErasureTenants;
+    THashMap<TShardIdx, bool> RunningDataErasureShards;
     THashMap<TShardIdx, TActorId> ActiveDataErasureShards;
 
     TAutoPtr<TDataErasureScheduler> DataErasureScheduler;
@@ -1129,7 +1131,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxRunTenantDataErasure(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev);
 
     struct TTxRunDataErasure;
-    NTabletFlatExecutor::ITransaction* CreateTxRunDataErasure(ui64 generation);
+    NTabletFlatExecutor::ITransaction* CreateTxRunDataErasure(ui64 generation, const TInstant& startTime);
 
     struct TTxCompleteDataErasure;
     NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasure(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev);

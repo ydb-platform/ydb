@@ -2251,7 +2251,7 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
         }
 
         if (RunningDataErasureForTenants.contains(pathId)) {
-            db.Table<Schema::DataErasure>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+            db.Table<Schema::ActiveDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
             RunningDataErasureForTenants.erase(pathId);
         }
 
@@ -7705,9 +7705,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, c
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvRunDataErasure::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "+++Handle TEvRunDataErasure"
-        << ", at schemeshard: " << TabletID());
-    Execute(CreateTxRunDataErasure(ev->Get()->Generation), ctx);
+        "+++Handle TEvRunDataErasure, at schemeshard: " << TabletID());
+    Execute(CreateTxRunDataErasure(ev->Get()->Generation, ev->Get()->StartTime), ctx);
 }
 
 void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext&) {

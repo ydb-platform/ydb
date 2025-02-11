@@ -1953,7 +1953,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct DataErasure : Table<115> {
+    struct ActiveDataErasureTenants : Table<115> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct IsCompleted : Column<3, NScheme::NTypeIds::Bool> {};
@@ -1962,6 +1962,30 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<
             OwnerPathId,
             LocalPathId,
+            IsCompleted
+        >;
+    };
+
+    struct TenantDataErasure : Table<116> {
+        struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct IsCompleted : Column<2, NScheme::NTypeIds::Bool> {};
+
+        using TKey = TableKey<Generation>;
+        using TColumns = TableColumns<
+            Generation,
+            IsCompleted
+        >;
+    };
+
+    struct ActiveDataErasureShards : Table<117> {
+        struct OwnerShardIdx :  Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalShardIdx :  Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+        struct IsCompleted : Column<3, NScheme::NTypeIds::Bool> {};
+
+        using TKey = TableKey<OwnerShardIdx, LocalShardIdx>;
+        using TColumns = TableColumns<
+            OwnerShardIdx,
+            LocalShardIdx,
             IsCompleted
         >;
     };
@@ -2081,6 +2105,9 @@ struct Schema : NIceDb::Schema {
         KMeansTreeSample
         DataErasure
         DataErasureScheduler
+        ActiveDataErasureTenants,
+        TenantDataErasure,
+        ActiveDataErasureShards
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

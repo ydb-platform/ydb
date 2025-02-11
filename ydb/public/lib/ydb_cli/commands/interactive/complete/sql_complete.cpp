@@ -3,10 +3,10 @@
 #include "c3_engine.h"
 #include "sql_syntax.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr4_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr4_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr4_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr4_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
 
 #include <util/generic/algorithm.h>
 #include <util/stream/output.h>

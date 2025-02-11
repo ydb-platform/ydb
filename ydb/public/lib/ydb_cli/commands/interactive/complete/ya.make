@@ -12,8 +12,8 @@ PEERDIR(
     contrib/libs/antlr4-c3
     yql/essentials/sql/settings
     yql/essentials/sql/v1/format
-    ydb/public/lib/ydb_cli/commands/interactive/antlr4_ast/gen/v1_ansi_antlr4
-    ydb/public/lib/ydb_cli/commands/interactive/antlr4_ast/gen/v1_antlr4
+    ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_ansi_antlr4
+    ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_antlr4
 )
 
 END()

@@ -2,10 +2,10 @@
 
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr4_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr4_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr4_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/antlr4_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
 
 #define RULE_(mode, name) NALP##mode##Antlr4::SQLv1Antlr4Parser::Rule##name
 

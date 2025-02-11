@@ -1406,6 +1406,7 @@ public:
                 return false;
             }
             case EOperatingMode::ProcessRestored: {
+                if (IsFinished_) return false;
                 if (HasAnythingToLoad()) {
                     SwitchMode(EOperatingMode::Restoring);
                     return CheckSpillingAndWait();
@@ -1987,6 +1988,9 @@ public:
     }
 
     bool FillOutput(const THolderFactory& holderFactory) {
+        if constexpr(Finalize) {
+            std::cerr << "Filling Output" << std::endl;
+        }
         bool exit = false;
         while (WritingOutput_) {
             if constexpr (UseSet) {
@@ -2446,6 +2450,8 @@ private:
         Done,
     };
 
+    bool LogReturnOk = true;
+
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             TState& state = *static_cast<TState*>(State_.AsBoxed().Get());
@@ -2462,6 +2468,7 @@ private:
                         if (state.HasAnythingToLoad()) {
                             state.Clear();
                             state.IsFinished_ = false;
+                            LogReturnOk = true;
 
                         } else {
                             return NUdf::EFetchStatus::Finish;
@@ -2480,15 +2487,15 @@ private:
                             return NUdf::EFetchStatus::Yield;
                         case NUdf::EFetchStatus::Ok:
                             state.ProcessInput(HolderFactory_);
+                            if constexpr (Finalize) {
+                                if (state.CheckSpillingAndWait()) return NUdf::EFetchStatus::Yield;
+                            }
                             continue;
                         case NUdf::EFetchStatus::Finish:
                             state.FinishFetched = true;
                             break;
                     }
 
-                    if constexpr (Finalize) {
-                        if (state.CheckSpillingAndWait()) return NUdf::EFetchStatus::Yield;
-                    }
 
                     if (state.Finish())
                         break;
@@ -2511,6 +2518,13 @@ private:
             const auto sliceSize = state.Slice();
             for (size_t i = 0; i < outputWidth; ++i) {
                 output[i] = state.Get(sliceSize, HolderFactory_, i);
+            }
+
+            if constexpr(Finalize) {
+                if (LogReturnOk) {
+                    std::cerr << "Returning OK" << std::endl;
+                    LogReturnOk = false;
+                }
             }
             return NUdf::EFetchStatus::Ok;
         }

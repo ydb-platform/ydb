@@ -31,7 +31,7 @@ namespace NSQLComplete {
 
     public:
         TSpecializedSqlCompletionEngine()
-            : Grammar(MakeSqlGrammar(M))
+            : Grammar(&GetSqlGrammar(M))
             , C3(ComputeC3Config())
         {
         }
@@ -91,7 +91,7 @@ namespace NSQLComplete {
             return keywords;
         }
 
-        ISqlGrammar::TPtr Grammar;
+        const ISqlGrammar* Grammar;
         TC3Engine<G> C3;
     };
 

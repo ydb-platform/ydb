@@ -25,19 +25,19 @@ namespace NSQLComplete {
         {
         }
 
-        const antlr4::dfa::Vocabulary& GetVocabulary() override {
+        const antlr4::dfa::Vocabulary& GetVocabulary() const override {
             return *Vocabulary;
         }
 
-        const std::unordered_set<TTokenId>& GetAllTokens() override {
+        const std::unordered_set<TTokenId>& GetAllTokens() const override {
             return AllTokens;
         }
 
-        const std::unordered_set<TTokenId>& GetKeywordTokens() override {
+        const std::unordered_set<TTokenId>& GetKeywordTokens() const override {
             return KeywordTokens;
         }
 
-        const TVector<TRuleId>& GetKeywordRules() override {
+        const TVector<TRuleId>& GetKeywordRules() const override {
             static const TVector<TRuleId> KeywordRules = {
                 RULE(Keyword),
                 RULE(Keyword_expr_uncompat),
@@ -101,19 +101,19 @@ namespace NSQLComplete {
         }
 
         const antlr4::dfa::Vocabulary* Vocabulary;
-        std::unordered_set<TTokenId> AllTokens;
-        std::unordered_set<TTokenId> KeywordTokens;
+        const std::unordered_set<TTokenId> AllTokens;
+        const std::unordered_set<TTokenId> KeywordTokens;
     };
 
-    ISqlGrammar::TPtr MakeSqlGrammar(ESqlSyntaxMode mode) {
-        static TSqlGrammar defaultSqlGrammar(mode);
-        static TSqlGrammar ansiSqlGrammar(mode);
+    const ISqlGrammar& GetSqlGrammar(ESqlSyntaxMode mode) {
+        const static TSqlGrammar DefaultSqlGrammar(mode);
+        const static TSqlGrammar AnsiSqlGrammar(mode);
 
         switch (mode) {
             case ESqlSyntaxMode::Default:
-                return &defaultSqlGrammar;
+                return DefaultSqlGrammar;
             case ESqlSyntaxMode::ANSI:
-                return &ansiSqlGrammar;
+                return AnsiSqlGrammar;
         }
     }
 

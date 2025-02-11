@@ -16,15 +16,13 @@ namespace NSQLComplete {
 
     class ISqlGrammar {
     public:
-        using TPtr = ISqlGrammar*;
-
-        virtual const antlr4::dfa::Vocabulary& GetVocabulary() = 0;
-        virtual const std::unordered_set<TTokenId>& GetAllTokens() = 0;
-        virtual const std::unordered_set<TTokenId>& GetKeywordTokens() = 0;
-        virtual const TVector<TRuleId>& GetKeywordRules() = 0;
+        virtual const antlr4::dfa::Vocabulary& GetVocabulary() const = 0;
+        virtual const std::unordered_set<TTokenId>& GetAllTokens() const = 0;
+        virtual const std::unordered_set<TTokenId>& GetKeywordTokens() const = 0;
+        virtual const TVector<TRuleId>& GetKeywordRules() const = 0;
         virtual ~ISqlGrammar() = default;
     };
 
-    ISqlGrammar::TPtr MakeSqlGrammar(ESqlSyntaxMode mode);
+    const ISqlGrammar& GetSqlGrammar(ESqlSyntaxMode mode);
 
 } // namespace NSQLComplete

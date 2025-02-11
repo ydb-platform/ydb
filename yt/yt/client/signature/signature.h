@@ -28,7 +28,14 @@ private:
     std::vector<std::byte> Signature_;
 
     friend class TSignatureGeneratorBase;
+    friend class TSignatureGenerator;
+    friend class TDummySignatureGenerator;
+    friend class TAlwaysThrowingSignatureGenerator;
+
     friend class TSignatureValidatorBase;
+    friend class TSignatureValidator;
+    friend class TDummySignatureValidator;
+    friend class TAlwaysThrowingSignatureValidator;
 
     friend void Serialize(const TSignature& signature, NYson::IYsonConsumer* consumer);
     friend void Deserialize(TSignature& signature, NYTree::INodePtr node);

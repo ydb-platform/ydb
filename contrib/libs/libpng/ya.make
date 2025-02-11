@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.6.45)
+VERSION(1.6.46)
 
-ORIGINAL_SOURCE(https://github.com/pnggroup/libpng/archive/v1.6.45.tar.gz)
+ORIGINAL_SOURCE(https://github.com/pnggroup/libpng/archive/v1.6.46.tar.gz)
 
 PEERDIR(
     contrib/libs/zlib

@@ -18,10 +18,10 @@ public:
 
     [[nodiscard]] TSignaturePtr Sign(NYson::TYsonString data);
 
-protected:
-    NYson::TYsonString& GetHeader(const TSignaturePtr& signature);
-
-    std::vector<std::byte>& GetSignature(const TSignaturePtr& signature);
+private:
+    friend class TSignatureGenerator;
+    friend class TDummySignatureGenerator;
+    friend class TAlwaysThrowingSignatureGenerator;
 };
 
 DEFINE_REFCOUNTED_TYPE(TSignatureGeneratorBase)

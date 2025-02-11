@@ -264,6 +264,68 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
     }
 }
 
+bool AllConsumersAreUnordered(const TExprNode::TPtr& node, const TParentsMap& parents, TNodeSet& unorderedConsumers) {
+    static const THashSet<TStringBuf> traverseCallables = {
+        TCoExtractMembers::CallableName(),
+        TCoAssumeDistinct::CallableName(),
+        TCoAssumeUnique::CallableName(),
+        TCoAssumeColumnOrder::CallableName(),
+    };
+    TNodeSet current{node.Get()};
+    while (!current.empty()) {
+        TNodeSet next;
+        for (auto curr : current) {
+            auto it = parents.find(curr);
+            if (it == parents.cend() || it->second.empty()) {
+                return false;
+            }
+            for (auto parent : it->second) {
+                if (TCoUnordered::Match(parent)) {
+                    // TODO: should probably add more callables here
+                    unorderedConsumers.insert(parent);
+                    continue;
+                }
+                if (!parent->IsCallable(traverseCallables)) {
+                    return false;
+                }
+                YQL_ENSURE(&parent->Head() == curr);
+                next.insert(parent);
+            }
+        }
+        current = std::move(next);
+    }
+    return true;
+}
+
+bool OptimizeForUnorderedConsumers(const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+    static const char optName[] = "UnorderedOverSortImproved";
+    YQL_ENSURE(optCtx.Types);
+    const bool optEnabled = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+    if (!optEnabled) {
+        return false;
+    }
+
+    if (!node->IsCallable({"Sort", "AssumeSorted", "TopSort"})) {
+        return false;
+    }
+
+    YQL_ENSURE(optCtx.ParentsMap);
+    const auto& parentsMap = *optCtx.ParentsMap;
+    TNodeSet unorderedConsumers;
+    if (!AllConsumersAreUnordered(node, parentsMap, unorderedConsumers)) {
+        return false;
+    }
+
+    YQL_ENSURE(!unorderedConsumers.empty());
+    const TExprNode::TPtr newNode = node->IsCallable("TopSort") ? ctx.RenameNode(*node, "Top") : node->HeadPtr();
+    for (auto consumer : unorderedConsumers) {
+        toOptimize[consumer] = ctx.ReplaceNode(ctx.ShallowCopy(*consumer), *node, newNode);
+    }
+
+    YQL_CLOG(DEBUG, Core) << "Droping sort due to unordered consumers for " << node->Content();
+    return true;
+}
+
 }
 
 void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
@@ -328,6 +390,9 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
     };
 
     map[TCoSort::CallableName()] = map[TCoAssumeSorted::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (OptimizeForUnorderedConsumers(node, toOptimize, ctx, optCtx)) {
+            return true;
+        }
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
                 return ApplyExtractMembersToSort(input, members, parentsMap, ctx, " with multi-usage");
@@ -348,6 +413,9 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
     };
 
     map[TCoTop::CallableName()] = map[TCoTopSort::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (OptimizeForUnorderedConsumers(node, toOptimize, ctx, optCtx)) {
+            return true;
+        }
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
                 return ApplyExtractMembersToTop(input, members, parentsMap, ctx, " with multi-usage");

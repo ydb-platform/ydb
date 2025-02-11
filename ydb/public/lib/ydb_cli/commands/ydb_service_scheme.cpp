@@ -1071,7 +1071,7 @@ void TCommandList::Parse(TConfig& config) {
 
 void TCommandList::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
-    ParsePath(config, 0);
+    ParsePath(config, 0, true);
 }
 
 int TCommandList::Run(TConfig& config) {

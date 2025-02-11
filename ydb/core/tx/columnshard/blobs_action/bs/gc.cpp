@@ -60,13 +60,13 @@ std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const T
     auto it = ListsByGroupId.find(address);
     AFL_VERIFY(it != ListsByGroupId.end());
     if (++it->second.RequestsCount >= TGCLists::RequestsLimit) {
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)
-            ("event", "build_gc_request")
-            ("address", address.DebugString())("current_gen", CurrentGen)
-            ("gen", CollectGenStepInFlight)
-            ("count", it->second.RequestsCount);
-        return nullptr;
-    }
+         AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)
+             ("event", "build_gc_request")
+             ("address", address.DebugString())("current_gen", CurrentGen)
+             ("gen", CollectGenStepInFlight)
+             ("count", it->second.RequestsCount);
+         return nullptr;
+     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "build_gc_request")("address", address.DebugString())("current_gen", CurrentGen)("gen", CollectGenStepInFlight)
         ("count", it->second.RequestsCount);
     auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(

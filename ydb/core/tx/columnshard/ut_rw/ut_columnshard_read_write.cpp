@@ -2421,9 +2421,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
     }
 
+    template<typename Controller>
     void TestCompactionGC() {
         TTestBasicRuntime runtime;
-        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<Controller>();
         csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csDefaultControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csDefaultControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
@@ -2687,7 +2688,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(CompactionGC) {
-        TestCompactionGC();
+        TestCompactionGC<TDefaultTestsController>();
+    }
+
+    Y_UNIT_TEST(CompactionGCFailingBs) {
+        TestCompactionGC<NOlap::TFailingBSController>();
     }
 
     Y_UNIT_TEST(PortionInfoSize) {

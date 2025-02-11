@@ -17,7 +17,7 @@ public:
         THashSet<TLogoBlobID> KeepList;
         THashSet<TLogoBlobID> DontKeepList;
         mutable ui32 RequestsCount = 0;
-
+        
         constexpr static ui32 RequestsLimit = 10;
     };
     using TGCListsByGroup = THashMap<TBlobAddress, TGCLists>;

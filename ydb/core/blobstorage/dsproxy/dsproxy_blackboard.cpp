@@ -285,6 +285,32 @@ TString TBlobState::TWholeState::ToString() const {
     return str.Str();
 }
 
+TString TBlobState::ReportErrorReasons() const {
+    TStackVec<std::unordered_set<TString>> errorsByDisk(Disks.size());
+    for (const TDisk& disk : Disks) {
+        for (const TDiskPart& part : disk.DiskParts) {
+            if (part.ErrorReason) {
+                errorsByDisk[disk.OrderNumber].insert(part.ErrorReason);
+            }
+        }
+    }
+
+    TStringStream str;
+    str << "[ ";
+    for (ui32 orderNumber = 0; orderNumber < errorsByDisk.size(); ++orderNumber) {
+        if (!errorsByDisk[orderNumber].empty()) {
+            str << "{ OrderNumber# " << orderNumber << " ErrorReasons# [ ";
+            for (const TString& errorReason : errorsByDisk[orderNumber]) {
+                str << "\"" << errorReason << "\", ";
+            }
+            str << "] } ";
+        }
+    }
+    str << "]";
+
+    return str.Str();
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TGroupDiskRequests
 //

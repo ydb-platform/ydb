@@ -200,7 +200,6 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
         }
 
-        vdiskConfig->ThrottlingDeviceSpeed = ThrottlingDeviceSpeed;
         vdiskConfig->ThrottlingDryRun = ThrottlingDryRun;
         vdiskConfig->ThrottlingMinLevel0SstCount = ThrottlingMinLevel0SstCount;
         vdiskConfig->ThrottlingMaxLevel0SstCount = ThrottlingMaxLevel0SstCount;

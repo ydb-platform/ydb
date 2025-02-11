@@ -32,7 +32,7 @@
 namespace {
     TDuration CalculateNextAttemptDelay(const NKikimr::NKqp::TWriteActorSettings& settings, ui64 attempt) {
         auto delay = settings.StartRetryDelay;
-        for (ui64 index = 0; index < attempt; ++index) {
+        for (ui64 index = 0; index < attempt && delay * (1 - settings.UnsertaintyRatio) <= settings.MaxRetryDelay; ++index) {
             delay *= settings.Multiplier;
         }
 
@@ -214,7 +214,8 @@ public:
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
         NWilson::TTraceId traceId)
-        : TypeEnv(typeEnv)
+        : MessageSettings(GetWriteActorSettings())
+        , TypeEnv(typeEnv)
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
         , LockMode(lockMode)

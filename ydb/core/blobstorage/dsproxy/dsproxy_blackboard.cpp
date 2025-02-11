@@ -286,7 +286,7 @@ TString TBlobState::TWholeState::ToString() const {
 }
 
 TString TBlobState::ReportErrorReasons() const {
-    TStackVec<std::unordered_set<TString>> errorsByDisk(Disks.size());
+    TStackVec<std::unordered_set<TString>, TypicalDisksInSubring> errorsByDisk(Disks.size());
     for (const TDisk& disk : Disks) {
         for (const TDiskPart& part : disk.DiskParts) {
             if (part.ErrorReason) {

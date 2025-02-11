@@ -304,6 +304,8 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildBatchDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source, TNodePtr options = nullptr);
 
     // Implemented in query.cpp
+    TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped);
+    TNodePtr BuildAlterDatabase(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAlterDatabaseParameters& params,TScopedStatePtr scoped);
     TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TViewDescription& view);
     TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& func, const TVector<TTableArg>& args);
     TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name);

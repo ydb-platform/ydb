@@ -849,16 +849,20 @@ protected:
         std::unique_ptr<TEvWhiteboard::TEvTabletStateResponse> response = std::make_unique<TEvWhiteboard::TEvTabletStateResponse>();
         auto& record = response->Record;
         if (request.format() == "packed5") {
-            TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(TabletStateInfo.size());
+            std::vector<const NKikimrWhiteboard::TTabletStateInfo*> matchedTablets;
             for (const auto& [tabletId, tabletInfo] : TabletStateInfo) {
                 if (matchesFilter(tabletInfo)) {
-                    ptr->TabletId = tabletInfo.tabletid();
-                    ptr->FollowerId = tabletInfo.followerid();
-                    ptr->Generation = tabletInfo.generation();
-                    ptr->Type = tabletInfo.type();
-                    ptr->State = tabletInfo.state();
-                    ++ptr;
+                    matchedTablets.push_back(&tabletInfo);
                 }
+            }
+            TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(matchedTablets.size());
+            for (auto tabletInfo : matchedTablets) {
+                ptr->TabletId = tabletInfo->tabletid();
+                ptr->FollowerId = tabletInfo->followerid();
+                ptr->Generation = tabletInfo->generation();
+                ptr->Type = tabletInfo->type();
+                ptr->State = tabletInfo->state();
+                ++ptr;
             }
         } else {
             if (request.groupby().empty()) {

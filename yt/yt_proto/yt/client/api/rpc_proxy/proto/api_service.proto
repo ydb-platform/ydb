@@ -2268,6 +2268,7 @@ message TReqSuspendOperation
         string operation_alias = 3;
     }
     optional bool abort_running_jobs = 2 [default = false];
+    optional string reason = 4;
 }
 
 message TRspSuspendOperation
@@ -3058,6 +3059,7 @@ message TOperation
     optional bytes runtime_parameters = 16; // YSON
 
     optional bool suspended = 17;
+    optional string suspend_reason = 29;
 
     optional bytes events = 18; // YSON
     optional bytes result = 19; // YSON

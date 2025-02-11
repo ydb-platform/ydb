@@ -8,25 +8,13 @@ namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const NYson::TYsonString& TSignatureValidatorBase::GetHeader(const TSignaturePtr& signature)
-{
-    return signature->Header_;
-}
-
-const std::vector<std::byte>& TSignatureValidatorBase::GetSignature(const TSignaturePtr& signature)
-{
-    return signature->Signature_;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TDummySignatureValidator
     : public TSignatureValidatorBase
 {
 public:
     TFuture<bool> Validate(const TSignaturePtr& signature) override
     {
-        YT_VERIFY(GetHeader(signature).ToString() == "DummySignature");
+        YT_VERIFY(signature->Header_.ToString() == "DummySignature");
         return TrueFuture;
     }
 };

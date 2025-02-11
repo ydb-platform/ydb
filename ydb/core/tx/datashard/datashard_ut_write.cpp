@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cout << "========= Send immediate insert with duplicate, keys -2, 0, 2 =========\n";
         {
             auto request = MakeWriteRequest(++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT, tableId, opts.Columns_, rowCount, -2);
-            const auto writeResult = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            const auto writeResult = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
         }
 
         Cout << "========= Read table =========\n";

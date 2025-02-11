@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/vdisk/common/align.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
@@ -231,8 +232,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             ctx.Send(NotifyID, new TEvHullHugeWritten(HugeSlot));
             ctx.Send(HugeKeeperCtx->SkeletonId, new TEvHullLogHugeBlob(WriteId, Item->LogoBlobId, Item->Ingress, DiskAddr,
-                Item->IgnoreBlock, Item->SenderId, Item->Cookie, std::move(Item->Result), &Item->ExtraBlockChecks), 0, 0,
-                Span.GetTraceId());
+                Item->IgnoreBlock, Item->SenderId, Item->Cookie, std::move(Item->Result), &Item->ExtraBlockChecks,
+                Item->RewriteBlob), 0, 0, Span.GetTraceId());
             LOG_DEBUG(ctx, BS_HULLHUGE,
                       VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: finish: id# %s diskAddr# %s",
@@ -427,9 +428,10 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             Y_ABORT_UNLESS(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == Lsn);
 
-            LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "ChunkDestroyer: committed:"
+            LOG_INFO(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "ChunkDestroyer: committed:"
                 " chunks# %s Lsn# %" PRIu64, FormatList(ChunksToFree).data(), Lsn));
 
+            ctx.Send(HugeKeeperCtx->SkeletonId, new TEvNotifyChunksDeleted(Lsn, ChunksToFree));
             ctx.Send(NotifyID, new TEvHullHugeChunkFreed);
             Die(ctx);
         }
@@ -1012,12 +1014,6 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ctx.Send(ev->Sender, new TEvHugeLockChunksResult(std::move(lockedChunks)));
         }
 
-        void Handle(TEvHugeUnlockChunks::TPtr& ev, const TActorContext& /*ctx*/) {
-            for (const auto& d : ev->Get()->Chunks) {
-                State.Pers->Heap->UnlockChunk(d.ChunkId, d.SlotSize);
-            }
-        }
-
         void Handle(TEvHugeStat::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG(ctx, BS_HULLHUGE,
                 VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
@@ -1027,6 +1023,15 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             res->Stat = State.Pers->Heap->GetStat();
             UpdateGlobalFragmentationStat(res->Stat);
             ctx.Send(ev->Sender, res.release());
+        }
+
+        void Handle(TEvHugeShredNotify::TPtr &ev, const TActorContext &ctx) {
+            auto *msg = ev->Get();
+            std::ranges::sort(msg->ChunksToShred);
+            State.Pers->Heap->ShredNotify(msg->ChunksToShred);
+            FreeChunks(ctx);
+            TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvHugeShredNotifyResult, 0, ev->Sender, SelfId(),
+                nullptr, 0));
         }
 
         void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
@@ -1177,8 +1182,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 HFunc(TEvHugeDropAllocatedSlots, Handle)
                 HFunc(TEvHugePreCompact, Handle)
                 HFunc(TEvHugeLockChunks, Handle)
-                HFunc(TEvHugeUnlockChunks, Handle)
                 HFunc(TEvHugeStat, Handle)
+                HFunc(TEvHugeShredNotify, Handle)
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(NMon::TEvHttpInfo, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)

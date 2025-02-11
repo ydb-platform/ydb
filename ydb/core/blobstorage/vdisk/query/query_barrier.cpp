@@ -34,7 +34,7 @@ namespace NKikimr {
                     VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                             "TEvVGetBarrierResult: %s", Result->ToString().data()));
             SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, HullCtx->VCtx);
-            ctx.Send(ParentId, new TEvents::TEvActorDied);
+            ctx.Send(ParentId, new TEvents::TEvGone);
             Die(ctx);
         }
 

@@ -1970,13 +1970,13 @@ TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, const TActorContext &
 
 TActorId TTabletSetupInfo::Tablet(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
                                   ui32 suggestedGeneration, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
-    return ctx.ExecutorThread.RegisterActor(CreateTablet(launcher, info, this, suggestedGeneration, profiles, txCacheQuota),
+    return ctx.Register(CreateTablet(launcher, info, this, suggestedGeneration, profiles, txCacheQuota),
                                             TabletMailboxType, TabletPoolId);
 }
 
 TActorId TTabletSetupInfo::Follower(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
                                  ui32 followerId, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
-    return ctx.ExecutorThread.RegisterActor(CreateTabletFollower(launcher, info, this, followerId, profiles, txCacheQuota),
+    return ctx.Register(CreateTabletFollower(launcher, info, this, followerId, profiles, txCacheQuota),
                                             TabletMailboxType, TabletPoolId);
 }
 

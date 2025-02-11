@@ -671,6 +671,11 @@ ISubConsumerClientPtr CreateSubConsumerClient(
     TRichYPath queuePath)
 {
     auto queueCluster = queuePath.GetCluster();
+    if (!queueCluster && queueClusterClient) {
+        if (auto queueClusterFromClient = queueClusterClient->GetClusterName()) {
+            queueCluster = *queueClusterFromClient;
+        }
+    }
     if (!queueCluster) {
         if (auto clientCluster = consumerClusterClient->GetClusterName()) {
             queueCluster = *clientCluster;

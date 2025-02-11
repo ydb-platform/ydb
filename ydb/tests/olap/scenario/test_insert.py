@@ -1,3 +1,4 @@
+import time
 from conftest import BaseTestSet
 from ydb.tests.olap.scenario.helpers import (
     ScenarioTestHelper,
@@ -35,15 +36,18 @@ class TestInsert(BaseTestSet):
         log: str = sth.get_full_path("log" + table)
         cnt: str = sth.get_full_path("cnt" + table)
         for i in range(rows_count):
-            try:
-                sth.execute_query(
-                    yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=10
-                )
-            except Exception:
-                if ignore_read_errors:
-                    pass
-                else:
-                    raise
+            for c in range(10):
+                try:
+                    sth.execute_query(
+                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=20, fail_on_error=False
+                    )
+                    break
+                except Exception:
+                    if ignore_read_errors:
+                        pass
+                    else:
+                        raise
+                time.sleep(1)
 
     def scenario_read_data_during_bulk_upsert(self, ctx: TestContext):
         sth = ScenarioTestHelper(ctx)

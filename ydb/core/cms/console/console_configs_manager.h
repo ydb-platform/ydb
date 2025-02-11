@@ -32,16 +32,27 @@ private:
 
     using TBase = TActorBootstrapped<TConfigsManager>;
 
-    struct TValidateConfigResult {
-        std::optional<TString> ErrorReason;
-        bool Modify = false;
+    struct TUpdateConfigOpBaseContext {
+        std::optional<TString> Error;
+
+        TMap<TString, std::pair<TString, TString>> DeprecatedFields;
+        TMap<TString, std::pair<TString, TString>> UnknownFields;
+    };
+
+    struct TUpdateConfigOpContext
+        : public TUpdateConfigOpBaseContext
+    {
         TString UpdatedConfig;
         ui32 Version;
         TString Cluster;
-        bool HasForbiddenUnknown = false;
-        TMap<TString, std::pair<TString, TString>> DeprecatedFields;
-        TMap<TString, std::pair<TString, TString>> UnknownFields;
-        bool ValidationFinished = false;
+    };
+
+    struct TUpdateDatabaseConfigOpContext
+        : public TUpdateConfigOpBaseContext
+    {
+        TString UpdatedConfig;
+        TString TargetDatabase;
+        ui32 Version;
     };
 
 public:
@@ -69,7 +80,13 @@ public:
     bool CheckConfig(const NKikimrConsole::TConfigsConfig &config,
                      Ydb::StatusIds::StatusCode &code,
                      TString &error);
-    TValidateConfigResult ValidateConfigAndReplaceMetadata(const TString& config, bool force = false, bool allowUnknownFields = false);
+
+
+    void ReplaceMainConfigMetadata(const TString &config, bool force, TUpdateConfigOpContext& opCtx);
+    void ValidateMainConfig(TUpdateConfigOpContext& opCtx);
+
+    void ReplaceDatabaseConfigMetadata(const TString &config, bool force, TUpdateDatabaseConfigOpContext& opCtx);
+    void ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opCtx);
 
     void SendInReply(const TActorId& sender, const TActorId& icSession, std::unique_ptr<IEventBase> ev, ui64 cookie = 0);
 
@@ -128,7 +145,9 @@ private:
     class TTxUpdateLastProvidedConfig;
     class TTxGetLogTail;
     class TTxLogCleanup;
-    class TTxReplaceYamlConfig;
+    class TTxReplaceYamlConfigBase;
+    class TTxReplaceMainYamlConfig;
+    class TTxReplaceDatabaseYamlConfig;
     class TTxDropYamlConfig;
     class TTxGetYamlConfig;
     class TTxGetYamlMetadata;
@@ -145,8 +164,10 @@ private:
     ITransaction *CreateTxUpdateLastProvidedConfig(TEvConsole::TEvConfigNotificationResponse::TPtr &ev);
     ITransaction *CreateTxGetLogTail(TEvConsole::TEvGetLogTailRequest::TPtr &ev);
     ITransaction *CreateTxLogCleanup();
-    ITransaction *CreateTxReplaceYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev);
-    ITransaction *CreateTxSetYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev);
+    ITransaction *CreateTxReplaceMainYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev);
+    ITransaction *CreateTxReplaceDatabaseYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev);
+    ITransaction *CreateTxSetMainYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev);
+    ITransaction *CreateTxSetDatabaseYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev);
     ITransaction *CreateTxDropYamlConfig(TEvConsole::TEvDropConfigRequest::TPtr &ev);
     ITransaction *CreateTxGetYamlConfig(TEvConsole::TEvGetAllConfigsRequest::TPtr &ev);
     ITransaction *CreateTxGetYamlMetadata(TEvConsole::TEvGetAllMetadataRequest::TPtr &ev);
@@ -180,6 +201,8 @@ private:
     void Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlobStorage::TEvControllerValidateConfigRequest::TPtr &ev, const TActorContext &ctx);
+
+    void FailReplaceConfig(TActorId Sender, const TString& error, const TActorContext &ctx);
 
     static bool CheckRights(const TString& userToken);
 
@@ -279,6 +302,7 @@ public:
 private:
     TConsole &Self;
     TConfigsConfig Config;
+    TString DomainName;
     // All config items by id.
     TConfigIndex ConfigIndex;
     ui64 NextConfigItemId;
@@ -300,7 +324,8 @@ private:
 
     TString ClusterName;
     ui32 YamlVersion = 0;
-    TString YamlConfig;
+    TString MainYamlConfig;
+    THashMap<TString, TDatabaseYamlConfig> DatabaseYamlConfigs;
     bool YamlDropped = false;
     bool YamlReadOnly = true;
     TMap<ui64, TString> VolatileYamlConfigs;

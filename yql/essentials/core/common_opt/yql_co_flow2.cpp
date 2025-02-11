@@ -2653,7 +2653,12 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return ctx.RenameNode(node->Head(), "Top");
         }
 
-        if (node->Head().IsCallable({"Sort", "AssumeSorted"})) {
+        static const char optName[] = "UnorderedOverSortImproved";
+        YQL_ENSURE(optCtx.Types);
+        const bool optEnabled = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+
+        if (!optEnabled && node->Head().IsCallable({"Sort", "AssumeSorted"})) {
+            // if optEnabled this action is performed in yql_co_simple1.cpp (without multiusage check)
             YQL_CLOG(DEBUG, Core) << node->Content() << " absorbs " << node->Head().Content();
             return ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
         }

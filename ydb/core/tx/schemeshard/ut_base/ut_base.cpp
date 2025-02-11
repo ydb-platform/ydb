@@ -2105,11 +2105,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Columns { Name: "key18"   Type: "Uint64" }
               Columns { Name: "key19"   Type: "Uint64" }
               Columns { Name: "key20"   Type: "Uint64" }
+              Columns { Name: "key21"   Type: "Uint64" }
+              Columns { Name: "key22"   Type: "Uint64" }
+              Columns { Name: "key23"   Type: "Uint64" }
+              Columns { Name: "key24"   Type: "Uint64" }
+              Columns { Name: "key25"   Type: "Uint64" }
+              Columns { Name: "key26"   Type: "Uint64" }
+              Columns { Name: "key27"   Type: "Uint64" }
+              Columns { Name: "key28"   Type: "Uint64" }
+              Columns { Name: "key29"   Type: "Uint64" }
+              Columns { Name: "key30"   Type: "Uint64" }
 
               Columns { Name: "value0" Type: "Utf8" }
               Columns { Name: "value1" Type: "Utf8" }
               KeyColumnNames: ["key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key10",
-                               "key11", "key12", "key13", "key14", "key15", "key16", "key17", "key18", "key19", "key20"]
+                               "key11", "key12", "key13", "key14", "key15", "key16", "key17", "key18", "key19", "key20",
+                               "key21", "key22", "key23", "key24", "key25", "key26", "key27", "key28", "key29", "key30"]
             }
             IndexDescription {
               Name: "UserDefinedIndexByValue0"
@@ -6646,6 +6657,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup4", true), {
             NLs::CheckPartCount("PQGroup4", 2, 1, 2, 2),
         });
+
+        // decimal type
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup5"
+            TotalGroupCount: 2
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                PartitionKeySchema { Name: "key1" TypeId: 4865 TypeInfo { DecimalPrecision: 35 DecimalScale: 10 } }
+            }
+            PartitionBoundaries {
+                Tuple { Optional { Low128: 0 Hi128: 0 } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup5", true), {
+            NLs::CheckPartCount("PQGroup5", 2, 1, 2, 2),
+        });        
     }
 
     Y_UNIT_TEST(AlterPersQueueGroupWithKeySchema) {

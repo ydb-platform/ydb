@@ -5,6 +5,7 @@ PY_SRCS(
 )
 
 PEERDIR(
+    ydb/tests/stress/common
     ydb/public/sdk/python
     ydb/public/sdk/python/enable_v3_new_behavior
     library/python/monlib

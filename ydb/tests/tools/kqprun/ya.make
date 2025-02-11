@@ -17,6 +17,7 @@ PEERDIR(
     yt/yql/providers/yt/gateway/file
     yql/essentials/sql/pg
 
+    ydb/tests/tools/kqprun/runlib
     ydb/tests/tools/kqprun/src
 )
 

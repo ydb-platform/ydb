@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     actors.cpp
-    common.cpp
     kqp_runner.cpp
     ydb_setup.cpp
 )
@@ -10,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/testlib
 
+    ydb/tests/tools/kqprun/runlib
     ydb/tests/tools/kqprun/src/proto
 )
 

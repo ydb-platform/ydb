@@ -212,8 +212,8 @@ namespace NKikimr {
 
         ui64 CalcSstCountSpeedLimit() const {
             ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
-            ui64 maxSstCount = (ui64)VCfg->ThrottlingMaxSstCount;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinLevel0SstCount;
+            ui64 maxSstCount = (ui64)VCfg->ThrottlingMaxLevel0SstCount;
 
             return LinearInterpolation(CurrentSstCount, minSstCount, maxSstCount, deviceSpeed);
         }
@@ -285,7 +285,7 @@ namespace NKikimr {
         }
 
         bool IsActive() const {
-            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinLevel0SstCount;
             ui64 minInplacedSize = (ui64)ThrottlingMinInplacedSize;
             ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
             ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
@@ -294,6 +294,10 @@ namespace NKikimr {
                 CurrentInplacedSize > minInplacedSize ||
                 CurrentOccupancy > minOccupancy ||
                 CurrentLogChunkCount > minLogChunkCount;
+        }
+
+        bool IsThrottling() const {
+            return IsActive() && !VCfg->ThrottlingDryRun;
         }
 
         ui32 GetThrottlingRate() const {
@@ -331,7 +335,7 @@ namespace NKikimr {
             Mon.ThrottlingLevel0SstCount() = sstCount;
 
             CurrentInplacedSize = inplacedSize;
-            Mon.ThrottlingAllLevelsInplacedSize() = inplacedSize;
+            Mon.ThrottlingInplacedSize() = inplacedSize;
 
             CurrentOccupancy = occupancy * 1'000'000;
             Mon.ThrottlingOccupancyPerMille() = occupancy * 1000;
@@ -340,6 +344,18 @@ namespace NKikimr {
             Mon.ThrottlingLogChunkCount() = logChunkCount;
 
             Mon.ThrottlingIsActive() = (ui64)IsActive();
+            Mon.ThrottlingDryRun() = VCfg->ThrottlingDryRun;
+
+            Mon.ThrottlingMinLevel0SstCount() = VCfg->ThrottlingMinLevel0SstCount;
+            Mon.ThrottlingMaxLevel0SstCount() = VCfg->ThrottlingMaxLevel0SstCount;
+            Mon.ThrottlingMinInplacedSizeHDD() = VCfg->ThrottlingMinInplacedSizeHDD;
+            Mon.ThrottlingMaxInplacedSizeHDD() = VCfg->ThrottlingMaxInplacedSizeHDD;
+            Mon.ThrottlingMinInplacedSizeSSD() = VCfg->ThrottlingMinInplacedSizeSSD;
+            Mon.ThrottlingMaxInplacedSizeSSD() = VCfg->ThrottlingMaxInplacedSizeSSD;
+            Mon.ThrottlingMinOccupancyPerMille() = VCfg->ThrottlingMinOccupancyPerMille;
+            Mon.ThrottlingMaxOccupancyPerMille() = VCfg->ThrottlingMaxOccupancyPerMille;
+            Mon.ThrottlingMinLogChunkCount() = VCfg->ThrottlingMinLogChunkCount;
+            Mon.ThrottlingMaxLogChunkCount() = VCfg->ThrottlingMaxLogChunkCount;
 
             if (!IsActive()) {
                 CurrentTime = {};
@@ -438,7 +454,7 @@ namespace NKikimr {
             auto now = ctx.Now();
             ThrottlingController->UpdateState(now, sstCount, dataInplacedSize, occupancy, LogChunkCount);
 
-            if (ThrottlingController->IsActive()) {
+            if (ThrottlingController->IsThrottling()) {
                 ThrottlingController->UpdateTime(now);
 
                 int count = batchSize;
@@ -517,7 +533,7 @@ namespace NKikimr {
     }
 
     bool TOverloadHandler::IsThrottling() const {
-        return ThrottlingController->IsActive();
+        return ThrottlingController->IsThrottling();
     }
 
     ui32 TOverloadHandler::GetThrottlingRate() const {
@@ -527,7 +543,7 @@ namespace NKikimr {
     template <class TEv>
     inline bool TOverloadHandler::PostponeEvent(TAutoPtr<TEventHandle<TEv>> &ev) {
         if (DynamicPDiskWeightsManager->StopPuts() ||
-            ThrottlingController->IsActive() ||
+            ThrottlingController->IsThrottling() ||
             !EmergencyQueue->Empty())
         {
             EmergencyQueue->Push(ev);

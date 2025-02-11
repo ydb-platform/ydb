@@ -181,8 +181,9 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxChunksToDefragInflight;
 
         TControlWrapper ThrottlingDeviceSpeed;
-        TControlWrapper ThrottlingMinSstCount;
-        TControlWrapper ThrottlingMaxSstCount;
+        TControlWrapper ThrottlingDryRun;
+        TControlWrapper ThrottlingMinLevel0SstCount;
+        TControlWrapper ThrottlingMaxLevel0SstCount;
         TControlWrapper ThrottlingMinInplacedSizeHDD;
         TControlWrapper ThrottlingMaxInplacedSizeHDD;
         TControlWrapper ThrottlingMinInplacedSizeSSD;

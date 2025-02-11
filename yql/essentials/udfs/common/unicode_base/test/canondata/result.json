@@ -1,4 +1,19 @@
 {
+    "test.test[BlockIsCategory]": [
+        {
+            "uri": "file://test.test_BlockIsCategory_/results.txt"
+        }
+    ],
+    "test.test[BlockNormalize]": [
+        {
+            "uri": "file://test.test_BlockNormalize_/results.txt"
+        }
+    ],
+    "test.test[BlockTo]": [
+        {
+            "uri": "file://test.test_BlockTo_/results.txt"
+        }
+    ],
     "test.test[Find]": [
         {
             "uri": "file://test.test_Find_/results.txt"
@@ -9,9 +24,19 @@
             "uri": "file://test.test_IsCategory_/results.txt"
         }
     ],
+    "test.test[LevensteinDistanceCodePoints]": [
+        {
+            "uri": "file://test.test_LevensteinDistanceCodePoints_/results.txt"
+        }
+    ],
     "test.test[List]": [
         {
             "uri": "file://test.test_List_/results.txt"
+        }
+    ],
+    "test.test[Normalize]": [
+        {
+            "uri": "file://test.test_Normalize_/results.txt"
         }
     ],
     "test.test[Remove]": [
@@ -22,6 +47,11 @@
     "test.test[Replace]": [
         {
             "uri": "file://test.test_Replace_/results.txt"
+        }
+    ],
+    "test.test[SplitToListNoCrash]": [
+        {
+            "uri": "file://test.test_SplitToListNoCrash_/results.txt"
         }
     ],
     "test.test[Strip]": [

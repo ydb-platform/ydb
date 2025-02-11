@@ -83,6 +83,13 @@ class Request(_SansIORequest):
     #: .. versionadded:: 0.5
     max_form_memory_size: t.Optional[int] = None
 
+    #: The maximum number of multipart parts to parse, passed to
+    #: :attr:`form_data_parser_class`. Parsing form data with more than this
+    #: many parts will raise :exc:`~.RequestEntityTooLarge`.
+    #:
+    #: .. versionadded:: 2.2.3
+    max_form_parts = 1000
+
     #: The form data parser that should be used.  Can be replaced to customize
     #: the form date parsing.
     form_data_parser_class: t.Type[FormDataParser] = FormDataParser
@@ -246,6 +253,7 @@ class Request(_SansIORequest):
             self.max_form_memory_size,
             self.max_content_length,
             self.parameter_storage_class,
+            max_form_parts=self.max_form_parts,
         )
 
     def _load_form_data(self) -> None:
@@ -542,6 +550,18 @@ class Request(_SansIORequest):
     # Cached values for ``(silent=False, silent=True)``. Initialized
     # with sentinel values.
     _cached_json: t.Tuple[t.Any, t.Any] = (Ellipsis, Ellipsis)
+
+    @t.overload
+    def get_json(
+        self, force: bool = ..., silent: "te.Literal[False]" = ..., cache: bool = ...
+    ) -> t.Any:
+        ...
+
+    @t.overload
+    def get_json(
+        self, force: bool = ..., silent: bool = ..., cache: bool = ...
+    ) -> t.Optional[t.Any]:
+        ...
 
     def get_json(
         self, force: bool = False, silent: bool = False, cache: bool = True

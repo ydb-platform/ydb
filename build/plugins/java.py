@@ -58,13 +58,6 @@ def onjava_module(unit, *args):
         # TODO remove when java test dart is in prod
         'UNITTEST_DIR': unit.get('UNITTEST_DIR'),
         'JVM_ARGS': extract_macro_calls(unit, 'JVM_ARGS_VALUE', args_delim),
-        'TEST_CWD': extract_macro_calls(unit, 'TEST_CWD_VALUE', args_delim),
-        'TEST_FORK_MODE': extract_macro_calls(unit, 'TEST_FORK_MODE', args_delim),
-        'SPLIT_FACTOR': extract_macro_calls(unit, 'TEST_SPLIT_FACTOR', args_delim),
-        'TIMEOUT': extract_macro_calls(unit, 'TEST_TIMEOUT', args_delim),
-        'TAG': extract_macro_calls(unit, 'TEST_TAGS_VALUE', args_delim),
-        'SIZE': extract_macro_calls(unit, 'TEST_SIZE_NAME', args_delim),
-        'DEPENDS': extract_macro_calls(unit, 'TEST_DEPENDS_VALUE', args_delim),
         'IDEA_EXCLUDE': extract_macro_calls(unit, 'IDEA_EXCLUDE_DIRS_VALUE', args_delim),
         'IDEA_RESOURCE': extract_macro_calls(unit, 'IDEA_RESOURCE_DIRS_VALUE', args_delim),
         'IDEA_MODULE_NAME': extract_macro_calls(unit, 'IDEA_MODULE_NAME_VALUE', args_delim),
@@ -81,7 +74,6 @@ def onjava_module(unit, *args):
         data['ENABLE_PREVIEW'] = extract_macro_calls(unit, 'ENABLE_PREVIEW_VALUE', args_delim)
 
     if unit.get('SAVE_JAVAC_GENERATED_SRCS_DIR') and unit.get('SAVE_JAVAC_GENERATED_SRCS_TAR'):
-        data['SAVE_JAVAC_GENERATED_SRCS_DIR'] = extract_macro_calls(unit, 'SAVE_JAVAC_GENERATED_SRCS_DIR', args_delim)
         data['SAVE_JAVAC_GENERATED_SRCS_TAR'] = extract_macro_calls(unit, 'SAVE_JAVAC_GENERATED_SRCS_TAR', args_delim)
 
     if unit.get('JAVA_ADD_DLLS_VALUE') == 'yes':
@@ -91,16 +83,8 @@ def onjava_module(unit, *args):
         data['ERROR_PRONE'] = extract_macro_calls(unit, 'ERROR_PRONE_VALUE', args_delim)
 
     if unit.get('WITH_KOTLIN_VALUE') == 'yes':
-        data['WITH_KOTLIN'] = extract_macro_calls(unit, 'WITH_KOTLIN_VALUE', args_delim)
-        if unit.get('KOTLIN_JVM_TARGET'):
-            data['KOTLIN_JVM_TARGET'] = extract_macro_calls(unit, 'KOTLIN_JVM_TARGET', args_delim)
-        if unit.get('KOTLINC_FLAGS_VALUE'):
-            data['KOTLINC_FLAGS'] = extract_macro_calls(unit, 'KOTLINC_FLAGS_VALUE', args_delim)
         if unit.get('KOTLINC_OPTS_VALUE'):
             data['KOTLINC_OPTS'] = extract_macro_calls(unit, 'KOTLINC_OPTS_VALUE', args_delim)
-
-    if unit.get('DIRECT_DEPS_ONLY_VALUE') == 'yes':
-        data['DIRECT_DEPS_ONLY'] = extract_macro_calls(unit, 'DIRECT_DEPS_ONLY_VALUE', args_delim)
 
     if unit.get('JAVA_EXTERNAL_DEPENDENCIES_VALUE'):
         valid = []
@@ -117,33 +101,6 @@ def onjava_module(unit, *args):
                 valid.append(dep)
         if valid:
             data['EXTERNAL_DEPENDENCIES'] = [valid]
-
-    if unit.get('MAKE_UBERJAR_VALUE') == 'yes':
-        if unit.get('MODULE_TYPE') != 'JAVA_PROGRAM':
-            ymake.report_configure_error('{}: UBERJAR supported only for JAVA_PROGRAM module type'.format(unit.path()))
-        data['UBERJAR'] = extract_macro_calls(unit, 'MAKE_UBERJAR_VALUE', args_delim)
-        data['UBERJAR_PREFIX'] = extract_macro_calls(unit, 'UBERJAR_PREFIX_VALUE', args_delim)
-        data['UBERJAR_HIDE_EXCLUDE'] = extract_macro_calls(unit, 'UBERJAR_HIDE_EXCLUDE_VALUE', args_delim)
-        data['UBERJAR_PATH_EXCLUDE'] = extract_macro_calls(unit, 'UBERJAR_PATH_EXCLUDE_VALUE', args_delim)
-        data['UBERJAR_MANIFEST_TRANSFORMER_MAIN'] = extract_macro_calls(
-            unit, 'UBERJAR_MANIFEST_TRANSFORMER_MAIN_VALUE', args_delim
-        )
-        data['UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE'] = extract_macro_calls(
-            unit, 'UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE_VALUE', args_delim
-        )
-        data['UBERJAR_APPENDING_TRANSFORMER'] = extract_macro_calls(
-            unit, 'UBERJAR_APPENDING_TRANSFORMER_VALUE', args_delim
-        )
-        data['UBERJAR_SERVICES_RESOURCE_TRANSFORMER'] = extract_macro_calls(
-            unit, 'UBERJAR_SERVICES_RESOURCE_TRANSFORMER_VALUE', args_delim
-        )
-
-    if unit.get('WITH_JDK_VALUE') == 'yes':
-        if unit.get('MODULE_TYPE') != 'JAVA_PROGRAM':
-            ymake.report_configure_error(
-                '{}: JDK export supported only for JAVA_PROGRAM module type'.format(unit.path())
-            )
-        data['WITH_JDK'] = extract_macro_calls(unit, 'WITH_JDK_VALUE', args_delim)
 
     # IMPORTANT before switching vcs_info.py to python3 the value was always evaluated to $YMAKE_PYTHON but no
     # code in java dart parser extracts its value only checks this key for existance.

@@ -264,6 +264,24 @@ Y_UNIT_TEST(TestScalar) {
     UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(value).GetDatum().scalar_as<arrow::UInt64Scalar>().value, testValue);
 }
 
+template<auto Type, typename ArrowType>
+void TestContainerForStringType() {
+    TSetup<false> setup;
+    auto dataLiteral = setup.PgmBuilder->NewDataLiteral<Type>("\"Just a string\"");
+    const auto dataAfterBlocks = setup.PgmBuilder->AsScalar(dataLiteral);
+    const auto graph = setup.BuildGraph(dataAfterBlocks);
+    const auto value = graph->GetValue();
+
+    UNIT_ASSERT(typeid(*TArrowBlock::From(value).GetDatum().scalar()) == typeid(ArrowType));
+}
+
+Y_UNIT_TEST(TestStringTypesHasAppropriateContainer) {
+    TestContainerForStringType<NUdf::EDataSlot::Utf8, arrow::StringScalar>();
+    TestContainerForStringType<NUdf::EDataSlot::Json, arrow::StringScalar>();
+    TestContainerForStringType<NUdf::EDataSlot::Yson, arrow::BinaryScalar>();
+    TestContainerForStringType<NUdf::EDataSlot::String, arrow::BinaryScalar>();
+}
+
 Y_UNIT_TEST_LLVM(TestReplicateScalar) {
     const ui64 count = 1000;
     const ui32 value = 42;

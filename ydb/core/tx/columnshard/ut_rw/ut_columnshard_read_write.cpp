@@ -2391,7 +2391,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // Try to scan snapshot that is too old
         {
             {
-                auto request = std::make_unique<TEvColumnShard::TEvScan>();
+                auto request = std::make_unique<TEvDataShard::TEvKqpScan>();
                 request->Record.SetTxId(Max<ui64>());
                 request->Record.SetScanId(1);
                 request->Record.SetLocalPathId(tableId);

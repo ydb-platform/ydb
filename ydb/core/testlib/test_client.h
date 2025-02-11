@@ -142,6 +142,7 @@ namespace Tests {
         bool UseRealThreads = true;
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
+        bool EnableYqGrpc = false;
         TDuration KeepSnapshotTimeout = TDuration::Zero();
         ui64 ChangesQueueItemsLimit = 0;
         ui64 ChangesQueueBytesLimit = 0;
@@ -161,6 +162,7 @@ namespace Tests {
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
+        NYql::ISolomonGateway::TPtr SolomonGateway;
         bool InitializeFederatedQuerySetupFactory = false;
         TString ServerCertFilePath;
         bool Verbose = true;
@@ -207,6 +209,7 @@ namespace Tests {
         TServerSettings& SetEnableDbCounters(bool value) { FeatureFlags.SetEnableDbCounters(value); return *this; }
         TServerSettings& SetEnablePersistentQueryStats(bool value) { FeatureFlags.SetEnablePersistentQueryStats(value); return *this; }
         TServerSettings& SetEnableYq(bool value) { EnableYq = value; return *this; }
+        TServerSettings& SetEnableYqGrpc(bool value) { EnableYqGrpc = value; return *this; }
         TServerSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
         TServerSettings& SetChangesQueueItemsLimit(ui64 value) { ChangesQueueItemsLimit = value; return *this; }
         TServerSettings& SetChangesQueueBytesLimit(ui64 value) { ChangesQueueBytesLimit = value; return *this; }
@@ -216,6 +219,7 @@ namespace Tests {
         TServerSettings& SetCredentialsFactory(NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { CredentialsFactory = std::move(credentialsFactory); return *this; }
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
+        TServerSettings& SetSolomonGateway(NYql::ISolomonGateway::TPtr solomonGateway) { SolomonGateway = std::move(solomonGateway); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }
         TServerSettings& SetUseSectorMap(bool value) { UseSectorMap = value; return *this; }
@@ -253,16 +257,16 @@ namespace Tests {
             return *this;
         }
 
-        // Add additional grpc services
-        template <typename TService>
+        template <typename TService, typename...TParams>
         TServerSettings& RegisterGrpcService(
             const TString& name,
-            std::optional<NActors::TActorId> proxyId = std::nullopt
+            std::optional<NActors::TActorId> proxyId = std::nullopt,
+            TParams...params
         ) {
             if (!GrpcServiceFactory) {
                 GrpcServiceFactory = std::make_shared<TGrpcServiceFactory>();
             }
-            GrpcServiceFactory->Register<TService>(name, true, proxyId);
+            GrpcServiceFactory->Register<TService>(name, true, proxyId, params...);
             return *this;
         }
 

@@ -26,6 +26,8 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
 
         auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), expectedDataCleanupGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTabletId(), shards.at(0));
+        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
     }
 }
 

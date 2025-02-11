@@ -186,10 +186,10 @@ private:
         if (it != ProgramFactories.end()) {
             return it->second;
         }
-        return ProgramFactories.emplace(settings, NYql::NPureCalc::MakeProgramFactory(
-            NYql::NPureCalc::TProgramFactoryOptions()
-                .SetLLVMSettings(settings.EnabledLLVM ? "ON" : "OFF")
-        )).first->second;
+        auto options = NYql::NPureCalc::TProgramFactoryOptions();
+        options.SetLLVMSettings(settings.EnabledLLVM ? "ON" : "OFF");
+        options.UseAntlr4 = false;
+        return ProgramFactories.emplace(settings, NYql::NPureCalc::MakeProgramFactory(options)).first->second;
     }
 
 private:

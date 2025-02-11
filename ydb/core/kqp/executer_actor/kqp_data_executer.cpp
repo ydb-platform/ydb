@@ -2037,7 +2037,6 @@ private:
                         case NKqpProto::TKqpSource::kReadRangesSource:
                             if (auto partitionsCount = BuildScanTasksFromSource(
                                     stageInfo,
-                                    /* shardsResolved */ StreamResult || EnableReadsMerge,
                                     /* limitTasksPerNode */ StreamResult || EnableReadsMerge)) {
                                 sourceScanPartitionsCount += *partitionsCount;
                             } else {
@@ -2101,9 +2100,6 @@ private:
                 }
             }
         }
-
-        // For generic query all shards are already resolved
-        YQL_ENSURE(!StreamResult || remoteComputeTasks.empty());
 
         for(const auto& channel: TasksGraph.GetChannels()) {
             if (IsCrossShardChannel(TasksGraph, channel)) {
@@ -2189,7 +2185,6 @@ private:
         TasksGraph.GetMeta().UseFollowers = GetUseFollowers();
 
         if (RemoteComputeTasks) {
-            YQL_ENSURE(!StreamResult);
             TSet<ui64> shardIds;
             for (const auto& [shardId, _] : RemoteComputeTasks) {
                 shardIds.insert(shardId);
@@ -2253,6 +2248,11 @@ private:
                         }
                     }
                 }
+            }
+
+            if (shardIds.size() <= 1 && HasDatashardSourceScan) {
+                // nothing to merge
+                HasDatashardSourceScan = false;
             }
 
             if ((HasOlapTable || HasDatashardSourceScan) && shardIds) {

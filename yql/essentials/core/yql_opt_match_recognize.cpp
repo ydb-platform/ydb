@@ -254,10 +254,13 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
                 .Ptr();
             }
             default:
-                ctx.AddError(TIssue(ctx.GetPosition(sortTraits->Pos()), "Expect ORDER BY timestamp for MATCH_RECOGNIZE"));
+                ctx.AddError(TIssue(ctx.GetPosition(sortTraits->Pos()), "Expected no ORDER BY or ORDER BY timestamp for MATCH_RECOGNIZE"));
                 return {};
         }
     }();
+    if (!timeOrderRecover) {
+        return {};
+    }
 
     auto measures = ExpandMatchRecognizeMeasuresAggregates(params->ChildPtr(0), ctx, typeAnnCtx);
     auto rowsPerMatch = params->ChildPtr(1);

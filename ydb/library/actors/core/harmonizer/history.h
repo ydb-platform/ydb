@@ -34,6 +34,9 @@ struct TValueHistory {
     double Accumulate(auto op, auto comb, ui8 seconds) const {
         HARMONIZER_HISTORY_PRINT("Accumulate, seconds = ", static_cast<ui16>(seconds), ", WithTail = ", WithTail);
         double acc = AccumulatedValue;
+        if (seconds == 0) {
+            return acc;
+        }
         size_t idx = HistoryIdx;
         ui8 leftSeconds = seconds;
         if constexpr (!WithTail) {

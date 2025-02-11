@@ -15,7 +15,7 @@
 (let narrowLambdaLeftSemi (lambda '(item1 item2) (AsStruct '('"asubkey" item1) '('"avalue" item2))))
 
 (let doJoin (lambda '(left right narrowMapLambda joinKind leftKeyColumns leftKeyDrops rightKeyColumns rightKeyDrops) (block '(
-    (return (Collect (NarrowMap (ToFlow (WideFromBlocks (BlockMapJoinCore (FromFlow (WideToBlocks (ExpandMap left expandLambda))) (FromFlow (WideToBlocks (ExpandMap right expandLambda))) joinKind leftKeyColumns leftKeyDrops rightKeyColumns rightKeyDrops '()))) narrowMapLambda)))
+    (return (Collect (NarrowMap (ToFlow (WideFromBlocks (BlockMapJoinCore (WideToBlocks (FromFlow (ExpandMap left expandLambda))) (WideToBlocks (FromFlow (ExpandMap right expandLambda))) joinKind leftKeyColumns leftKeyDrops rightKeyColumns rightKeyDrops '()))) narrowMapLambda)))
 ))))
 
 (let innerJoin (Apply doJoin (ToFlow table (DependsOn (String '0))) (ToFlow table (DependsOn (String '1))) narrowLambdaInner 'Inner '('0) '() '('0) '()))

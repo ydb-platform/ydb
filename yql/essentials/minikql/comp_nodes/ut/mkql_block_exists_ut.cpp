@@ -53,7 +53,7 @@ void DoBlockExistsOffset(size_t length, size_t offset) {
             pb.Nth(item, 3)
         };
     });
-    node = pb.WideToBlocks(node);
+    node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
     if (offset > 0) {
         node = pb.WideSkipBlocks(node, pb.NewDataLiteral<ui64>(offset));
     }

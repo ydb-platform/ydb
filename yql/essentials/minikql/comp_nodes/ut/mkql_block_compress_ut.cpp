@@ -81,7 +81,7 @@ void DoNestedTuplesCompressTest() {
     node = pb.ExpandMap(node, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)};
     });
-    node = pb.WideToBlocks(node);
+    node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
 
     node = pb.BlockExpandChunked(node);
     node = pb.WideSkipBlocks(node, pb.template NewDataLiteral<ui64>(19));
@@ -186,7 +186,8 @@ Y_UNIT_TEST_LLVM(CompressBasic) {
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)};
     });
-    const auto compressedBlocks = pb.BlockCompress(pb.WideToBlocks(wideFlow), 0);
+    const auto uncompressedBlocks = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+    const auto compressedBlocks = pb.BlockCompress(uncompressedBlocks, 0);
     const auto compressedFlow = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(compressedBlocks)));
     const auto narrowFlow = pb.NarrowMap(compressedFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.NewTuple({items[0], items[1]});

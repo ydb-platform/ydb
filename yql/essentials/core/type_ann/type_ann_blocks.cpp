@@ -868,24 +868,15 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
 
 IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-
-    // Static assert to ensure backward compatible change: if the
-    // constant below is true, both input and output types of
-    // WideToBlocks callable have to be WideStream; otherwise,
-    // both input and output types have to be WideFlow.
-    // FIXME: When all spots using WideToBlocks are adjusted
-    // to work with WideStream, drop the assertion below.
-    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
-
     if (!EnsureArgsCount(*input, 1U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+    if (!EnsureWideStreamType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    const auto multiType = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
     TTypeAnnotationNode::TListType retMultiType;
     for (const auto& type : multiType->GetItems()) {
         if (type->IsBlockOrScalar()) {
@@ -902,7 +893,7 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
 
     retMultiType.push_back(ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
     auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(retMultiType);
-    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
+    input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(outputItemType));
     return IGraphTransformer::TStatus::Ok;
 }
 

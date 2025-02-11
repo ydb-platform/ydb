@@ -264,6 +264,12 @@ struct TConcatenateOptions
 
     /// Whether we should append to destination or rewrite it.
     FLUENT_FIELD_OPTION(bool, Append);
+
+    // Maximum number of items to process in single concat request.
+    //
+    // If number of items provided is greater then this parameter
+    // client might split concatenate to several requests.
+    FLUENT_FIELD_DEFAULT(int, MaxBatchSize, 20);
 };
 
 ///

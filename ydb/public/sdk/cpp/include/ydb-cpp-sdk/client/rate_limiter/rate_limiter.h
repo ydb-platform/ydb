@@ -2,8 +2,7 @@
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
 
-#include <library/cpp/json/json_value.h>
-
+#include <chrono>
 #include <unordered_map>
 #include <variant>
 
@@ -28,7 +27,7 @@ struct TReplicatedBucketSettings {
 
     // Interval between syncs from kesus and between consumption reports.
     // Default value equals 5000 ms and not inherited.
-    FLUENT_SETTING_OPTIONAL(TDuration, ReportInterval);
+    FLUENT_SETTING_OPTIONAL(std::chrono::milliseconds, ReportInterval);
 };
 
 class TLeafBehavior {
@@ -112,13 +111,13 @@ struct TMetric {
 
     // Billing metric period (aligned to hour boundary).
     // Default value is inherited from parent or equals 60 seconds for root.
-    FLUENT_SETTING_OPTIONAL(TDuration, BillingPeriod);
+    FLUENT_SETTING_OPTIONAL(std::chrono::seconds, BillingPeriod);
 
     // User-defined labels.
     FLUENT_SETTING(TLabels, Labels);
 
     // Billing metric JSON fields (inherited from parent if not set)
-    FLUENT_SETTING(NJson::TJsonValue, MetricFields);
+    FLUENT_SETTING(std::string, MetricFieldsJson);
 };
 
 struct TMeteringConfig {
@@ -134,16 +133,16 @@ struct TMeteringConfig {
 
     // Period to report consumption history from clients to kesus
     // Default value is inherited from parent or equals 5000 ms for root.
-    FLUENT_SETTING_OPTIONAL(TDuration, ReportPeriod);
+    FLUENT_SETTING_OPTIONAL(std::chrono::milliseconds, ReportPeriod);
 
     // Consumption history period that is sent in one message to metering actor.
     // Default value is inherited from parent or equals 1000 ms for root.
-    FLUENT_SETTING_OPTIONAL(TDuration, MeterPeriod);
+    FLUENT_SETTING_OPTIONAL(std::chrono::milliseconds, MeterPeriod);
 
     // Time window to collect data from every client.
     // Any client metering message that is `collect_period` late is discarded (not metered or billed).
     // Default value is inherited from parent or equals 30 seconds for root.
-    FLUENT_SETTING_OPTIONAL(TDuration, CollectPeriod);
+    FLUENT_SETTING_OPTIONAL(std::chrono::seconds, CollectPeriod);
 
     // Provisioned consumption limit in units per second.
     // Effective value is limited by corresponding `max_units_per_second`.

@@ -7,22 +7,19 @@
 #include <ydb/public/api/grpc/ydb_rate_limiter_v1.grpc.pb.h>
 #include <src/client/common_client/impl/client.h>
 
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
-
 #include <google/protobuf/util/json_util.h>
 
 namespace NYdb::inline V3::NRateLimiter {
 
 TReplicatedBucketSettings::TReplicatedBucketSettings(const Ydb::RateLimiter::ReplicatedBucketSettings& proto) {
     if (proto.has_report_interval_ms()) {
-        ReportInterval_ = TDuration::MilliSeconds(proto.report_interval_ms());
+        ReportInterval_ = std::chrono::milliseconds(proto.report_interval_ms());
     }
 }
 
 void TReplicatedBucketSettings::SerializeTo(Ydb::RateLimiter::ReplicatedBucketSettings& proto) const {
     if (ReportInterval_) {
-        proto.set_report_interval_ms(ReportInterval_->MilliSeconds());
+        proto.set_report_interval_ms(ReportInterval_->count());
     }
 }
 
@@ -112,41 +109,42 @@ void THierarchicalDrrSettings<TDerived>::SerializeTo(Ydb::RateLimiter::Hierarchi
 TMetric::TMetric(const Ydb::RateLimiter::MeteringConfig_Metric& proto) {
     Enabled_ = proto.enabled();
     if (proto.billing_period_sec()) {
-        BillingPeriod_ = TDuration::Seconds(proto.billing_period_sec());
+        BillingPeriod_ = std::chrono::seconds(proto.billing_period_sec());
     }
     for (const auto& [k, v] : proto.labels()) {
         Labels_[k] = v;
     }
-
-    TString jsonStr;
-    if (auto st = google::protobuf::util::MessageToJsonString(proto.metric_fields(), &jsonStr); !st.ok()) {
-        ReadJsonTree(jsonStr, &MetricFields_);
+    if (proto.has_metric_fields()) {
+        TString jsonStr;
+        if (auto st = google::protobuf::util::MessageToJsonString(proto.metric_fields(), &jsonStr); st.ok()) {
+            MetricFieldsJson_ = jsonStr;
+        }
     }
 }
 
 void TMetric::SerializeTo(Ydb::RateLimiter::MeteringConfig_Metric& proto) const {
     proto.set_enabled(Enabled_);
     if (BillingPeriod_) {
-        proto.set_billing_period_sec(BillingPeriod_->Seconds());
+        proto.set_billing_period_sec(BillingPeriod_->count());
     }
     for (const auto& [k, v] : Labels_) {
         (*proto.mutable_labels())[k] = v;
     }
-
-    auto jsonStr = WriteJson(MetricFields_, false);
-    google::protobuf::util::JsonStringToMessage(jsonStr, proto.mutable_metric_fields());
+    if (!MetricFieldsJson_.empty()) {
+        google::protobuf::util::JsonStringToMessage(MetricFieldsJson_, proto.mutable_metric_fields());
+    }
 }
 
 TMeteringConfig::TMeteringConfig(const Ydb::RateLimiter::MeteringConfig& proto) {
     Enabled_ = proto.enabled();
     if (proto.report_period_ms()) {
-        ReportPeriod_ = TDuration::MilliSeconds(proto.report_period_ms());
+        ReportPeriod_ = std::chrono::milliseconds(proto.report_period_ms());
     }
     if (proto.meter_period_ms()) {
-        MeterPeriod_ = TDuration::MilliSeconds(proto.meter_period_ms());
+        MeterPeriod_ = std::chrono::milliseconds(proto.meter_period_ms());
     }
     if (proto.collect_period_sec()) {
-        CollectPeriod_ = TDuration::Seconds(proto.collect_period_sec());
+        CollectPeriod_ = std::chrono::seconds(proto.collect_period_sec());
     }
     if (proto.provisioned_units_per_second()) {
         ProvisionedUnitsPerSecond_ = proto.provisioned_units_per_second();
@@ -171,13 +169,13 @@ TMeteringConfig::TMeteringConfig(const Ydb::RateLimiter::MeteringConfig& proto) 
 void TMeteringConfig::SerializeTo(Ydb::RateLimiter::MeteringConfig& proto) const {
     proto.set_enabled(Enabled_);
     if (ReportPeriod_) {
-        proto.set_report_period_ms(ReportPeriod_->MilliSeconds());
+        proto.set_report_period_ms(ReportPeriod_->count());
     }
     if (MeterPeriod_) {
-        proto.set_meter_period_ms(MeterPeriod_->MilliSeconds());
+        proto.set_meter_period_ms(MeterPeriod_->count());
     }
     if (CollectPeriod_) {
-        proto.set_collect_period_sec(CollectPeriod_->Seconds());
+        proto.set_collect_period_sec(CollectPeriod_->count());
     }
     if (ProvisionedUnitsPerSecond_) {
         proto.set_provisioned_units_per_second(*ProvisionedUnitsPerSecond_);

@@ -24,6 +24,7 @@ struct TEvKeyValue {
         EvReportWriteLatency,
         EvUpdateWeights,
         EvCompleteGC,
+        EvCleanUpDataRequest,
 
         EvRead = EvRequest + 16,
         EvReadRange,
@@ -32,13 +33,14 @@ struct TEvKeyValue {
         EvAcquireLock,
 
         EvResponse = EvRequest + 512,
+        EvForceTabletDataCleanup,
+        EvCleanUpDataResponse,
 
         EvReadResponse = EvResponse + 16,
         EvReadRangeResponse,
         EvExecuteTransactionResponse,
         EvGetStorageChannelStatusResponse,
         EvAcquireLockResponse,
-
         EvEnd
     };
 
@@ -197,6 +199,53 @@ struct TEvKeyValue {
             : Repeat(repeat)
         {}
     };
+
+    struct TEvCleanUpDataResponse;
+
+    struct TEvCleanUpDataRequest : public TEventPB<TEvCleanUpDataRequest,
+            NKikimrKeyValue::CleanUpDataRequest, EvCleanUpDataRequest> {
+        using TResponse = TEvCleanUpDataResponse;
+
+        TEvCleanUpDataRequest() = default;
+        
+        TEvCleanUpDataRequest(ui64 generation) {
+            Record.set_generation(generation);
+        }
+    };
+
+    struct TEvCleanUpDataResponse : public TEventPB<TEvCleanUpDataResponse,
+            NKikimrKeyValue::CleanUpDataResponse, EvCleanUpDataResponse> {
+        using TRequest = TEvCleanUpDataRequest;
+
+        TEvCleanUpDataResponse() = default;
+
+        TEvCleanUpDataResponse(ui64 generation, NKikimrKeyValue::CleanUpDataResponse::Status status, const TString& errorReason) {
+            Record.set_generation(generation);
+            Record.set_status(status);
+            Record.set_error_reason(errorReason);
+        }
+
+        static std::unique_ptr<TEvCleanUpDataResponse> MakeSuccess(ui64 generation) {
+            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_SUCCESS, "");
+        }
+
+        static std::unique_ptr<TEvCleanUpDataResponse> MakeError(ui64 generation, const TString& errorReason) {
+            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ERROR, errorReason);
+        }
+
+        static std::unique_ptr<TEvCleanUpDataResponse> MakeAlreadyCompleted(ui64 generation) {
+            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ALREADY_COMPLETED, "");
+        }
+    };
+
+    struct TEvForceTabletDataCleanup : public TEventLocal<TEvForceTabletDataCleanup, EvForceTabletDataCleanup> {
+        ui64 Generation;
+
+        TEvForceTabletDataCleanup(ui64 generation)
+            : Generation(generation)
+        {}
+    };
+
 };
 
 } // NKikimr

@@ -217,6 +217,20 @@ public:
         return StoredState.UserGeneration;
     }
 
+    TSet<TLogoBlobID>& GetCurrentTrashBin() {
+        return Trash.rbegin()->second;
+    }
+
+    TSet<TLogoBlobID>& GetCollectingTrashBin() {
+        return Trash.begin()->second;
+    }
+
+    ui64 GetCollectingCleanupGeneration() const {
+        return Trash.begin()->first;
+    }
+
+    bool StartCleanupData(ui64 generation, TActorId sender);
+
 protected:
     TKeyValueStoredStateData StoredState;
     ui32 NextLogoBlobStep;
@@ -226,7 +240,10 @@ protected:
 
     TIndex Index;
     THashMap<TLogoBlobID, ui32> RefCounts;
-    TSet<TLogoBlobID> Trash;
+    TMap<ui64, TSet<TLogoBlobID>> Trash; // clean up generation -> set of blobs
+    ui64 CompletedCleanupGeneration = 0;
+    ui64 CompletedCleanupTrashGeneration = 0;
+    TMap<ui64, TActorId> CleanupGenerationToSender;
     TMap<ui64, ui64> InFlightForStep;
     TMap<std::tuple<ui64, ui32>, ui32> RequestUidStepToCount;
     THashSet<ui64> CmdTrimLeakedBlobsUids;
@@ -326,13 +343,14 @@ public:
     void UpdateStoredState(ISimpleDb &db, const NKeyValue::THelpers::TGenerationStep &genStep);
     void CompleteGCExecute(ISimpleDb &db, const TActorContext &ctx);
     void CompleteGCComplete(const TActorContext &ctx, const TTabletStorageInfo *info);
+    void CompleteCleanupDataExecute(ISimpleDb &db, const TActorContext &ctx);
+    void CompleteCleanupDataComplete(const TActorContext &ctx, const TTabletStorageInfo *info);
     void StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep,
         TVector<TLogoBlobID>& trashGoingToCollect);
     void StartCollectingIfPossible(const TActorContext &ctx);
     bool OnEvCollect(const TActorContext &ctx);
     void OnEvCollectDone(const TActorContext &ctx);
     void OnEvCompleteGC(bool repeat);
-
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,
@@ -712,7 +730,9 @@ public:
     }
 
     ui32 GetTrashCount() const {
-        return Trash.size();
+        return std::accumulate(Trash.begin(), Trash.end(), 0, [](ui32 acc, const auto& pair) {
+            return acc + pair.second.size();
+        });
     }
 
 public: // For testing

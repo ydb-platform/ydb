@@ -288,6 +288,7 @@ protected:
 
     KV_SIMPLE_TX(RegisterInitialGCCompletion);
     KV_SIMPLE_TX(CompleteGC);
+    KV_SIMPLE_TX(CompleteCleanupData);
 
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
@@ -486,6 +487,18 @@ protected:
         SetActivityType(NKikimrServices::TActivity::KEYVALUE_ACTOR);
     }
 
+    void Handle(TEvKeyValue::TEvCleanUpDataRequest::TPtr &ev) {
+        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
+                << " Handle TEvCleanUpDataRequest " << ev->Get()->ToString());
+        State.StartCleanupData(ev->Get()->Record.generation(), ev->Sender);
+    }
+
+    void Handle(TEvKeyValue::TEvForceTabletDataCleanup::TPtr &ev) {
+        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
+                << " Handle TEvForceTabletDataCleanup generation# " << ev->Get()->Generation);
+        Executor()->CleanupData();
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
@@ -526,6 +539,12 @@ public:
         return false;
     }
 
+    void DataCleanupComplete(const TActorContext &ctx) override {
+        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KV271, "DataCleanupComplete",
+            (TabletId, TabletID()));
+        Execute(new TTxCompleteCleanupData(this), ctx);
+    }
+
     STFUNC(StateInit) {
         RestoreActorActivity();
         ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
@@ -555,6 +574,8 @@ public:
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             HFunc(TEvents::TEvPoisonPill, Handle);
 
+            hFunc(TEvKeyValue::TEvCleanUpDataRequest, Handle);
+            hFunc(TEvKeyValue::TEvForceTabletDataCleanup, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()

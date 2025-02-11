@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dsproxy_mock_cp.h"
+
 #include <cstring>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
@@ -59,9 +61,13 @@ namespace NFake {
         const TGroupId GroupId;
 
     public:
+        static std::unique_ptr<TProxyDSCP> Cp;
+
         TProxyDS(TGroupId groupId = TGroupId::Zero())
             : GroupId(groupId)
-        {}
+        {
+            Cp->AddMock(groupId, this);
+        }
 
     public: // BS events interface : Handle(event) -> event
         TEvBlobStorage::TEvPutResult* Handle(TEvBlobStorage::TEvPut *msg) {
@@ -374,6 +380,13 @@ namespace NFake {
                         auto it = Blobs.find(id);
                         if (it != Blobs.end()) {
                             it->second.DoNotKeep = true;
+                        }
+                        auto blockIt = Blocks.find(id.TabletID());
+                        if (blockIt == Blocks.end()) {
+                            continue;
+                        }
+                        if (id.Generation() < blockIt->second || id.Generation() == blockIt->second && id.Step() < blockIt->second) {
+                            Blobs.erase(id);
                         }
                     }
                 }

@@ -22,5 +22,6 @@ const TFileInfo& Database();
 const TFileInfo& CreateUser();
 const TFileInfo& CreateGroup();
 const TFileInfo& AlterGroup();
+const TFileInfo& CreateAsyncReplication();
 
 } // NYdb::NDump:NFiles

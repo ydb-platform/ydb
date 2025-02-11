@@ -310,17 +310,21 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 Поле | Описание
 --- | ---
-`name` | Имя пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
-`config` | Настройки пула ресурсов.<br/>Тип: `JsonDocument`.<br/>
-`acl` | Настройки ACL<br/>Тип: `JsonDocument`.
+`Name` | Имя пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
+`Config` | Настройки пула ресурсов.<br/>Тип: `JsonDocument`.<br/>
+`Owner` | Владеле пула ресурсов.<br/>Тип: `Utf8`.<br/>
+`Permissions` | Доступы на объект пула ресурсов<br/>Тип: `JsonDocument`.<br/>
+`EffectivePermissions` | Фактический доступ на объект пула ресурсов<br/>Тип: `JsonDocument`.
 
 ### Пример
 
 ```yql
 SELECT
-    name,
-    config,
-    acl
+    Name,
+    Config,
+    Owner,
+    Permissions,
+    EffectivePermissions
 FROM `.sys/resource_pools`
 WHERE name = "default";
 ```
@@ -335,17 +339,17 @@ WHERE name = "default";
 
 Поле | Описание
 --- | ---
-`name` | Имя классификатора пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
-`rank` | Приоритет выбора классификатора пулов ресурсов.<br/>Тип: `Int64`.<br/>
-`config` | Настройки классификатора пулов ресурсов.<br/>Тип: `JsonDocument`.
+`Name` | Имя классификатора пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
+`Rank` | Приоритет выбора классификатора пулов ресурсов.<br/>Тип: `Int64`.<br/>
+`Config` | Настройки классификатора пулов ресурсов.<br/>Тип: `JsonDocument`.
 
 ### Пример
 
 ```yql
 SELECT
-    name,
-    rank,
-    config
+    Name,
+    Rank,
+    Config
 FROM `.sys/resource_pools_classifiers`
 WHERE name = "olap";
 ```

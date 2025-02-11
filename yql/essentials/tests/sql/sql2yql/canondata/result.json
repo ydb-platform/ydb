@@ -11261,9 +11261,9 @@
     ],
     "test_sql_negative.test[lambda-lambda_no_dollar_assign-default.txt]": [
         {
-            "checksum": "68fdd4a5658a392623fcdad598463f01",
-            "size": 267,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql_negative.test_lambda-lambda_no_dollar_assign-default.txt_/err_file.out"
+            "checksum": "a241c3dedcd3cb21630b944d02c7710b",
+            "size": 184,
+            "uri": "https://{canondata_backend}/1937150/1c11855c3fbd4d89c3dccdc8d48b0a48f4874e36/resource.tar.gz#test_sql_negative.test_lambda-lambda_no_dollar_assign-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[match_recognize-measures_aggr_factory-default.txt]": [

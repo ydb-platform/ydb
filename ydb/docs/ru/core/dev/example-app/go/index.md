@@ -98,7 +98,7 @@ err = db.Query().Exec(ctx, `
   series_info Text,
   release_date Date,
   comment Text,
-  
+
   PRIMARY KEY(series_id)
  )`, query.WithTxControl(query.NoTx()),
 )
@@ -163,28 +163,28 @@ if err != nil {
   ```
 
 - ScanNamed
-  
+
   ```go
   var seriesID, title string
-	var releaseDate time.Time
-	err = row.ScanNamed(query.Named("series_id", &seriesID), query.Named("title", &title), query.Named("release_date", &releaseDate))
-	if err != nil {
+  var releaseDate time.Time
+  err = row.ScanNamed(query.Named("series_id", &seriesID), query.Named("title", &title), query.Named("release_date", &releaseDate))
+  if err != nil {
     // обработка ошибки выполнения запроса
-	}
+  }
   ```
 
-- Scan 
-  
+- Scan
+
   ```go
   var seriesID, title string
-	var releaseDate time.Time
-	err = row.Scan(&seriesID, &title, &releaseDate)
-	if err != nil {
+  var releaseDate time.Time
+  err = row.Scan(&seriesID, &title, &releaseDate)
+  if err != nil {
     // обработка ошибки выполнения запроса
-	}
+  }
   ```
-
-- {% endlist %}
+  
+ {% endlist %}
 
 {% include [scan_query.md](../_includes/steps/08_scan_query.md) %}
 

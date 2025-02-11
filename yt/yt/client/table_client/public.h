@@ -165,6 +165,11 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, int,
     ((Scan)    (1))
 );
 
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(ETabletTransactionSerializationType, i8,
+    ((Coarse)  (0))
+    ((PerRow)  (1))
+);
+
 YT_DEFINE_ERROR_ENUM(
     ((SortOrderViolation)                (301))
     ((InvalidDoubleValue)                (302))

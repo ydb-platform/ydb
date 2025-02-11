@@ -1,4 +1,5 @@
 #include "check_runner.h"
+#include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/parser/pg_wrapper/interface/raw_parser.h>
@@ -72,11 +73,18 @@ private:
             return res;
         }
 
-        google::protobuf::Arena arena;
-        auto msg = NSQLTranslationV1::SqlAST(request.Program, request.File, res.Issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
-            settings.AnsiLexer, true, false, &arena);
-        if (msg) {
-            res.Success = true;
+        auto lexer = NSQLTranslationV1::MakeLexer(settings.AnsiLexer, true);
+        auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
+            Y_UNUSED(token);
+        };
+
+        if (lexer->Tokenize(request.Program, request.File, onNextToken, res.Issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+            google::protobuf::Arena arena;
+            auto msg = NSQLTranslationV1::SqlAST(request.Program, request.File, res.Issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
+                settings.AnsiLexer, true, false, &arena);
+            if (msg) {
+                res.Success = true;
+            }
         }
 
         return res;

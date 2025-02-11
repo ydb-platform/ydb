@@ -73,6 +73,10 @@ custom_runs-env="list"
 custom_runs-command="list"
 custom_runs-outputs="list"
 custom_runs-cwd="str"
+custom_runs-cmake_packages="list"
+custom_runs-cmake_packages-ITEM="dict"
+custom_runs-cmake_packages-name="str"
+custom_runs-cmake_packages-components="list"
 
 javac-flags="list"
 

@@ -385,7 +385,8 @@ private:
                 , TDuration::MilliSeconds(100)
                 , TDuration::MilliSeconds(300)
                 , TDuration::Seconds(1)
-                , 100
+                , std::numeric_limits<size_t>::max()
+                , TDuration::Seconds(10)
             )->CreateRetryState();
     }
 

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    rewrite_query.cpp
     util.cpp
     view_utils.cpp
 )

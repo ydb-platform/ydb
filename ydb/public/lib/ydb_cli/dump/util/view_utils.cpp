@@ -1,3 +1,4 @@
+#include "rewrite_query.h"
 #include "view_utils.h"
 
 #include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
@@ -361,7 +362,7 @@ TString BuildCreateViewQuery(
 }
 
 bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool restoreRootIsDatabase,
-    const TString& dbPath, const TString& source, NYql::TIssues& issues
+    const TString& dbPath, NYql::TIssues& issues
 ) {
     const auto backupRoot = GetBackupRoot(query);
 
@@ -373,16 +374,7 @@ bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool res
         return false;
     }
 
-    constexpr TStringBuf pattern = R"(CREATE VIEW IF NOT EXISTS `\S+` )";
-    if (!re2::RE2::Replace(&query, pattern, std::format(R"(CREATE VIEW IF NOT EXISTS `{}` )", dbPath.c_str()))) {
-        issues.AddIssue(TStringBuilder()
-            << "Cannot restore a view from the source: " << source
-            << ". Pattern: \"" << pattern << "\", was not found in the create view statement: " << query.Quote()
-        );
-        return false;
-    }
-
-    return true;
+    return RewriteCreateQuery(query, "CREATE VIEW IF NOT EXISTS `{}`", dbPath, issues);
 }
 
 }

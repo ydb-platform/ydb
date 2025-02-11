@@ -163,6 +163,7 @@ public:
         , ExecutionUnitsLimit(config.GetComputeActorsCount())
         , SpillingPercent(config.GetSpillingPercent())
         , TotalMemoryResource(MakeIntrusive<TMemoryResource>(config.GetQueryMemoryLimit(), (double)100, config.GetSpillingPercent()))
+        , ResourceSnapshotState(std::make_shared<TResourceSnapshotState>())
     {
         SetConfigValues(config);
     }
@@ -195,7 +196,6 @@ public:
 
     void CreateResourceInfoExchanger(
             const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
-        ResourceSnapshotState = std::make_shared<TResourceSnapshotState>();
         auto exchanger = CreateKqpResourceInfoExchangerActor(
             Counters, ResourceSnapshotState, settings);
         ResourceInfoExchanger = ActorSystem->Register(exchanger);
@@ -401,10 +401,8 @@ public:
     TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const override {
         TVector<NKikimrKqp::TKqpNodeResources> resources;
         std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
-        if (ResourceSnapshotState) {
-            with_lock (ResourceSnapshotState->Lock) {
-                infos = ResourceSnapshotState->Snapshot;
-            }
+        with_lock (ResourceSnapshotState->Lock) {
+            infos = ResourceSnapshotState->Snapshot;
         }
         if (infos != nullptr) {
             resources = *infos;
@@ -416,10 +414,8 @@ public:
     void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) override {
         LOG_AS_D("Schedule Snapshot request");
         std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
-        if (ResourceSnapshotState) {
-            with_lock (ResourceSnapshotState->Lock) {
-                infos = ResourceSnapshotState->Snapshot;
-            }
+        with_lock (ResourceSnapshotState->Lock) {
+            infos = ResourceSnapshotState->Snapshot;
         }
         TVector<NKikimrKqp::TKqpNodeResources> resources;
         if (infos != nullptr) {

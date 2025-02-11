@@ -9,13 +9,14 @@ logger = logging.getLogger(__name__)
 
 
 class Nodes(object):
-    def __init__(self, nodes, dry_run=False, ssh_user=None, queue_size=0):
+    def __init__(self, nodes, dry_run=False, ssh_user=None, queue_size=0, ssh_key_path=None):
         assert isinstance(nodes, list)
         assert len(nodes) > 0
         assert isinstance(nodes[0], str)
         self._nodes = nodes
         self._dry_run = bool(dry_run)
         self._ssh_user = ssh_user
+        self._ssh_key_path = ssh_key_path
         self._logger = logger.getChild(self.__class__.__name__)
         self._queue = queue.Queue(queue_size)
         self._qsize = queue_size
@@ -29,6 +30,9 @@ class Nodes(object):
         command.extend(['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-A'])
         if (self._ssh_user):
             command.extend(['-l', self._ssh_user])
+
+        if (self._ssh_key_path):
+            command.extend(['-i', self._ssh_key_path])
 
         return command
 

@@ -169,6 +169,17 @@ target_macroses-merge_args="flag"
 add_test_requirements="list"
 add_ytest_requirements="list"
 
+custom_runs="list"
+custom_runs-depends="list"
+custom_runs-env="list"
+custom_runs-command="list"
+custom_runs-outputs="list"
+custom_runs-cwd="str"
+custom_runs-cmake_packages="list"
+custom_runs-cmake_packages-ITEM="dict"
+custom_runs-cmake_packages-name="str"
+custom_runs-cmake_packages-components="list"
+
 [attrs.induced]
 # Induced packages
 packages="list"

@@ -103,6 +103,8 @@ namespace TEvSchemeShard {
         EvWakeupToRunDataErasure,
         EvRunDataErasure,
         EvCompleteDataErasure,
+        EvDataErasureInfoRequest,
+        EvDataErasureInfoResponse,
 
         EvEnd
     };
@@ -691,7 +693,11 @@ namespace TEvSchemeShard {
     };
 
     struct TEvCompleteDataErasure : TEventLocal<TEvCompleteDataErasure, EvCompleteDataErasure> {
-        TEvCompleteDataErasure() = default;
+        const ui64 Generation;
+
+        TEvCompleteDataErasure(ui64 generation)
+            : Generation(generation)
+        {}
     };
 
     struct TEvDataClenupRequest : TEventPB<TEvDataClenupRequest, NKikimrScheme::TEvDataCleanupRequest, EvDataCleanupRequest> {
@@ -715,6 +721,17 @@ namespace TEvSchemeShard {
         TEvDataCleanupResult(ui64 ownerId, ui64 localPathId, ui64 generation, bool isCompleted)
             : TEvDataCleanupResult(TPathId(ownerId, localPathId), generation, isCompleted)
         {}
+    };
+
+    struct TEvDataErasureInfoRequest : TEventPB<TEvDataErasureInfoRequest, NKikimrScheme::TEvDataErasureInfoRequest, EvDataErasureInfoRequest> {};
+
+    struct TEvDataErasureInfoResponse : TEventPB<TEvDataErasureInfoResponse, NKikimrScheme::TEvDataErasureInfoResponse, EvDataErasureInfoResponse> {
+        TEvDataErasureInfoResponse() = default;
+        TEvDataErasureInfoResponse(ui64 generation, bool isComplete) {
+            Record.SetGeneration(generation);
+            NKikimrScheme::TEvDataErasureInfoResponse::EStatus status = (isComplete ? NKikimrScheme::TEvDataErasureInfoResponse::COMPLETE : NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS);
+            Record.SetStatus(status);
+        }
     };
 };
 

@@ -67,20 +67,19 @@ Y_UNIT_TEST_SUITE(TestSuete1) {
 
         ui64 txId = 100;
 
-        ui64 tenantSchemeshardId1 = CreateTestSubdomain(runtime, env, &txId, "Database1");
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Database1"), {
-            NLs::PathExist,
-            NLs::ExtractTenantSchemeshard(&tenantSchemeshardId1)
-        });
+        CreateTestSubdomain(runtime, env, &txId, "Database1");
+        CreateTestSubdomain(runtime, env, &txId, "Database2");
 
+        env.SimulateSleep(runtime, TDuration::Seconds(3));
+        auto sender = runtime.AllocateEdgeActor();
 
-        ui64 tenantSchemeshardId2 = CreateTestSubdomain(runtime, env, &txId, "Database2");
+        auto request = MakeHolder<TEvSchemeShard::TEvDataErasureInfoRequest>();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-        env.SimulateSleep(runtime, TDuration::Seconds(10));
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDataErasureInfoResponse>(handle);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Database2"), {
-            NLs::PathExist,
-            NLs::ExtractTenantSchemeshard(&tenantSchemeshardId2)
-        });
+        UNIT_ASSERT_EQUAL(response->Record.GetGeneration(), 1);
+        UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETE);
     }
 }

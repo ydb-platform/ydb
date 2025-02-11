@@ -1293,6 +1293,8 @@ public:
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvListUsers::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx);
+
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
 
     TOperationId RouteIncoming(TTabletId tabletId, const TActorContext& ctx);

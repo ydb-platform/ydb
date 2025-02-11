@@ -12,6 +12,8 @@ TDataErasureScheduler::TDataErasureScheduler(const NActors::TActorId& schemeShar
 
 void TDataErasureScheduler::Handle(TEvSchemeShard::TEvCompleteDataErasurePtr& ev, const NActors::TActorContext& ctx) {
     Y_UNUSED(ev);
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
     DataErasureInFlight = false;
     FinishTime = AppData(ctx)->TimeProvider->Now();
     TDuration dataErasureDuration = FinishTime - StartTime;

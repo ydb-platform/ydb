@@ -153,6 +153,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const 
 
     if (ActiveDataErasureTenants.empty()) {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ ActiveDataErasureTenants is empty. Send to BSC");
+        ctx.Send(SelfId(), new TEvSchemeShard::TEvCompleteDataErasure(DataErasureGeneration));
     }
 }
 

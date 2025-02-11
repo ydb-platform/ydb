@@ -451,3 +451,17 @@ message TEvDataCleanupResult {
     optional uint64 CurrentGeneration = 2; // current clean up iteration
     optional bool Completed = 3; // is it completed?
 }
+
+message TEvDataErasureInfoRequest {
+}
+
+message TEvDataErasureInfoResponse {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        COMPLETE = 1;
+        IN_PROGRESS = 2;
+    }
+
+    optional EStatus Status = 1;
+    optional uint64 Generation = 2;
+}

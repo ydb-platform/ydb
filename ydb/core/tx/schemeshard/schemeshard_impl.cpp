@@ -4782,6 +4782,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvDataClenupRequest, Handle);
         HFuncTraced(TEvDataShard::TEvForceDataCleanupResult, Handle);
         HFuncTraced(TEvSchemeShard::TEvDataCleanupResult, Handle);
+        HFuncTraced(TEvSchemeShard::TEvDataErasureInfoRequest, Handle);
 
         //operation initiate msg
         HFuncTraced(TEvSchemeShard::TEvModifySchemeTransaction, Handle);
@@ -7693,6 +7694,13 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContex
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvListUsers::TPtr &ev, const TActorContext &ctx) {
     Execute(CreateTxListUsers(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx) {
+    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "+++Handle TEvDataErasureInfoRequest"
+        << ", at schemeshard: " << TabletID());
+    ctx.Send(ev->Sender, new TEvSchemeShard::TEvDataErasureInfoResponse(DataErasureScheduler->GetGeneration(), !DataErasureScheduler->IsDataErasureInFlight()));
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvRunDataErasure::TPtr& ev, const TActorContext& ctx) {

@@ -139,7 +139,8 @@ void TBlobState::AddPutOkResponse(const TBlobStorageGroupInfo &info, const TLogo
     diskPart.Situation = ESituation::Present;
 }
 
-void TBlobState::AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber) {
+void TBlobState::AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber,
+        const TString& errorReason) {
     Y_ABORT_UNLESS(id.PartId() != 0);
     ui32 partIdx = id.PartId() - 1;
     IsChanged = true;
@@ -153,6 +154,7 @@ void TBlobState::AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogo
     TDiskPart &diskPart = disk.DiskParts[partIdx];
     diskPart.Situation = ESituation::Error;
     diskPart.Requested.Clear();
+    diskPart.ErrorReason = errorReason;
 }
 
 void TBlobState::AddNotYetResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber) {
@@ -258,6 +260,9 @@ TString TBlobState::TDiskPart::ToString() const {
     TStringStream str;
     str << "{Requested# " << Requested.ToString();
     str << " Situation# " << SituationToString(Situation);
+    if (ErrorReason) {
+        str << " ErrorReason# " << ErrorReason;
+    }
     str << "}";
     return str.Str();
 }
@@ -359,11 +364,11 @@ void TBlackboard::AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber) {
     state.AddNotYetResponse(*Info, id, orderNumber);
 }
 
-void TBlackboard::AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber) {
+void TBlackboard::AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber, const TString& errorReason) {
     Y_ABORT_UNLESS(bool(id));
     Y_ABORT_UNLESS(id.PartId() != 0);
     TBlobState &state = GetState(id);
-    state.AddErrorResponse(*Info, id, orderNumber);
+    state.AddErrorResponse(*Info, id, orderNumber, errorReason);
 }
 
 EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec<IStrategy*, 1>& s,

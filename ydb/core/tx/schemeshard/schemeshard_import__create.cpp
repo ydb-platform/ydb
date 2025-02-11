@@ -849,8 +849,7 @@ private:
 
             NYql::TIssues issues;
             if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
-                issues.AddIssue(NYdb::NIssue::TIssue(TStringBuilder() << "path: " << source)
-                    .SetCode(NYdb::NIssue::DEFAULT_ERROR, NYdb::NIssue::ESeverity::Info));
+                issues.AddIssue(TStringBuilder() << "path: " << source);
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid view creation query");
             }
             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(

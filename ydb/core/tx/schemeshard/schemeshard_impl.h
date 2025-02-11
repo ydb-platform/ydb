@@ -704,6 +704,7 @@ public:
     void PersistTableCreated(NIceDb::TNiceDb& db, const TPathId tableId);
     void PersistTableAlterVersion(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
     void PersistTableFinishColumnBuilding(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 colId);
+    void PersistTableIsRestore(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
     void PersistTableAltered(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
     void PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, const TTableInfo::TAlterDataPtr alter);
     void PersistPersQueueGroup(NIceDb::TNiceDb &db, TPathId pathId, const TTopicInfo::TPtr);
@@ -890,6 +891,7 @@ public:
         TVector<TPathId> CdcStreamScans;
         TVector<TPathId> TablesToClean;
         TDeque<TPathId> BlockStoreVolumesToClean;
+        TVector<TPathId> RestoreTablesToUnmark;
     };
 
     void SubscribeToTempTableOwners();
@@ -916,6 +918,9 @@ public:
 
     void ScheduleCleanDroppedPaths();
     void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);
+    
+    struct TTxUnmarkRestoreTables;
+    NTabletFlatExecutor::ITransaction* CreateTxUnmarkRestoreTables(TVector<TPathId>&& tablesToUnmark);
 
     void EnqueueBackgroundCompaction(const TShardIdx& shardIdx, const TPartitionStats& stats);
     void UpdateBackgroundCompaction(const TShardIdx& shardIdx, const TPartitionStats& stats);
@@ -1255,6 +1260,8 @@ public:
     THashMap<ui64, TImportInfo::TPtr> Imports;
     THashMap<TString, TImportInfo::TPtr> ImportsByUid;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToImport;
+    THashSet<TActorId> RunningImportSchemeGetters;
+    THashSet<TActorId> RunningImportSchemeQueryExecutors;
 
     void FromXxportInfo(NKikimrImport::TImport& exprt, const TImportInfo::TPtr importInfo);
 
@@ -1263,6 +1270,7 @@ public:
     static void PersistImportState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo);
     static void PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
     static void PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
+    static void PersistImportItemPreparedCreationQuery(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
     static void PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
 
     struct TImport {
@@ -1286,6 +1294,7 @@ public:
 
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(ui64 id, const TMaybe<ui32>& itemIdx = Nothing());
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvIndexBuilder::TEvCreateResponse::TPtr& ev);
@@ -1297,6 +1306,7 @@ public:
     void Handle(TEvImport::TEvForgetImportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, const TActorContext& ctx);
 
     void ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx);
     // } // NImport

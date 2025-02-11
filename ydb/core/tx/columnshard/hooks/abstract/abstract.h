@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/tx/tiering/tier/identifier.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -26,12 +27,20 @@ class TColumnEngineChanges;
 class IBlobsGCAction;
 class TPortionInfo;
 class TDataAccessorsResult;
+class IBlobsStorageOperator;
 namespace NIndexes {
 class TIndexMetaContainer;
+}
+namespace NDataLocks {
+class ILock;
 }
 }   // namespace NKikimr::NOlap
 namespace arrow {
 class RecordBatch;
+}
+
+namespace NKikimr::NWrappers::NExternalStorage {
+class IExternalStorageOperator;
 }
 
 namespace NKikimr::NYDBTest {
@@ -61,6 +70,7 @@ public:
         Cleanup,
         GC
     };
+    YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
 
 protected:
     virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {
@@ -210,6 +220,11 @@ public:
         return original;
     }
 
+    virtual std::shared_ptr<NWrappers::NExternalStorage::IExternalStorageOperator> GetStorageOperatorOverride(
+        const NColumnShard::NTiers::TExternalStorageId& /*storageId*/) const {
+        return nullptr;
+    }
+
     TDuration GetActualizationTasksLag() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetActualizationTasksLagMs());
         return DoGetActualizationTasksLag(defaultValue);
@@ -329,6 +344,9 @@ public:
         Y_UNUSED(txInfo);
     }
 
+    virtual THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>> GetExternalDataLocks() const {
+        return {};
+    }
 };
 
 class TControllers {
@@ -337,7 +355,7 @@ private:
 
 public:
     template <class TController>
-    class TGuard: TNonCopyable {
+    class TGuard: TMoveOnly {
     private:
         std::shared_ptr<TController> Controller;
 
@@ -347,12 +365,22 @@ public:
             Y_ABORT_UNLESS(Controller);
         }
 
+        TGuard(TGuard&& other)
+            : TGuard(other.Controller) {
+            other.Controller = nullptr;
+        }
+        TGuard& operator=(TGuard&& other) {
+            std::swap(Controller, other.Controller);
+        }
+
         TController* operator->() {
             return Controller.get();
         }
 
         ~TGuard() {
-            Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+            if (Controller) {
+                Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+            }
         }
     };
 

@@ -2606,7 +2606,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
 
             if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
-                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetVectorIndexSettings()).Settings;
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -2648,7 +2648,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 1);
 
             if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
-                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetVectorIndexSettings()).Settings;
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -2786,7 +2786,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(AlterIndexImplTableUsingPublicAPI) {
         TKikimrRunner kikimr;
         kikimr.GetTestClient().GrantConnect("user@builtin");
-        
+
         auto adminSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(adminSession);
 
@@ -3004,7 +3004,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 0);
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -3056,7 +3056,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Covered");
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -3125,7 +3125,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Key", EPrimitiveType::Uint64)
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
-                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{ 
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     1024,
@@ -3145,7 +3145,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 0);
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -3165,7 +3165,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .AddNullableColumn("Covered", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
-                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {"Covered"}, {TVectorIndexSettings{ 
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {"Covered"}, {TVectorIndexSettings{
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     1024,
@@ -3186,7 +3186,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Covered");
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -3363,6 +3363,235 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(CreateAlterUserWithHash) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user1 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user2 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "wrongSaltLength",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'salt\' is 15, but it must be equal 24");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user3 HASH '{
+                    "hash": "wrongHashLength",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'hash\' is 15, but it must be equal 44");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user4 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "wrongtype"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'type\' must be equal \"argon2id\"");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user5 HASH '{{{{}}}
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                ';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hash value; it should be in JSON-format");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user6 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id",
+                    "some_strange_field": "some_strange_value"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "There should be strictly three fields here: salt, hash and type");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user7 HASH '{
+                    "hash": "Field not in base64format but with 44 length",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'hash\' must be in base64 format");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user8 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "Not in base64 format =) ",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'salt\' must be in base64 format");
+        }
+
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user9;
+                ALTER USER user9 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user10;
+                ALTER USER user10 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "wrongSaltLength",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'salt\' is 15, but it must be equal 24");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user11;
+                ALTER USER user11 HASH '{
+                    "hash": "wrongHashLength",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'hash\' is 15, but it must be equal 44");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user12;
+                ALTER USER user12 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "wrongtype"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'type\' must be equal \"argon2id\"");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user13;
+                ALTER USER user13 HASH '{{{{}}}
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                ';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hash value; it should be in JSON-format");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user14;
+                ALTER USER user14 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id",
+                    "some_strange_field": "some_strange_value"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "There should be strictly three fields here: salt, hash and type");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user15;
+                ALTER USER user15 HASH '{
+                    "hash": "Field not in base64format but with 44 length",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'hash\' must be in base64 format");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user16;
+                ALTER USER user16 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "Not in base64 format =) ",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'salt\' must be in base64 format");
         }
     }
 
@@ -3937,7 +4166,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        
+
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -4065,8 +4294,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAndDropUser) {
+    Y_UNIT_TEST_TWIN(CreateAndDropUser, StrictAclCheck) {
         TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableStrictAclCheck(StrictAclCheck);
         auto db = kikimr.GetTableClient();
         {
             // Drop non-existing user force
@@ -4138,7 +4368,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             // Drop user with ACL
             auto session = db.CreateSession().GetValueSync().GetSession();
-            
+
             TString query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE USER user2 PASSWORD NULL;
@@ -4158,8 +4388,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             DROP USER user2;
             )";
             result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: User user2 has an ACL record on /Root and can't be removed");
+            if (!StrictAclCheck) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: User user2 has an ACL record on /Root and can't be removed");
+            }
         }
     }
 
@@ -5159,7 +5393,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             WITH (
                 STORE = UNSUPPORTED
             );
-        )"; 
+        )";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
     }
@@ -5820,7 +6054,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = TStringBuilder() << R"(
@@ -5845,7 +6079,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = TStringBuilder() << R"(
@@ -5910,7 +6144,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto queryAlter = TStringBuilder() << R"(
@@ -5946,7 +6180,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CompareYson(R"(
                 [[[1];1];[[2];1];[[3];2];[[105];105];[[107];107];[[206];206];[[208];208]]
             )", FormatResultSetYson(result.GetResultSet(0)));
-        } 
+        }
     }
 
     Y_UNIT_TEST(Int8Int16) {
@@ -10428,10 +10662,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         {
             auto session = testHelper.GetSession();
             auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64 NOT NULL, 
-                Value1 String, 
-                Value2 Uint32, 
-                PRIMARY KEY (Key), 
+                Key Uint64 NOT NULL,
+                Value1 String,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
                 FAMILY default (
                     COMPRESSION="snappy"
                 )) WITH (STORE = COLUMN);)";
@@ -11397,11 +11631,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TString tableName = "/Root/ColumnTableTest";
         auto session = testHelper.GetSession();
         auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
-            Key Uint64 NOT NULL, 
-            Value1 String, 
-            Value2 Uint32, 
-            PRIMARY KEY (Key), 
-            FAMILY default ()) 
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 Uint32,
+            PRIMARY KEY (Key),
+            FAMILY default ())
             WITH (STORE = COLUMN);)";
         auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -11428,13 +11662,13 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TString tableName = "/Root/ColumnTableTest";
         auto session = testHelper.GetSession();
         auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
-            Key Uint64 NOT NULL, 
-            Value1 String, 
-            Value2 Uint32, 
-            PRIMARY KEY (Key), 
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 Uint32,
+            PRIMARY KEY (Key),
             FAMILY family1 (
                 COMPRESSION_LEVEL = 2
-            )) 
+            ))
             WITH (STORE = COLUMN);)";
         auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
@@ -11445,12 +11679,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TString tableName = "/Root/ColumnTableTest";
         auto session = testHelper.GetSession();
         auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
-            Key Uint64 NOT NULL, 
-            Value1 String, 
-            Value2 Uint32, 
-            PRIMARY KEY (Key), 
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 Uint32,
+            PRIMARY KEY (Key),
             FAMILY family1 (
-            )) 
+            ))
             WITH (STORE = COLUMN);)";
         auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
@@ -11725,7 +11959,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-nan\" As Decimal(35, 10))", "[]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"-inf\"];[\"155555555555555.1\"];[\"255555555555555.1\"];[\"1255555555555555.1\"];[\"1555555555555555.1\"];[\"inf\"]]");
     }
-        
+
     Y_UNIT_TEST(DecimalCsv) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -11844,11 +12078,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             tableInserter.AddRow().Add(1).AddNull().Add(jsonString);
             tableInserter.AddRow().Add(2).Add(jsonString).Add(jsonBin);
             testHelper.BulkUpsert(testTable, tableInserter);
-        }
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(3).Add(jsonBin).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter, Ydb::StatusIds::SCHEME_ERROR);
         }
     }
 }

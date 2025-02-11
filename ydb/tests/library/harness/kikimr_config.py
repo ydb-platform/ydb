@@ -151,6 +151,7 @@ class KikimrConfigGenerator(object):
             extra_grpc_services=None,  # list[str]
             hive_config=None,
             datashard_config=None,
+            columnshard_config=None,
             enforce_user_token_requirement=False,
             default_user_sid=None,
             pg_compatible_expirement=False,
@@ -158,6 +159,7 @@ class KikimrConfigGenerator(object):
             kafka_api_port=None,
             metadata_section=None,
             column_shard_config=None,
+            use_config_store=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -252,9 +254,6 @@ class KikimrConfigGenerator(object):
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
-
-        if os.getenv('YDB_TABLE_ENABLE_PREPARED_DDL', 'false').lower() == 'true':
-            self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
 
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
@@ -355,6 +354,8 @@ class KikimrConfigGenerator(object):
 
         if datashard_config:
             self.yaml_config["data_shard_config"] = datashard_config
+        if columnshard_config:
+            self.yaml_config["column_shard_config"] = columnshard_config
 
         self.__build()
 
@@ -393,7 +394,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
 
         if pg_compatible_expirement:
-            self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
@@ -449,6 +449,8 @@ class KikimrConfigGenerator(object):
             self.full_config["config"] = self.yaml_config
         else:
             self.full_config = self.yaml_config
+
+        self.use_config_store = use_config_store
 
     @property
     def pdisks_info(self):

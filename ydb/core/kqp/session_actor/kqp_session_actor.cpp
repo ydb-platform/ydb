@@ -915,6 +915,12 @@ public:
                             "Write transactions between column and row tables are disabled at current time.");
             return false;
         }
+        if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
+            && QueryState->TxCtx->HasOltpTable) {
+            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "SnapshotRW can only be used with olap tables.");
+            return false;
+        }
 
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
         QueryState->TxCtx->ApplyPhysicalQuery(phyQuery);
@@ -1573,7 +1579,7 @@ public:
             switch (status) {
                 case Ydb::StatusIds::ABORTED: {
                     if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
-                        issues.AddIssue(*QueryState->TxCtx->TxManager->GetLockIssue());
+                        YQL_ENSURE(!issues.Empty());
                     } else if (ev->BrokenLockPathId) {
                         YQL_ENSURE(!QueryState->TxCtx->TxManager);
                         issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));

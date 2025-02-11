@@ -88,6 +88,10 @@ message TEvStatistics {
     uint64 ReadBytes = 3;
     repeated TPartitionStatistics Partition = 4;
     uint64 CpuMicrosec = 5;
+    uint64 FilteredBytes = 6;
+    uint64 FilteredRows = 7;
+    uint64 QueuedBytes = 8;
+    uint64 QueuedRows = 9;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
@@ -101,6 +105,7 @@ message TEvSessionError {
 
 message TEvHeartbeat {
     uint32 PartitionId = 1;
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
 message TEvNoSession {

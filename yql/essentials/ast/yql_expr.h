@@ -121,6 +121,47 @@ struct TTypeAnnotationVisitor {
     virtual void Visit(const TScalarExprType& type) = 0;
 };
 
+struct TDefaultTypeAnnotationVisitor : public TTypeAnnotationVisitor {
+    void Visit(const TUnitExprType& type) override;
+    void Visit(const TMultiExprType& type) override;
+    void Visit(const TTupleExprType& type) override;
+    void Visit(const TStructExprType& type) override;
+    void Visit(const TItemExprType& type) override;
+    void Visit(const TListExprType& type) override;
+    void Visit(const TStreamExprType& type) override;
+    void Visit(const TFlowExprType& type) override;
+    void Visit(const TDataExprType& type) override;
+    void Visit(const TPgExprType& type) override;
+    void Visit(const TWorldExprType& type) override;
+    void Visit(const TOptionalExprType& type) override;
+    void Visit(const TCallableExprType& type) override;
+    void Visit(const TResourceExprType& type) override;
+    void Visit(const TTypeExprType& type) override;
+    void Visit(const TDictExprType& type) override;
+    void Visit(const TVoidExprType& type) override;
+    void Visit(const TNullExprType& type) override;
+    void Visit(const TGenericExprType& type) override;
+    void Visit(const TTaggedExprType& type) override;
+    void Visit(const TErrorExprType& type) override;
+    void Visit(const TVariantExprType& type) override;
+    void Visit(const TEmptyListExprType& type) override;
+    void Visit(const TEmptyDictExprType& type) override;
+    void Visit(const TBlockExprType& type) override;
+    void Visit(const TScalarExprType& type) override;
+};
+
+class TErrorTypeVisitor : public TDefaultTypeAnnotationVisitor
+{
+public:
+    TErrorTypeVisitor(TExprContext& ctx);
+    void Visit(const TErrorExprType& type) override;
+    bool HasErrors() const;
+
+private:
+    TExprContext& Ctx_;
+    bool HasErrors_ = false;
+};
+
 enum ETypeAnnotationFlags : ui32 {
     TypeNonComposable = 0x01,
     TypeNonPersistable = 0x02,

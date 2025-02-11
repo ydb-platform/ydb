@@ -1993,6 +1993,18 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
+    void CreateAlterLoginRemoveGroup(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& group, const TVector<TExpectedResult>& expectedResults) {
+        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto transaction = modifyTx->Record.AddTransaction();
+        transaction->SetWorkingDir(database);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+        auto createGroup = transaction->MutableAlterLogin()->MutableRemoveGroup();
+        createGroup->SetGroup(group);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
     void AlterLoginAddGroupMembership(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& member, const TString& group, const TVector<TExpectedResult>& expectedResults) {
         auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = modifyTx->Record.AddTransaction();
@@ -2475,7 +2487,8 @@ namespace NSchemeShardUT_Private {
 
         const auto& sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, datashardTabletId, sender, ev.Release());
-        runtime.GrabEdgeEvent<TEvDataShard::TEvUploadRowsResponse>(sender);
+        auto evResponse = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvUploadRowsResponse>(sender);
+        UNIT_ASSERT_C(evResponse->Get()->Record.GetStatus() == NKikimrTxDataShard::TError::OK, "Status: " << evResponse->Get()->Record.GetStatus() << " Issues: " << evResponse->Get()->Record.GetErrorDescription());
     }
 
     void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected) {

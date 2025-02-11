@@ -301,6 +301,12 @@ enum class EBlockEngineMode {
     Force /* "force" */,
 };
 
+enum class EEngineType {
+    Default /* "default" */,
+    Dq /* "dq" */,
+    Ytflow /* "ytflow" */,
+};
+
 struct TUdfCachedInfo {
     TString NormalizedName;
     const TTypeAnnotationNode* FunctionType = nullptr;
@@ -416,6 +422,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool OrderedColumns = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
+    THashSet<TString> PeepholeFlags;
     bool StreamLookupJoin = false;
     ui32 MaxAggPushdownPredicates = 6; // algorithm complexity is O(2^N)
 
@@ -428,6 +435,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
 
     std::optional<bool> InitializeResult;
     EHiddenMode HiddenMode = EHiddenMode::Disable;
+    EEngineType EngineType = EEngineType::Default;
 
     template <typename T>
     T GetRandom() const noexcept;

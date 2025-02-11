@@ -54,6 +54,7 @@ enum EServiceKikimr {
     BS_PROXY_ASSIMILATE = 347;
     BS_VDISK_BALANCING = 2600;
     BS_PROXY_GETBLOCK = 2601;
+    BS_SHRED = 2602;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -1075,5 +1076,6 @@ message TActivity {
         BS_GROUP_GETBLOCK = 653;
         HTTP_MON_INDEX_SERVICE = 654;
         HTTP_MON_AUTHORIZED_ACTOR_REQUEST = 655;
+        IMPORT_SCHEME_QUERY_EXECUTOR = 656;
     };
 };

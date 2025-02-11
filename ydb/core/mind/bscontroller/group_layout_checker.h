@@ -72,23 +72,25 @@ namespace NKikimr::NBsController {
             TEntityId RealmGroup;
             TEntityId Realm;
             TEntityId Domain;
-            TEntityId Node;
+            TEntityId Device;
 
             TPDiskLayoutPosition() = default;
 
-            TPDiskLayoutPosition(TEntityId realmGroup, TEntityId realm, TEntityId domain, TEntityId node)
+            TPDiskLayoutPosition(TEntityId realmGroup, TEntityId realm, TEntityId domain, TEntityId device)
                 : RealmGroup(realmGroup)
                 , Realm(realm)
                 , Domain(domain)
-                , Node(node)
+                , Device(device)
             {}
 
             TPDiskLayoutPosition(TDomainMapper& mapper, const TNodeLocation& location, TPDiskId pdiskId, const TGroupGeometryInfo& geom) {
-                TStringStream realmGroup, realm, domain;
+                TStringStream realmGroup, realm, domain, device;
+                ui32 deviceLevelEnd = TNodeLocation::TKeys::E::Unit + 1;
                 const std::pair<int, TStringStream*> levels[] = {
                     {geom.GetRealmLevelBegin(), &realmGroup},
                     {Max(geom.GetRealmLevelEnd(), geom.GetDomainLevelBegin()), &realm},
-                    {Max(geom.GetRealmLevelEnd(), geom.GetDomainLevelEnd()), &domain}
+                    {Max(geom.GetRealmLevelEnd(), geom.GetDomainLevelEnd()), &domain},
+                    {Max(geom.GetRealmLevelEnd(), geom.GetDomainLevelEnd(), deviceLevelEnd), &device}
                 };
                 auto addLevel = [&](int key, const TString& value) {
                     for (const auto& [reference, stream] : levels) {
@@ -104,15 +106,15 @@ namespace NKikimr::NBsController {
                 RealmGroup = mapper(realmGroup.Str());
                 Realm = mapper(realm.Str());
                 Domain = mapper(domain.Str());
-                Node.Value = pdiskId.NodeId;
+                Device = mapper(device.Str());
             }
 
             TString ToString() const {
-                return TStringBuilder() << "{" << RealmGroup << "." << Realm << "." << Domain << "}";
+                return TStringBuilder() << "{" << RealmGroup << "." << Realm << "." << Domain << "." << Device << "}";
             }
 
             auto AsTuple() const {
-                return std::tie(RealmGroup, Realm, Domain);
+                return std::tie(RealmGroup, Realm, Domain, Device);
             }
 
             friend bool operator ==(const TPDiskLayoutPosition& x, const TPDiskLayoutPosition& y) {
@@ -127,13 +129,13 @@ namespace NKikimr::NBsController {
         struct TScore {
             ui32 RealmInterlace = 0;
             ui32 DomainInterlace = 0;
-            ui32 NodeInterlace = 0;
+            ui32 DeviceInterlace = 0;
             ui32 RealmGroupScatter = 0;
             ui32 RealmScatter = 0;
             ui32 DomainScatter = 0;
 
             auto AsTuple() const {
-                return std::make_tuple(RealmInterlace, DomainInterlace, NodeInterlace, RealmGroupScatter, RealmScatter, DomainScatter);
+                return std::make_tuple(RealmInterlace, DomainInterlace, DeviceInterlace, RealmGroupScatter, RealmScatter, DomainScatter);
             }
 
             bool BetterThan(const TScore& other) const {
@@ -151,7 +153,7 @@ namespace NKikimr::NBsController {
             TString ToString() const {
                 return TStringBuilder() << "{RealmInterlace# " << RealmInterlace
                     << " DomainInterlace# " << DomainInterlace
-                    << " NodeInterlace# " << NodeInterlace
+                    << " DeviceInterlace# " << DeviceInterlace
                     << " RealmGroupScatter# " << RealmGroupScatter
                     << " RealmScatter# " << RealmScatter
                     << " DomainScatter# " << DomainScatter
@@ -173,7 +175,7 @@ namespace NKikimr::NBsController {
             TStackVec<THashMap<TEntityId, ui32>, 32> NumDisksPerDomain;
             THashMap<TEntityId, ui32> NumDisksPerDomainTotal;
 
-            THashMap<TEntityId, ui32> NumDisksPerNode;
+            THashMap<TEntityId, ui32> NumDisksPerDevice;
 
             TGroupLayout(const TBlobStorageGroupInfo::TTopology& topology)
                 : Topology(topology)
@@ -195,7 +197,7 @@ namespace NKikimr::NBsController {
                 NumDisksPerDomain[domainIdx][pos.Domain] += value;
                 NumDisksPerDomainTotal[pos.Domain] += value;
 
-                NumDisksPerNode[pos.Node] += value;
+                NumDisksPerDevice[pos.Device] += value;
             }
 
             void AddDisk(const TPDiskLayoutPosition& pos, ui32 orderNumber) {
@@ -213,12 +215,12 @@ namespace NKikimr::NBsController {
                 const auto& disksPerRealm = NumDisksPerRealm[vdisk.FailRealm][pos.Realm];
                 const auto& disksPerDomain = NumDisksPerDomain[domainIdx][pos.Domain];
 
-                const ui32 disksOnNode = NumDisksPerNode[pos.Node];
+                const ui32 disksOnDevice = NumDisksPerDevice[pos.Device];
 
                 return {
                     .RealmInterlace = NumDisksPerRealmTotal[pos.Realm] - disksPerRealm,
                     .DomainInterlace = NumDisksPerDomainTotal[pos.Domain] - disksPerDomain,
-                    .NodeInterlace = disksOnNode,
+                    .DeviceInterlace = disksOnDevice,
                     .RealmGroupScatter = NumDisks - NumDisksPerRealmGroup[pos.RealmGroup],
                     .RealmScatter = NumDisksInRealm[vdisk.FailRealm] - disksPerRealm,
                     .DomainScatter = NumDisksInDomain[domainIdx] - disksPerDomain,

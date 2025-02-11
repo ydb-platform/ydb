@@ -14,6 +14,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/html.h>
+#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
@@ -37,7 +38,7 @@ namespace NPDisk {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
-void CreatePDiskActor(TGenericExecutorThread& executorThread,
+void CreatePDiskActor(TExecutorThread& executorThread,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TIntrusivePtr<TPDiskConfig> &cfg,
         const NPDisk::TMainKey &mainKey,
@@ -65,11 +66,13 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
         ui32 SlotId = 0;
         bool IsShred = false;
         ui64 ShredGeneration = 0;
+        ui64 Cookie;
 
-        TInitQueueItem(const TActorId sender, const ui64 shredGeneration)
+        TInitQueueItem(const TActorId sender, const ui64 shredGeneration, ui64 cookie)
             : Sender(sender)
             , IsShred(true)
             , ShredGeneration(shredGeneration)
+            , Cookie(cookie)
         {}
 
         TInitQueueItem(TOwnerRound ownerRound, TVDiskID vDisk, ui64 pDiskGuid, TActorId sender, TActorId cutLogId,
@@ -249,7 +252,7 @@ public:
 
             TString path = Sprintf("pdisk%09" PRIu32, (ui32)Cfg->PDiskId);
             TString name = Sprintf("PDisk%09" PRIu32, (ui32)Cfg->PDiskId);
-            mon->RegisterActorPage(pdisksMonPage, path, name, false, ctx.ExecutorThread.ActorSystem,
+            mon->RegisterActorPage(pdisksMonPage, path, name, false, ctx.ActorSystem(),
                 SelfId());
         }
         NodeWhiteboardServiceId = Cfg->MetadataOnly
@@ -299,7 +302,7 @@ public:
         Become(&TThis::StateError);
         for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
             if (it->IsShred) {
-                Send(it->Sender, new NPDisk::TEvShredPDiskResult(NKikimrProto::CORRUPTED, it->ShredGeneration, errorReason));
+                Send(it->Sender, new NPDisk::TEvShredPDiskResult(NKikimrProto::CORRUPTED, it->ShredGeneration, errorReason), 0, it->Cookie);
                 if (PDisk) {
                     PDisk->Mon.ShredPDisk.CountResponse();
                 }
@@ -617,6 +620,7 @@ public:
             if (it->IsShred) {
                 NPDisk::TEvShredPDisk evShredPDisk(it->ShredGeneration);
                 auto* request = PDisk->ReqCreator.CreateFromEv<NPDisk::TShredPDisk>(evShredPDisk, it->Sender);
+                request->Cookie = it->Cookie;
                 PDisk->InputRequest(request);
             } else {
                 NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
@@ -667,7 +671,7 @@ public:
     
     void InitHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
         const NPDisk::TEvShredPDisk &evShredPDisk = *ev->Get();
-        InitQueue.emplace_back(ev->Sender, evShredPDisk.ShredGeneration);
+        InitQueue.emplace_back(ev->Sender, evShredPDisk.ShredGeneration, ev->Cookie);
     }
 
     void InitHandle(NPDisk::TEvPreShredCompactVDiskResult::TPtr &ev) {
@@ -843,7 +847,7 @@ public:
 
     void ErrorHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
         // Respond with error, can't shred in this state.
-        Send(ev->Sender, new NPDisk::TEvShredPDiskResult(NKikimrProto::CORRUPTED, 0, StateErrorReason));
+        Send(ev->Sender, new NPDisk::TEvShredPDiskResult(NKikimrProto::CORRUPTED, 0, StateErrorReason), 0, ev->Cookie);
     }
 
     void ErrorHandle(NPDisk::TEvPreShredCompactVDiskResult::TPtr &ev) {
@@ -1060,6 +1064,7 @@ public:
 
     void Handle(NPDisk::TEvShredPDisk::TPtr &ev) {
         auto* request = PDisk->ReqCreator.CreateFromEv<TShredPDisk>(*ev->Get(), ev->Sender);
+        request->Cookie = ev->Cookie;
         PDisk->InputRequest(request);
     }
 
@@ -1220,7 +1225,7 @@ public:
 
             auto& counters = AppData(actorCtx)->Counters;
 
-            TGenericExecutorThread& executorThread = actorCtx.ExecutorThread;
+            TExecutorThread& executorThread = actorCtx.ExecutorThread;
 
             PassAway();
 

@@ -111,6 +111,10 @@ namespace NKikimr::NStorage {
                 // it's okay, just wait for another configuration change or something like that
                 ConfigCommittedToConsole = true;
                 break;
+
+            case NKikimrBlobStorage::TEvControllerProposeConfigResponse::ReverseCommit:
+                Y_DEBUG_ABORT();
+                break;
         }
     }
 
@@ -198,7 +202,7 @@ namespace NKikimr::NStorage {
 
         if (!fetched) { // fill in 'to-be-fetched' version of config with version incremented by one
             try {
-                auto metadata = NYamlConfig::GetMetadata(yaml);
+                auto metadata = NYamlConfig::GetMainMetadata(yaml);
                 metadata.Cluster = metadata.Cluster.value_or("unknown"); // TODO: fix this
                 metadata.Version = metadata.Version.value_or(0) + 1;
                 temp = NYamlConfig::ReplaceMetadata(yaml, metadata);

@@ -1,2 +1,0 @@
-httpx
-httpx/_transports

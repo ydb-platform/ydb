@@ -61,6 +61,10 @@ namespace NKikimr::NStorage {
         friend bool operator ==(const TPDiskKey& x, const TPDiskKey& y) {
             return x.NodeId == y.NodeId && x.PDiskId == y.PDiskId;
         }
+
+        TString ToString() const {
+            return TStringBuilder() << '[' << NodeId << ':' << PDiskId << ']';
+        }
     };
 
     struct TUnreportedMetricTag {};
@@ -77,6 +81,10 @@ namespace NKikimr::NStorage {
 
         ui32 RefCount = 0;
         bool Temporary = false;
+
+        std::optional<ui64> ShredGenerationIssued;
+        std::variant<std::monostate, ui64, TString> ShredState; // not issued, finished with generation, aborted
+        THashSet<ui64> ShredCookies;
 
         TPDiskRecord(NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk record)
             : Record(std::move(record))
@@ -113,6 +121,8 @@ namespace NKikimr::NStorage {
         std::map<TPDiskKey, TPDiskRecord> LocalPDisks;
         TIntrusiveList<TPDiskRecord, TUnreportedMetricTag> PDisksWithUnreportedMetrics;
         std::map<ui64, ui32> PDiskRestartRequests;
+        ui64 LastShredCookie = 0;
+        THashMap<ui64, TPDiskKey> ShredInFlight;
 
         struct TPDiskByPathInfo {
             TPDiskKey RunningPDiskId; // currently running PDiskId
@@ -171,10 +181,13 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxChunksToDefragInflight;
 
         TControlWrapper ThrottlingDeviceSpeed;
-        TControlWrapper ThrottlingMinSstCount;
-        TControlWrapper ThrottlingMaxSstCount;
-        TControlWrapper ThrottlingMinInplacedSize;
-        TControlWrapper ThrottlingMaxInplacedSize;
+        TControlWrapper ThrottlingDryRun;
+        TControlWrapper ThrottlingMinLevel0SstCount;
+        TControlWrapper ThrottlingMaxLevel0SstCount;
+        TControlWrapper ThrottlingMinInplacedSizeHDD;
+        TControlWrapper ThrottlingMaxInplacedSizeHDD;
+        TControlWrapper ThrottlingMinInplacedSizeSSD;
+        TControlWrapper ThrottlingMaxInplacedSizeSSD;
         TControlWrapper ThrottlingMinOccupancyPerMille;
         TControlWrapper ThrottlingMaxOccupancyPerMille;
         TControlWrapper ThrottlingMinLogChunkCount;
@@ -535,6 +548,9 @@ namespace NKikimr::NStorage {
         void Handle(TEvInterconnect::TEvNodeInfo::TPtr ev);
         void Handle(TEvInterconnect::TEvNodesInfo::TPtr ev);
         void Handle(NPDisk::TEvSlayResult::TPtr ev);
+        void Handle(NPDisk::TEvShredPDiskResult::TPtr ev);
+        void Handle(NPDisk::TEvShredPDisk::TPtr ev);
+        void ProcessShredStatus(ui64 cookie, ui64 generation, std::optional<TString> error);
         void Handle(TEvRegisterPDiskLoadActor::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev);
 
@@ -543,7 +559,8 @@ namespace NKikimr::NStorage {
         void SendVDiskReport(TVSlotId vslotId, const TVDiskID& vdiskId,
             NKikimrBlobStorage::TEvControllerNodeReport::EVDiskPhase phase, TDuration backoff = {});
 
-        void SendPDiskReport(ui32 pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::EPDiskPhase phase);
+        void SendPDiskReport(ui32 pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::EPDiskPhase phase,
+                std::variant<std::monostate, ui64, TString> shredState = {});
 
         void Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);

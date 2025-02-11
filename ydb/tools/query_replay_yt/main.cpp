@@ -141,7 +141,7 @@ public:
 
     THolder<TQueryReplayEvents::TEvCompileResponse> RunReplay(NJson::TJsonValue&& json) {
         TString queryType = json["query_type"].GetStringSafe();
-        if (queryType == "QUERY_TYPE_AST_SCAN") {
+        if (queryType == "QUERY_TYPE_AST_SCAN" || queryType == "QUERY_TYPE_AST_DML") {
             return nullptr;
         }
 
@@ -285,6 +285,14 @@ int main(int argc, const char** argv) {
     spec.MaxFailedJobCount(10000);
 
     client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.YqlLogLevel));
+
+    auto mergeSpec = NYT::TMergeOperationSpec();
+    mergeSpec.AddInput(NYT::TRichYPath(config.DstPath));
+    mergeSpec.Output(NYT::TRichYPath(config.DstPath));
+    mergeSpec.CombineChunks(true);
+    mergeSpec.ForceTransform(true);
+
+    client->Merge(mergeSpec);
 
     return EXIT_SUCCESS;
 }

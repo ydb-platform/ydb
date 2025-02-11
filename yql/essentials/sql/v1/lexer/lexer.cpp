@@ -49,7 +49,7 @@ public:
 #if defined(_tsan_enabled_)
         TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
-        NSQLTranslation::TErrorCollectorOverIssues collector(newIssues, maxErrors, "");
+        NSQLTranslation::TErrorCollectorOverIssues collector(newIssues, maxErrors, queryName);
         if (Ansi && !Antlr4) {
             NProtoAST::TLexerTokensCollector3<NALPAnsi::SQLv1Lexer> tokensCollector(query, (const char**)NALPAnsi::SQLv1ParserTokenNames, queryName);
             tokensCollector.CollectTokens(collector, onNextToken);
@@ -242,7 +242,7 @@ void SplitByStatements(TTokenIterator begin, TTokenIterator end, TVector<TTokenI
 
 }
 
-bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr& lexer, TVector<TString>& statements, NYql::TIssues& issues) {
+bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr& lexer, TVector<TString>& statements, NYql::TIssues& issues, const TString& file) {
     TParsedTokenList allTokens;
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         if (token.Name != "EOF") {
@@ -250,7 +250,7 @@ bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr&
         }
     };
 
-    if (!lexer->Tokenize(query, "Query", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+    if (!lexer->Tokenize(query, file, onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
         return false;
     }
 

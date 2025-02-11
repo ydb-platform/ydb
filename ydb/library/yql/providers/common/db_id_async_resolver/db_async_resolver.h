@@ -19,7 +19,8 @@ enum class EDatabaseType {
     Greenplum,
     MsSQLServer,
     Oracle,
-    Logging
+    Logging,
+    Solomon
 };
 
 inline EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSourceKind) {

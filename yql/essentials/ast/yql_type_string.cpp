@@ -84,6 +84,13 @@ enum EToken
     TOKEN_DYNUMBER = -49,
     TOKEN_SCALAR = -50,
     TOKEN_BLOCK = -51,
+    TOKEN_DATE32 = -52,
+    TOKEN_DATETIME64 = -53,
+    TOKEN_TIMESTAMP64 = -54,
+    TOKEN_INTERVAL64 = -55,
+    TOKEN_TZDATE32 = -56,
+    TOKEN_TZDATETIME64 = -57,
+    TOKEN_TZTIMESTAMP64 = -58,
 
     // identifiers
     TOKEN_IDENTIFIER = -100,
@@ -148,6 +155,13 @@ EToken TokenTypeFromStr(TStringBuf str)
         { TStringBuf("DyNumber"), TOKEN_DYNUMBER },
         { TStringBuf("Block"), TOKEN_BLOCK},
         { TStringBuf("Scalar"), TOKEN_SCALAR},
+        { TStringBuf("Date32"), TOKEN_DATE32 },
+        { TStringBuf("Datetime64"), TOKEN_DATETIME64},
+        { TStringBuf("Timestamp64"), TOKEN_TIMESTAMP64 },
+        { TStringBuf("Interval64"), TOKEN_INTERVAL64 },
+        { TStringBuf("TzDate32"), TOKEN_TZDATE32 },
+        { TStringBuf("TzDatetime64"), TOKEN_TZDATETIME64},
+        { TStringBuf("TzTimestamp64"), TOKEN_TZTIMESTAMP64 },
     };
 
     auto it = map.find(str);
@@ -218,6 +232,13 @@ private:
         case TOKEN_UUID:
         case TOKEN_JSON_DOCUMENT:
         case TOKEN_DYNUMBER:
+        case TOKEN_DATE32:
+        case TOKEN_DATETIME64:
+        case TOKEN_TIMESTAMP64:
+        case TOKEN_INTERVAL64:
+        case TOKEN_TZDATE32:
+        case TOKEN_TZDATETIME64:
+        case TOKEN_TZTIMESTAMP64:
             type = MakeDataType(Identifier);
             GetNextToken();
             break;

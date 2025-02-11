@@ -279,7 +279,6 @@ struct TVDiskMock {
         UNIT_ASSERT_C(commited.empty(), "there are leaked chunks# " << FormatList(commited));
     }
 
-
     void ReserveChunk() {
         const auto evReserveRes = TestCtx->TestResponse<NPDisk::TEvChunkReserveResult>(
                 new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound, 1),
@@ -296,6 +295,16 @@ struct TVDiskMock {
         SendEvLogImpl(1, rec);
         Chunks[EChunkState::COMMITTED].insert(reservedChunks.begin(), reservedChunks.end());
         reservedChunks.clear();
+    }
+
+    void MarkCommitedChunksDirty() {
+        auto& commited = Chunks[EChunkState::COMMITTED];
+        TStackVec<TChunkIdx, 1> chunksToMark;
+        for (auto it = commited.begin(); it != commited.end(); ++it) {
+            chunksToMark.push_back(*it);
+        }
+        auto evMark = MakeHolder<NPDisk::TEvMarkDirty>(PDiskParams->Owner, PDiskParams->OwnerRound, chunksToMark);
+        TestCtx->Send(evMark.Release());
     }
 
     void DeleteCommitedChunks() {
@@ -366,6 +375,17 @@ struct TVDiskMock {
     void RespondToShred(ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString& errorReason) {
         THolder<NPDisk::TEvShredVDisk> evReq = TestCtx->Recv<NPDisk::TEvShredVDisk>();
         if (evReq) {
+            auto& commited = Chunks[EChunkState::COMMITTED];
+            NPDisk::TCommitRecord rec;
+            rec.DeleteChunks = TVector<TChunkIdx>();
+            for (const TChunkIdx &idx : evReq->ChunksToShred) {
+                if (commited.contains(idx)) {
+                    rec.DeleteChunks.push_back(idx);
+                    Chunks[EChunkState::DELETED].insert(idx);
+                    commited.erase(idx); 
+                }
+            }
+            SendEvLogImpl(1, rec);
             TestCtx->Send(new NPDisk::TEvShredVDiskResult(PDiskParams->Owner, PDiskParams->OwnerRound,
                 shredGeneration, status, errorReason));
         }

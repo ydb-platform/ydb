@@ -320,7 +320,8 @@ private:
                 ResolveNamesResult->ResultSet.front().TableId,
                 JoinPath(ResolveNamesResult->ResultSet.front().Path),
                 range,
-                columns);
+                columns,
+                Request->GetInternalToken());
 
             if (!tableScanActor) {
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,

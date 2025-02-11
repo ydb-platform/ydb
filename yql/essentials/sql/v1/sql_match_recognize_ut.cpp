@@ -41,7 +41,7 @@ bool IsLambda(const NYql::TAstNode* node, ui32 numberOfArgs) {
         return false;
     }
     if (!node->GetChild(0)->IsAtom() || node->GetChild(0)->GetContent() != "lambda") {
-        return  false;
+        return false;
     }
     return IsQuotedListOfSize(node->GetChild(1), numberOfArgs);
 }
@@ -71,7 +71,7 @@ FROM Input MATCH_RECOGNIZE(
         auto matchRecognizeAndSample = R"(
 USE plato;
 SELECT *
-FROM Input  MATCH_RECOGNIZE(
+FROM Input MATCH_RECOGNIZE(
     PATTERN ( A )
     DEFINE A as A
     ) TABLESAMPLE BERNOULLI(1.0)
@@ -148,13 +148,13 @@ FROM Input MATCH_RECOGNIZE(
         auto r = MatchRecognizeSqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto measures = FindMatchRecognizeParam(r.Root, "measures");
-        UNIT_ASSERT_VALUES_EQUAL(6, measures->GetChildrenCount());
+        UNIT_ASSERT_VALUES_EQUAL(7, measures->GetChildrenCount());
         const auto columnNames = measures->GetChild(3);
         UNIT_ASSERT(IsQuotedListOfSize(columnNames, 2));
         UNIT_ASSERT_VALUES_EQUAL("T", columnNames->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
         UNIT_ASSERT_VALUES_EQUAL("Key", columnNames->GetChild(1)->GetChild(1)->GetChild(1)->GetContent());
-        UNIT_ASSERT(IsLambda(measures->GetChild(4), 2));
-        UNIT_ASSERT(IsLambda(measures->GetChild(5), 2));
+        UNIT_ASSERT(IsQuotedListOfSize(measures->GetChild(4), 2));
+        UNIT_ASSERT(IsQuotedListOfSize(measures->GetChild(5), 2));
     }
     Y_UNIT_TEST(RowsPerMatch) {
         {
@@ -326,7 +326,7 @@ USE plato;
 SELECT *
 FROM Input MATCH_RECOGNIZE(
     INITIAL
-    PATTERN (A+  B* C?)
+    PATTERN (A+ B* C?)
     DEFINE A as A
     )
 )";
@@ -340,7 +340,7 @@ USE plato;
 SELECT *
 FROM Input MATCH_RECOGNIZE(
     SEEK
-    PATTERN (A+  B* C?)
+    PATTERN (A+ B* C?)
     DEFINE A as A
     )
 )";
@@ -353,7 +353,7 @@ FROM Input MATCH_RECOGNIZE(
 USE plato;
 SELECT *
 FROM Input MATCH_RECOGNIZE(
-    PATTERN (A+  B* C?)
+    PATTERN (A+ B* C?)
     DEFINE A as A
     )
 )";
@@ -427,7 +427,7 @@ PATTERN (
     }
 
     Y_UNIT_TEST(PatternLimitedNesting) {
-        const size_t MaxNesting = 20;
+        constexpr size_t MaxNesting = 20;
         for (size_t extraNesting = 0; extraNesting <= 1; ++extraNesting) {
             std::string pattern;
             for (size_t i = 0; i != MaxNesting + extraNesting; ++i)
@@ -469,7 +469,7 @@ FROM Input MATCH_RECOGNIZE(
         };
         auto getTheFactor = [](const NYql::TAstNode* root) {
             const auto& patternCallable = FindMatchRecognizeParam(root, "pattern");
-            const auto& factor =  patternCallable->GetChild(1)->GetChild(1)->GetChild(0)->GetChild(1);
+            const auto& factor = patternCallable->GetChild(1)->GetChild(1)->GetChild(0)->GetChild(1);
             return NYql::NMatchRecognize::TRowPatternFactor{
                     TString(), //primary var or subexpression, not used in this test
                     FromString<uint64_t>(factor->GetChild(1)->GetChild(1)->GetContent()), //QuantityMin
@@ -651,7 +651,7 @@ FROM Input MATCH_RECOGNIZE(
     }
 
     Y_UNIT_TEST(PermuteTooMuch) {
-        for (size_t n = 1; n <= NYql::NMatchRecognize::MaxPermutedItems + 1; ++n) {
+        for (size_t n = 1; n <= 6 + 1; ++n) {
             std::vector<std::string> vars(n);
             std::generate(begin(vars), end(vars), [n = 0] () mutable { return "A" + std::to_string(n++);});
             const auto stmt = TString(R"(
@@ -671,7 +671,7 @@ FROM Input MATCH_RECOGNIZE(
 )"
             );
             const auto &r = MatchRecognizeSqlToYql(stmt);
-            if (n <= NYql::NMatchRecognize::MaxPermutedItems) {
+            if (n <= 6) {
                 UNIT_ASSERT(r.IsOk());
             } else {
                 UNIT_ASSERT(!r.IsOk());

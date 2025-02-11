@@ -1,4 +1,4 @@
-PY2TEST()
+PY3TEST()
 
 TEST_SRCS(
     test.py
@@ -29,6 +29,7 @@ DATA(
 )
 
 PEERDIR(
+    ydb/tests/fq/tools
     yql/essentials/tests/common/test_framework
 )
 

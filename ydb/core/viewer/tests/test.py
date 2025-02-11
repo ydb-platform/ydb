@@ -6,26 +6,33 @@ from urllib.parse import urlencode
 import time
 
 
-cluster = KiKiMR(KikimrConfigGenerator())
+cluster = KiKiMR(KikimrConfigGenerator(enable_alter_database_create_hive_first=True))
 cluster.start()
+domain_name = '/' + cluster.domain_name
+dedicated_db = domain_name + "/dedicated_db"
+shared_db = domain_name + "/shared_db"
+serverless_db = domain_name + "/serverless_db"
+print('Creating database %s' % dedicated_db)
+cluster.create_database(dedicated_db,
+                        storage_pool_units_count={
+                            'hdd': 1
+                        })
+cluster.register_and_start_slots(dedicated_db, count=1)
+cluster.wait_tenant_up(dedicated_db)
+cluster.create_hostel_database(shared_db,
+                               storage_pool_units_count={
+                                   'hdd': 1
+                               })
+cluster.register_and_start_slots(shared_db, count=1)
+cluster.wait_tenant_up(shared_db)
+cluster.create_serverless_database(serverless_db, shared_db)
+cluster.wait_tenant_up(serverless_db)
+databases = [domain_name, dedicated_db, shared_db, serverless_db]
 
 
 def call_viewer_api(url):
     port = cluster.nodes[1].mon_port
     return requests.get("http://localhost:%s%s" % (port, url))
-
-
-def call_viewer(url, params=None):
-    if params is None:
-        params = {}
-    return call_viewer_api(url + '?' + urlencode(params))
-
-
-def call_viewer_db(url, params=None):
-    if params is None:
-        params = {}
-    params["database"] = cluster.domain_name
-    return call_viewer(url, params)
 
 
 def get_result(result):
@@ -34,27 +41,44 @@ def get_result(result):
     return {"status_code": result.status_code, "text": result.text}
 
 
+def call_viewer(url, params=None):
+    if params is None:
+        params = {}
+    return get_result(call_viewer_api(url + '?' + urlencode(params)))
+
+
+def call_viewer_db(url, params=None):
+    if params is None:
+        params = {}
+    result = {}
+    for name in databases:
+        params["database"] = name
+        result[name] = call_viewer(url, params)
+    return result
+
+
 def get_viewer(url, params=None):
     if params is None:
         params = {}
-    return get_result(call_viewer(url, params))
+    return call_viewer(url, params)
 
 
 def get_viewer_db(url, params=None):
     if params is None:
         params = {}
-    return get_result(call_viewer_db(url, params))
+    return call_viewer_db(url, params)
 
 
 wait_good = False
 wait_time = 0
+max_wait_time = 300
 
 
 def wait_for_cluster_ready():
     global wait_time
     global wait_good
     for node_id, node in cluster.nodes.items():
-        while wait_time < 60:
+        while wait_time < max_wait_time:
             all_good = False
             while True:
                 try:
@@ -84,13 +108,60 @@ def wait_for_cluster_ready():
                 break
             time.sleep(1)
             wait_time += 1
-    while wait_time < 60:
+    for database in databases:
+        if database != domain_name:
+            call_viewer("/viewer/query", {
+                'database': database,
+                'query': 'create table table1(id int64, name text, primary key(id)))',
+                'schema': 'multi'
+            })
+    for database in databases:
+        while wait_time < max_wait_time:
+            all_good = False
+            print("Waiting for database %s to be ready" % database)
+            while True:
+                result = get_result(requests.get("http://localhost:%s/viewer/tenantinfo?database=%s" % (cluster.nodes[1].mon_port, database)))  # force connect between nodes
+                if 'status_code' in result and result['status_code'] != 200:
+                    break
+                if 'CoresUsed' not in result['TenantInfo'][0]:
+                    break
+                result = get_result(requests.get("http://localhost:%s/viewer/healthcheck?database=%s" % (cluster.nodes[1].mon_port, database)))  # force connect between nodes
+                if 'status_code' in result and result['status_code'] != 200:
+                    break
+                if result['self_check_result'] != 'GOOD':
+                    break
+                all_good = True
+                break
+            if all_good:
+                break
+            time.sleep(1)
+            wait_time += 1
+    while wait_time < max_wait_time:
         all_good = False
         while True:
-            result = get_result(requests.get("http://localhost:%s/storage/groups" % cluster.nodes[1].mon_port))  # check that stats are ready
+            result = call_viewer("/viewer/query", {
+                'database': domain_name,
+                'query': 'SELECT * FROM `.sys/ds_vslots`',
+            })
             if 'status_code' in result and result['status_code'] != 200:
                 break
-            if 'TotalGroups' not in result or result['TotalGroups'] < 3:
+            bad = 0
+            for vslot in result:
+                if 'State' not in vslot or vslot['State'] != 'OK':
+                    bad += 1
+            if bad > 0:
+                break
+            result = get_result(requests.get("http://localhost:%s/storage/groups?fields_required=all" % (cluster.nodes[1].mon_port)))  # force connect between nodes
+            if 'status_code' in result and result['status_code'] != 200:
+                break
+            if len(result['StorageGroups']) < 5:
+                break
+            result = get_result(requests.get("http://localhost:%s/viewer/cluster" % (cluster.nodes[1].mon_port)))  # force connect between nodes
+            if 'status_code' in result and result['status_code'] != 200:
+                break
+            if 'StorageTotal' not in result or result['StorageTotal'] == 0:
+                break
+            if 'StorageUsed' not in result or result['StorageUsed'] == 0:
                 break
             all_good = True
             break
@@ -98,8 +169,7 @@ def wait_for_cluster_ready():
             break
         time.sleep(1)
         wait_time += 1
-
-    wait_good = wait_time < 60
+    wait_good = wait_time < max_wait_time
     print('Wait for cluster to be ready took %s seconds' % wait_time)
 
 
@@ -117,19 +187,53 @@ def test_counter():
 def replace_values_by_key(data, target_key):
     def can_convert_to_number(s):
         try:
-            float(s)
+            int(s)
             return True
         except ValueError:
             return False
 
     def replacement_value(value):
         if isinstance(value, int):
+            if value != 0:
+                return "not-zero-number"
+        if isinstance(value, float):
+            if value != 0:
+                return "not-zero-number"
+        if isinstance(value, str):
+            if can_convert_to_number(value):
+                if int(value) != 0:
+                    return "not-zero-number-text"
+                else:
+                    return "0"
+            if len(value) > 0:
+                return "text"
+        if isinstance(value, dict):
+            if len(value.keys()) > 0:
+                return "not-empty-object"
+        if isinstance(value, list):
+            if len(value) > 0:
+                return "not-empty-array"
+        return value
+
+    def replace_recursive(data):
+        if isinstance(data, dict):
+            return {key: replace_recursive(replacement_value(value) if key in target_key else value)
+                    for key, value in data.items()}
+        elif isinstance(data, list):
+            return [replace_recursive(item) for item in data]
+        else:
+            return data
+
+    return replace_recursive(data)
+
+
+def replace_types_by_key(data, target_key):
+    def replacement_value(value):
+        if isinstance(value, int):
             return "number"
         if isinstance(value, float):
             return "number"
         if isinstance(value, str):
-            if can_convert_to_number(value):
-                return "number-text"
             return "text"
         if isinstance(value, dict):
             return "object"
@@ -149,13 +253,55 @@ def replace_values_by_key(data, target_key):
     return replace_recursive(data)
 
 
+def replace_values_by_key_and_value(data, target_key, target_value):
+    def replace_recursive(data):
+        if isinstance(data, dict):
+            return {key: replace_recursive('accepted-value' if key in target_key and value in target_value else value)
+                    for key, value in data.items()}
+        elif isinstance(data, list):
+            return [replace_recursive(item) for item in data]
+        else:
+            return data
+
+    return replace_recursive(data)
+
+
+def wipe_values_by_key(data, target_key):
+    def replace_recursive(data):
+        if isinstance(data, dict):
+            return {key: replace_recursive('accepted-value' if key in target_key else value)
+                    for key, value in data.items()}
+        elif isinstance(data, list):
+            return [replace_recursive(item) for item in data]
+        else:
+            return data
+
+    return replace_recursive(data)
+
+
+def delete_keys_recursively(data, keys_to_delete):
+    if isinstance(data, dict):
+        for key in list(data.keys()):
+            if key in keys_to_delete:
+                del data[key]
+            else:
+                delete_keys_recursively(data[key], keys_to_delete)
+    elif isinstance(data, list):
+        for item in data:
+            delete_keys_recursively(item, keys_to_delete)
+
+
 def normalize_result_pdisks(result):
-    return replace_values_by_key(result, ['AvailableSize',
-                                          'TotalSize',
-                                          'LogUsedSize',
-                                          'LogTotalSize',
-                                          'SystemSize',
-                                          ])
+    result = replace_values_by_key(result, ['AvailableSize',
+                                            'TotalSize',
+                                            'LogUsedSize',
+                                            'LogTotalSize',
+                                            'SystemSize',
+                                            'SlotSize',
+                                            'EnforcedDynamicSlotSize',
+                                            ])
+    result = replace_values_by_key_and_value(result, ['Status'], ['ACTIVE', 'INACTIVE'])
+    return result
 
 
 def normalize_result_vdisks(result):
@@ -168,12 +314,31 @@ def normalize_result_vdisks(result):
 
 
 def normalize_result_groups(result):
-    return replace_values_by_key(result, ['Read',
-                                          'Write',
+    return replace_values_by_key(result, ['Available',
+                                          'Limit',
                                           ])
 
 
 def normalize_result_nodes(result):
+    result = replace_types_by_key(result, ['ClockSkewUs',
+                                           'ClockSkewMinUs',
+                                           'ClockSkewMaxUs',
+                                           'NetworkUtilization',
+                                           'NetworkUtilizationMin',
+                                           'NetworkUtilizationMax',
+                                           'NetworkWriteThroughput',
+                                           'PingTimeUs',
+                                           'PingTimeMinUs',
+                                           'PingTimeMaxUs',
+                                           'ReverseClockSkewUs',
+                                           'ReversePingTimeUs',
+                                           'Utilization',
+                                           'BytesWritten',
+                                           'ReceiveThroughput',
+                                           'SendThroughput',
+                                           'UptimeSeconds',
+                                           'Usage',
+                                           ])
     return replace_values_by_key(result, ['CpuUsage',
                                           'DiskSpaceUsage',
                                           'Address',
@@ -181,20 +346,19 @@ def normalize_result_nodes(result):
                                           'port',
                                           'host',
                                           'Host',
+                                          'PeerName',
                                           'LoadAverage',
-                                          'Usage',
                                           'MemoryStats',
-                                          'MemoryUsed',
                                           'MemoryTotal',
                                           'MemoryLimit',
                                           'NumberOfCpus',
-                                          'Version',
-                                          'UptimeSeconds',
                                           'CoresUsed',
                                           'CoresTotal',
                                           'CreateTime',
                                           'MaxDiskUsage',
                                           'Roles',
+                                          'ConnectTime',
+                                          'Connections',
                                           ])
 
 
@@ -203,23 +367,48 @@ def normalize_result_info(result):
                                           'StartTime',
                                           'ResponseTime',
                                           'ResponseDuration',
+                                          'ProcessDuration',
                                           ])
 
 
 def normalize_result_schema(result):
     return replace_values_by_key(result, ['CreateStep',
                                           'ACL',
-                                          'EffectiveACL'
+                                          'EffectiveACL',
+                                          'CreateTxId',
+                                          'PathId',
                                           ])
 
 
 def normalize_result_cluster(result):
     return replace_values_by_key(result, ['MapVersions',
                                           'Versions',
+                                          'DataCenters',
+                                          'Metrics',
+                                          'StorageTotal',
+                                          'StorageUsed',
+                                          'ROT',
                                           ])
 
 
+def normalize_result_healthcheck(result):
+    result = replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
+    delete_keys_recursively(result, ['issue_log'])
+    return result
+
+
 def normalize_result(result):
+    delete_keys_recursively(result, ['Version',
+                                     'MemoryUsed',
+                                     'WriteThroughput',
+                                     'ReadThroughput',
+                                     'Read',
+                                     'Write',
+                                     ])
+    result = wipe_values_by_key(result, ['LatencyGetFast',
+                                         'LatencyPutTabletLog',
+                                         'LatencyPutUserData'
+                                         ])
     result = normalize_result_nodes(result)
     result = normalize_result_info(result)
     result = normalize_result_schema(result)
@@ -239,23 +428,26 @@ def get_viewer_db_normalized(url, params=None):
 
 
 def test_viewer_nodes():
-    return get_viewer_normalized("/viewer/nodes", {
+    result = get_viewer_db_normalized("/viewer/nodes", {
         'fields_required': 'all'
     })
+    for name in databases:
+        for node in result[name]['Nodes']:
+            node['SystemState']['Endpoints'].sort(key=lambda x: x['Name'])
+    return result
 
 
 def test_storage_groups():
-    return get_viewer_normalized("/storage/groups", {
+    return normalize_result(get_viewer("/storage/groups", {
         'fields_required': 'all'
-    })
-
-
-def test_viewer_nodeinfo():
-    return get_viewer_normalized("/viewer/nodeinfo")
+    }))
 
 
 def test_viewer_sysinfo():
-    return get_viewer_normalized("/viewer/sysinfo")
+    result = get_viewer_normalized("/viewer/sysinfo")
+    for node in result['SystemStateInfo']:
+        node['Endpoints'].sort(key=lambda x: x['Name'])
+    return result
 
 
 def test_viewer_vdiskinfo():
@@ -271,12 +463,27 @@ def test_viewer_bsgroupinfo():
 
 
 def test_viewer_tabletinfo():
-    return get_viewer_db_normalized("/viewer/tabletinfo")
+    result = {}
+    result['totals'] = get_viewer_db_normalized("/viewer/tabletinfo", {
+        'group': 'Type',
+        'enums': 'true',
+    })
+    for name in databases:
+        result['totals'][name]['TabletStateInfo'].sort(key=lambda x: x['Type'])
+    result['detailed'] = get_viewer_db_normalized("/viewer/tabletinfo")
+    for name in databases:
+        result['detailed'][name]['TabletStateInfo'].sort(key=lambda x: x['TabletId'])
+    return result
 
 
 def test_viewer_describe():
-    db = cluster.domain_name
-    return get_viewer_db_normalized("/viewer/describe", {'path': db})
+    result = {}
+    for name in databases:
+        result[name] = get_viewer_normalized("/viewer/describe", {
+            'database': name,
+            'path': name
+            })
+    return result
 
 
 def test_viewer_cluster():
@@ -292,7 +499,9 @@ def test_viewer_tenantinfo_db():
 
 
 def test_viewer_healthcheck():
-    return get_viewer_normalized("/viewer/healthcheck")
+    result = get_viewer_db_normalized("/viewer/healthcheck")
+    result = normalize_result_healthcheck(result)
+    return result
 
 
 def test_viewer_acl():
@@ -318,3 +527,36 @@ def test_viewer_query_issue_13757():
         'query': 'SELECT CAST(<|one:"8912", two:42|> AS Struct<two:Utf8, three:Date?>);',
         'schema': 'multi'
     })
+
+
+def test_viewer_query_issue_13945():
+    return get_viewer_db("/viewer/query", {
+        'query': 'SELECT AsList();',
+        'schema': 'multi'
+    })
+
+
+def test_pqrb_tablet():
+    response_create_topic = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TOPIC topic1(CONSUMER consumer1)',
+        'schema': 'multi'
+    })
+    response_tablet_info = call_viewer("/viewer/tabletinfo", {
+        'database': dedicated_db,
+        'path': dedicated_db + '/topic1',
+        'enums': 'true'
+    })
+    result = {
+        'response_create_topic': response_create_topic,
+        'response_tablet_info': response_tablet_info,
+    }
+    return replace_values_by_key(result, ['version',
+                                          'ResponseTime',
+                                          'ChangeTime',
+                                          'HiveId',
+                                          'NodeId',
+                                          'TabletId',
+                                          'PathId',
+                                          'SchemeShard'
+                                          ])

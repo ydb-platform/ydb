@@ -23,6 +23,15 @@ namespace NKikimr {
             // list of freed chunks; FoundChunksToDefrag can differ from FreedChunks.size(),
             // because we search ChunksToDefrag on some snapshot, real state can differ
             TDefragChunks FreedChunks;
+
+            void Output(IOutputStream& s) const {
+                s << "{FoundChunksToDefrag# " << FoundChunksToDefrag
+                    << " RewrittenRecs# " << RewrittenRecs
+                    << " RewrittenBytes# " << RewrittenBytes
+                    << " Eof# " << Eof
+                    << " FreedChunks# " << FormatList(FreedChunks)
+                    << "}";
+            }
         };
 
         TStat Stat;
@@ -35,7 +44,7 @@ namespace NKikimr {
     struct TChunksToDefrag;
 
     IActor *CreateDefragQuantumActor(const std::shared_ptr<TDefragCtx>& dctx, const TVDiskID& selfVDiskId,
-        std::optional<TChunksToDefrag> chunksToDefrag);
+        std::optional<TChunksToDefrag> chunksToDefrag, ui32 minHugeBlobInBytes);
 
 } // NKikimr
 

@@ -344,6 +344,7 @@ message TClusterInfo {
     uint64 Hosts = 60;
     uint64 Tenants = 61;
     double NetworkUtilization = 62;
+    uint64 NetworkWriteThroughput = 63;
 }
 
 enum ETenantType {
@@ -400,6 +401,7 @@ message TTenant {
     uint32 CoresTotal = 50;
     optional NKikimrMemory.TMemoryStats MemoryStats = 51;
     float NetworkUtilization = 52;
+    uint64 NetworkWriteThroughput = 53;
 }
 
 message TTenants {

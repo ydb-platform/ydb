@@ -236,6 +236,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, false> MaxOutputTables;
     NCommon::TConfSetting<bool, false> DisableFuseOperations;
+    NCommon::TConfSetting<bool, false> EnableFuseMapToMapReduce;
     NCommon::TConfSetting<NSize::TSize, false> MaxExtraJobMemoryToFuseOperations;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseOperations;
     NCommon::TConfSetting<ui32, false> MaxOperationFiles;

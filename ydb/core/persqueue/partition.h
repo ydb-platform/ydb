@@ -295,7 +295,8 @@ private:
                                                       const TActorContext& ctx);
     // will return rcount and rsize also
     TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
-                                                   const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset);
+                                                   const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
+                                                   TBlobKeyTokens* blobKeyTokens);
     TVector<TClientBlob>    GetReadRequestFromHead(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
                                                    const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount,
                                                    ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset);
@@ -687,6 +688,9 @@ private:
     TMessageQueue PendingRequests;
     TMessageQueue QuotaWaitingRequests;
 
+    std::deque<TString> DeletedKeys;
+    std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
+
     THead Head;
     THead NewHead;
     TPartitionedBlob PartitionedBlob;
@@ -977,6 +981,11 @@ private:
     void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
 
     size_t WriteNewSizeFromSupportivePartitions = 0;
+
+    bool TryAddDeleteHeadKeysToPersistRequest();
+    void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
+
+    TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);
 };
 
 } // namespace NKikimr::NPQ

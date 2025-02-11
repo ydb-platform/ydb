@@ -1,8 +1,8 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/client/signature/generator.h>
-#include <yt/yt/client/signature/validator.h>
 #include <yt/yt/client/signature/signature.h>
+#include <yt/yt/client/signature/validator.h>
 
 #include <yt/yt/core/yson/string.h>
 

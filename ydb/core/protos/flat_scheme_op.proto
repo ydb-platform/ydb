@@ -317,6 +317,7 @@ message TTableDescription {
 
     optional bool OmitFollowers = 36 [default = false]; // used with CopyFromTable
     optional bool IsBackup = 37 [default = false];
+    optional bool IsRestore = 45 [default = false];
 
     repeated TCdcStreamDescription CdcStreams = 38;
     repeated TSequenceDescription Sequences = 39;
@@ -849,12 +850,14 @@ message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
     optional bool CanLogin = 3 [default = true];
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
     optional bool CanLogin = 3;
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginRemoveUser {

@@ -2279,5 +2279,11 @@ message TEvForceDataCleanup {
 // Returns DataCleanupGeneration of the last successfully completed TEvForceDataCleanup request.
 // Intermediate requests and corresponding TEvForceDataCleanupResult's may be skipped.
 message TEvForceDataCleanupResult {
-    optional uint64 DataCleanupGeneration = 1; // from corresponding request
+    enum EStatus {
+        OK = 0;
+        FAILED = 1;
+    };
+    optional uint64 DataCleanupGeneration = 1; // from corresponding request (or greater)
+    optional uint64 TabletId = 2;
+    optional EStatus Status = 3;
 }

@@ -63,12 +63,12 @@ public:
         (subrequests, options))
 
     DELEGATE_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options),
         (query, options))
 
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options),
         (query, options))
 
@@ -282,6 +282,11 @@ public:
         const TUnfreezeTableOptions& options),
         (path, options))
 
+    DELEGATE_METHOD(TFuture<void>, CancelTabletTransition, (
+        NTabletClient::TTabletId tabletId,
+        const TCancelTabletTransitionOptions& options),
+        (tabletId, options))
+
     DELEGATE_METHOD(TFuture<void>, ReshardTable, (
         const NYPath::TYPath& path,
         const std::vector<NTableClient::TLegacyOwningKey>& pivotKeys,
@@ -483,6 +488,12 @@ public:
         const NYson::TYsonString& parameters,
         const TUpdateOperationParametersOptions& options),
         (operationIdOrAlias, parameters, options))
+
+    DELEGATE_METHOD(TFuture<void>, PatchOperationSpec, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const TPatchOperationSpecOptions& options),
+        (operationIdOrAlias, patches, options))
 
     DELEGATE_METHOD(TFuture<TOperation>, GetOperation, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -895,4 +906,3 @@ protected:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

@@ -5,6 +5,7 @@ import os
 import pytest
 import logging
 import time
+import json
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -75,6 +76,23 @@ def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match
         if count == expected_count:
             break
         if not exact_match and count > expected_count:
+            break
+        assert time.time() < deadline, f"Waiting sensor {sensor} value failed, current count {count}"
+        time.sleep(1)
+    pass
+
+
+def wait_public_sensor_value(kikimr, query_id, sensor, expected_value):
+    deadline = time.time() + 60
+    cloud_id = "mock_cloud"
+    folder_id = "my_folder"
+    while True:
+        count = 0
+        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+            value = kikimr.compute_plane.get_sensors(node_index, "yq_public").find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": sensor})
+            count += value if value is not None else 0
+        if count >= expected_value:
             break
         assert time.time() < deadline, f"Waiting sensor {sensor} value failed, current count {count}"
         time.sleep(1)
@@ -959,12 +977,22 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_COMPILE_SERVICE", COMPUTE_NODE_COUNT)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_FORMAT_HANDLER", 1)
         wait_row_dispatcher_sensor_value(kikimr, "ClientsCount", 1)
         wait_row_dispatcher_sensor_value(kikimr, "RowsSent", 1, exact_match=False)
         wait_row_dispatcher_sensor_value(kikimr, "IncomingRequests", 1, exact_match=False)
 
+        wait_public_sensor_value(kikimr, query_id, "query.input_filtered_bytes", 1)
+        wait_public_sensor_value(kikimr, query_id, "query.source_input_filtered_records", 1)
+        wait_public_sensor_value(kikimr, query_id, "query.input_queued_bytes", 0)
+        wait_public_sensor_value(kikimr, query_id, "query.source_input_queued_records", 0)
         stop_yds_query(client, query_id)
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
         wait_row_dispatcher_sensor_value(kikimr, "ClientsCount", 0)
+
+        stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
+        filtered_bytes = stat['Graph=0']['IngressFilteredBytes']['sum']
+        filtered_rows = stat['Graph=0']['IngressFilteredRows']['sum']
+        assert filtered_bytes > 1 and filtered_rows > 0

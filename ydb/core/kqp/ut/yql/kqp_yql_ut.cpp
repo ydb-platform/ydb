@@ -610,7 +610,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
     Y_UNIT_TEST(UuidPrimaryKeyDisabled) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableUuidAsPrimaryKey(false)
@@ -681,7 +680,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
     Y_UNIT_TEST(UuidPrimaryKey) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -829,7 +827,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
     Y_UNIT_TEST(TestUuidPrimaryKeyPrefixSearch) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -885,7 +882,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
     Y_UNIT_TEST(TestUuidDefaultColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -970,7 +966,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
     Y_UNIT_TEST_TWIN(PgIntPrimaryKey, EnableKqpDataQueryStreamLookup) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(EnableKqpDataQueryStreamLookup);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()

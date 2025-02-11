@@ -590,8 +590,8 @@ The inverse function is [VariantItem](#variantitem).
 ### Signature
 
 ```yql
-DynamicVariant(item:T,index:Uint32,Variant<T, T, ...>)->Optional<Variant<T, T, ...>>
-DynamicVariant(item:T,index:Utf8,Variant<key1: T, key2: T, ...>)->Optional<Variant<key1: T, key2: T, ...>>
+DynamicVariant(item:T,index:Uint32?,Variant<T, T, ...>)->Optional<Variant<T, T, ...>>
+DynamicVariant(item:T,index:Utf8?,Variant<key1: T, key2: T, ...>)->Optional<Variant<key1: T, key2: T, ...>>
 ```
 
 ### Example
@@ -599,11 +599,11 @@ DynamicVariant(item:T,index:Utf8,Variant<key1: T, key2: T, ...>)->Optional<Varia
 ```yql
 $dt = Int32;
 $tvt = Variant<$dt,$dt>;
-SELECT ListMap([(10,0u),(20,2u)],($x)->(DynamicVariant($x.0,$x.1,$tvt))); -- [0: 10,NULL]
+SELECT ListMap([(10,0u),(20,2u),(30,NULL)],($x)->(DynamicVariant($x.0,$x.1,$tvt))); -- [0: 10,NULL,NULL]
 
 $dt = Int32;
 $svt = Variant<x:$dt,y:$dt>;
-SELECT ListMap([(10,'x'u),(20,'z'u)],($x)->(DynamicVariant($x.0,$x.1,$svt))); -- [x: 10,NULL]
+SELECT ListMap([(10,'x'u),(20,'z'u),(30,NULL)],($x)->(DynamicVariant($x.0,$x.1,$svt))); -- [x: 10,NULL,NULL]
 
 ```
 

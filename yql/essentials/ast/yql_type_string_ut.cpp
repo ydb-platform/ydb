@@ -54,9 +54,16 @@ Y_UNIT_TEST_SUITE(TTypeString)
         TestOk("Datetime", "(DataType 'Datetime)");
         TestOk("Timestamp", "(DataType 'Timestamp)");
         TestOk("Interval", "(DataType 'Interval)");
+        TestOk("Date32", "(DataType 'Date32)");
+        TestOk("Datetime64", "(DataType 'Datetime64)");
+        TestOk("Timestamp64", "(DataType 'Timestamp64)");
+        TestOk("Interval64", "(DataType 'Interval64)");
         TestOk("TzDate", "(DataType 'TzDate)");
         TestOk("TzDatetime", "(DataType 'TzDatetime)");
         TestOk("TzTimestamp", "(DataType 'TzTimestamp)");
+        TestOk("TzDate32", "(DataType 'TzDate32)");
+        TestOk("TzDatetime64", "(DataType 'TzDatetime64)");
+        TestOk("TzTimestamp64", "(DataType 'TzTimestamp64)");
         TestOk("Uuid", "(DataType 'Uuid)");
         TestOk("Decimal(10,2)", "(DataType 'Decimal '10 '2)");
     }

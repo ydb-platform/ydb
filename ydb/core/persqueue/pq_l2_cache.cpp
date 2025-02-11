@@ -17,7 +17,7 @@ void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
     auto mon = appData->Mon;
     if (mon) {
         NMonitoring::TIndexMonPage * page = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(page, "pql2", "PersQueue Node Cache", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        mon->RegisterActorPage(page, "pql2", "PersQueue Node Cache", false, ctx.ActorSystem(), ctx.SelfID);
     }
 
     Become(&TThis::StateFunc);
@@ -34,6 +34,7 @@ void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TA
     TouchBlobs(ctx, tabletId, request->ExpectedBlobs, false);
     RemoveBlobs(ctx, tabletId, request->RemovedBlobs);
     RegretBlobs(ctx, tabletId, request->MissedBlobs);
+    RenameBlobs(ctx, tabletId, request->RenamedBlobs);
 
     THashMap<TKey, TCacheValue::TPtr> evicted;
     AddBlobs(ctx, tabletId, request->StoredBlobs, evicted);
@@ -46,7 +47,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
     TInstant now = TAppData::TimeProvider->Now();
     THashMap<TActorId, THolder<TCacheL2Response>> responses;
 
-    for (auto rm : evictedBlobs) {
+    for (const auto& rm : evictedBlobs) {
         const TKey& key = rm.first;
         TCacheValue::TPtr evicted = rm.second;
 
@@ -57,7 +58,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
         }
 
         Y_ABORT_UNLESS(key.TabletId == resp->TabletId, "PQ L2. Multiple topics in one PQ tablet.");
-        resp->Removed.push_back({key.Partition, key.Offset, key.PartNo, evicted});
+        resp->Removed.emplace_back(key.Partition, key.Offset, key.PartNo, evicted);
 
         RetentionTime = now - evicted->GetAccessTime();
         if (RetentionTime < KeepTime)
@@ -70,6 +71,13 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
     { // counters
         (*Counters.Retention) = RetentionTime.Seconds();
     }
+}
+
+void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheKeysRequest::TPtr& ev, const TActorContext& ctx)
+{
+    auto response = MakeHolder<TEvPqCache::TEvCacheKeysResponse>();
+    response->RenamedKeys = RenamedKeys;
+    ctx.Send(ev->Sender, response.Release());
 }
 
 /// @return outRemoved - map of evicted items. L1 should be noticed about them
@@ -153,6 +161,28 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
         (*Counters.Evictions) += numEvicted;
         (*Counters.Unused) += numUnused;
         (*Counters.Used) += numEvicted - numUnused;
+    }
+}
+
+void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
+                                    const TVector<std::pair<TCacheBlobL2, TCacheBlobL2>>& blobs)
+{
+    RenamedKeys += blobs.size();
+
+    for (const auto& [oldBlob, newBlob] : blobs) {
+        TKey oldKey(tabletId, oldBlob);
+        auto it = Cache.FindWithoutPromote(oldKey);
+        if (it == Cache.End()) {
+            continue;
+        }
+
+        TKey newKey(tabletId, newBlob);
+        Cache.Insert(newKey, *it);
+        Cache.Erase(it);
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Renamed. Tablet '" << tabletId
+                    << "' old partition " << oldBlob.Partition << " old offset " << oldBlob.Offset
+                    << " new partition " << newBlob.Partition << " new offset " << newBlob.Offset);
     }
 }
 

@@ -334,6 +334,10 @@ const TString* INode::ModuleName() const {
     return nullptr;
 }
 
+bool INode::IsScript() const {
+    return false;
+}
+
 bool INode::HasSkip() const {
     return false;
 }
@@ -566,6 +570,10 @@ const TString* IProxyNode::ModuleName() const {
     return Inner->ModuleName();
 }
 
+bool IProxyNode::IsScript() const {
+    return Inner->IsScript();
+}
+
 bool IProxyNode::HasSkip() const {
     return Inner->HasSkip();
 }
@@ -704,6 +712,14 @@ TAstDirectNode::TAstDirectNode(TAstNode* node)
 TAstNode* TAstDirectNode::Translate(TContext& ctx) const {
     Y_UNUSED(ctx);
     return Node;
+}
+
+TNodePtr BuildList(TPosition pos, TVector<TNodePtr> nodes) {
+    return new TAstListNodeImpl(pos, std::move(nodes));
+}
+
+TNodePtr BuildQuote(TPosition pos, TNodePtr expr) {
+    return BuildList(pos, {BuildAtom(pos, "quote", TNodeFlags::Default), expr});
 }
 
 TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg) {
@@ -2669,10 +2685,6 @@ TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isL
     return new TAccessNode(pos, ids, isLookup);
 }
 
-TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, const TString& var, const TString& column, bool theSameVar) {
-    return new TMatchRecognizeVarAccessNode(pos, var, column, theSameVar);
-}
-
 void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
                                           const TVector<TNodePtr>& groupByExprTerms)
 {
@@ -3023,6 +3035,18 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
 
     FunctionName = function->FuncName();
     ModuleName = function->ModuleName();
+    ScriptUdf = function->IsScript();
+    if (ScriptUdf && as_tuple->GetTupleSize() > 1) {
+        ctx.Error(Pos) << "Udf: user type is not supported for script udfs";
+        return false;
+    }
+
+    if (ScriptUdf) {
+        for (size_t i = 0; i < function->GetTupleSize(); ++i) {
+            ScriptArgs.push_back(function->GetTupleElement(i));
+        }
+    }
+
     TVector<TNodePtr> external;
     external.reserve(as_tuple->GetTupleSize() - 1);
 
@@ -3045,9 +3069,26 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     if (TStructNode* named_args = Args[1]->GetStructNode(); named_args) {
         for (const auto &arg: named_args->GetExprs()) {
             if (arg->GetLabel() == "TypeConfig") {
+                if (function->IsScript()) {
+                    ctx.Error() << "Udf: TypeConfig is not supported for script udfs";
+                    return false;
+                }
+
                 TypeConfig = MakeAtomFromExpression(Pos, ctx, arg);
             } else if (arg->GetLabel() == "RunConfig") {
+                if (function->IsScript()) {
+                    ctx.Error() << "Udf: RunConfig is not supported for script udfs";
+                    return false;
+                }
+
                 RunConfig = arg;
+            } else if (arg->GetLabel() == "Cpu") {
+                Cpu = MakeAtomFromExpression(Pos, ctx, arg);
+            } else if (arg->GetLabel() == "ExtraMem") {
+                ExtraMem = MakeAtomFromExpression(Pos, ctx, arg);
+            } else {
+                ctx.Error() << "Udf: unexpected named argument: " << arg->GetLabel();
+                return false;
             }
         }
     }
@@ -3073,6 +3114,31 @@ TNodePtr TUdfNode::GetRunConfig() const {
 
 const TDeferredAtom& TUdfNode::GetTypeConfig() const {
     return TypeConfig;
+}
+
+TNodePtr TUdfNode::BuildOptions() const {
+    if (Cpu.Empty() && ExtraMem.Empty()) {
+        return nullptr;
+    }
+
+    auto options = Y();
+    if (!Cpu.Empty()) {
+        options = L(options, Q(Y(Q("cpu"), Cpu.Build())));
+    }
+
+    if (!ExtraMem.Empty()) {
+        options = L(options, Q(Y(Q("extraMem"), ExtraMem.Build())));
+    }
+
+    return Q(options);
+}
+
+bool TUdfNode::IsScript() const {
+    return ScriptUdf;
+}
+
+const TVector<TNodePtr>& TUdfNode::GetScriptArgs() const {
+    return ScriptArgs;
 }
 
 TUdfNode* TUdfNode::GetUdfNode() {

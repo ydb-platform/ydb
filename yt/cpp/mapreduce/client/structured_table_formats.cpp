@@ -4,8 +4,7 @@
 #include "skiff.h"
 
 #include <yt/cpp/mapreduce/common/retry_lib.h>
-
-#include <yt/cpp/mapreduce/http/retry_request.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>

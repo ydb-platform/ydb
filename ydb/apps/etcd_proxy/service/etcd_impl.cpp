@@ -416,6 +416,28 @@ struct TTxn : public TOperation {
     std::vector<TCompare> Compares;
     std::vector<TRequestOp> Success, Failure;
 
+    using TKeysSet = std::unordered_set<std::pair<std::string, std::string>>;
+
+    void GetKeys(TKeysSet& keys) const {
+        for (const auto& compare : Compares)
+            keys.emplace(compare.Key, compare.RangeEnd);
+
+        const auto get = [](const std::vector<TRequestOp>& operations, TKeysSet& keys) {
+            for (const auto& operation : operations) {
+                if (const auto oper = std::get_if<TRange>(&operation))
+                    keys.emplace(oper->Key, oper->RangeEnd);
+                else if (const auto oper = std::get_if<TPut>(&operation))
+                    keys.emplace(oper->Key, std::string());
+                else if (const auto oper = std::get_if<TDeleteRange>(&operation))
+                    keys.emplace(oper->Key, oper->RangeEnd);
+                else if (const auto oper = std::get_if<TTxn>(&operation))
+                    oper->GetKeys(keys);
+            }
+        };
+        get(Success, keys);
+        get(Failure, keys);
+    }
+
     template<class TOperation, class TSrc>
     static bool Parse(std::vector<TRequestOp>& operations, const TSrc& src) {
         TOperation op;
@@ -569,8 +591,8 @@ class TEtcdRequestGrpc
 {
     friend class TBaseEtcdRequest;
 public:
-    TEtcdRequestGrpc(IRequestNoOpCtx* request, TSharedStuff::TPtr stuff)
-        : Request_(request), Stuff(std::move(stuff))
+    TEtcdRequestGrpc(std::unique_ptr<IRequestCtx> request, TSharedStuff::TPtr stuff)
+        : Request_(std::move(request)), Stuff(std::move(stuff))
     {}
 
     void Bootstrap(const TActorContext&) {
@@ -620,7 +642,7 @@ protected:
         this->Die(ctx);
     }
 
-    const std::shared_ptr<IRequestNoOpCtx> Request_;
+    const std::unique_ptr<IRequestCtx> Request_;
     const TSharedStuff::TPtr Stuff;
 };
 
@@ -718,6 +740,12 @@ private:
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
         AddParam("Revision", params, Revision);
+
+        TTxn::TKeysSet keys;
+        Txn.GetKeys(keys);
+        Cerr << __func__ << " keys: " << keys.size() << Endl;
+     //   const bool singleKey = keys.size() < 2U;
+
         size_t resultsCounter = 0U, paramsCounter = 0U;
         return Txn.MakeQueryWithParams(sql, params, &resultsCounter, &paramsCounter);
     }
@@ -928,40 +956,40 @@ private:
 
 }
 
-NActors::IActor* MakeRange(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
-    return new TRangeRequest(p, std::move(stuff));
+NActors::IActor* MakeRange(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+    return new TRangeRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakePut(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
-    return new TPutRequest(p, std::move(stuff));
+NActors::IActor* MakePut(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+    return new TPutRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeDeleteRange(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
-    return new TDeleteRangeRequest(p, std::move(stuff));
+NActors::IActor* MakeDeleteRange(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+    return new TDeleteRangeRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeTxn(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
-    return new TTxnRequest(p, std::move(stuff));
+NActors::IActor* MakeTxn(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+    return new TTxnRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeCompact(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
-    return new TCompactRequest(p, std::move(stuff));
+NActors::IActor* MakeCompact(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+    return new TCompactRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseGrant(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
-    return new TLeaseGrantRequest(p, std::move(stuff));
+NActors::IActor* MakeLeaseGrant(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+    return new TLeaseGrantRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseRevoke(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
-    return new TLeaseRevokeRequest(p, std::move(stuff));
+NActors::IActor* MakeLeaseRevoke(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+    return new TLeaseRevokeRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseTimeToLive(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
-    return new TLeaseTimeToLiveRequest(p, std::move(stuff));
+NActors::IActor* MakeLeaseTimeToLive(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+    return new TLeaseTimeToLiveRequest(std::move(p), std::move(stuff));
 }
 
-NActors::IActor* MakeLeaseLeases(IRequestNoOpCtx* p, TSharedStuff::TPtr stuff) {
-    return new TLeaseLeasesRequest(p, std::move(stuff));
+NActors::IActor* MakeLeaseLeases(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {
+    return new TLeaseLeasesRequest(std::move(p), std::move(stuff));
 }
 
 } // namespace NEtcd

@@ -332,9 +332,9 @@ void TEtcdKVService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         this, this->GetService(), CQ,                                                       \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                      \
             NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());       \
-            ActorSystem->Register(Make##methodName(new TEtcdRequestCall<                       \
+            ActorSystem->Register(Make##methodName(std::make_unique<TEtcdRequestCall<          \
                 etcdserverpb::Y_CAT(secondName, Request),                                       \
-                etcdserverpb::Y_CAT(secondName, Response)>(reqCtx),                              \
+                etcdserverpb::Y_CAT(secondName, Response)>>(reqCtx),                             \
             Stuff));                                                                              \
         },                                                                                         \
         &etcdserverpb::KV::AsyncService::Y_CAT(Request, methodName),                               \
@@ -387,15 +387,15 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         this, this->GetService(), CQ,                                                       \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                      \
             NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());       \
-            ActorSystem->Register(Make##methodName(new TEtcdRequestCall<                       \
+            ActorSystem->Register(Make##methodName(std::make_unique<TEtcdRequestCall<          \
                 etcdserverpb::Y_CAT(methodName, Request),                                       \
-                etcdserverpb::Y_CAT(methodName, Response)>(reqCtx),                              \
+                etcdserverpb::Y_CAT(methodName, Response)>>(reqCtx),                             \
             Stuff));                                                                              \
-        },                                                                                         \
-        &etcdserverpb::Lease::AsyncService::Y_CAT(Request, methodName),                            \
-        "Lease/" Y_STRINGIZE(methodName),                                                          \
-        logger,                                                                                    \
-        getCounterBlock("etcd", Y_STRINGIZE(methodName))                                           \
+        },                                                                                        \
+        &etcdserverpb::Lease::AsyncService::Y_CAT(Request, methodName),                           \
+        "Lease/" Y_STRINGIZE(methodName),                                                         \
+        logger,                                                                                   \
+        getCounterBlock("etcd", Y_STRINGIZE(methodName))                                          \
     )->Run()
 
     SETUP_ETCD_LEASE_METHOD(LeaseGrant);

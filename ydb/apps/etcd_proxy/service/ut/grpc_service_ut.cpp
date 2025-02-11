@@ -608,6 +608,145 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
             }
          });
     }
+
+    Y_UNIT_TEST(TxnMultiKeysAndOperations) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            Put("one", "first", etcd);
+            Put("two", "second", etcd);
+            Put("three", "third", etcd);
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                {
+                    const auto compare = txnRequest.add_compare();
+                    compare->set_result(etcdserverpb::Compare_CompareResult_LESS);
+                    compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
+                    compare->set_key("one");
+                    compare->set_value("dd");
+                }
+
+                {
+                    const auto compare = txnRequest.add_compare();
+                    compare->set_result(etcdserverpb::Compare_CompareResult_GREATER);
+                    compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
+                    compare->set_key("two");
+                    compare->set_value("tt");
+                }
+
+                {
+                    const auto compare = txnRequest.add_compare();
+                    compare->set_result(etcdserverpb::Compare_CompareResult_NOT_EQUAL);
+                    compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
+                    compare->set_key("three");
+                    compare->set_value("xx");
+                }
+
+                {
+                    const auto put = txnRequest.add_success()->mutable_request_put();
+                    put->set_key("one");
+                    put->set_value("1");
+                }
+
+                {
+                    const auto put = txnRequest.add_success()->mutable_request_range();
+                    put->set_key("two");
+                }
+
+                {
+                    const auto put = txnRequest.add_success()->mutable_request_delete_range();
+                    put->set_key("three");
+                }
+
+                {
+                    const auto put = txnRequest.add_failure()->mutable_request_put();
+                    put->set_key("one");
+                    put->set_value("eerste");
+                    put->set_prev_kv(true);
+                }
+
+                {
+                    const auto put = txnRequest.add_failure()->mutable_request_put();
+                    put->set_key("two");
+                    put->set_value("twede");
+                    put->set_prev_kv(true);
+                }
+
+                {
+                    const auto put = txnRequest.add_failure()->mutable_request_put();
+                    put->set_key("three");
+                    put->set_value("driede");
+                    put->set_prev_kv(true);
+                }
+
+                etcdserverpb::TxnResponse txnResponse;
+                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+
+                UNIT_ASSERT(!txnResponse.succeeded());
+
+                UNIT_ASSERT_VALUES_EQUAL(txnResponse.responses(0).response_put().prev_kv().value(), "first");
+                UNIT_ASSERT_VALUES_EQUAL(txnResponse.responses(1).response_put().prev_kv().value(), "second");
+                UNIT_ASSERT_VALUES_EQUAL(txnResponse.responses(2).response_put().prev_kv().value(), "third");
+            }
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                {
+                    const auto compare = txnRequest.add_compare();
+                    compare->set_result(etcdserverpb::Compare_CompareResult_LESS);
+                    compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
+                    compare->set_key("one");
+                    compare->set_value("first");
+                }
+
+                {
+                    const auto compare = txnRequest.add_compare();
+                    compare->set_result(etcdserverpb::Compare_CompareResult_GREATER);
+                    compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
+                    compare->set_key("two");
+                    compare->set_value("second");
+                }
+
+                {
+                    const auto compare = txnRequest.add_compare();
+                    compare->set_result(etcdserverpb::Compare_CompareResult_NOT_EQUAL);
+                    compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
+                    compare->set_key("three");
+                    compare->set_value("third");
+                }
+
+                {
+                    const auto put = txnRequest.add_success()->mutable_request_put();
+                    put->set_key("one");
+                    put->set_value("1");
+                }
+
+                {
+                    const auto put = txnRequest.add_success()->mutable_request_range();
+                    put->set_key("two");
+                }
+
+                {
+                    const auto put = txnRequest.add_success()->mutable_request_delete_range();
+                    put->set_key("three");
+                }
+
+                {
+                    const auto range = txnRequest.add_failure()->mutable_request_range();
+                    range->set_key("one");
+                    range->set_range_end("txn");
+                }
+
+                etcdserverpb::TxnResponse txnResponse;
+                etcd->Txn(&txnCtx, txnRequest, &txnResponse);
+
+                UNIT_ASSERT(txnResponse.succeeded());
+            }
+        });
+    }
 } // Y_UNIT_TEST_SUITE(Etcd_KV)
 
 Y_UNIT_TEST_SUITE(Etcd_Lease) {

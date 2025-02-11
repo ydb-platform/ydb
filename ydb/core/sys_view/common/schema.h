@@ -13,6 +13,7 @@ namespace NSysView {
 constexpr TStringBuf PartitionStatsName = "partition_stats";
 constexpr TStringBuf NodesName = "nodes";
 constexpr TStringBuf QuerySessions = "query_sessions";
+constexpr TStringBuf ResourcePoolsName = "resource_pools";
 
 constexpr TStringBuf TopQueriesByDuration1MinuteName = "top_queries_by_duration_one_minute";
 constexpr TStringBuf TopQueriesByDuration1HourName = "top_queries_by_duration_one_hour";
@@ -733,6 +734,22 @@ struct Schema : NIceDb::Schema {
             Statement,
             PathType
         >;
+    };
+
+    struct ResourcePools : Table<22> {
+        struct Name  : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Config  : Column<2, NScheme::NTypeIds::JsonDocument> {};
+        struct Owner  : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct Permissions  : Column<4, NScheme::NTypeIds::JsonDocument> {};
+        struct EffectivePermissions  : Column<5, NScheme::NTypeIds::JsonDocument> {};
+
+        using TKey = TableKey<Name>;
+        using TColumns = TableColumns<
+            Name,
+            Config,
+            Owner,
+            Permissions,
+            EffectivePermissions>;
     };
 };
 

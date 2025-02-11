@@ -187,22 +187,22 @@ void TScopedAlloc::Release() {
     }
 }
 
-void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
-    auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
-    auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
+void* MKQLAllocSlow(size_t size, TAllocState* state, const EMemorySubPool mPool) {
+    auto alignedSize = AlignUp(size + sizeof(TAllocPageHeader) + MKQL_ALIGNMENT, MKQL_ALIGNMENT);
+    auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), alignedSize);
 
     auto* page = (TAllocPageHeader*)state->GetBlock(capacity);
 
     page->Deallocated = 0;
     page->Capacity = capacity;
-    page->Offset = roundedSize;
+    page->Offset = alignedSize;
     page->UseCount = 1;
     page->MyAlloc = state;
     page->Link = nullptr;
 
     auto*& mPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
 
-    auto newPageAvailable = capacity - roundedSize;
+    auto newPageAvailable = capacity - alignedSize;
     auto curPageAvailable = mPage->Capacity - mPage->Offset;
 
     if (newPageAvailable > curPageAvailable) {
@@ -210,7 +210,7 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     }
 
     void* ret = (char*)page + sizeof(TAllocPageHeader);
-    ASAN_POISON_MEMORY_REGION((char*)ret + sz, capacity - sz - sizeof(TAllocPageHeader));
+    ASAN_POISON_MEMORY_REGION((char*)ret + size, capacity - size - sizeof(TAllocPageHeader));
     return ret;
 }
 

@@ -26,6 +26,9 @@ struct TAllocPageHeader {
     ui64 Deallocated;
     TAlignedPagePool* MyAlloc;
     TAllocPageHeader* Link;
+#if defined(_asan_enabled_)
+    const char Redzone[MKQL_ALIGNMENT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+#endif
 };
 
 using TMemorySubPoolIdx = ui32;
@@ -67,7 +70,6 @@ struct TAllocState : public TAlignedPagePool
 #endif
 
         void* ret = Alloc(size);
-        ASAN_UNPOISON_MEMORY_REGION(ret, size);
         return ret;
     }
 
@@ -339,18 +341,18 @@ inline void* MKQLAllocFastDeprecated(const size_t sz, TAllocState* state, const 
 }
 #endif
 
-// unpoisoned: [0, +sz)
-inline void* MKQLAllocFastWithSize(const size_t sz, TAllocState* state, const EMemorySubPool mPool) {
+// unpoisoned: [0, +size)
+inline void* MKQLAllocFastWithSize(const size_t size, TAllocState* state, const EMemorySubPool mPool) {
     Y_DEBUG_ABORT_UNLESS(state);
 
-    bool useMalloc = state->SupportsSizedAllocators && sz > MaxPageUserData;
+    bool useMalloc = state->SupportsSizedAllocators && size > MaxPageUserData;
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     useMalloc = useMalloc || TAllocState::IsDefaultAllocatorUsed();
 #endif
 
     if (Y_UNLIKELY(useMalloc)) {
-        state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
-        auto* ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
+        state->OffloadAlloc(sizeof(TAllocState::TListEntry) + size);
+        auto* ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + size);
         if (!ret) {
             throw TMemoryLimitExceededException();
         }
@@ -361,15 +363,15 @@ inline void* MKQLAllocFastWithSize(const size_t sz, TAllocState* state, const EM
 
     auto* page = state->CurrentPages[(TMemorySubPoolIdx)mPool];
 
-    if (Y_LIKELY(page->Offset + sz <= page->Capacity)) {
+    if (Y_LIKELY(page->Offset + size + MKQL_ALIGNMENT <= page->Capacity)) {
         void* ret = (char*)page + page->Offset;
-        page->Offset = AlignUp(page->Offset + sz, MKQL_ALIGNMENT);
+        page->Offset = AlignUp(page->Offset + size + MKQL_ALIGNMENT, MKQL_ALIGNMENT);
         ++page->UseCount;
-        ASAN_UNPOISON_MEMORY_REGION(ret, sz);
+        ASAN_UNPOISON_MEMORY_REGION(ret, size);
         return ret;
     }
 
-    void* ret = MKQLAllocSlow(sz, state, mPool);
+    void* ret = MKQLAllocSlow(size, state, mPool);
     return ret;
 }
 

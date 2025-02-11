@@ -246,7 +246,7 @@ public:
 #endif
 
 protected:
-    void* Alloc(size_t size); // poisoned
+    void* Alloc(size_t size); // unpoisoned: [0, +size)
     void Free(void* ptr, size_t size) noexcept; // poisoned
 
     void UpdatePeaks() {

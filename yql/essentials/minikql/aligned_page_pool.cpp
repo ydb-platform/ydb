@@ -455,7 +455,6 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
     } else {
 #endif
         res = Alloc(POOL_PAGE_SIZE);
-        ASAN_UNPOISON_MEMORY_REGION(res, POOL_PAGE_SIZE);
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     }
 #endif
@@ -504,7 +503,6 @@ void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
         return GetPage();
     } else {
         auto* ptr = Alloc(size);
-        ASAN_UNPOISON_MEMORY_REGION(ptr, size);
         Y_DEBUG_ABORT_UNLESS(ActiveBlocks.emplace(ptr, size).second);
         return ptr;
     }
@@ -534,6 +532,7 @@ void TAlignedPagePoolImpl<T>::ReturnBlock(void* ptr, size_t size) noexcept {
 
 template<typename T>
 void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
+    const auto origSize = size;
     void* res = nullptr;
     size = AlignUp(size, SYS_PAGE_SIZE);
 
@@ -625,17 +624,19 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
     }
     ++AllocCount;
     UpdatePeaks();
+
+    ASAN_UNPOISON_MEMORY_REGION(res, origSize);
     return res;
 }
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::Free(void* ptr, size_t size) noexcept {
+    ASAN_POISON_MEMORY_REGION(ptr, size);
+
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size <= MaxMidSize) {
         size = FastClp2(size);
     }
-
-    ASAN_POISON_MEMORY_REGION(ptr, size);
 
     if (size <= MaxMidSize) {
         auto level = LeastSignificantBit(size) - LeastSignificantBit(POOL_PAGE_SIZE);

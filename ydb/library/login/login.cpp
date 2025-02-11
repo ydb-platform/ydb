@@ -141,6 +141,10 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
 
     if (request.CanLogin.has_value()) {
         user.IsEnabled = request.CanLogin.value();
+
+        if (user.IsEnabled && AccountLockout.AttemptThreshold != 0 && user.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold) {
+            SidsShouldResetByUnbanning.insert(user.Name);
+        }
     }
 
     return response;
@@ -354,6 +358,7 @@ bool TLoginProvider::CheckLockout(const TSidRecord& sid) const {
 
 void TLoginProvider::ResetFailedLoginAttemptCount(TSidRecord* sid) {
     sid->FailedLoginAttemptCount = 0;
+    SidsShouldResetByUnbanning.erase(sid->Name);
 }
 
 void TLoginProvider::UnlockAccount(TSidRecord* sid) {
@@ -361,12 +366,18 @@ void TLoginProvider::UnlockAccount(TSidRecord* sid) {
 }
 
 bool TLoginProvider::ShouldResetFailedAttemptCount(const TSidRecord& sid) const {
+    if (SidsShouldResetByUnbanning.contains(sid.Name)) {
+        return true;
+    }
+
     if (sid.FailedLoginAttemptCount == 0) {
         return false;
     }
+
     if (AccountLockout.AttemptResetDuration == std::chrono::system_clock::duration::zero()) {
         return false;
     }
+
     return sid.LastFailedLogin + AccountLockout.AttemptResetDuration < std::chrono::system_clock::now();
 }
 

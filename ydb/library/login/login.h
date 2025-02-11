@@ -222,14 +222,16 @@ private:
     static bool CheckAllowedName(const TString& name);
 
     bool CheckLockout(const TSidRecord& sid) const;
-    static void ResetFailedLoginAttemptCount(TSidRecord* sid);
-    static void UnlockAccount(TSidRecord* sid);
+    void ResetFailedLoginAttemptCount(TSidRecord* sid);
+    void UnlockAccount(TSidRecord* sid);
     bool ShouldResetFailedAttemptCount(const TSidRecord& sid) const;
     bool ShouldUnlockAccount(const TSidRecord& sid) const;
     bool CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
 
     struct TImpl;
     THolder<TImpl> Impl;
+
+    std::unordered_set<TString> SidsShouldResetByUnbanning;
 
     TPasswordChecker PasswordChecker;
     THashChecker HashChecker;

@@ -6,7 +6,7 @@
 
 namespace NSQLComplete {
 
-    static constexpr std::string_view WordBreakCharacters = " \t\v\f\a\b\r\n`~!@#$%^&*-=+[](){}\\|;:'\".,<>/?";
+    static const char WordBreakCharacters[] = " \t\v\f\a\b\r\n`~!@#$%^&*-=+[](){}\\|;:'\".,<>/?";
 
     bool IsWordBoundary(char ch);
 

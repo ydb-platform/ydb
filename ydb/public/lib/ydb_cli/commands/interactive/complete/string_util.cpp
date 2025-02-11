@@ -4,8 +4,13 @@
 
 namespace NSQLComplete {
 
-    bool IsWordBoundary(char ch) {
-        return WordBreakCharacters.contains(ch);
+    bool IsWordBoundary(char ch) { // Is optimized into table lookup by clang
+        for (size_t i = 0; i < sizeof(WordBreakCharacters) - 1; ++i) {
+            if (WordBreakCharacters[i] == ch) {
+                return true;
+            }
+        }
+        return false;
     }
 
     size_t LastWordIndex(TStringBuf text) {

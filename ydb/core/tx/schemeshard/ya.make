@@ -280,6 +280,7 @@ PEERDIR(
     ydb/core/audit
     ydb/core/base
     ydb/core/blob_depot
+    ydb/core/blobstorage/base
     ydb/core/blockstore/core
     ydb/core/engine
     ydb/core/engine/minikql

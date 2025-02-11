@@ -1,6 +1,8 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
+#include <ydb/core/mind/bscontroller/bsc.h>
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
@@ -65,14 +67,18 @@ Y_UNIT_TEST_SUITE(TestSuete1) {
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController),
+                     &CreateFlatBsController);
+
         ui64 txId = 100;
 
         CreateTestSubdomain(runtime, env, &txId, "Database1");
         CreateTestSubdomain(runtime, env, &txId, "Database2");
 
-        env.SimulateSleep(runtime, TDuration::Seconds(3));
-        auto sender = runtime.AllocateEdgeActor();
 
+        env.SimulateSleep(runtime, TDuration::Seconds(3));
+
+        auto sender = runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvSchemeShard::TEvDataErasureInfoRequest>();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 

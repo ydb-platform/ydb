@@ -1,5 +1,7 @@
 #include "schemeshard_impl.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
+
 namespace NKikimr::NSchemeShard {
 
 NOperationQueue::EStartStatus TSchemeShard::StartDataErasure(const TPathId& pathId) {
@@ -153,10 +155,39 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const 
     TabletCounters->Cumulative()[COUNTER_DATA_ERASURE_OK].Increment(1);
     UpdateDataErasureQueueMetrics();
 
-    if (ActiveDataErasureTenants.empty()) {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ ActiveDataErasureTenants is empty. Send to BSC");
-        ctx.Send(SelfId(), new TEvSchemeShard::TEvCompleteDataErasure(DataErasureGeneration));
+    bool isDataErasureCompleted = true;
+    for (const auto& [pathId, isCompleted] : RunningDataErasureForTenants) {
+        if (!isCompleted) {
+            isDataErasureCompleted = false;
+            break;
+        }
     }
+
+    if (isDataErasureCompleted) {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ ActiveDataErasureTenants is empty. Send to BSC");
+        std::unique_ptr<TEvBlobStorage::TEvControllerShredRequest> request(
+            new TEvBlobStorage::TEvControllerShredRequest(DataErasureGeneration));
+
+        PipeClientCache->Send(ctx, MakeBSControllerID(), request.release());
+    }
+}
+
+void TSchemeShard::Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+
+    if (record.GetCurrentGeneration() != DataErasureGeneration) {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvControllerShredResponse: Get unexpected generation " << record.GetCurrentGeneration());
+        return;
+    }
+
+    if (record.GetCompleted()) {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvControllerShredResponse: Data shred in BSC is completed");
+    } else {
+        // Schedule new request to BS controller to get data shred progress
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvControllerShredResponse: Progress data shred in BSC " << record.GetProgress10k());
+    }
+    // BS Controller always return completed as false
+    ctx.Send(SelfId(), new TEvSchemeShard::TEvCompleteDataErasure(DataErasureGeneration));
 }
 
 void TSchemeShard::UpdateDataErasureQueueMetrics() {
@@ -218,7 +249,7 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
     }
     void DoComplete(const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "+++TTxRunDataErasure Complete at schemeshard: " << Self->TabletID());
+            "TTxRunDataErasure Complete at schemeshard: " << Self->TabletID());
     }
 };
 
@@ -249,7 +280,10 @@ struct TSchemeShard::TTxCompleteDataErasure : public TSchemeShard::TRwTxBase {
         db.Table<Schema::ActiveDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::ActiveDataErasureTenants::IsCompleted>(true);
     }
 
-    void DoComplete(const TActorContext& /*ctx*/) override {}
+    void DoComplete(const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxCompleteDataErasure Complete at schemeshard: " << Self->TabletID());
+    }
 };
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasure(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev) {
@@ -263,7 +297,7 @@ struct TSchemeShard::TTxDataErasureSchedulerInit : public TSchemeShard::TRwTxBas
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "+++ TTxDataErasureSchedulerInit Execute at schemeshard: " << Self->TabletID());
+            "TTxDataErasureSchedulerInit Execute at schemeshard: " << Self->TabletID());
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::DataErasureScheduler>().Key(0).Update<Schema::DataErasureScheduler::IsCompleted,
                                                                Schema::DataErasureScheduler::StartTime>(true, AppData(ctx)->TimeProvider->Now().MicroSeconds());
@@ -271,7 +305,7 @@ struct TSchemeShard::TTxDataErasureSchedulerInit : public TSchemeShard::TRwTxBas
 
     void DoComplete(const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "+++ TTxDataErasureSchedulerInit Complete at schemeshard: " << Self->TabletID());
+            "TTxDataErasureSchedulerInit Complete at schemeshard: " << Self->TabletID());
     }
 };
 

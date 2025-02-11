@@ -18,6 +18,7 @@
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/system/info.h>
 #include <util/system/mutex.h>
 #include <util/thread/pool.h>
 
@@ -903,6 +904,7 @@ public:
     explicit TDataWriter(
             const TString& path,
             const TTableDescription& desc,
+            ui32 partitionCount,
             const TRestoreSettings& settings,
             TImportClient& importClient,
             TTableClient& tableClient,
@@ -925,11 +927,17 @@ public:
         }
 
         TasksQueue = MakeHolder<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
-        TasksQueue->Start(settings.InFly_, settings.InFly_ + 1);
+
+        size_t threadCount = settings.MaxInFlight_;
+        if (!threadCount) {
+            threadCount = Min<size_t>(partitionCount, NSystemInfo::CachedNumberOfCpus());
+        }
+
+        TasksQueue->Start(threadCount, threadCount + 1);
     }
 
     bool Push(NPrivate::TBatch&& data) override {
-        if (data.size() > TRestoreSettings::MaxBytesPerRequest) {
+        if (data.size() > TRestoreSettings::MaxImportDataBytesPerRequest) {
             LOG_E("Too much data: " << data.GetLocation());
             return false;
         }
@@ -989,13 +997,14 @@ NPrivate::IDataAccumulator* CreateImportDataAccumulator(
 NPrivate::IDataWriter* CreateImportDataWriter(
         const TString& path,
         const TTableDescription& desc,
+        ui32 partitionCount,
         TImportClient& importClient,
         TTableClient& tableClient,
         const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators,
         const TRestoreSettings& settings,
         const std::shared_ptr<TLog>& log)
 {
-    return new TDataWriter(path, desc, settings, importClient, tableClient, accumulators, log);
+    return new TDataWriter(path, desc, partitionCount, settings, importClient, tableClient, accumulators, log);
 }
 
 } // NDump

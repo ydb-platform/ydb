@@ -195,4 +195,5 @@ message TFeatureFlags {
     optional bool EnableDatabaseAdmin = 169 [default = false];
     optional bool EnableChangefeedsImport = 170 [default = false];
     optional bool EnablePermissionsExport = 171 [default = false];
+    optional bool EnableDataErasure = 172 [default = false];
 }

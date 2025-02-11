@@ -70,15 +70,17 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController),
                      &CreateFlatBsController);
 
+        runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
         ui64 txId = 100;
 
         CreateTestSubdomain(runtime, env, &txId, "Database1");
         CreateTestSubdomain(runtime, env, &txId, "Database2");
 
-
         env.SimulateSleep(runtime, TDuration::Seconds(3));
 
-        auto sender = runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvSchemeShard::TEvDataErasureInfoRequest>();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 

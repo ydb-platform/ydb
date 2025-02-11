@@ -408,6 +408,7 @@ public:
     bool EnableVectorIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableParameterizedDecimal = false;
+    bool EnableDataErasure = false;
 
     TShardDeleter ShardDeleter;
 

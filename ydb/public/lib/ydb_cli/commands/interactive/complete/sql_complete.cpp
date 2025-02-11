@@ -13,7 +13,7 @@
 
 namespace NSQLComplete {
 
-    template <ESqlSyntaxMode M>
+    template <bool IsAnsiLexer>
     class TSpecializedSqlCompletionEngine: public ISqlCompletionEngine {
     private:
         using TDefaultYQLGrammar = TAntlrGrammar<
@@ -25,13 +25,13 @@ namespace NSQLComplete {
             NALPAnsiAntlr4::SQLv1Antlr4Parser>;
 
         using G = std::conditional_t<
-            M == ESqlSyntaxMode::Default,
-            TDefaultYQLGrammar,
-            TAnsiYQLGrammar>;
+            IsAnsiLexer,
+            TAnsiYQLGrammar,
+            TDefaultYQLGrammar>;
 
     public:
         TSpecializedSqlCompletionEngine()
-            : Grammar(&GetSqlGrammar(M))
+            : Grammar(&GetSqlGrammar(IsAnsiLexer))
             , C3(ComputeC3Config())
         {
         }
@@ -98,23 +98,21 @@ namespace NSQLComplete {
     class TSqlCompletionEngine: public ISqlCompletionEngine {
     public:
         TCompletionContext Complete(TCompletionInput input) override {
-            auto mode = QuerySyntaxMode(TString(input.Text));
-            auto& engine = GetSpecializedEngine(mode);
+            auto isAnsiLexer = IsAnsiQuery(TString(input.Text));
+            auto& engine = GetSpecializedEngine(isAnsiLexer);
             return engine.Complete(std::move(input));
         }
 
     private:
-        ISqlCompletionEngine& GetSpecializedEngine(ESqlSyntaxMode mode) {
-            switch (mode) {
-                case ESqlSyntaxMode::Default:
-                    return DefaultEngine;
-                case ESqlSyntaxMode::ANSI:
-                    return AnsiEngine;
+        ISqlCompletionEngine& GetSpecializedEngine(bool isAnsiLexer) {
+            if (isAnsiLexer) {
+                return AnsiEngine;
             }
+            return DefaultEngine;
         }
 
-        TSpecializedSqlCompletionEngine<ESqlSyntaxMode::Default> DefaultEngine;
-        TSpecializedSqlCompletionEngine<ESqlSyntaxMode::ANSI> AnsiEngine;
+        TSpecializedSqlCompletionEngine</* IsAnsiLexer = */ false> DefaultEngine;
+        TSpecializedSqlCompletionEngine</* IsAnsiLexer = */ true> AnsiEngine;
     };
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine() {

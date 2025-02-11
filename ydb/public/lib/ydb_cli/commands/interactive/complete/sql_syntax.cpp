@@ -9,13 +9,6 @@ namespace NSQLComplete {
     using NSQLTranslation::TTranslationSettings;
     using NYql::TIssues;
 
-    ESqlSyntaxMode QuerySyntaxMode(const TString& query) {
-        if (IsAnsiQuery(query)) {
-            return ESqlSyntaxMode::ANSI;
-        }
-        return ESqlSyntaxMode::Default;
-    }
-
     bool IsAnsiQuery(const TString& query) {
         TTranslationSettings settings;
         TIssues issues;

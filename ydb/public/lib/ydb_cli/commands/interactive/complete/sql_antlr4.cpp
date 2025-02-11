@@ -18,8 +18,8 @@ namespace NSQLComplete {
 
     class TSqlGrammar: public ISqlGrammar {
     public:
-        TSqlGrammar(ESqlSyntaxMode mode)
-            : Vocabulary(GetVocabulary(mode))
+        TSqlGrammar(bool isAnsiLexer)
+            : Vocabulary(GetVocabulary(isAnsiLexer))
             , AllTokens(ComputeAllTokens())
             , KeywordTokens(ComputeKeywordTokens())
         {
@@ -66,13 +66,11 @@ namespace NSQLComplete {
         }
 
     private:
-        static const antlr4::dfa::Vocabulary* GetVocabulary(ESqlSyntaxMode mode) {
-            switch (mode) { // Taking a reference is okay as vocabulary storage is static
-                case ESqlSyntaxMode::Default:
-                    return &NALPDefaultAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
-                case ESqlSyntaxMode::ANSI:
-                    return &NALPAnsiAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
+        static const antlr4::dfa::Vocabulary* GetVocabulary(bool isAnsiLexer) {
+            if (isAnsiLexer) { // Taking a reference is okay as vocabulary storage is static
+                return &NALPAnsiAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
             }
+            return &NALPDefaultAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
         }
 
         std::unordered_set<TTokenId> ComputeAllTokens() {
@@ -105,16 +103,14 @@ namespace NSQLComplete {
         const std::unordered_set<TTokenId> KeywordTokens;
     };
 
-    const ISqlGrammar& GetSqlGrammar(ESqlSyntaxMode mode) {
-        const static TSqlGrammar DefaultSqlGrammar(mode);
-        const static TSqlGrammar AnsiSqlGrammar(mode);
+    const ISqlGrammar& GetSqlGrammar(bool isAnsiLexer) {
+        const static TSqlGrammar DefaultSqlGrammar(/* isAnsiLexer = */ false);
+        const static TSqlGrammar AnsiSqlGrammar(/* isAnsiLexer = */ true);
 
-        switch (mode) {
-            case ESqlSyntaxMode::Default:
-                return DefaultSqlGrammar;
-            case ESqlSyntaxMode::ANSI:
-                return AnsiSqlGrammar;
+        if (isAnsiLexer) {
+            return AnsiSqlGrammar;
         }
+        return DefaultSqlGrammar;
     }
 
 } // namespace NSQLComplete

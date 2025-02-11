@@ -23,6 +23,6 @@ namespace NSQLComplete {
         virtual ~ISqlGrammar() = default;
     };
 
-    const ISqlGrammar& GetSqlGrammar(ESqlSyntaxMode mode);
+    const ISqlGrammar& GetSqlGrammar(bool isAnsiLexer);
 
 } // namespace NSQLComplete

@@ -19,14 +19,7 @@ namespace NSQLComplete {
     class TSqlGrammar: public ISqlGrammar {
     public:
         TSqlGrammar(ESqlSyntaxMode mode)
-            : Vocabulary([&] { // Taking a reference is okay as vocabulary storage is static
-                switch (mode) {
-                    case ESqlSyntaxMode::Default:
-                        return &NALPDefaultAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
-                    case ESqlSyntaxMode::ANSI:
-                        return &NALPAnsiAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
-                }
-            }())
+            : Vocabulary(GetVocabulary(mode))
             , AllTokens(ComputeAllTokens())
             , KeywordTokens(ComputeKeywordTokens())
         {
@@ -73,6 +66,15 @@ namespace NSQLComplete {
         }
 
     private:
+        static const antlr4::dfa::Vocabulary* GetVocabulary(ESqlSyntaxMode mode) {
+            switch (mode) { // Taking a reference is okay as vocabulary storage is static
+                case ESqlSyntaxMode::Default:
+                    return &NALPDefaultAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
+                case ESqlSyntaxMode::ANSI:
+                    return &NALPAnsiAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
+            }
+        }
+
         std::unordered_set<TTokenId> ComputeAllTokens() {
             const auto& vocabulary = GetVocabulary();
 

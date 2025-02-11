@@ -69,7 +69,7 @@ bool TKeyValueState::RemoveCollectedTrash(ISimpleDb &db) {
             ++collected;
         }
 
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC24, "Remove from Trash",
+        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC240, "Remove from Trash",
             (TabletId, TabletId), (RemovedCount, collected), (TrashBinSize, trashBinIt->second.size()), (TrashCount, GetTrashCount()));
 
         const TActorContext &ctx = TActivationContext::AsActorContext();
@@ -78,7 +78,7 @@ bool TKeyValueState::RemoveCollectedTrash(ISimpleDb &db) {
                 ctx.Send(ctx.SelfID, new TEvKeyValue::TEvForceTabletDataCleanup(generation));
             }
             CompletedCleanupTrashGeneration = Max(CompletedCleanupTrashGeneration, trashBinIt->first);
-            STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC24, "Remove trash bin",
+            STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC241, "Remove trash bin",
                 (TabletId, TabletId), (CompletedCleanupTrashGeneration, CompletedCleanupTrashGeneration), (generation, trashBinIt->first));
             trashBinIt = Trash.erase(trashBinIt);
         }
@@ -129,11 +129,11 @@ void TKeyValueState::CompleteGCComplete(const TActorContext &ctx, const TTabletS
 }
 
 bool TKeyValueState::StartCleanupData(ui64 generation, TActorId sender) {
-    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC24, "StartCleanupData",
+    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC242, "StartCleanupData",
         (TabletId, TabletId), (generation, generation), (sender, sender));
     const auto &ctx = TActivationContext::AsActorContext();
     if (CompletedCleanupGeneration >= generation) {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC24, "StartCleanupData already completed",
+        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC243, "StartCleanupData already completed",
             (TabletId, TabletId), (generation, generation), (sender, sender));
         ctx.Send(sender, TEvKeyValue::TEvCleanUpDataResponse::MakeAlreadyCompleted(generation));
         return false;
@@ -141,18 +141,18 @@ bool TKeyValueState::StartCleanupData(ui64 generation, TActorId sender) {
 
     CleanupGenerationToSender[generation] = sender;
     if (CompletedCleanupTrashGeneration >= generation) {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC24, "StartCleanupData already completed trash generation",
+        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC244, "StartCleanupData already completed trash generation",
             (TabletId, TabletId), (generation, generation), (sender, sender));
         return false;
     }
 
     if (Trash.rbegin()->first <= generation) {
         if (Trash.rbegin()->first < generation) {
-            STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC24, "StartCleanupData create new trash generation",
+            STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC245, "StartCleanupData create new trash generation",
                 (TabletId, TabletId), (generation, generation));
             Trash.emplace(generation, TSet<TLogoBlobID>());
         }
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC24, "StartCleanupData create next trash generation",
+        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC246, "StartCleanupData create next trash generation",
             (TabletId, TabletId), (generation, generation));
         Trash.emplace(generation + 1, TSet<TLogoBlobID>());
     }
@@ -167,15 +167,15 @@ bool TKeyValueState::StartCleanupData(ui64 generation, TActorId sender) {
     return true;
 }
 
-void TKeyValueState::CompleteCleanupDataExecute(ISimpleDb &db, const TActorContext &/*ctx*/) {
+void TKeyValueState::CompleteCleanupDataExecute(ISimpleDb &db, const TActorContext& /*ctx*/) {
     if (CompletedCleanupGeneration < CompletedCleanupTrashGeneration) {
         THelpers::DbUpdateCleanUpGeneration(CompletedCleanupTrashGeneration, db);
     }
 }
 
-void TKeyValueState::CompleteCleanupDataComplete(const TActorContext &/*ctx*/, const TTabletStorageInfo */*info*/) {
+void TKeyValueState::CompleteCleanupDataComplete(const TActorContext& /*ctx*/, const TTabletStorageInfo* /*info*/) {
     if (CompletedCleanupGeneration == CompletedCleanupTrashGeneration) {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC24, "CompleteCleanupDataComplete nothing to do",
+        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC247, "CompleteCleanupDataComplete nothing to do",
             (CompletedCleanupGeneration, CompletedCleanupGeneration), (CompletedCleanupTrashGeneration, CompletedCleanupTrashGeneration));
         return;
     }
@@ -183,13 +183,13 @@ void TKeyValueState::CompleteCleanupDataComplete(const TActorContext &/*ctx*/, c
     ui64 count = 0;
     while (CleanupGenerationToSender.size() && CleanupGenerationToSender.begin()->first <= CompletedCleanupGeneration) {
         auto it = CleanupGenerationToSender.begin();
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC24, "CleanUpDataComplete send TEvCleanUpDataResponse",
+        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC248, "CleanUpDataComplete send TEvCleanUpDataResponse",
             (CleanUpGeneration, it->first), (ResponseReceiver, it->second));
         TActivationContext::AsActorContext().Send(it->second, TEvKeyValue::TEvCleanUpDataResponse::MakeSuccess(it->first));
         CleanupGenerationToSender.erase(it);
         ++count;
     }
-    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC24, "CompleteCleanupDataComplete Sent# " << count << " responses",
+    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC249, "CompleteCleanupDataComplete Sent# " << count << " responses",
         (CompletedCleanupGeneration, CompletedCleanupGeneration), (CompletedCleanupTrashGeneration, CompletedCleanupTrashGeneration));
 }
 

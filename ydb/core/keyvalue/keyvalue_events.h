@@ -41,6 +41,7 @@ struct TEvKeyValue {
         EvExecuteTransactionResponse,
         EvGetStorageChannelStatusResponse,
         EvAcquireLockResponse,
+
         EvEnd
     };
 

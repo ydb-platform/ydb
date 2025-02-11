@@ -111,7 +111,6 @@ private: //events
     void AddReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, NUdf::TUnboxedValue *lookupPayload) {
             NUdf::TUnboxedValue* outputRowItems;
             NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
-            ui32 estimatedRowSize = 2;
             for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
                 const auto& [source, index] = OutputRowColumnOrder[i];
                 switch (source) {

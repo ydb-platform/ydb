@@ -380,10 +380,11 @@ private:
     }
 
     static TTableCreatorRetryPolicy::IRetryState::TPtr CreateRetryState() {
-        return TTableCreatorRetryPolicy::GetFixedIntervalPolicy(
+        return TTableCreatorRetryPolicy::GetExponentialBackoffPolicy(
                   [](bool longDelay){return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;}
                 , TDuration::MilliSeconds(100)
                 , TDuration::MilliSeconds(300)
+                , TDuration::Seconds(1)
                 , 100
             )->CreateRetryState();
     }

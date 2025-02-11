@@ -83,10 +83,11 @@ protected:
 
 private:
     static TRetryPolicy::IRetryState::TPtr CreateRetryState() {
-        return TRetryPolicy::GetFixedIntervalPolicy(
+        return TRetryPolicy::GetExponentialBackoffPolicy(
                   [](bool longDelay){return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;}
                 , TDuration::MilliSeconds(100)
                 , TDuration::MilliSeconds(500)
+                , TDuration::Seconds(1)
                 , 100
             )->CreateRetryState();
     }

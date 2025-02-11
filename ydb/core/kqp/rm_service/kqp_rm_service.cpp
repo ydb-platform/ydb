@@ -401,8 +401,10 @@ public:
     TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const override {
         TVector<NKikimrKqp::TKqpNodeResources> resources;
         std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
-        with_lock (ResourceSnapshotState->Lock) {
-            infos = ResourceSnapshotState->Snapshot;
+        if (ResourceSnapshotState) {
+            with_lock (ResourceSnapshotState->Lock) {
+                infos = ResourceSnapshotState->Snapshot;
+            }
         }
         if (infos != nullptr) {
             resources = *infos;
@@ -414,8 +416,10 @@ public:
     void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) override {
         LOG_AS_D("Schedule Snapshot request");
         std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
-        with_lock (ResourceSnapshotState->Lock) {
-            infos = ResourceSnapshotState->Snapshot;
+        if (ResourceSnapshotState) {
+            with_lock (ResourceSnapshotState->Lock) {
+                infos = ResourceSnapshotState->Snapshot;
+            }
         }
         TVector<NKikimrKqp::TKqpNodeResources> resources;
         if (infos != nullptr) {

@@ -118,6 +118,7 @@ namespace NTable {
         TVector<TIntrusiveConstPtr<TColdPart>> ColdParts;
         TTransactionMap CommittedTransactions;
         TTransactionSet RemovedTransactions;
+        TTransactionSet GarbageTransactions;
         TVector<TIntrusiveConstPtr<TTxStatusPart>> TxStatus;
     };
 

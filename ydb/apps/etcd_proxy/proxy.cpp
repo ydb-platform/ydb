@@ -1,4 +1,5 @@
 #include <ydb/library/services/services.pb.h>
+#include <util/stream/file.h>
 #include <util/system/mlock.h>
 #include <library/cpp/getopt/last_getopt.h>
 #include <ydb/library/actors/core/log.h>
@@ -14,10 +15,6 @@
 #include <ydb/core/grpc_services/base/base.h>
 
 #include "proxy.h"
-
-namespace NKikimrConfig {
-    class TAppConfig {};
-}
 
 namespace NEtcd {
 
@@ -84,6 +81,16 @@ int TProxy::StartServer() {
     NYdbGrpc::TServerOptions opts;
     opts.SetPort(ListeningPort);
 
+    if (!Root.empty() || !Cert.empty() || !Key.empty()) {
+        NYdbGrpc::TSslData sslData {
+            .Cert = TFileInput(Cert).ReadAll(),
+            .Key = TFileInput(Key).ReadAll(),
+            .Root = TFileInput(Root).ReadAll(),
+            .DoRequestClientCertificate = true
+        };
+        opts.SetSslData(std::move(sslData));
+    }
+
     const auto watchtower = ActorSystem->Register(NEtcd::BuildWatchtower(Counters, Stuff));
 
     GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts, Counters);
@@ -144,6 +151,10 @@ TProxy::TProxy(int argc, char** argv)
     opts.AddLongOption("init", "Initialize etcd databse").NoArgument().SetFlag(&Initialize_);
     opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&useStdErr);
     opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&mlock);
+
+    opts.AddLongOption("ca", "SSL CA certificate file").Optional().RequiredArgument("CA").StoreResult(&Root);;
+    opts.AddLongOption("cert", "SSL certificate file").Optional().RequiredArgument("CERT").StoreResult(&Cert);;
+    opts.AddLongOption("key", "SSL key file").Optional().RequiredArgument("KEY").StoreResult(&Key);;
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 

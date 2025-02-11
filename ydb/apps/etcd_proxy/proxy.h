@@ -43,11 +43,10 @@ private:
     std::unique_ptr<NActors::TActorSystem> ActorSystem;
     std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
 
-    // arguments
     bool Initialize_ = false;
     TString Database, Endpoint;
     uint16_t ListeningPort = 2379;
-    TString SslCertificate;
+    TString Root, Cert, Key;
 };
 
 }

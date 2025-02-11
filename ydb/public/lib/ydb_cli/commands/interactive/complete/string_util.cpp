@@ -16,7 +16,7 @@ namespace NSQLComplete {
     size_t LastWordIndex(TStringBuf text) {
         for (auto it = std::rbegin(text); it != std::rend(text); std::advance(it, 1)) {
             if (IsWordBoundary(*it)) {
-                return std::distance(it, std::rend(text)) + 1;
+                return std::distance(it, std::rend(text));
             }
         }
         return 0;

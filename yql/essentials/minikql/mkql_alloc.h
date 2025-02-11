@@ -307,11 +307,12 @@ private:
 
 void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool); // unpoisoned: [-sizeof(TAllocPageHeader), +sz)
 
+#if !defined(_asan_enabled_)
 // unpoisoned: [0, +sz)
 inline void* MKQLAllocFastDeprecated(const size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     Y_DEBUG_ABORT_UNLESS(state);
 
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
+#   if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
         if (!ret) {
@@ -321,7 +322,7 @@ inline void* MKQLAllocFastDeprecated(const size_t sz, TAllocState* state, const 
         ret->Link(&state->OffloadedBlocksRoot);
         return ret + 1;
     }
-#endif
+#   endif
 
     auto* page = state->CurrentPages[(TMemorySubPoolIdx)mPool];
 
@@ -336,6 +337,7 @@ inline void* MKQLAllocFastDeprecated(const size_t sz, TAllocState* state, const 
     void* ret = MKQLAllocSlow(sz, state, mPool);
     return ret;
 }
+#endif
 
 // unpoisoned: [0, +sz)
 inline void* MKQLAllocFastWithSize(const size_t sz, TAllocState* state, const EMemorySubPool mPool) {
@@ -373,12 +375,13 @@ inline void* MKQLAllocFastWithSize(const size_t sz, TAllocState* state, const EM
 
 void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept;
 
+#if !defined(_asan_enabled_)
 inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool) noexcept {
     if (!mem) {
         return;
     }
 
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
+#   if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
         TAllocState *state = TlsAllocState;
         Y_DEBUG_ABORT_UNLESS(state);
@@ -388,18 +391,18 @@ inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool) noex
         free(entry);
         return;
     }
-#endif
+#   endif
 
     auto* page = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
     Y_DEBUG_ABORT_UNLESS(page->MyAlloc == TlsAllocState, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << page->MyAlloc->GetDebugInfo() << " freed with: " << TlsAllocState->GetDebugInfo()).data());
     if (Y_LIKELY(--page->UseCount != 0)) {
-        // TODO: should poison freed space somehow?
         return;
     }
 
     MKQLFreeSlow(page, TlsAllocState, mPool);
 }
+#endif
 
 inline void MKQLFreeFastWithSize(const void* mem, const size_t sz, TAllocState* state, const EMemorySubPool mPool) noexcept {
     if (!mem) {
@@ -433,9 +436,11 @@ inline void MKQLFreeFastWithSize(const void* mem, const size_t sz, TAllocState* 
     MKQLFreeSlow(page, state, mPool);
 }
 
+#if !defined(_asan_enabled_)
 inline void* MKQLAllocDeprecated(size_t sz, const EMemorySubPool mPool) {
     return MKQLAllocFastDeprecated(sz, TlsAllocState, mPool);
 }
+#endif
 
 inline void* MKQLAllocWithSize(size_t sz, const EMemorySubPool mPool) {
     return MKQLAllocFastWithSize(sz, TlsAllocState, mPool);

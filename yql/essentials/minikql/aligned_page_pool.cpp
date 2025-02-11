@@ -104,7 +104,7 @@ private:
             FreePage(addr);
             return GetPageSize();
         }
-#elif __has_feature(address_sanitizer)
+#elif defined(_asan_enabled_)
         FreePage(addr);
         return GetPageSize();
 #endif
@@ -476,11 +476,10 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
     auto page = AllPages.find(addr);
     Y_DEBUG_ABORT_UNLESS(page != AllPages.end());
 
-#if __has_feature(address_sanitizer)
+#if defined(_asan_enabled_)
     AllPages.erase(page);
     Free(addr, POOL_PAGE_SIZE);
 #else
-    ASAN_POISON_MEMORY_REGION(addr, POOL_PAGE_SIZE);
     FreePages.emplace(addr);
 #endif
 }
@@ -740,7 +739,7 @@ void* GetAlignedPage(ui64 size) {
         }
     }
 
-#if __has_feature(address_sanitizer)
+#if defined(_asan_enabled_)
     auto allocSize = size;
 #else
     auto allocSize = Max<ui64>(MaxMidSize, size);
@@ -757,7 +756,7 @@ void* GetAlignedPage(ui64 size) {
         ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: " << LastSystemErrorText(lastError) << mmaps.Str();
     }
 
-#if !__has_feature(address_sanitizer)
+#if !defined(_asan_enabled_)
     if (size < MaxMidSize) {
         // push extra allocated pages to cache
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);

@@ -84,8 +84,6 @@ void TSchemeShard::EnqueueDataErasure(const TPathId& pathId) {
 }
 
 void TSchemeShard::DataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ Disconnect to tablet: " << tabletId
-        << ", at schemeshard: " << TabletID());
     const auto shardIdx = GetShardIdx(tabletId);
     if (!ShardInfos.contains(shardIdx)) {
         return;
@@ -115,7 +113,6 @@ void TSchemeShard::DataErasureHandleDisconnect(TTabletId tabletId, const TActorI
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ Handle TEvDataCleanupResult at schemeshard# " << TabletID());
     const auto& record = ev->Get()->Record;
 
     if (record.GetCurrentGeneration() == DataErasureGeneration) {
@@ -140,7 +137,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const 
     } else {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[DataErasure] [Finished] Data erasure completed "
             "for pathId# " << pathId
-            << " in# " << duration.MilliSeconds()
+            << " in# " << duration.MilliSeconds() << " ms"
             << ", next wakeup# " << DataErasureQueue->GetWakeupDelta()
             << ", rate# " << DataErasureQueue->GetRate()
             << ", in queue# " << DataErasureQueue->Size() << " tenants"
@@ -150,7 +147,6 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const 
 
     ActiveDataErasureTenants.erase(pathId);
     RunningDataErasureForTenants.erase(pathId);
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ RunningDataErasureForTenants.size: " << RunningDataErasureForTenants.size());
 
     TabletCounters->Cumulative()[COUNTER_DATA_ERASURE_OK].Increment(1);
     UpdateDataErasureQueueMetrics();
@@ -164,7 +160,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const 
     }
 
     if (isDataErasureCompleted) {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "+++ ActiveDataErasureTenants is empty. Send to BSC");
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Data erasure in tenants is completed. Send request to BS controller");
         std::unique_ptr<TEvBlobStorage::TEvControllerShredRequest> request(
             new TEvBlobStorage::TEvControllerShredRequest(DataErasureGeneration));
 
@@ -213,15 +209,11 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "+++TTxRunDataErasure Execute at schemeshard: " << Self->TabletID());
+                    "TTxRunDataErasure Execute at schemeshard: " << Self->TabletID());
         NIceDb::TNiceDb db(txc.DB);
         if (Self->DataErasureGeneration < RequestedGeneration) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "+++TTxRunDataErasure Execute. New generation# " << RequestedGeneration);
             Self->DataErasureGeneration = RequestedGeneration;
             Self->DataErasureQueue->Clear();
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "+++TTxRunDataErasure Execute. Start data erasure for # " << Self->SubDomains.size() << " tenants");
             for (auto& [pathId, subdomain] : Self->SubDomains) {
                 auto path = TPath::Init(pathId, Self);
                 if (path->IsRoot()) {
@@ -237,8 +229,6 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
                 db.Table<Schema::ActiveDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::ActiveDataErasureTenants::IsCompleted>(false);
             }
         } else if (Self->DataErasureGeneration == RequestedGeneration) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "+++TTxRunDataErasure Execute. Known generation# " << RequestedGeneration);
             Self->DataErasureQueue->Clear();
             for (const auto& [pathId, isCompleted] : Self->RunningDataErasureForTenants) {
                 if (!isCompleted) {

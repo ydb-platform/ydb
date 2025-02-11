@@ -9,7 +9,8 @@ using namespace NSchemeShardUT_Private;
 
 namespace {
 
-ui64 CreateTestSubdomain(TTestActorRuntime& runtime,
+ui64 CreateTestSubdomain(
+    TTestActorRuntime& runtime,
     TTestEnv& env,
     ui64* txId,
     const TString& name) {
@@ -58,12 +59,11 @@ ui64 CreateTestSubdomain(TTestActorRuntime& runtime,
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TestSuete1) {
-    Y_UNIT_TEST(test1) {
+Y_UNIT_TEST_SUITE(TestDataErasure) {
+    Y_UNIT_TEST(SimpleDataErasureTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 

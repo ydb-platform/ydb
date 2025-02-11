@@ -3,8 +3,6 @@
 namespace NKikimr::NSchemeShard {
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "+++Handle TEvDataClenupRequest at schemestard: " << TabletID());
     Execute(CreateTxRunTenantDataErasure(ev), ctx);
 }
 
@@ -36,10 +34,10 @@ NOperationQueue::EStartStatus TSchemeShard::StartTenantDataErasure(const TShardI
     std::unique_ptr<TEvDataShard::TEvForceDataCleanup> request(
         new TEvDataShard::TEvForceDataCleanup(DataErasureGeneration));
 
-        ActiveDataErasureShards[shardIdx] = PipeClientCache->Send(
-            ctx,
-            ui64(datashardId),
-            request.release());
+    ActiveDataErasureShards[shardIdx] = PipeClientCache->Send(
+        ctx,
+        ui64(datashardId),
+        request.release());
 
     return NOperationQueue::EStartStatus::EOperationRunning;
 }
@@ -80,7 +78,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, con
     const ui64 completedGeneration = record.GetDataCleanupGeneration();
     if (completedGeneration != DataErasureGeneration) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "+++Handle TEvForceDataCleanupResult: Unknown generation#" << completedGeneration << ", Expected gen# " << DataErasureGeneration << " at schemestard: " << TabletID());
+            "Handle TEvForceDataCleanupResult: Unknown generation#" << completedGeneration << ", Expected gen# " << DataErasureGeneration << " at schemestard: " << TabletID());
         return;
     }
 
@@ -100,7 +98,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, con
             << ", running# " << TenantDataErasureQueue->RunningSize() << " shards"
             << " at schemeshard " << TabletID());
     } else {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[BackgroundCompaction] [Finished] Compaction completed "
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[TenantDataErasure] [Finished] Data erasure is completed "
             "for pathId# " << (it != ShardInfos.end() ? it->second.PathId.ToString() : "") << ", datashard# " << tabletId
             << ", shardIdx# " << shardIdx
             << " in# " << duration.MilliSeconds() << " ms, with status# " << (int)record.GetStatus()
@@ -116,18 +114,11 @@ void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, con
     TabletCounters->Cumulative()[COUNTER_TENANT_DATA_ERASURE_OK].Increment(1);
     UpdateTenantDataErasureQueueMetrics();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "+++Handle TEvForceDataCleanupResult: RunningDataErasureForShards.size(): " << ActiveDataErasureShards.size());
-
-
     if (ActiveDataErasureShards.empty()) {
         std::unique_ptr<TEvSchemeShard::TEvDataCleanupResult> response(
             new TEvSchemeShard::TEvDataCleanupResult(ParentDomainId, DataErasureGeneration, true));
 
         const ui64 rootSchemeshard = ParentDomainId.OwnerId;
-
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "+++Handle TEvForceDataCleanupResult: Send result to root schemeshard# " << rootSchemeshard);
 
         /*RunningDataErasureForTenants[pathId] = */PipeClientCache->Send(
             ctx,
@@ -136,23 +127,20 @@ void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, con
     }
 }
 
-void TSchemeShard::TenantDataErasureHandleDisconnect(TTabletId tabletId, const TActorId& /*clientId*/) {
+void TSchemeShard::TenantDataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId) {
     auto tabletIt = TabletIdToShardIdx.find(tabletId);
     if (tabletIt == TabletIdToShardIdx.end())
         return; // just sanity check
     const auto& shardIdx = tabletIt->second;
 
-    // auto it = RunningBorrowedCompactions.find(shardIdx);
-    // if (it == RunningBorrowedCompactions.end())
-    //     return;
+    auto it = ActiveDataErasureShards.find(shardIdx);
+    if (it == ActiveDataErasureShards.end())
+        return;
 
-    // if (it->second != clientId)
-    //     return;
+    if (it->second != clientId)
+        return;
 
-    // RunningBorrowedCompactions.erase(it);
-
-    // disconnected from node we have requested borrowed compaction. We just resend request, because it
-    // is safe: if first request is executing or has been already executed, then second request will be ignored.
+    ActiveDataErasureShards.erase(it);
 
     StartTenantDataErasure(shardIdx);
 }
@@ -176,7 +164,7 @@ void TSchemeShard::RemoveTenantDataErasure(const TShardIdx& shardIdx) {
     if (!TenantDataErasureQueue)
         return;
 
-    // RunningBorrowedCompactions.erase(shardIdx);
+    ActiveDataErasureShards.erase(shardIdx);
     TenantDataErasureQueue->Remove(shardIdx);
     UpdateTenantDataErasureQueueMetrics();
 }
@@ -202,7 +190,7 @@ struct TSchemeShard::TTxRunTenantDataErasure : public TSchemeShard::TRwTxBase {
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "+++TTxRunTenantDataErasure Execute at schemestard: " << Self->TabletID());
+            "TTxRunTenantDataErasure Execute at schemestard: " << Self->TabletID());
         if (Self->IsDomainSchemeShard) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[TenantDataErasure] [Request] Cannot run data erasure on root schemeshard");
             return;
@@ -221,7 +209,10 @@ struct TSchemeShard::TTxRunTenantDataErasure : public TSchemeShard::TRwTxBase {
         }
     }
 
-    void DoComplete(const TActorContext& /*ctx*/) override {}
+    void DoComplete(const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxRunTenantDataErasure Execute at schemestard: " << Self->TabletID());
+    }
 };
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxRunTenantDataErasure(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev) {

@@ -60,13 +60,6 @@ public:
     {
     }
 
-    explicit TUnboxedValueBatch(ui32 width)
-        : Width_(width)
-        , IsWide_(width > 1)
-        , PageSize_(GetPageSize(width)) {
-
-    }
-
     TUnboxedValueBatch(const TUnboxedValueBatch& other) = default;
     TUnboxedValueBatch& operator=(const TUnboxedValueBatch& other) = default;
 

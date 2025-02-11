@@ -52,10 +52,6 @@ struct TScheme {
 };
 
 struct TOutputType {
-    explicit TOutputType(ui32 width)
-        : Data(width) {
-    }
-
     NUdf::TUnboxedValue Value;
     NMiniKQL::TUnboxedValueBatch Data;
 };
@@ -90,7 +86,6 @@ public:
     explicit TOutputListImpl(const TMessageOutputSpec& outputSpec, TWorkerHolder<IPullListWorker> worker)
         : WorkerHolder_(std::move(worker))
         , OutputSpec(outputSpec)
-        , Out(1)
     {
         Row.resize(1);
     }
@@ -497,7 +492,9 @@ private:
     TString GenerateSql() {
         TStringBuilder sb;
         sb << TransformLambda;
-        sb << "SELECT $__ydb_transfer_lambda(TableRow()) AS " << RESULT_COLUMN_NAME << " FROM Input;\n";
+        sb << "SELECT * FROM (\n";
+        sb << "  SELECT $__ydb_transfer_lambda(TableRow()) AS " << RESULT_COLUMN_NAME << " FROM Input\n";
+        sb << ") FLATTEN BY " << RESULT_COLUMN_NAME << ";\n";
         LOG_T("SQL: " << sb);
         return sb;
     }

@@ -1,4 +1,4 @@
-#include "ydb_cloud_root.h"
+#include "ydb_root.h"
 #include "ydb_update.h"
 #include "ydb_version.h"
 
@@ -54,7 +54,7 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
     };
 }
 
-TYCloudClientCommandRoot::TYCloudClientCommandRoot(const TString& name, const TClientSettings& settings)
+TYdbClientCommandRoot::TYdbClientCommandRoot(const TString& name, const TClientSettings& settings)
     : TClientCommandRoot(name, settings)
 {
     if (settings.StorageUrl.has_value()) {
@@ -74,14 +74,14 @@ namespace {
     }
 }
 
-void TYCloudClientCommandRoot::Config(TConfig& config) {
+void TYdbClientCommandRoot::Config(TConfig& config) {
     TClientCommandRoot::Config(config);
 
     NLastGetopt::TOpts& opts = *config.Opts;
     RemoveOption(opts, "svnrevision");
 }
 
-int TYCloudClientCommandRoot::Run(TConfig& config) {
+int TYdbClientCommandRoot::Run(TConfig& config) {
     if (config.StorageUrl.has_value() && config.NeedToCheckForUpdate) {
         TYdbUpdater updater(config.StorageUrl.value());
         if (config.ForceVersionCheck) {
@@ -102,7 +102,7 @@ int TYCloudClientCommandRoot::Run(TConfig& config) {
     return TClientCommandRoot::Run(config);
 }
 
-int NewYCloudClient(int argc, char** argv) {
+int NewYdbClient(int argc, char** argv) {
     NYdb::NConsoleClient::TClientSettings settings;
     settings.EnableSsl = true;
     settings.UseAccessToken = true;
@@ -112,10 +112,10 @@ int NewYCloudClient(int argc, char** argv) {
     settings.UseOauth2TokenExchange = true;
     settings.UseExportToYt = false;
     settings.MentionUserAccount = false;
-    //settings.StorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/release";
+    settings.StorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/release";
     settings.YdbDir = "ydb";
 
-    auto commandsRoot = MakeHolder<TYCloudClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
+    auto commandsRoot = MakeHolder<TYdbClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client");
     TClientCommand::TConfig config(argc, argv);
     return commandsRoot->Process(config);

@@ -14,14 +14,14 @@ private:
     void SetCredentialsGetter(TConfig& config) override;
 };
 
-class TYCloudClientCommandRoot : public TClientCommandRoot {
+class TYdbClientCommandRoot : public TClientCommandRoot {
 public:
-    TYCloudClientCommandRoot(const TString& name, const TClientSettings& settings);
+    TYdbClientCommandRoot(const TString& name, const TClientSettings& settings);
     void Config(TConfig& config) override;
     int Run(TConfig& config) override;
 };
 
-int NewYCloudClient(int argc, char** argv);
+int NewYdbClient(int argc, char** argv);
 
 }
 }

@@ -2,7 +2,7 @@
 #include <yql/essentials/utils/log/log.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 
-namespace NYql {
+namespace NYql::NFmr {
 
 class TFmrJobFactory: public IFmrJobFactory {
 public:
@@ -59,4 +59,4 @@ TFmrJobFactory::TPtr MakeFmrJobFactory(const TFmrJobFactorySettings& settings) {
     return MakeIntrusive<TFmrJobFactory>(settings);
 }
 
-} // namespace NYql
+} // namespace NYql::NFmr

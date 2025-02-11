@@ -1939,7 +1939,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TAlterDatabaseParameters alterDatabaseParams;
             alterDatabaseParams.Owner = roleName;
-            alterDatabaseParams.DbPath = Id(node.GetRule_an_id_schema3(), *this);
+            alterDatabaseParams.DbPath = TDeferredAtom(Ctx.Pos(), Id(node.GetRule_an_id_schema3(), *this));
 
             const TPosition pos = Ctx.Pos();
             TString service = Ctx.Scoped->CurrService;
@@ -1947,6 +1947,19 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             auto stmt = BuildAlterDatabase(pos, service, cluster, alterDatabaseParams, Ctx.Scoped);
             AddStatementToBlocks(blocks, stmt);
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore62: {
+            // show_create_table_stmt: SHOW CREATE TABLE table_ref
+            Ctx.BodyPart();
+            const auto& rule = core.GetAlt_sql_stmt_core62().GetRule_show_create_table_stmt1();
+
+            TTableRef tr;
+            if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref4(), tr)) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildShowCreate(Ctx.Pos(), tr, Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:

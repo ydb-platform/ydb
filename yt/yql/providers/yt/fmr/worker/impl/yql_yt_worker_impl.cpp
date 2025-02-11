@@ -5,7 +5,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include "yql_yt_worker_impl.h"
 
-namespace NYql {
+namespace NYql::NFmr {
 
 namespace {
 
@@ -136,4 +136,4 @@ IFmrWorker::TPtr MakeFmrWorker(IFmrCoordinator::TPtr coordinator, IFmrJobFactory
     return MakeIntrusive<TFmrWorker>(coordinator, jobFactory, settings);
 }
 
-} // namspace NYql
+} // namespace NYql::NFmr

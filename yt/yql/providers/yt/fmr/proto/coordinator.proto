@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package NYql.NFmr.NProto;
+
+import "yt/yql/providers/yt/fmr/proto/request_options.proto";
+
+message THeartbeatRequest {
+    uint32 WorkerId = 1;
+    string VolatileId = 2;
+    repeated TTaskState TaskStates = 3;
+    TStatistics Statistics = 4;
+}
+
+message THeartbeatResponse {
+    repeated TTask TasksToRun = 1;
+    repeated string TaskToDeleteIds = 2;
+}
+
+message TStartOperationRequest {
+    ETaskType TaskType = 1;
+    TTaskParams TaskParams = 2;
+    string SessionId = 3;
+    optional string IdempotencyKey = 4;
+    uint32 NumRetries = 5;
+}
+
+message TStartOperationResponse {
+    EOperationStatus Status = 1;
+    string OperationId = 2;
+}
+
+message TGetOperationRequest {
+    string OperationId = 1;
+}
+
+message TGetOperationResponse {
+    EOperationStatus Status = 1;
+    repeated TFmrError ErrorMessages = 2;
+}
+
+message TDeleteOperationRequest {
+    string OperationId = 1;
+}
+
+message TDeleteOperationResponse {
+    EOperationStatus Status = 1;
+}

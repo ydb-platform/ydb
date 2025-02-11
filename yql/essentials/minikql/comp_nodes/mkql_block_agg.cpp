@@ -28,6 +28,8 @@
 #include <arrow/array/builder_primitive.h>
 #include <arrow/chunked_array.h>
 
+#include <fstream>
+
 //#define USE_STD_UNORDERED
 
 namespace NKikimr {
@@ -1373,6 +1375,7 @@ public:
     bool FinishFetched = false;
 
     bool CheckSpillingAndWait() {
+        // return false;
         switch(Mode_) {
             case EOperatingMode::InMemory: {
                 if (!HasMemoryForProcessing() || FinishFetched && HasSpilledState_) {
@@ -1429,7 +1432,9 @@ public:
         IsExtractingFinished = false;
 
         Aggs_.resize(0);
+        Aggs_.shrink_to_fit();
         AggStateOffsets_.resize(0);
+        AggStateOffsets_.shrink_to_fit();
         for (const auto& p : AggsParams_) {
             Aggs_.emplace_back(p.Prepared_->Make(Ctx_));
             MKQL_ENSURE(Aggs_.back()->StateSize == p.Prepared_->StateSize, "State size mismatch");
@@ -1454,6 +1459,7 @@ public:
             Readers_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
             Builders_[i] = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, Ctx_.ArrowMemoryPool, MaxBlockLen_, &Ctx_.Builder->GetPgBuilder());
         }
+        Arena_.Clear();
         std::cerr << "State cleared" << std::endl;
 
     }
@@ -2451,6 +2457,35 @@ private:
     };
 
     bool LogReturnOk = true;
+    std::vector<std::pair<ui64, ui64>> memUsage;
+
+    void WriteMemInfo() {
+        std::ofstream inmemfile("memUsage.csv");
+        inmemfile << "usage,limit" << std::endl;
+        for (const auto &val : memUsage) {
+            inmemfile << val.first << "," << val.second << std::endl;
+        }
+    }
+
+    void AddOnlyNewValueToMem(ui64 used, ui64 limit, std::vector<std::pair<ui64, ui64>>& memvec) {
+        if (memvec.empty()) {
+            memvec.push_back({used, limit});
+            return;
+        }
+
+        const auto& lastval = memvec.back();
+        if (lastval.first == used && lastval.second == limit) return;
+
+        memvec.push_back({used, limit});
+    }
+
+    void SaveMemoryDump() {
+        const auto used = TlsAllocState->GetUsed();
+        const auto limit = TlsAllocState->GetLimit();
+        AddOnlyNewValueToMem(used, limit, memUsage);
+    }
+
+
 
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
@@ -2459,6 +2494,7 @@ private:
             const size_t inputWidth = state.Width_;
             const size_t outputWidth = state.OutputWidth_;
             MKQL_ENSURE(outputWidth == width, "The given width doesn't equal to the result type size");
+            if constexpr (Finalize) SaveMemoryDump();
 
             // std::cerr << "MISHA HERE. Final? " << Finalize << std::endl;
 
@@ -2466,12 +2502,15 @@ private:
                 if (state.IsFinished_) {
                     if constexpr (Finalize) {
                         if (state.HasAnythingToLoad()) {
+                            if constexpr (Finalize) SaveMemoryDump();
                             state.Clear();
+                            if constexpr (Finalize) SaveMemoryDump();
                             state.IsFinished_ = false;
                             LogReturnOk = true;
 
                         } else {
                             std::cerr << "MISHA FINISHED" << std::endl;
+                            WriteMemInfo();
                             return NUdf::EFetchStatus::Finish;
                         }
                     } else {
@@ -2481,7 +2520,12 @@ private:
 
                 while (!state.WritingOutput_) {
                     if constexpr(Finalize) {
-                        if (state.CheckSpillingAndWait()) return NUdf::EFetchStatus::Yield;
+                        if constexpr (Finalize) SaveMemoryDump();
+                        if (state.CheckSpillingAndWait())  {
+
+                            if constexpr (Finalize) SaveMemoryDump();
+                            return NUdf::EFetchStatus::Yield;
+                        }
                     }
                     switch (Stream_.WideFetch(inputFields, inputWidth)) {
                         case NUdf::EFetchStatus::Yield:
@@ -2489,7 +2533,10 @@ private:
                         case NUdf::EFetchStatus::Ok:
                             state.ProcessInput(HolderFactory_);
                             if constexpr (Finalize) {
-                                if (state.CheckSpillingAndWait()) return NUdf::EFetchStatus::Yield;
+                                if (state.CheckSpillingAndWait())  {
+                                    if constexpr (Finalize) SaveMemoryDump();
+                                    return NUdf::EFetchStatus::Yield;
+                                }
                             }
                             continue;
                         case NUdf::EFetchStatus::Finish:
@@ -2498,6 +2545,7 @@ private:
                     }
 
 
+                    if constexpr (Finalize) SaveMemoryDump();
                     if (state.Finish())
                         break;
                     else {
@@ -2508,18 +2556,21 @@ private:
                     }
                 }
 
+                if constexpr (Finalize) SaveMemoryDump();
                 if (!state.FillOutput(HolderFactory_)) {
                     if constexpr(Finalize) {
                         MKQL_ENSURE(false, "HERE");
                     }
                     return NUdf::EFetchStatus::Finish;
                 }
+                if constexpr (Finalize) SaveMemoryDump();
             }
 
             const auto sliceSize = state.Slice();
             for (size_t i = 0; i < outputWidth; ++i) {
                 output[i] = state.Get(sliceSize, HolderFactory_, i);
             }
+            if constexpr (Finalize) SaveMemoryDump();
 
             if constexpr(Finalize) {
                 if (LogReturnOk) {
@@ -2527,6 +2578,7 @@ private:
                     LogReturnOk = false;
                 }
             }
+            if constexpr (Finalize) SaveMemoryDump();
             return NUdf::EFetchStatus::Ok;
         }
     private:

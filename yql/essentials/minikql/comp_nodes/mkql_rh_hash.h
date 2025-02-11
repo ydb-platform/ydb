@@ -10,6 +10,7 @@
 
 #include <util/digest/city.h>
 #include <util/generic/scope.h>
+#include <iostream>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -340,6 +341,7 @@ private:
             growFactor = 2;
         }
         auto newCapacity = Capacity * growFactor;
+        std::cerr << "[#" << (void*)this << "] Growing: " << Capacity << "->" << newCapacity << std::endl;
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);

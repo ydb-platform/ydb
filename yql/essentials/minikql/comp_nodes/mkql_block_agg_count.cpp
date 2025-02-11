@@ -157,6 +157,7 @@ public:
         new(state) TState();
         auto typedState = static_cast<TState*>(state);
         typedState->Count_ = buffer.PopNumber<decltype(typedState->Count_)>();
+        typedState->Count_ = 777;
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {

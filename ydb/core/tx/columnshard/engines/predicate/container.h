@@ -98,7 +98,7 @@ public:
 
     bool IsInclude() const;
 
-    bool CrossRanges(const TPredicateContainer& ext);
+    bool CrossRanges(const TPredicateContainer& ext) const;
 
     static TPredicateContainer BuildNullPredicateFrom() {
         return TPredicateContainer(NArrow::ECompareType::GREATER_OR_EQUAL);

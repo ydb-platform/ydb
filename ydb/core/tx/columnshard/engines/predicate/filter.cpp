@@ -109,9 +109,6 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TReplac
 
 TPKRangesFilter::TPKRangesFilter(const bool reverse)
     : ReverseFlag(reverse) {
-    auto range = TPKRangeFilter::Build(TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo());
-    Y_ABORT_UNLESS(range);
-    SortedRanges.emplace_back(*range);
 }
 
 std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {

@@ -2471,6 +2471,7 @@ private:
                             LogReturnOk = true;
 
                         } else {
+                            std::cerr << "MISHA FINISHED" << std::endl;
                             return NUdf::EFetchStatus::Finish;
                         }
                     } else {

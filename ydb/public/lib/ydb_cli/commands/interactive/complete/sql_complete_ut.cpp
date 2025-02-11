@@ -62,6 +62,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         TVector<std::string> expected = {
             "ASYNC",
             "BACKUP",
+            "DATABASE",
             "EXTERNAL",
             "GROUP",
             "OBJECT",

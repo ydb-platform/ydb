@@ -17,6 +17,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
+    library/cpp/resource
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils
@@ -56,6 +57,8 @@ RESOURCE(
     ydb/core/persqueue/ut/resources/counters_pqproxy.html counters_pqproxy.html
 
     ydb/core/persqueue/ut/resources/counters_labeled.json counters_labeled.json
+
+    ydb/core/persqueue/ut/resources/new_version_topic.dat new_version_topic.dat
 )
 
 END()

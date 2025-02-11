@@ -284,6 +284,10 @@ void PQTabletRestart(
     ui64 tabletId,
     TActorId edge);
 
+void SetTabletValue(TTestActorRuntime& runtime,
+                    ui64 tabletId,
+                    const TString& key, const TString& value,
+                    const TActorId& edge);
 
 /*
 ** TTestContext requiring functions
@@ -303,6 +307,9 @@ void PQBalancerPrepare(
     bool kill = true);
 
 void PQTabletRestart(TTestContext& context);
+
+void SetTabletValue(TTestContext& context,
+                    const TString& key, const TString& value);
 
 TActorId RegisterReadSession(
    const TString& session,

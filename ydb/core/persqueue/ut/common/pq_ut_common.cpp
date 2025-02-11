@@ -293,6 +293,37 @@ void PQTabletRestart(TTestActorRuntime& runtime, ui64 tabletId, TActorId edge) {
     rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
     runtime.DispatchEvents(rebootOptions);
 }
+ 
+void SetTabletValue(TTestContext& tc,
+                    const TString& key, const TString& value)
+{
+    return SetTabletValue(*tc.Runtime, tc.TabletId, key, value, tc.Edge);
+}
+
+void SetTabletValue(TTestActorRuntime& runtime,
+                    ui64 tabletId,
+                    const TString& key,
+                    const TString& value,
+                    const TActorId& edge)
+{
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto* cmd = request->Record.AddCmdWrite();
+    cmd->SetKey(key);
+    cmd->SetValue(value);
+
+    runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.WriteResultSize(), 1);
+    const auto &result = response->Record.GetWriteResult(0);
+    UNIT_ASSERT(result.HasStatus());
+    UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
+}
 
 TActorId SetOwner(const ui32 partition, TTestContext& tc, const TString& owner, bool force) {
     return SetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition, owner, force);

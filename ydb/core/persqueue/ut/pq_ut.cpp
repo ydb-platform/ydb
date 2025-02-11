@@ -9,6 +9,8 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/streams/bzip2/bzip2.h>
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
@@ -2428,7 +2430,44 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
         }
     });
 }
+ 
+TString DecodeValue(const TString& encoded)
+{
+    auto decoded = Base64Decode(encoded);
+    TStringInput stream(decoded);
+    TBZipDecompress decompressor(&stream);
+    return decompressor.ReadAll();
+}
 
+void LoadKeyValuesFromNewVersion(TTestContext& tc)
+{
+    TStringStream stream(NResource::Find("new_version_topic.dat"));
+
+    while (true) {
+        TString key, encoded;
+
+        stream >> key >> encoded;
+        if (key.empty() || encoded.empty()) {
+            break;
+        }
+
+        TString decoded = DecodeValue(encoded);
+        SetTabletValue(tc, key, decoded);
+    }
+}
+
+Y_UNIT_TEST(Test_The_Partition_And_Blob_Created_By_The_New_Version)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    PQTabletPrepare({.partitions = 1}, {{"consumer", true}}, tc);
+
+    LoadKeyValuesFromNewVersion(tc);
+
+    PQTabletRestart(tc);
+}
 
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

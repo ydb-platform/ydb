@@ -286,5 +286,13 @@ int main(int argc, const char** argv) {
 
     client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.YqlLogLevel));
 
+    auto mergeSpec = NYT::TMergeOperationSpec();
+    mergeSpec.AddInput(NYT::TRichYPath(config.DstPath));
+    mergeSpec.Output(NYT::TRichYPath(config.DstPath));
+    mergeSpec.CombineChunks(true);
+    mergeSpec.ForceTransform(true);
+
+    client->Merge(mergeSpec);
+
     return EXIT_SUCCESS;
 }

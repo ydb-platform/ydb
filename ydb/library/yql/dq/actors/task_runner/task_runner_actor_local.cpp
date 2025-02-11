@@ -444,7 +444,7 @@ private:
             }   
         }
 
-        if (settings.GetEnableSpilling()) {
+        if (settings.GetEnableSpilling() || true) {
             auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
             auto errorCallback = ev->Get()->ExecCtx->GetErrorCallback();
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback, errorCallback));

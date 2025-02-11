@@ -10,6 +10,10 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 
+#include <yql/essentials/minikql/computation/mkql_spiller.h>
+#include <yql/essentials/minikql/computation/mkql_spiller_factory.h>
+#include <yql/essentials/utils/log/log.h>
+
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
@@ -30,6 +34,15 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
+
+ui64 linescount = 0;
+
+bool HasMemoryForProcessing() {
+    ++linescount;
+    if (linescount % 100 == 0) return false;
+    return true;
+    return !TlsAllocState->IsMemoryYellowZoneEnabled();
+}
 
 constexpr bool InlineAggState = false;
 
@@ -1180,6 +1193,49 @@ public:
     typename TFixedMapImpl::const_iterator HashFixedMapIt_;
     TPagedArena Arena_;
 
+
+    struct TSpillingBucket {
+
+        std::optional<NThreading::TFuture<ISpiller::TKey>> SpillingOperation_ = std::nullopt;
+        std::optional<NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>> LoadingOperation_ = std::nullopt;
+        std::vector<ISpiller::TKey> SpillingKeys_;
+        std::vector<size_t> SpillingSizes_;
+
+        ISpiller::TPtr Spiller_;
+
+        TOutputBuffer KeysBuffer;
+        TOutputBuffer StateBuffer;
+        ui64 TmpRows = 0;
+
+        NYql::TChunkedBuffer SpillingBuffer;
+
+        ui64 Rows = 0;
+
+        ui64 GetSize() const {
+            return SpillingBuffer.Size();
+        }
+
+        void Clear() {
+            SpillingBuffer = NYql::TChunkedBuffer();
+            Rows = 0;
+        }
+
+    };
+
+    static constexpr ui64 NumberOfSpillingBuckets_ = 12;
+    static constexpr ui64 BucketSizeLimit_ = 1_MB;
+    std::deque<TSpillingBucket> SpillingBuckets_;
+
+    typename TDynMapImpl::const_iterator SpillingHashMapIt_;
+    typename TFixedMapImpl::const_iterator SpillingHashFixedMapIt_;
+    bool IsExtractingFinished = false;
+    bool IteratorsInitialized = false;
+
+    ISpillerFactory::TPtr SpillerFactory_;
+
+    std::hash<TKey> Hasher_;
+    TComputationContext& Ctx_;
+
     THashedWrapperBaseState(TMemoryUsageInfo* memInfo, ui32 keyLength, ui32 streamIndex, size_t width, size_t outputWidth, std::optional<ui32> filterColumn, const std::vector<TAggParams<TAggregator>>& params,
         const std::vector<std::vector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
         : TBlockState(memInfo, outputWidth)
@@ -1197,7 +1253,11 @@ public:
         , Readers_(keys.size())
         , Builders_(keys.size())
         , Arena_(TlsAllocState)
+        , Hasher_(MakeHash<TKey>(KeyLength_))
+        , Ctx_(ctx)
     {
+        std::cerr << "Keys.size(): " << Keys_.size() << std::endl;
+        std::cerr << "UseArens: " << UseArena << std::endl;
         Pointer_ = Values_.data();
         for (size_t i = 0; i < Keys_.size(); ++i) {
             auto itemType = AS_TYPE(TBlockType, Keys_[i].Type)->GetItemType();
@@ -1217,17 +1277,514 @@ public:
         }
 
         auto equal = MakeEqual<TKey>(KeyLength_);
-        auto hasher = MakeHash<TKey>(KeyLength_);
         if constexpr (UseSet) {
             MKQL_ENSURE(params.empty(), "Only keys are supported");
-            HashSet_ = std::make_unique<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
+            HashSet_ = std::make_unique<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(Hasher_, equal);
         } else {
             if (!InlineAggState) {
-                HashFixedMap_ = std::make_unique<TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
+                HashFixedMap_ = std::make_unique<TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(Hasher_, equal);
             } else {
-                HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(TotalStateSize_, hasher, equal);
+                HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(TotalStateSize_, Hasher_, equal);
             }
         }
+        SpillerFactory_ = ctx.SpillerFactory;
+    }
+
+    enum class EOperatingMode {
+        InMemory,
+        Spilling,
+        Restoring,
+        ProcessRestored,
+        Done
+    };
+
+    bool HasSpilledState_ = false;
+    EOperatingMode Mode_ = EOperatingMode::InMemory; 
+
+    void LogMemoryUsage() const {
+        const auto used = TlsAllocState->GetUsed();
+        const auto limit = TlsAllocState->GetLimit();
+        TStringBuilder logmsg;
+        logmsg << "Memory usage: ";
+        if (limit) {
+            logmsg << (used*100/limit) << "%=";
+        }
+        logmsg << (used/1_MB) << "MB/" << (limit/1_MB) << "MB";
+
+        YQL_LOG(INFO) << logmsg;
+    }
+
+    void PrepareForSpilling() {
+        std::cerr << "Preparing for spilling. Spiller factory: " << (bool)SpillerFactory_ << std::endl;
+        SpillingBuckets_.resize(NumberOfSpillingBuckets_);
+        auto spiller = SpillerFactory_->CreateSpiller();
+        for (auto &b: SpillingBuckets_) {
+            b.Spiller_ = spiller;
+        }
+
+        std::cerr << "maxBlockLen: " << MaxBlockLen_ << std::endl;
+    }
+
+
+    void SwitchMode(EOperatingMode mode) {
+        LogMemoryUsage();
+        switch(mode) {
+            case EOperatingMode::InMemory: {
+                YQL_LOG(INFO) << "switching Memory mode to InMemory";
+                break;
+            }
+            case EOperatingMode::Spilling: {
+                YQL_LOG(INFO) << "switching Memory mode to Spilling";
+                if (!HasSpilledState_) {
+                    HasSpilledState_ = true;
+                    PrepareForSpilling();
+                }
+                break;
+            }
+            case EOperatingMode::Restoring: {
+                YQL_LOG(INFO) << "switching Memory mode to Restoring";
+                break;
+            }
+            case EOperatingMode::ProcessRestored: {
+                YQL_LOG(INFO) << "switching Memory mode to ProcessRestored";
+                break;
+            }
+            case EOperatingMode::Done: {
+                YQL_LOG(INFO) << "switching Memory mode to Done";
+                break;
+           }
+        }
+
+        Mode_ = mode;
+    }
+
+    bool FinishFetched = false;
+
+    bool CheckSpillingAndWait() {
+        switch(Mode_) {
+            case EOperatingMode::InMemory: {
+                if (!HasMemoryForProcessing() || FinishFetched && HasSpilledState_) {
+                    SwitchMode(EOperatingMode::Spilling);
+                    return CheckSpillingAndWait();
+                }
+                return false;
+            }
+            case EOperatingMode::Spilling: {
+                if (!SpillEverything()) return true;
+                std::cerr << "MISHA blobs spilled: " << std::endl;
+                for (ui64 bucketId = 0; bucketId < NumberOfSpillingBuckets_; ++bucketId) {
+                    std::cerr << "BucketID: " << bucketId << std::endl;
+                    for (auto blobId : SpillingBuckets_[bucketId].SpillingKeys_) {
+                        std::cerr << blobId << " ";
+                    }
+                    std::cerr << std::endl;
+                }
+                Clear();
+
+                if (!FinishFetched) {
+                    SwitchMode(EOperatingMode::InMemory);
+                    return false;
+                }
+                SwitchMode(EOperatingMode(EOperatingMode::Restoring));
+                return CheckSpillingAndWait();
+            }
+            case EOperatingMode::Restoring: {
+                if (!LoadNextBucket()) return true;
+                SwitchMode(EOperatingMode::ProcessRestored);
+                return false;
+            }
+            case EOperatingMode::ProcessRestored: {
+                if (HasAnythingToLoad()) {
+                    SwitchMode(EOperatingMode::Restoring);
+                    return CheckSpillingAndWait();
+                } else {
+                    SwitchMode(EOperatingMode::Done);
+                    return false;
+                }
+            }
+            case EOperatingMode::Done: {
+                return false;
+
+            }
+
+        }
+    }
+
+    void Clear() {
+        TotalStateSize_ = 0;
+        IteratorsInitialized = 0;
+        IsExtractingFinished = false;
+
+        Aggs_.resize(0);
+        AggStateOffsets_.resize(0);
+        for (const auto& p : AggsParams_) {
+            Aggs_.emplace_back(p.Prepared_->Make(Ctx_));
+            MKQL_ENSURE(Aggs_.back()->StateSize == p.Prepared_->StateSize, "State size mismatch");
+            AggStateOffsets_.emplace_back(TotalStateSize_);
+            TotalStateSize_ += Aggs_.back()->StateSize;
+        }
+
+        auto equal = MakeEqual<TKey>(KeyLength_);
+        if constexpr (UseSet) {
+            HashSet_ = std::make_unique<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(Hasher_, equal);
+        } else {
+            if (!InlineAggState) {
+                HashFixedMap_ = std::make_unique<TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(Hasher_, equal);
+            } else {
+                HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(TotalStateSize_, Hasher_, equal);
+            }
+        }
+        BatchNum_ = 0;
+
+        for (size_t i = 0; i < Keys_.size(); ++i) {
+            auto itemType = AS_TYPE(TBlockType, Keys_[i].Type)->GetItemType();
+            Readers_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
+            Builders_[i] = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, Ctx_.ArrowMemoryPool, MaxBlockLen_, &Ctx_.Builder->GetPgBuilder());
+        }
+        std::cerr << "State cleared" << std::endl;
+
+    }
+
+    void UniteKeysAndStates(ui64 bucketId) {
+        auto kb = SpillingBuckets_[bucketId].KeysBuffer.Finish();
+        if (!kb.size()) return;
+        MKQL_ENSURE(kb.size(), "NON ZERO SIZE");
+        TString k = TString(kb.begin(), kb.size());
+
+        auto sb = SpillingBuckets_[bucketId].StateBuffer.Finish();
+        TString s = TString(sb.begin(), sb.size());
+
+        NYql::TChunkedBuffer keyb = NYql::TChunkedBuffer(std::move(k));
+        NYql::TChunkedBuffer stateb = NYql::TChunkedBuffer(std::move(s));
+        SpillingBuckets_[bucketId].SpillingBuffer.Append(std::move(keyb));
+        SpillingBuckets_[bucketId].SpillingBuffer.Append(std::move(stateb));
+
+        SpillingBuckets_[bucketId].KeysBuffer.Rewind();
+        SpillingBuckets_[bucketId].StateBuffer.Rewind();
+
+        SpillingBuckets_[bucketId].Rows += SpillingBuckets_[bucketId].TmpRows;
+        SpillingBuckets_[bucketId].TmpRows = 0;
+        DumpState();
+    }   
+
+    void DumpState() {
+        return ;
+        std::cout << "# " << TlsAllocState->GetUsed() << " " << TlsAllocState->GetLimit() << " ";
+
+        // if constexpr (!InlineAggState) {
+        //     SpillingHashFixedMapIt_ = HashFixedMap_->Begin();
+        // } else {
+        //     SpillingHashMapIt_ = HashMap_->Begin();
+        // }
+        for (const auto& bucket : SpillingBuckets_) {
+            std::cout << bucket.GetSize() << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    bool HasFullSpillingBuckets() {
+        for (const auto& bucket : SpillingBuckets_) {
+            if (bucket.GetSize() > BucketSizeLimit_) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    template <typename THash>
+    bool SpillingIterate(THash& hash, typename THash::const_iterator& iter) {
+        std::array<typename THash::const_iterator, PrefetchBatchSize> iters;
+        ui32 itersLen = 0;
+
+        auto iterateBatch = [&]() {
+            for (ui32 i = 0; i < itersLen; ++i) {
+                auto iter = iters[i];
+
+                const TKey& key = hash.GetKey(iter);
+                ui64 bucketId = Hasher_(key) % NumberOfSpillingBuckets_;
+                SpillingBuckets_[bucketId].KeysBuffer.PushString(GetKeyView<TKey>(key, KeyLength_));
+
+                auto payload = (char*)hash.GetPayload(iter);
+                char* ptr;
+                if constexpr (UseArena) {
+                    ptr = *(char**)payload;
+                } else {
+                    ptr = payload;
+                }
+
+                if constexpr (Many) {
+                    for (ui32 i = 0; i < Streams_.size(); ++i) {
+                        MKQL_ENSURE(ptr[i], "Missing partial aggregation state for stream #" << i);
+                    }
+
+                    ptr += Streams_.size();
+                }
+
+                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                    Aggs_[i]->SerializeState(ptr, SpillingBuckets_[bucketId].StateBuffer);
+                    // Aggs_[i]->DestroyState(ptr);
+
+
+                    ptr += Aggs_[i]->StateSize;
+                }
+
+                SpillingBuckets_[bucketId].TmpRows++;
+                if (SpillingBuckets_[bucketId].TmpRows == PrefetchBatchSize) {
+                    UniteKeysAndStates(bucketId);
+                }
+            }
+
+        };
+
+        for (; iter != hash.End(); hash.Advance(iter)) {
+            if (!hash.IsValid(iter)) {
+                continue;
+            }
+
+            if (HasFullSpillingBuckets()) {
+                DumpState();
+                iterateBatch();
+                return false;
+                
+            }
+
+            if (itersLen == iters.size()) {
+                DumpState();
+                iterateBatch();
+                itersLen = 0;
+            }
+
+            iters[itersLen] = iter;
+            ++itersLen;
+            if constexpr (UseArena) {
+                auto payload = (char*)hash.GetPayload(iter);
+                auto ptr = *(char**)payload;
+                NYql::PrefetchForWrite(ptr);
+            }
+
+            if constexpr (std::is_same<TKey, TSSOKey>::value) {
+                const auto& key = hash.GetKey(iter);
+                if (!key.IsInplace()) {
+                    NYql::PrefetchForRead(key.AsView().Data());
+                }
+            } else if constexpr (std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                const auto& key = hash.GetKey(iter);
+                NYql::PrefetchForRead(key.Data);
+            }
+        }
+
+        iterateBatch();
+        for (ui64 bucketId = 0; bucketId < NumberOfSpillingBuckets_; ++bucketId) {
+            UniteKeysAndStates(bucketId);
+        }
+        return true;
+    }
+
+    bool UpdateSpillingAndWait(bool finalize=false) {
+        for (ui64 bucketId = 0; bucketId < NumberOfSpillingBuckets_; ++bucketId) {
+            auto& bucket = SpillingBuckets_[bucketId];
+            if (bucket.SpillingOperation_.has_value() && !bucket.SpillingOperation_->HasValue()) return false;
+
+            if (bucket.SpillingOperation_.has_value()) {
+                bucket.SpillingKeys_.push_back(bucket.SpillingOperation_->ExtractValue());
+                bucket.SpillingOperation_ = std::nullopt;
+            }
+
+            if (bucket.GetSize() > BucketSizeLimit_ || bucket.GetSize() != 0 && finalize) {
+                std::cerr << "Spilling bucket: " << bucketId << " Size: " << bucket.SpillingBuffer.Size() << " Rows: " << bucket.Rows << " TmpRows: " << bucket.TmpRows << " Finalize: " << finalize << std::endl;
+                bucket.SpillingSizes_.push_back(bucket.Rows);
+                bucket.SpillingOperation_ = bucket.Spiller_->Put(std::move(bucket.SpillingBuffer));
+                bucket.Clear();
+                return false;
+            }
+        }
+
+        return true;
+
+    }
+
+    bool SpillEverything() {
+        if (!IteratorsInitialized) {
+            if constexpr (!InlineAggState) {
+                SpillingHashFixedMapIt_ = HashFixedMap_->Begin();
+            } else {
+                SpillingHashMapIt_ = HashMap_->Begin();
+            }
+            IteratorsInitialized = true;
+        }
+        std::cerr << "Spilling everything" << std::endl;
+
+        while (!IsExtractingFinished) {
+            if (!UpdateSpillingAndWait(false)) return false;
+            IsExtractingFinished = InlineAggState ?
+                SpillingIterate(*HashMap_, SpillingHashMapIt_) :
+                SpillingIterate(*HashFixedMap_, SpillingHashFixedMapIt_);
+
+        }
+        return UpdateSpillingAndWait(true);
+    }
+
+    bool HasAnythingToLoad() const {
+        return LoadingBucket < NumberOfSpillingBuckets_;
+    }
+
+    ui64 LoadingBucket = 0;
+
+    bool LoadNextBucket() {
+        std::cerr << "Loading bucket " << LoadingBucket << std::endl;
+        if (SpillingBuckets_[LoadingBucket].LoadingOperation_.has_value() && !SpillingBuckets_[LoadingBucket].LoadingOperation_->HasValue()) return false;
+
+        if (SpillingBuckets_[LoadingBucket].LoadingOperation_.has_value()) {
+            auto data = *SpillingBuckets_[LoadingBucket].LoadingOperation_->ExtractValue();
+            SpillingBuckets_[LoadingBucket].LoadingOperation_ = std::nullopt;
+
+            std::cerr << "ProcessingLoaded" << std::endl;
+            SpillingProcessInput(data, LoadingBucket);
+            DumpState();
+        }
+        if (SpillingBuckets_[LoadingBucket].SpillingKeys_.empty()) {
+            LoadingBucket++;
+            return true;
+            // if (LoadingBucket == NumberOfSpillingBuckets_) return true;
+
+        }
+        SpillingBuckets_[LoadingBucket].LoadingOperation_ = SpillingBuckets_[LoadingBucket].Spiller_->Get(SpillingBuckets_[LoadingBucket].SpillingKeys_.back());
+        SpillingBuckets_[LoadingBucket].SpillingKeys_.pop_back();
+
+        return false;
+
+    }
+
+    void SpillingProcessInput(NYql::TChunkedBuffer& data, ui64 bucketId) {
+        NYql::TChunkedBufferOutput outtmp(data);
+
+        TStringStream stream;
+
+        data.CopyTo(stream, data.Size());
+
+        TStringBuf tmp = stream.Str();
+
+        auto strSize = data.Size();
+
+        NYql::NUdf::TInputBuffer input(tmp);
+
+        ++BatchNum_;
+        const auto batchLength = SpillingBuckets_[bucketId].SpillingSizes_.back();
+        SpillingBuckets_[bucketId].SpillingSizes_.pop_back();
+        if (!batchLength) {
+            return;
+        }
+        HasValues_ = true;
+
+        std::cerr << "Size: " << strSize << " Batch length: " << batchLength << std::endl;
+
+        std::array<TOutputBuffer, PrefetchBatchSize> out;
+        for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
+            out[i].Resize(sizeof(TKey));
+        }
+
+        std::array<TRobinHoodBatchRequestItem<TKey>, PrefetchBatchSize> insertBatch;
+        std::array<ui64, PrefetchBatchSize> insertBatchRows;
+        std::array<char*, PrefetchBatchSize> insertBatchPayloads;
+        std::array<bool, PrefetchBatchSize> insertBatchIsNew;
+        ui32 insertBatchLen = 0;
+
+        const auto processInsertBatch = [&]() {
+            // std::cerr << "Processing insert batch. InsertBatvhLen: " << insertBatchLen<< std::endl;
+            for (ui32 i = 0; i < insertBatchLen; ++i) {
+                auto& r = insertBatch[i];
+                TStringBuf str = out[i].Finish();
+                TKey key = MakeKey<TKey>(str, KeyLength_);
+                r.ConstructKey(key);
+            }
+
+            if constexpr (UseSet) {
+                HashSet_->BatchInsert({insertBatch.data(), insertBatchLen},[&](size_t index, typename THashedWrapperBaseState::TSetImpl::iterator iter, bool isNew) {
+                    Y_UNUSED(index);
+                    if (isNew) {
+                        if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                            MoveKeyToArena(HashSet_->GetKey(iter), Arena_, KeyLength_);
+                        }
+                    }
+                });
+            } else {
+                using THashTable = std::conditional_t<InlineAggState, typename THashedWrapperBaseState::TDynMapImpl, typename THashedWrapperBaseState::TFixedMapImpl>;
+                THashTable* hash;
+                if constexpr (!InlineAggState) {
+                    hash = HashFixedMap_.get();
+                } else {
+                    hash = HashMap_.get();
+                }
+
+                hash->BatchInsert({insertBatch.data(), insertBatchLen}, [&](size_t index, typename THashTable::iterator iter, bool isNew) {
+                    if (isNew) {
+                        if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                            MoveKeyToArena(hash->GetKey(iter), Arena_, KeyLength_);
+                        }
+                    }
+
+                    if constexpr (UseArena) {
+                        // prefetch payloads only
+                        auto payload = hash->GetPayload(iter);
+                        char* ptr;
+                        if (isNew) {
+                            ptr = (char*)Arena_.Alloc(TotalStateSize_);
+                            *(char**)payload = ptr;
+                        } else {
+                            ptr = *(char**)payload;
+                        }
+
+                        insertBatchIsNew[index] = isNew;
+                        insertBatchPayloads[index] = ptr;
+                        NYql::PrefetchForWrite(ptr);
+                    } else {
+                        // process insert
+                        auto payload = (char*)hash->GetPayload(iter);
+                        auto row = insertBatchRows[index];
+                        // ui32 streamIndex = 0;
+                        if constexpr (Many) {
+                            MKQL_ENSURE(false, "wrong");
+                            // streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
+                        }
+
+                        SpillingInsert(row, payload, isNew, input);
+                    }
+                });
+
+                if constexpr (UseArena) {
+                    for (ui32 i = 0; i < insertBatchLen; ++i) {
+                        auto row = insertBatchRows[i];
+                        // ui32 streamIndex = 0;
+                        if constexpr (Many) {
+                            MKQL_ENSURE(false, "wrong");
+                            // streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
+                        }
+
+                        bool isNew = insertBatchIsNew[i];
+                        char* payload = insertBatchPayloads[i];
+                        SpillingInsert(row, payload, isNew, input);
+                    }
+                }
+            }
+        };
+
+        for (ui64 row = 0; row < batchLength; ++row) {
+            // std::cerr << "Row: " << row << "/" << batchLength << std::endl;
+
+            // encode key
+            out[insertBatchLen].Rewind();
+            out[insertBatchLen].PushString(input.PopString());
+
+            insertBatchRows[insertBatchLen] = row;
+            ++insertBatchLen;
+            if (insertBatchLen == PrefetchBatchSize) {
+                processInsertBatch();
+                insertBatchLen = 0;
+            }
+        }
+
+        processInsertBatch();
     }
 
     void ProcessInput(const THolderFactory& holderFactory) {
@@ -1500,6 +2057,57 @@ private:
 
         Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputBlockSize_)));
         OutputBlockSize_ = 0;
+    }
+
+    void SpillingInsert(ui64 row, char* payload, bool isNew, NYql::NUdf::TInputBuffer& input) const {
+        char* ptr = payload;
+
+        if (isNew) {
+            if constexpr (Many) {
+                MKQL_ENSURE(false, "Wrong");
+                // static_assert(Finalize);
+                // MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
+                // memset(ptr, 0, Streams_.size());
+                // ptr[currentStreamIndex] = 1;
+
+                // for (auto i : Streams_[currentStreamIndex]) {
+
+                //     Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                // }
+            } else {
+                // TODO: reverse order
+                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                    Aggs_[i]->DeserializeState(ptr, input);
+
+                    ptr += Aggs_[i]->StateSize;
+                }
+            }
+        } else {
+            MKQL_ENSURE(false, "Every key should be new");
+            if constexpr (Many) {
+                MKQL_ENSURE(false, "Wrong");
+                // static_assert(Finalize);
+                // MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
+
+                // bool isNewStream = !ptr[currentStreamIndex];
+                // ptr[currentStreamIndex] = 1;
+
+                // for (auto i : Streams_[currentStreamIndex]) {
+
+                //     if (isNewStream) {
+                //         Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                //     } else {
+                //         Aggs_[i]->UpdateState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                //     }
+                // }
+            } else {
+                for (size_t i = 0; i < Aggs_.size(); ++i) {
+                    Aggs_[i]->UpdateState(ptr, BatchNum_, Values_.data(), row);
+
+                    ptr += Aggs_[i]->StateSize;
+                }
+            }
+        }
     }
 
     void Insert(ui64 row, char* payload, bool isNew, ui32 currentStreamIndex) const {
@@ -1819,6 +2427,13 @@ private:
         {
         }
 
+    enum class TSpillingState {
+        InMemory,
+        Spilling,
+        Restoring,
+        Done,
+    };
+
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             TState& state = *static_cast<TState*>(State_.AsBoxed().Get());
@@ -1827,11 +2442,27 @@ private:
             const size_t outputWidth = state.OutputWidth_;
             MKQL_ENSURE(outputWidth == width, "The given width doesn't equal to the result type size");
 
+            // std::cerr << "MISHA HERE. Final? " << Finalize << std::endl;
+
             if (!state.Count) {
-                if (state.IsFinished_)
-                    return NUdf::EFetchStatus::Finish;
+                if (state.IsFinished_) {
+                    if constexpr (Finalize) {
+                        if (state.HasAnythingToLoad()) {
+                            state.Clear();
+                            state.IsFinished_ = false;
+
+                        } else {
+                            return NUdf::EFetchStatus::Finish;
+                        }
+                    } else {
+                        return NUdf::EFetchStatus::Finish;
+                    }
+                }
 
                 while (!state.WritingOutput_) {
+                    if constexpr(Finalize) {
+                        if (state.CheckSpillingAndWait()) return NUdf::EFetchStatus::Yield;
+                    }
                     switch (Stream_.WideFetch(inputFields, inputWidth)) {
                         case NUdf::EFetchStatus::Yield:
                             return NUdf::EFetchStatus::Yield;
@@ -1839,17 +2470,30 @@ private:
                             state.ProcessInput(HolderFactory_);
                             continue;
                         case NUdf::EFetchStatus::Finish:
+                            state.FinishFetched = true;
                             break;
+                    }
+
+                    if constexpr (Finalize) {
+                        if (state.CheckSpillingAndWait()) return NUdf::EFetchStatus::Yield;
                     }
 
                     if (state.Finish())
                         break;
-                    else
+                    else {
+                        if constexpr(Finalize) {
+                            MKQL_ENSURE(false, "HERE");
+                        }
                         return NUdf::EFetchStatus::Finish;
+                    }
                 }
 
-                if (!state.FillOutput(HolderFactory_))
+                if (!state.FillOutput(HolderFactory_)) {
+                    if constexpr(Finalize) {
+                        MKQL_ENSURE(false, "HERE");
+                    }
                     return NUdf::EFetchStatus::Finish;
+                }
             }
 
             const auto sliceSize = state.Slice();

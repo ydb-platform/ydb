@@ -110,6 +110,7 @@ private: //events
     void AddReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, NUdf::TUnboxedValue *lookupPayload) {
             NUdf::TUnboxedValue* outputRowItems;
             NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
+            ui32 estimatedRowSize = 2;
             for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
                 const auto& [source, index] = OutputRowColumnOrder[i];
                 switch (source) {
@@ -131,9 +132,8 @@ private: //events
                         Y_ABORT();
                         break;
                 }
+                estimatedRowSize += TDqDataSerializer::EstimateSize(outputRowItems[i], OutputRowType->GetElementType(i));
             }
-            auto estimatedRowSize = TDqDataSerializer::EstimateSize(outputRow, OutputRowType);
-            if (estimatedRowSize < 1) estimatedRowSize = 1;
             EstimatedReadySize += estimatedRowSize;
             ReadyQueue.PushRow(outputRowItems, OutputRowType->GetElementsCount());
     }

@@ -735,6 +735,9 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
                 TableStats.emplace(table.GetTablePath(), tableAggr);
             }
 
+            TotalReadRows += table.GetReadRows();
+            TotalReadBytes += table.GetReadBytes();
+
             tableAggr->SetReadRows(tableAggr->GetReadRows() + table.GetReadRows());
             tableAggr->SetReadBytes(tableAggr->GetReadBytes() + table.GetReadBytes());
             tableAggr->SetWriteRows(tableAggr->GetWriteRows() + table.GetWriteRows());
@@ -1070,6 +1073,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
     }
 
+    ui64 totalReadRows = 0;
+    ui64 totalReadBytes = 0;
+
     for (auto& [stageId, stageStat] : StageStats) {
         auto& stageStats = *protoStages[stageStat.StageId.StageId];
         stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
@@ -1114,6 +1120,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             ExportAggStats(t.EraseRows, *table.MutableEraseRows());
             ExportAggStats(t.EraseBytes, *table.MutableEraseBytes());
             table.SetAffectedPartitions(ExportAggStats(t.AffectedPartitions));
+
+            totalReadRows += table.GetReadRows().GetSum();
+            totalReadBytes += table.GetReadBytes().GetSum();
         }
         for (auto& [id, i] : stageStat.Ingress) {
             ExportAggAsyncBufferStats(i, (*stageStats.MutableIngress())[id]);
@@ -1146,6 +1155,13 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             ExportAggStats(a.Rows, *aggrStat.MutableRows());
         }
     }
+
+
+
+    stats.SetDurationUs(TInstant::Now().MicroSeconds() - StartTs.MicroSeconds());
+
+    stats.SetTotalReadRows(totalReadRows);
+    stats.SetTotalReadBytes(totalReadBytes);
 
     for (const auto& [_, tableStats] : TableStats) {
         stats.AddTables()->CopyFrom(*tableStats);
@@ -1231,6 +1247,9 @@ void TQueryExecutionStats::Finish() {
 
     Result->SetCpuTimeUs(Result->GetCpuTimeUs() + ExecuterCpuTime.MicroSeconds());
     Result->SetDurationUs(FinishTs.MicroSeconds() - StartTs.MicroSeconds());
+
+    Result->SetTotalReadRows(TotalReadRows);
+    Result->SetTotalReadBytes(TotalReadBytes);
 
     // Result->Result* fields are (temporary?) commented out in proto due to lack of use
     //

@@ -1337,15 +1337,13 @@ public:
 
         auto options = Y(Q(Y(Q("mode"), Q("alterDatabase"))));
 
-        options = L(options, Q(Y(Q("dbPath"), Q(Params.DbPath))));
-
         if (Params.Owner.has_value()) {
-            options = L(options, Q(Y(Q("owner"), Q(Params.Owner.value().Build()))));
+            options = L(options, Q(Y(Q("owner"), Params.Owner.value().Build())));
         }
 
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)),
-            Y("let", "world", Y(TString(WriteName), "world", "sink", Q(options))),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("databasePath"), Y("String", Params.DbPath.Build())))), Y("Void"), Q(options))),
             Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
             )));
 

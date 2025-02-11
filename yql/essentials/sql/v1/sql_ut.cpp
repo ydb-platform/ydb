@@ -977,7 +977,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             Y_UNUSED(word);
 
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
-                R"(let world (Write! world sink '('('mode 'alterDatabase) '('dbPath '/Root/test) '('owner ''"user1"))))"
+                R"(let world (Write! world sink (Key '('databasePath (String '"/Root/test"))) (Void) '('('mode 'alterDatabase) '('owner '"user1"))))"
             ));
         };
 

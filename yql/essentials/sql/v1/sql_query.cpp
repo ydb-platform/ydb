@@ -1939,7 +1939,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TAlterDatabaseParameters alterDatabaseParams;
             alterDatabaseParams.Owner = roleName;
-            alterDatabaseParams.DbPath = Id(node.GetRule_an_id_schema3(), *this);
+            alterDatabaseParams.DbPath = TDeferredAtom(Ctx.Pos(), Id(node.GetRule_an_id_schema3(), *this));
 
             const TPosition pos = Ctx.Pos();
             TString service = Ctx.Scoped->CurrService;

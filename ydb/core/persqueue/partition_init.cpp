@@ -486,6 +486,71 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     };
 }
 
+static bool IsIncludes(const TKey& lhs, const TKey& rhs)
+{
+    if (lhs.GetOffset() > rhs.GetOffset()) {
+        return false;
+    }
+    if (lhs.GetOffset() + lhs.GetCount() < rhs.GetOffset() + rhs.GetCount()) {
+        return false;
+    }
+    return true;
+}
+
+static bool IsAdjacentToTheLeft(const TKey& lhs, const TKey& rhs)
+{
+    return lhs.GetOffset() + lhs.GetCount() == rhs.GetOffset();
+}
+
+static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
+                                             const TPartitionId& partitionId)
+{
+    TVector<TString> keys;
+
+    for (ui32 i = 0; i < range.PairSize(); ++i) {
+        const auto& pair = range.GetPair(i);
+        Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+        keys.push_back(pair.GetKey());
+    }
+
+    std::sort(keys.begin(), keys.end());
+
+    TDeque<TString> filtered;
+    TKey lastKey;
+
+    for (size_t i = 0; i < keys.size(); ++i) {
+        if (filtered.empty()) {
+            filtered.push_back(keys[i]);
+            lastKey = MakeKeyFromString(filtered.back(), partitionId);
+            continue;
+        }
+
+        auto candidate = MakeKeyFromString(keys[i], partitionId);
+
+        // `lastKey` includes `candidate`
+        if (IsIncludes(lastKey, candidate)) {
+            continue;
+        }
+        // `candidate` includes `lastKey`
+        if (IsIncludes(candidate, lastKey)) {
+            filtered.back() = keys[i];
+            lastKey = MakeKeyFromString(filtered.back(), partitionId);
+            continue;
+        }
+        // `lastKey` is adjacent to `candidate' on the left
+        if (IsAdjacentToTheLeft(lastKey, candidate)) {
+            filtered.push_back(keys[i]);
+            lastKey = MakeKeyFromString(filtered.back(), partitionId);
+            continue;
+        }
+
+        Y_ABORT_UNLESS(false, "A strange key %s, last key %s",
+                       keys[i].data(), filtered.back().data());
+    }
+
+    return {filtered.begin(), filtered.end()};
+}
+
 void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx) {
     auto& endOffset = Partition()->EndOffset;
     auto& startOffset = Partition()->StartOffset;
@@ -495,9 +560,14 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     auto& gapSize = Partition()->GapSize;
     auto& bodySize = Partition()->BodySize;
 
+    const auto actualKeys = FilterBlobsMetaData(range, PartitionId());
+
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         auto pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+        if (!actualKeys.contains(pair.GetKey())) {
+            continue;
+        }
         TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
         if (dataKeysBody.empty()) { //no data - this is first pair of first range
             head.Offset = endOffset = startOffset = k.GetOffset();

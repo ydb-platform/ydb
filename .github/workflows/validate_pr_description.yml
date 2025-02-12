@@ -1,4 +1,4 @@
-name: Validate PR Description
+name: PR-description
 
 on:
   pull_request:

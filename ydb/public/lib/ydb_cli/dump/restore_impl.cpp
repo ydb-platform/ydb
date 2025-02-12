@@ -480,7 +480,7 @@ TRestoreResult TRestoreClient::RestoreFolder(
     }
 
     if (IsFileExists(fsPath.Child(NFiles::CreateAsyncReplication().FileName))) {
-        return RestoreReplication(fsPath, objectDbPath, settings, oldEntries.contains(objectDbPath));
+        return RestoreReplication(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, oldEntries.contains(objectDbPath));
     }
 
     if (IsFileExists(fsPath.Child(NFiles::Empty().FileName))) {
@@ -505,7 +505,7 @@ TRestoreResult TRestoreClient::RestoreFolder(
         } else if (IsFileExists(child.Child(NFiles::CreateCoordinationNode().FileName))) {
             result = RestoreCoordinationNode(child, childDbPath, settings, oldEntries.contains(childDbPath));
         } else if (IsFileExists(child.Child(NFiles::CreateAsyncReplication().FileName))) {
-            result = RestoreReplication(child, childDbPath, settings, oldEntries.contains(childDbPath));
+            result = RestoreReplication(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries.contains(childDbPath));
         } else if (child.IsDirectory()) {
             result = RestoreFolder(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries);
         }
@@ -605,7 +605,8 @@ TRestoreResult TRestoreClient::RestoreTopic(
 
 TRestoreResult TRestoreClient::RestoreReplication(
     const TFsPath& fsPath,
-    const TString& dbPath,
+    const TString& dbRestoreRoot,
+    const TString& dbPathRelativeToRestoreRoot,
     const TRestoreSettings& settings,
     bool isAlreadyExisting)
 {
@@ -615,6 +616,7 @@ TRestoreResult TRestoreClient::RestoreReplication(
         return *error;
     }
 
+    const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
     LOG_I("Restore async replication " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
     if (settings.DryRun_) {
@@ -624,6 +626,9 @@ TRestoreResult TRestoreClient::RestoreReplication(
     auto query = ReadAsyncReplicationQuery(fsPath, Log.get());
 
     NYql::TIssues issues;
+    if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
+        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+    }
     if (!RewriteCreateQuery(query, "CREATE ASYNC REPLICATION `{}`", dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }

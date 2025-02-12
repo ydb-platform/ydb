@@ -725,7 +725,12 @@ inline TString Interval(const TDuration& value) {
     return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
 }
 
-TString BuildCreateReplicationQuery(const TString& name, const NReplication::TReplicationDescription& desc) {
+TString BuildCreateReplicationQuery(
+        const TString& db,
+        const TString& backupRoot,
+        const TString& name,
+        const NReplication::TReplicationDescription& desc)
+{
     TVector<TString> targets(::Reserve(desc.GetItems().size()));
     for (const auto& item : desc.GetItems()) {
         if (!item.DstPath.ends_with("/indexImplTable")) { // TODO(ilnaz): get rid of this hack
@@ -752,18 +757,29 @@ TString BuildCreateReplicationQuery(const TString& name, const NReplication::TRe
         opts.push_back(BuildOption("COMMIT_INTERVAL", Interval(desc.GetGlobalConsistency().GetCommitInterval())));
     }
 
-    return std::format("CREATE ASYNC REPLICATION `{}`\nFOR\n{}\nWITH (\n{}\n);",
-        name.c_str(), JoinSeq(",\n", targets).c_str(), JoinSeq(",\n", opts).c_str());
+    return std::format(
+            "-- database: \"{}\"\n"
+            "-- backup root: \"{}\"\n"
+            "CREATE ASYNC REPLICATION `{}`\nFOR\n{}\nWITH (\n{}\n);",
+        db.c_str(), backupRoot.c_str(), name.c_str(), JoinSeq(",\n", targets).c_str(), JoinSeq(",\n", opts).c_str());
 }
 
 }
 
-void BackupReplication(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
-    Y_ENSURE(!dbPath.empty());
+void BackupReplication(
+    TDriver driver,
+    const TString& db,
+    const TString& dbBackupRoot,
+    const TString& dbPathRelativeToBackupRoot,
+    const TFsPath& fsBackupFolder)
+{
+    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
+    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
+
     LOG_I("Backup async replication " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
     const auto desc = DescribeReplication(driver, dbPath);
-    const auto creationQuery = BuildCreateReplicationQuery(fsBackupFolder.GetName(), desc);
+    const auto creationQuery = BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), desc);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateAsyncReplication());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -813,7 +829,7 @@ static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
     }
 }
 
-void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& backupPrefix,
+void BackupFolderImpl(TDriver driver, const TString& database, const TString& dbPrefix, const TString& backupPrefix,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
         NYql::TIssues& issues
@@ -863,7 +879,7 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                 BackupCoordinationNode(driver, dbIt.GetFullPath(), childFolderPath);
             }
             if (dbIt.IsReplication()) {
-                BackupReplication(driver, dbIt.GetFullPath(), childFolderPath);
+                BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
             }
             dbIt.Next();
         }
@@ -1170,6 +1186,7 @@ void BackupDatabaseImpl(TDriver driver, const TString& dbPath, const TFsPath& fo
             BackupFolderImpl(
                 driver,
                 dbPath,
+                dbPath,
                 tmpDbFolder,
                 folderPath,
                 /* exclusionPatterns */ {},
@@ -1251,7 +1268,7 @@ void BackupFolder(const TDriver& driver, const TString& database, const TString&
         }
 
         NYql::TIssues issues;
-        BackupFolderImpl(driver, dbPrefix, tmpDbFolder, folderPath, exclusionPatterns,
+        BackupFolderImpl(driver, database, dbPrefix, tmpDbFolder, folderPath, exclusionPatterns,
             schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, issues
         );
 

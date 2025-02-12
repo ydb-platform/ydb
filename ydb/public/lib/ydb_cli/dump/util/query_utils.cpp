@@ -10,6 +10,7 @@
 #include <library/cpp/protobuf/util/simple_reflection.h>
 
 #include <util/folder/pathsplit.h>
+#include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
 
@@ -47,11 +48,24 @@ TString RewriteAbsolutePath(TStringBuf path, TStringBuf backupRoot, TStringBuf r
 namespace {
 
 struct TAbsolutePathRewriter {
+    const TString Database;
     const TStringBuf BackupRoot;
     const TStringBuf RestoreRoot;
 
+    static TString BuildDatabaseToken(TStringBuf database) {
+        if (database) {
+            return TStringBuilder() << "`" << database << "/";
+        } else {
+            return "";
+        }
+    }
+
     static bool IsAbsolutePath(TStringBuf path) {
         return path.StartsWith("`/") && path.EndsWith('`');
+    }
+
+    bool IsInDatabase(TStringBuf path) const {
+        return path.StartsWith(Database);
     }
 
     TString RewriteAbsolutePath(TStringBuf path) const {
@@ -63,14 +77,15 @@ struct TAbsolutePathRewriter {
     }
 
 public:
-    explicit TAbsolutePathRewriter(TStringBuf backupRoot, TStringBuf restoreRoot)
-        : BackupRoot(backupRoot)
+    explicit TAbsolutePathRewriter(TStringBuf database, TStringBuf backupRoot, TStringBuf restoreRoot)
+        : Database(BuildDatabaseToken(database))
+        , BackupRoot(backupRoot)
         , RestoreRoot(restoreRoot)
     {
     }
 
     TString operator()(const TString& path) const {
-        if (IsAbsolutePath(path)) {
+        if (IsAbsolutePath(path) && (!Database || IsInDatabase(path))) {
             return RewriteAbsolutePath(path);
         }
 
@@ -175,7 +190,27 @@ struct TTableRefValidator {
     NYql::TIssues& Issues;
 };
 
+TString GetOpt(TStringInput query, TStringBuf pattern) {
+    TString line;
+    while (query.ReadLine(line)) {
+        StripInPlace(line);
+        if (line.StartsWith(pattern)) {
+            return TString(TStringBuf(line).Skip(pattern.size()).Chop(1 /* last " */));
+        }
+    }
+
+    return "";
+}
+
 } // anonymous
+
+TString GetBackupRoot(const TString& query) {
+    return GetOpt(query, R"(-- backup root: ")");
+}
+
+TString GetDatabase(const TString& query) {
+    return GetOpt(query, R"(-- database: ")");
+}
 
 bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::TIssues& issues) {
     NSQLTranslation::TTranslationSettings settings;
@@ -215,20 +250,20 @@ bool ValidateTableRefs(const TRule_sql_query& query, NYql::TIssues& issues) {
 }
 
 template <typename TRef>
-TString RewriteRefs(const TRule_sql_query& query, TStringBuf backupRoot, TStringBuf restoreRoot) {
-    TTokenCollector tokenCollector(TAbsolutePathRewriter(backupRoot, restoreRoot));
+TString RewriteRefs(const TRule_sql_query& query, TStringBuf db, TStringBuf backupRoot, TStringBuf restoreRoot) {
+    TTokenCollector tokenCollector(TAbsolutePathRewriter(db, backupRoot, restoreRoot));
     VisitAllFields<TRef>(query, tokenCollector);
     return tokenCollector.Tokens;
 }
 
 template <typename TRef>
-bool RewriteRefs(TString& queryStr, TStringBuf backupRoot, TStringBuf restoreRoot, NYql::TIssues& issues) {
+bool RewriteRefs(TString& queryStr, TStringBuf db, TStringBuf backupRoot, TStringBuf restoreRoot, NYql::TIssues& issues) {
     TRule_sql_query queryProto;
     if (!SqlToProtoAst(queryStr, queryProto, issues)) {
         return false;
     }
 
-    const auto rewrittenQuery = RewriteRefs<TRef>(queryProto, backupRoot, restoreRoot);
+    const auto rewrittenQuery = RewriteRefs<TRef>(queryProto, db, backupRoot, restoreRoot);
     // formatting here is necessary for the view to have pretty text inside it after the creation
     if (!Format(rewrittenQuery, queryStr, issues)) {
         return false;
@@ -238,11 +273,15 @@ bool RewriteRefs(TString& queryStr, TStringBuf backupRoot, TStringBuf restoreRoo
 }
 
 bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, NYql::TIssues& issues) {
-    return RewriteRefs<TRule_table_ref>(query, backupRoot, restoreRoot, issues);
+    return RewriteRefs<TRule_table_ref>(query, "", backupRoot, restoreRoot, issues);
 }
 
-bool RewriteObjectRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, NYql::TIssues& issues) {
-    return RewriteRefs<TRule_object_ref>(query, backupRoot, restoreRoot, issues);
+bool RewriteTableRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {
+    return RewriteRefs<TRule_table_ref>(query, GetDatabase(query), GetBackupRoot(query), restoreRoot, issues);
+}
+
+bool RewriteObjectRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {
+    return RewriteRefs<TRule_object_ref>(query, GetDatabase(query), GetBackupRoot(query), restoreRoot, issues);
 }
 
 bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::string& dbPath, NYql::TIssues& issues) {
@@ -253,21 +292,6 @@ bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::str
 
     issues.AddIssue(TStringBuilder() << "Pattern: \"" << pattern << "\" was not found: " << query.Quote());
     return false;
-}
-
-TString GetBackupRoot(TStringInput query) {
-    constexpr TStringBuf targetLinePrefix = "-- backup root: \"";
-    constexpr TStringBuf discardedSuffix = "\"";
-
-    TString line;
-    while (query.ReadLine(line)) {
-        StripInPlace(line);
-        if (line.StartsWith(targetLinePrefix)) {
-            return TString(TStringBuf(line).Skip(targetLinePrefix.size()).Chop(discardedSuffix.size()));
-        }
-    }
-
-    return "";
 }
 
 } // NYdb::NDump

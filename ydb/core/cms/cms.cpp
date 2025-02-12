@@ -378,12 +378,13 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data());
 
-        bool prepared = !request.GetEvictVDisks();
-        if (!prepared) {
-            prepared = CheckEvictVDisks(action, error);
+        bool ready = true;
+
+        if (request.GetEvictVDisks()) {
+            ready = CheckEvictVDisks(action, error);
         }
 
-        if (prepared && CheckAction(action, opts, error, ctx)) {
+        if (ready && CheckAction(action, opts, error, ctx)) {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: ALLOW");
 
             auto *permission = response.AddPermissions();
@@ -567,6 +568,7 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
         case TAction::RESTART_SERVICES:
         case TAction::SHUTDOWN_HOST:
         case TAction::REBOOT_HOST:
+        case TAction::REPLACE_DEVICES:
             break;
         default:
             error.Code = TStatus::WRONG_REQUEST;
@@ -574,11 +576,43 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
             return false;
     }
 
-    for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
-        if (!node->VDisks.empty()) {
-            error.Code = TStatus::DISALLOW_TEMP;
-            error.Reason = TStringBuilder() << "VDisks eviction from host " << action.GetHost() << " has not yet been completed";
-            return false;
+    if (action.GetType() != TAction::REPLACE_DEVICES) {
+        for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
+            if (!node->VDisks.empty()) {
+                error.Code = TStatus::DISALLOW_TEMP;
+                error.Reason = TStringBuilder() << "VDisks eviction from host " << action.GetHost() << " has not yet been completed";
+                return false;
+            }
+        }
+    } else {
+        for (auto& device : action.GetDevices()) {
+            const TPDiskInfo* pdisk = nullptr;
+            if (ClusterInfo->HasPDisk(device)) {
+                pdisk = &ClusterInfo->PDisk(device);
+            } else if (ClusterInfo->HasPDisk(action.GetHost(), device)) {
+                pdisk = &ClusterInfo->PDisk(action.GetHost(), device);
+            } else {
+                error.Code = TStatus::NO_SUCH_DEVICE;
+                error.Reason = TStringBuilder() << "Unknown device: " << device;
+                return false;
+            }
+
+            auto& vdisks = pdisk->VDisks;
+
+            if (!vdisks.empty()) {
+                for (auto& vdisk : vdisks) {
+                    if (TClusterInfo::IsStaticGroupVDisk(vdisk)) {
+                        // If non-dynamic group vdisks are present on the pdisk, we can't decomission it
+                        error.Code = TStatus::DISALLOW;
+                        error.Reason = TStringBuilder() << "Disk can't be decomissioned because it has static group vdisks";
+                        return false;
+                    }
+                    // If non-dynamic group vdisks are present on the pdisk, we can't decomission it
+                    error.Code = TStatus::DISALLOW_TEMP;
+                    error.Reason = TStringBuilder() << "PDisk decomission from host " << action.GetHost() << " has not yet been completed";
+                    return false;
+                }
+            }
         }
     }
 
@@ -985,7 +1019,7 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
                 res = false;
                 break;
             }
-        } else if (ClusterInfo->HasVDisk(device)) {
+        } else if (action.GetType() != TAction::REPLACE_DEVICES && ClusterInfo->HasVDisk(device)) {
             const auto &vdisk = ClusterInfo->VDisk(device);
             if (TryToLockVDisk(opts, vdisk, duration, error))
                 ClusterInfo->AddVDiskTempLock(vdisk.VDiskId, action);
@@ -1669,9 +1703,80 @@ TVector<TCms::THostMarkers> TCms::ResetHostMarkers(const TString &host, TTransac
     return updateMarkers;
 }
 
-void TCms::SentinelUpdateHostMarkers(TVector<TCms::THostMarkers> &&updateMarkers, const TActorContext &ctx) {
-    if (updateMarkers) {
-        ctx.Send(State->Sentinel, new TEvSentinel::TEvUpdateHostMarkers(std::move(updateMarkers)));
+TVector<TCms::TPDiskMarkers> TCms::SetPDiskMarker(const TString &host, const TString &device, NKikimrCms::EMarker marker, TTransactionContext &txc, const TActorContext &ctx) {
+    if (!ClusterInfo) {
+        return {};
+    }
+
+    TPDiskID pdiskId;
+    if (ClusterInfo->HasPDisk(device)) {
+        pdiskId = ClusterInfo->PDisk(device).PDiskId;
+    } else if (ClusterInfo->HasPDisk(host, device)) {
+        pdiskId = ClusterInfo->PDisk(host, device).PDiskId;
+    }
+    
+    if (State->PDiskMarkers.contains(pdiskId)) {
+        return {};
+    }
+
+    AuditLog(ctx, TStringBuilder() << "Add pdisk marker"
+        << ": pdiskId# " << pdiskId
+        << ", marker# " << marker);
+
+    State->PDiskMarkers[pdiskId] = {marker};
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::PDiskMarkers>().Key(pdiskId.NodeId, pdiskId.DiskId).Update(
+        NIceDb::TUpdate<Schema::PDiskMarkers::Markers>(TVector<NKikimrCms::EMarker>{marker})
+    );
+
+    TVector<TCms::TPDiskMarkers> updateMarkers;
+    if (ClusterInfo && ClusterInfo->HasPDisk(pdiskId)) {
+        updateMarkers.push_back({
+            .PDiskId = pdiskId,
+            .Markers = {marker},
+        });
+    }
+
+    return updateMarkers;
+}
+
+TVector<TCms::TPDiskMarkers> TCms::ResetPDiskMarkers(const TString &host, const TString &device, TTransactionContext &txc, const TActorContext &ctx) {
+    if (!ClusterInfo) {
+        return {};
+    }
+
+    TPDiskID pdiskId;
+    if (ClusterInfo->HasPDisk(device)) {
+        pdiskId = ClusterInfo->PDisk(device).PDiskId;
+    } else if (ClusterInfo->HasPDisk(host, device)) {
+        pdiskId = ClusterInfo->PDisk(host, device).PDiskId;
+    }
+
+    if (!State->PDiskMarkers.contains(pdiskId)) {
+        return {};
+    }
+
+    AuditLog(ctx, TStringBuilder() << "Reset pdisk markers"
+        << ": pdiskId# " << pdiskId);
+
+    State->PDiskMarkers.erase(pdiskId);
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::PDiskMarkers>().Key(pdiskId.NodeId, pdiskId.DiskId).Delete();
+
+    TVector<TCms::TPDiskMarkers> updateMarkers;
+    if (ClusterInfo && ClusterInfo->HasPDisk(pdiskId)) {
+        updateMarkers.push_back({
+            .PDiskId = pdiskId,
+            .Markers = {},
+        });
+    }
+
+    return updateMarkers;
+}
+
+void TCms::SentinelUpdateMarkers(TVector<TCms::THostMarkers> &&hostMarkers, TVector<TCms::TPDiskMarkers> &&pdiskMarkers, const TActorContext &ctx) {
+    if (hostMarkers || pdiskMarkers) {
+        ctx.Send(State->Sentinel, new TEvSentinel::TEvUpdateMarkers(std::move(hostMarkers), std::move(pdiskMarkers)));
     }
 }
 
@@ -1934,14 +2039,28 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
 
     if (rec.GetEvictVDisks()) {
         for (const auto &action : rec.GetActions()) {
-            if (State->HostMarkers.contains(action.GetHost())) {
+            const TString& host = action.GetHost();
+            if (State->HostMarkers.contains(host)) {
                 return ReplyWithError<TEvCms::TEvPermissionResponse>(
-                    ev, TStatus::WRONG_REQUEST, TStringBuilder() << "VDisks of host '" << action.GetHost() << "' are being evicted", ctx);
+                    ev, TStatus::WRONG_REQUEST, TStringBuilder() << "VDisks of host '" << host << "' are being evicted", ctx);
             }
-            for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
+            for (const auto node : ClusterInfo->HostNodes(host)) {
                 if (State->HostMarkers.contains(ToString(node->NodeId))) {
                     return ReplyWithError<TEvCms::TEvPermissionResponse>(
                         ev, TStatus::WRONG_REQUEST, TStringBuilder() << "VDisks of node '" << node->NodeId << "' are being evicted", ctx);
+                }
+            }
+            for (auto& device : action.GetDevices()) {
+                TPDiskID pdiskId;
+                if (ClusterInfo->HasPDisk(device)) {
+                    pdiskId = ClusterInfo->PDisk(device).PDiskId;
+                } else if (ClusterInfo->HasPDisk(host, device)) {
+                    pdiskId = ClusterInfo->PDisk(host, device).PDiskId;
+                }
+
+                if (State->PDiskMarkers.contains(pdiskId)) {
+                    return ReplyWithError<TEvCms::TEvPermissionResponse>(
+                        ev, TStatus::WRONG_REQUEST, TStringBuilder() << "PDisk '" << device << "' is being decomissioned", ctx);
                 }
             }
         }
@@ -1970,7 +2089,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         resp->Record.SetRequestId(reqId);
 
         TAutoPtr<TRequestInfo> copy;
-        if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
+        if (scheduled.Request.ActionsSize()) {
             scheduled.Owner = user;
             scheduled.Order = State->NextRequestId - 1;
             scheduled.Priority = priority;

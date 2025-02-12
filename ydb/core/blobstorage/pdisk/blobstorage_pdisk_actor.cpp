@@ -1342,6 +1342,14 @@ public:
             }
             Send(ev->Sender, new NMon::TEvHttpInfoRes(""));
             return;
+        } else if (cgi.Has("failWrites")) {
+            PDisk->BlockDevice->SetFailWrites(true);
+            Send(ev->Sender, new NMon::TEvHttpInfoRes(""));
+            return;
+        } else if (cgi.Has("normalWrites")) {
+            PDisk->BlockDevice->SetFailWrites(false);
+            Send(ev->Sender, new NMon::TEvHttpInfoRes(""));
+            return;
         }
 
         bool doGetSchedule = false;

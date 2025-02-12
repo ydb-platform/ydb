@@ -238,7 +238,7 @@ public:
 };
 
 void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config,
-        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false)
+        ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {}, bool useMirror3dcErasure = false, bool createDynamicGroups = false)
 {   
     constexpr ui32 MIRROR_3DC_VDISKS_COUNT = 9;
     constexpr ui32 BLOCK_4_2_VDISKS_COUNT = 8;
@@ -256,7 +256,20 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
     ui32 maxOneGroupVdisksPerNode = useMirror3dcErasure && numNodes < MIRROR_3DC_VDISKS_COUNT ? 3 : 1;
 
     auto now = runtime.GetTimeProvider()->Now();
-    for (ui32 groupId = 0; groupId < numGroups; ++groupId) {
+
+    std::map<ui32, ui32> groupIdxToGroupId;
+
+    for (ui32 i = 0; i < numGroups; ++i) {
+        ui32 groupId;
+
+        if (createDynamicGroups) {
+            groupId = ((i % pdisks) == 0) ? i : (i | (1 << 31));
+        } else {
+            groupId = i;
+        }
+
+        groupIdxToGroupId[i] = groupId;
+
         auto &group = *config->AddGroup();
         group.SetGroupId(groupId);
         group.SetGroupGeneration(1);
@@ -301,10 +314,11 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         for (ui32 pdiskIndex = 0; pdiskIndex < pdisks; ++pdiskIndex) {
             auto pdiskId = nodeId * pdisks + pdiskIndex;
             auto &pdisk = node.PDiskStateInfo[pdiskId];
+            TString pdiskPath = TStringBuilder() << "/" << nodeId << "/pdisk-" << pdiskId << ".data";
             pdisk.SetPDiskId(pdiskId);
             pdisk.SetCreateTime(now.GetValue());
             pdisk.SetChangeTime(now.GetValue());
-            pdisk.SetPath("/pdisk.data");
+            pdisk.SetPath(pdiskPath);
             pdisk.SetGuid(1);
             pdisk.SetAvailableSize(100ULL << 30);
             pdisk.SetTotalSize(200ULL << 30);
@@ -313,7 +327,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             auto &pdiskConfig = *config->AddPDisk();
             pdiskConfig.SetNodeId(nodeId);
             pdiskConfig.SetPDiskId(pdiskId);
-            pdiskConfig.SetPath("/pdisk.data");
+            pdiskConfig.SetPath(pdiskPath);
             pdiskConfig.SetGuid(1);
             pdiskConfig.SetDriveStatus(NKikimrBlobStorage::ACTIVE);
 
@@ -323,11 +337,14 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
 
             for (ui8 vdiskIndex = 0; vdiskIndex < vdiskPerPdisk; ++vdiskIndex) {
                 ui32 vdiskId = pdiskIndex * vdiskPerPdisk + vdiskIndex;
-                ui32 groupId = groupShift + vdiskId / maxOneGroupVdisksPerNode;
+                ui32 groupIdx = groupShift + vdiskId / maxOneGroupVdisksPerNode;
 
-                if (groupId >= config->GroupSize()) {
+                if (groupIdx >= config->GroupSize()) {
                     break;
                 }
+
+                UNIT_ASSERT(groupIdxToGroupId.count(groupIdx));
+                ui32 groupId = groupIdxToGroupId[groupIdx];
 
                 ui32 failRealm = 0;
                 if (useMirror3dcErasure) {
@@ -365,7 +382,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                 vdiskConfig.SetFailDomainIdx(nodeIndex % BLOCK_4_2_VDISKS_COUNT);
                 vdiskConfig.SetVDiskIdx(vdiskId % maxOneGroupVdisksPerNode);
 
-                config->MutableGroup(groupId)->AddVSlotId()
+                config->MutableGroup(groupIdx)->AddVSlotId()
                     ->CopyFrom(vdiskConfig.GetVSlotId());
             }
         }
@@ -585,7 +602,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
 
     TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
     TFakeNodeWhiteboardService::Info.clear();
-    GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure);
+    GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure, options.EnableDynamicGroups);
 
     SetObserverFunc([](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
@@ -938,6 +955,39 @@ void TCmsTestEnv::CheckBSCUpdateRequests(std::set<ui32> expectedNodes,
     );
 }
 
+
+void TCmsTestEnv::CheckBSCUpdateDriveRequests(std::set<std::pair<ui32, ui32>> expectedDrives,
+                                         NKikimrBlobStorage::EDriveStatus expectedStatus)
+{
+    using TBSCRequests = std::map<NKikimrBlobStorage::EDriveStatus, std::set<std::pair<ui32, ui32>>>;
+
+    TBSCRequests expectedRequests = { {expectedStatus, expectedDrives} };
+    TBSCRequests actualRequests;
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([&](IEventHandle& ev) {
+        if (ev.GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+            const auto& request = ev.Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record;
+            bool foundUpdateDriveCommand = false;
+            for (const auto& command : request.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    foundUpdateDriveCommand = true;
+                    const auto& update = command.GetUpdateDriveStatus();
+                    actualRequests[update.GetStatus()].insert(std::make_pair<ui32, ui32>(update.GetHostKey().GetNodeId(), update.GetPDiskId()));
+                }
+            }
+            return foundUpdateDriveCommand;
+        }
+        return false;
+    });
+    DispatchEvents(options, TDuration::Minutes(1));
+
+    UNIT_ASSERT_C(
+        actualRequests == expectedRequests,
+        TStringBuilder() << "Sentinel sent wrong update requests to BSC"
+    );
+}
+
 void TCmsTestEnv::CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask* req)
 {
     TString TaskId = req->Task.TaskId;
@@ -1244,7 +1294,7 @@ void TCmsTestEnv::EnableNoisyBSCPipe() {
 void TCmsTestEnv::RegenerateBSConfig(NKikimrBlobStorage::TBaseConfig *config, const TTestEnvOpts &opts) {
     TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
     config->Clear();
-    GenerateExtendedInfo(*this, config, opts.VDisks, 4, opts.Tenants, opts.UseMirror3dcErasure);
+    GenerateExtendedInfo(*this, config, opts.VDisks, 4, opts.Tenants, opts.UseMirror3dcErasure, opts.EnableDynamicGroups);
 }
 
 } // namespace NCmsTest

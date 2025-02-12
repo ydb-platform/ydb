@@ -674,7 +674,7 @@ namespace NKikimr::NBsController {
         }
 
         // check the donor mode
-        if (vslot->Mood != TMood::Donor) {
+        if (!TMood::IsDonor(vslot->Mood)) {
             throw TExDiskIsNotDonor(vslotId, vdiskId);
         }
 

@@ -231,6 +231,7 @@ namespace NKikimr {
 
                             case NKikimrBlobStorage::EDriveStatus::FAULTY:
                             case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
+                            case NKikimrBlobStorage::EDriveStatus::READONLY_FAULTY:
                                 // groups are moved out asynchronously
                                 break;
 
@@ -419,10 +420,11 @@ namespace NKikimr {
 
                     for (const TVSlotId& vslotId : donors) {
                         TVSlotInfo *mutableSlot = State.VSlots.FindForUpdate(vslotId);
+                        bool shouldBeReadonly = mutableSlot->PDisk->Status == NKikimrBlobStorage::EDriveStatus::READONLY_FAULTY;
                         Y_ABORT_UNLESS(mutableSlot);
                         const auto it = newSlots.find(mutableSlot->GetShortVDiskId());
                         Y_ABORT_UNLESS(it != newSlots.end());
-                        mutableSlot->MakeDonorFor(it->second);
+                        mutableSlot->MakeDonorFor(it->second, shouldBeReadonly);
                     }
                 }
 

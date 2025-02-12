@@ -51,6 +51,9 @@ enum EMarker {
     // Can be applied to hosts, nodes and PDisks to mark
     // specific disk or all disks on the host/node as inactive.
     MARKER_DISK_INACTIVE = 4;
+    // Can be applied to PDisks to mark
+    // specific disks as readonly faulty.
+    MARKER_DISK_READONLY_FAULTY = 5;
 }
 
 message TServiceState {

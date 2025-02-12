@@ -58,6 +58,9 @@ public:
     virtual void SetWriteCache(bool isEnable) = 0;
     virtual void Stop() = 0;
     virtual TString DebugInfo() = 0;
+
+    virtual bool GetFailWritesStatus() = 0;
+    virtual void SetFailWrites(bool fail) = 0;
 };
 
 class TPDisk;

@@ -32,8 +32,17 @@ extern const TString UPSERT_ASSIGNMENTS_AND_SET_WORKING_STATE;
 extern const TString CHECK_GROUP_STATE;
 extern const TString FETCH_ASSIGNMENTS;
 extern const TString CHECK_DEAD_MEMBERS;
-extern const TString UPDATE_TTLS;
-extern const TString UPDATE_TTL_LEAVE_GROUP;
+extern const TString UPDATE_LASTHEARTBEATS;
+extern const TString UPDATE_LASTHEARTBEAT_TO_LEAVE_GROUP;
+
+struct TGroupStatus {
+    bool Exists;
+    ui64 Generation;
+    ui64 State;
+    TString MasterId;
+    TInstant LastHeartbeat;
+    TString ProtocolName;
+};
 
 class TKafkaBalancerActor : public NActors::TActorBootstrapped<TKafkaBalancerActor> {
 public:
@@ -81,10 +90,11 @@ public:
         LEAVE_TX0_2_COMMIT_TX,
     };
 
-    TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TJoinGroupRequestData> message)
+    TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TJoinGroupRequestData> message, ui8 retryNum = 0)
         : Context(context)
         , CorrelationId(corellationId)
         , Cookie(cookie)
+        , CurrentRetryNumber(retryNum)
         , JoinGroupRequestData(message)
         , SyncGroupRequestData(
             std::shared_ptr<TBuffer>(),
@@ -102,12 +112,14 @@ public:
         CurrentStep   = STEP_NONE;
 
         GroupId  = JoinGroupRequestData->GroupId.value();
+        ProtocolType = JoinGroupRequestData->ProtocolType.value();
     }
 
-    TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TSyncGroupRequestData> message)
+    TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TSyncGroupRequestData> message, ui8 retryNum = 0)
         : Context(context)
         , CorrelationId(corellationId)
         , Cookie(cookie)
+        , CurrentRetryNumber(retryNum)
         , JoinGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
@@ -127,12 +139,14 @@ public:
         GroupId  = SyncGroupRequestData->GroupId.value();
         MemberId = SyncGroupRequestData->MemberId.value();
         GenerationId = SyncGroupRequestData->GenerationId;
+        ProtocolType = SyncGroupRequestData->ProtocolType.value();
     }
 
-    TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<THeartbeatRequestData> message)
+    TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<THeartbeatRequestData> message, ui8 retryNum = 0)
         : Context(context)
         , CorrelationId(corellationId)
         , Cookie(cookie)
+        , CurrentRetryNumber(retryNum)
         , JoinGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
@@ -154,10 +168,11 @@ public:
         GenerationId = HeartbeatGroupRequestData->GenerationId;
     }
 
-    TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TLeaveGroupRequestData> message)
+    TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TLeaveGroupRequestData> message, ui8 retryNum = 0)
         : Context(context)
         , CorrelationId(corellationId)
         , Cookie(cookie)
+        , CurrentRetryNumber(retryNum)
         , JoinGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
@@ -222,10 +237,21 @@ private:
     void SendLeaveGroupResponseFail(const TActorContext&, ui64 corellationId,
                                     EKafkaErrors error, TString message = "");
 
-    bool ParseCheckStateAndGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, bool& outGroupExists, ui64& outGeneration, ui64& outState, TString& outMasterId, TInstant& outTtl);
+    std::optional<TGroupStatus> ParseCheckStateAndGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
     bool ParseAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, TString& assignments);
     bool ParseWorkerStatesAndChooseProtocol(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, TString>& workerStates, TString& chosenProtocol);
     bool ParseDeadCount(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& outCount);
+
+    NYdb::TParamsBuilder BuildCheckGroupStateParams();
+    NYdb::TParamsBuilder BuildUpdateOrInsertNewGroupParams();
+    NYdb::TParamsBuilder BuildInsertMemberParams();
+    NYdb::TParamsBuilder BuildAssignmentsParams();
+    NYdb::TParamsBuilder BuildUpdatesGroupsAndSelectWorkerStatesParams();
+    NYdb::TParamsBuilder BuildUpdateGroupStateAndProtocolParams();
+    NYdb::TParamsBuilder BuildFetchAssignmentsParams();
+    NYdb::TParamsBuilder BuildLeaveGroupParams();
+    NYdb::TParamsBuilder BuildUpdateLastHeartbeatsParams();
+    NYdb::TParamsBuilder BuildCheckDeadsParams();
 
 private:
     enum EGroupState : ui32 {
@@ -243,7 +269,7 @@ private:
     TString GroupId;
     TString GroupName;
     TString MemberId;
-    TString AssignProtocolName;
+
     ui64 GenerationId = 0;
     ui64 CorrelationId = 0;
     ui64 Cookie = 0;
@@ -253,7 +279,9 @@ private:
     TString Assignments;
     std::unordered_map<TString, TString> WorkerStates;
     TString Protocol;
+    TString ProtocolType;
     TString Master;
+    ui8 CurrentRetryNumber;
 
     bool IsMaster = false;
 

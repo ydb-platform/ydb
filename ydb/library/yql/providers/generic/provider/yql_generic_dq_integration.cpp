@@ -52,11 +52,13 @@ namespace NYql {
             }
 
             bool CanRead(const TExprNode& read, TExprContext&, bool) override {
+                Cout << "CanRead" << Endl;
                 return TGenReadTable::Match(&read);
             }
 
             TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read,
                                           TExprContext&) override {
+                Cout << "EstimateReadSize" << Endl;
                 if (AllOf(read, [](const auto val) { return TGenReadTable::Match(val); })) {
                     return 0ul; // TODO: return real size
                 }
@@ -64,6 +66,7 @@ namespace NYql {
             }
 
             TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
+                Cout << "WrapRead" << Endl;
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
@@ -97,6 +100,7 @@ namespace NYql {
                                 .Build()
                             .Columns(std::move(columns))
                             .FilterPredicate(genReadTable.FilterPredicate())
+                            .Splits(genReadTable.Table().Splits())
                             .Build()
                         .RowType(ExpandType(genReadTable.Pos(), *rowType, ctx))
                         .DataSource(genReadTable.DataSource().Cast<TCoDataSource>())
@@ -106,7 +110,25 @@ namespace NYql {
                 return read;
             }
 
-            ui64 Partition(const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
+            ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
+                if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
+                    auto srcSettings = maybeDqSource.Cast().Settings();
+                    Cout << "HERE 0" << maybeDqSource.Raw()->Content() << " " << srcSettings.Raw()->Content() << Endl;
+                    if (auto maybeGenSourceSettings = TMaybeNode<TGenSourceSettings>(srcSettings.Raw())) {
+                        auto table = maybeGenSourceSettings.Cast().Table().StringValue();
+                        auto cluster = maybeGenSourceSettings.Cast().Cluster().StringValue();
+                        Cout << "HERE 1" << cluster << "." << table << Endl;
+
+                        const auto& splits = maybeGenSourceSettings.Cast().Splits().Cast<TCoAtomList>();
+
+                        for (auto split: splits) {
+                            Cout << "SPLIT: " << split.StringValue() << Endl;
+                        }
+
+
+                    }
+                }
+                
                 partitions.clear();
                 Generic::TRange range;
                 partitions.emplace_back();
@@ -117,6 +139,7 @@ namespace NYql {
 
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,
                                     TString& sourceType, size_t, TExprContext&) override {
+                Cout << "FillSourceSettings" << Endl;
                 const TDqSource source(&node);
                 if (const auto maybeSettings = source.Settings().Maybe<TGenSourceSettings>()) {
                     const auto settings = maybeSettings.Cast();
@@ -183,6 +206,7 @@ namespace NYql {
             }
 
             bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
+                Cout << "FillSourcePlanProperties" << Endl;
                 if (!node.Maybe<TDqSource>()) {
                     return false;
                 }
@@ -261,10 +285,12 @@ namespace NYql {
             }
 
             void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
+                Cout << "RegisterMkqlCompiler" << Endl;
                 RegisterDqGenericMkqlCompilers(compiler, State_);
             }
 
             void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
+                Cout << "FillLookupSourceSettings" << Endl;
                 const TDqLookupSourceWrap wrap(&node);
                 const auto settings = wrap.Input().Cast<TGenSourceSettings>();
 

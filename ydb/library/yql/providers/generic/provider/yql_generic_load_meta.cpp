@@ -266,6 +266,7 @@ namespace NYql {
                 Y_ENSURE(result->Splits.size() > 0);
 
                 TGenericState::TTableMeta tableMeta;
+
                 tableMeta.Schema = *result->Schema;
                 tableMeta.DataSourceInstance = result->DataSourceInstance;
 

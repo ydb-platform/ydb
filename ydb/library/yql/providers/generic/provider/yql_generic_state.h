@@ -40,8 +40,6 @@ namespace NYql {
             NYql::TGenericDataSourceInstance DataSourceInstance; 
             // External table schema
             NYql::NConnector::NApi::TSchema Schema; 
-            // Contains some binary description of table splits (partitions) produced by Connector
-            TVector<TString> Splits; 
         };
 
         using TGetTableResult = std::pair<std::optional<const TTableMeta*>, TIssues>;

@@ -89,7 +89,7 @@ namespace NYql {
         }
 
         TStatus HandleSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-            if (!EnsureArgsCount(*input, 6, ctx)) {
+            if (!EnsureArgsCount(*input, 7, ctx)) {
                 return TStatus::Error;
             }
 

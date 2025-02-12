@@ -176,8 +176,8 @@ if __name__ == "__main__":
     base_branch = sys.argv[3]
     suffix = sys.argv[4]
 
-    GITHUB_TOKEN = subprocess.run(["git", "config", "--get", "github.token"], capture_output=True, text=True).stdout.strip()
-
+    GITHUB_TOKEN = os.getenv("UPDATE_REPO_TOKEN")
+   
     try:
         with open(pr_data_file, 'r') as file:
             pr_ids = json.load(file)

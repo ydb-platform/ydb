@@ -188,13 +188,17 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
 
         # Step 7
         if not self.wait_for(
-            lambda: get_rows_in_portion(bucket2_path) == self.row_count and bucket_is_not_empty(self.bucket2)
-            # TODO: Uncomment after fix https://github.com/ydb-platform/ydb/issues/13616
-            # and not bucket_is_not_empty(self.bucket1)
-            ,
+            lambda: get_rows_in_portion(bucket2_path) == self.row_count and bucket_is_not_empty(self.bucket2),
             plain_or_under_sanitizer(600, 1200),
         ):
             raise Exception("Data eviction has not been started")
+
+        # Wait until bucket1 is empty
+        if not self.wait_for(
+            lambda: not bucket_is_not_empty(self.bucket1),
+            plain_or_under_sanitizer(120, 240),  # TODO: change wait time use config "PeriodicWakeupActivationPeriod"
+        ):
+            raise Exception("Bucket1 is not empty")
 
         # Step 8
         t0 = time.time()
@@ -210,10 +214,14 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
 
         # Step 9
         if not self.wait_for(
-            lambda: get_rows_in_portion("__DEFAULT") == self.row_count
-            # TODO: Uncomment after fix https://github.com/ydb-platform/ydb/issues/13616
-            # and not bucket_is_not_empty(self.bucket1) and not bucket_is_not_empty(self.bucket2)
-            ,
+            lambda: get_rows_in_portion("__DEFAULT") == self.row_count,
             plain_or_under_sanitizer(600, 1200),
         ):
             raise Exception("Data eviction has not been started")
+
+        # Wait until buckets are empty
+        if not self.wait_for(
+            lambda: not bucket_is_not_empty(self.bucket1) and not bucket_is_not_empty(self.bucket2),
+            plain_or_under_sanitizer(120, 240),  # TODO: change wait time use config "PeriodicWakeupActivationPeriod"
+        ):
+            raise Exception("Buckets are not empty")

@@ -1,6 +1,8 @@
 items:
 - name: Первоначальное развёртывание
   href: initial-deployment.md
+- name: Обновление конфигурации
+  href: update-config.md
 - name: Управление дисковой подсистемой кластера
   include:
     mode: link

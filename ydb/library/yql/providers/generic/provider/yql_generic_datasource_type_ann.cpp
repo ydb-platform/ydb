@@ -58,11 +58,12 @@ namespace NYql {
                 return TStatus::Error;
             }
 
-            if (!TCoAtomList::Match(input->Child(TGenTable::idx_Splits))) {
+            if (!EnsureTupleOfAtoms(*input->Child(TGenTable::idx_Splits), ctx)) {
                 return TStatus::Error;
             }
 
             input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+
             return TStatus::Ok;
         }
 

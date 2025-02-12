@@ -38,7 +38,7 @@ namespace NYql {
             TIssues Issues; 
         };
 
-        using TTableHanldingResultMap =
+        using TTableDescriptionMap =
             std::unordered_map<TGenericState::TTableAddress, TTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
 
     public:
@@ -54,7 +54,7 @@ namespace NYql {
                 return TStatus::Ok;
             }
 
-            std::unordered_set<TTableHanldingResultMap::key_type, TTableHanldingResultMap::hasher> pendingTables;
+            std::unordered_set<TTableDescriptionMap::key_type, TTableDescriptionMap::hasher> pendingTables;
             const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
                 if (const auto maybeRead = TMaybeNode<TGenRead>(node)) {
                     return maybeRead.Cast().DataSource().Category().Value() == GenericProviderName;
@@ -93,10 +93,10 @@ namespace NYql {
 
             std::vector<NThreading::TFuture<void>> handles;
             handles.reserve(pendingTables.size());
-            DescribeTableResults_.reserve(pendingTables.size());
+            TableDescriptions_.reserve(pendingTables.size());
 
             for (const auto& tableAddress : pendingTables) {
-                RunDescribeTable(tableAddress, handles);
+                LoadTableMetadataFromConnector(tableAddress, handles);
             }
 
             if (handles.empty()) {
@@ -108,7 +108,7 @@ namespace NYql {
         }
     
     private:
-        void RunDescribeTable(
+        void LoadTableMetadataFromConnector(
             const TGenericState::TTableAddress& tableAddress,
             std::vector<NThreading::TFuture<void>>& handles
         ) {
@@ -122,7 +122,7 @@ namespace NYql {
             handles.emplace_back(promise.GetFuture());
 
             // preserve data source instance for the further usage
-            auto emplaceIt = DescribeTableResults_.emplace(std::make_pair(tableAddress, std::make_shared<TTableDescription>()));
+            auto emplaceIt = TableDescriptions_.emplace(std::make_pair(tableAddress, std::make_shared<TTableDescription>()));
             auto desc = emplaceIt.first->second;
             desc->DataSourceInstance = request.data_source_instance();
 
@@ -230,9 +230,9 @@ namespace NYql {
                 return false;
             });
 
-            // Handle ListSplits responses and make new nodes
             TNodeOnNodeOwnedMap replaces(reads.size());
 
+            // Iterate over all the requested tables, check Connector responses
             for (const auto& r: reads) {
                 const TGenRead genRead(r);
                 const auto clusterName = genRead.DataSource().Cluster().StringValue();
@@ -240,9 +240,9 @@ namespace NYql {
                 const auto tableName = TString(keyArg.Tail().Head().Content());
                 const TGenericState::TTableAddress tableAddress{clusterName, tableName};
 
-                // find appropriate response
-                auto iter = DescribeTableResults_.find(tableAddress);
-                if (iter == DescribeTableResults_.end()) {
+                // Find appropriate response
+                auto iter = TableDescriptions_.find(tableAddress);
+                if (iter == TableDescriptions_.end()) {
                     ctx.AddError(
                         TIssue(ctx.GetPosition(genRead.Pos()), 
                                 TStringBuilder() << "Connector response not found for table " << tableAddress.String())
@@ -253,7 +253,7 @@ namespace NYql {
 
                 const auto& result = iter->second;
 
-                // If some errors occured during network interaction with Connector, return them
+                // If errors occured during network interaction with Connector, return them
                 if (result->Issues) {
                     for (const auto& issue: result->Issues) {
                         ctx.AddError(issue);
@@ -269,7 +269,7 @@ namespace NYql {
                 tableMeta.Schema = *result->Schema;
                 tableMeta.DataSourceInstance = result->DataSourceInstance;
 
-                // Parse table meta
+                // Parse table schema
                 ParseTableMeta(ctx, ctx.GetPosition(genRead.Pos()), tableAddress, tableMeta);
                 
                 // Fill AST for each requested table
@@ -277,6 +277,7 @@ namespace NYql {
                     ins.first->second = MakeTableMetaNode(ctx, genRead, tableName, result->Splits);
                 }
 
+                // Save table metadata into provider state
                 State_->AddTable(tableAddress, std::move(tableMeta));
             }
 
@@ -284,7 +285,7 @@ namespace NYql {
         }
 
         void Rewind() final {
-            DescribeTableResults_.clear();
+            TableDescriptions_.clear();
             AsyncFuture_ = {};
         }
 
@@ -511,7 +512,7 @@ namespace NYql {
     private:
         const TGenericState::TPtr State_;
 
-        TTableHanldingResultMap DescribeTableResults_;
+        TTableDescriptionMap TableDescriptions_;
 
         NThreading::TFuture<void> AsyncFuture_;
     };

@@ -6,6 +6,6 @@
         <tmp_path>/program.sql:<main>:8:13: Error: At function: Member
         	SELECT Key, Value3 FROM AS_TABLE($data);
 	            ^
-            <tmp_path>/program.sql:<main>:8:13: Error: Member not found: Value3
+            <tmp_path>/program.sql:<main>:8:13: Error: Member not found: Value3. Did you mean Value1?
             	SELECT Key, Value3 FROM AS_TABLE($data);
 	            ^

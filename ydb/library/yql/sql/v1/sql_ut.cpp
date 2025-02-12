@@ -3216,6 +3216,10 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(ErrorsInOrderByWhenColumnIsMissingInProjection) {
         ExpectFailWithError("select subkey from (select 1 as subkey) order by key", "<main>:1:50: Error: Column key is not in source column set\n");
         ExpectFailWithError("select subkey from plato.Input as a order by x.key", "<main>:1:46: Error: Unknown correlation name: x\n");
+        ExpectFailWithError("select distinct a, b from plato.Input order by c", "<main>:1:48: Error: Column c is not in source column set. Did you mean a?\n");
+        ExpectFailWithError("select count(*) as a from plato.Input order by c", "<main>:1:48: Error: Column c is not in source column set. Did you mean a?\n");
+        ExpectFailWithError("select count(*) as a, b, from plato.Input group by b order by c", "<main>:1:63: Error: Column c is not in source column set. Did you mean a?\n");
+        UNIT_ASSERT(SqlToYql("select a, b from plato.Input order by c").IsOk());
     }
 
     Y_UNIT_TEST(SelectAggregatedWhere) {
@@ -4197,6 +4201,17 @@ select FormatType($f());
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:3: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n"
                                           "<main>:6:39: Error: Unknown correlation name: t\n");
+    }
+
+    Y_UNIT_TEST(ErrOrderByIgnoredButCheckedForMissingColumns) {
+        auto req = "$src = SELECT key FROM (SELECT 1 as key, 2 as subkey) ORDER BY x; SELECT * FROM $src;";
+        ExpectFailWithError(req, "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n"
+                                 "<main>:1:64: Error: Column x is not in source column set\n");
+
+        req = "$src = SELECT key FROM plato.Input ORDER BY x; SELECT * FROM $src;";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n");
     }
 
     Y_UNIT_TEST(InvalidTtlInterval) {

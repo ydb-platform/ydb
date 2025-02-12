@@ -182,6 +182,7 @@ namespace NSQLTranslationV1 {
         virtual bool SetViewName(TContext& ctx, TPosition pos, const TString& view);
         virtual bool SetPrimaryView(TContext& ctx, TPosition pos);
         void UseAsInner();
+        void DisableSort();
         virtual bool UsedSubquery() const;
         virtual bool IsSelect() const;
         virtual bool HasSelectResult() const;
@@ -273,6 +274,7 @@ namespace NSQLTranslationV1 {
         bool ImplicitLabel = false;
         mutable TNodeState State;
         bool AsInner = false;
+        bool DisableSort_ = false;
     };
     typedef INode::TPtr TNodePtr;
 
@@ -715,7 +717,7 @@ namespace NSQLTranslationV1 {
         void Merge(const TColumns& columns);
         void SetPrefix(const TString& prefix);
         void SetAll();
-        bool IsColumnPossible(TContext& ctx, const TString& column);
+        bool IsColumnPossible(TContext& ctx, const TString& column) const;
     };
 
     class TSortSpecification: public TSimpleRefCount<TSortSpecification> {
@@ -830,6 +832,7 @@ namespace NSQLTranslationV1 {
         void SetAsNotReliable();
         bool IsReliable() const;
         bool IsUseSourceAsColumn() const;
+        bool IsUseSource() const;
         bool CanBeType() const;
 
     private:

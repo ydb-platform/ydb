@@ -5,11 +5,34 @@ namespace NKikimr {
 using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataCleanup) {
-    std::tuple<Tests::TServer::TPtr, TActorId, TVector<ui64>> SetupWithTable() {
+
+    static const TString DeletedShortValue("Some_value");
+    static const TString DeletedLongValue(size_t(100 * 1024), 't');
+    static const TString PresentShortValue("Some_other_value");
+    static const TString PresentLongValue(size_t(100 * 1024), 'r');
+
+    bool BlobStorageContains(const TVector<TServerSettings::TProxyDSPtr>& proxyDSs, const TString& value) {
+        for (const auto& proxyDS : proxyDSs) {
+            for (const auto& [id, blob] : proxyDS->AllMyBlobs()) {
+                if (!blob.DoNotKeep && blob.Buffer.ConvertToString().Contains(value)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    auto SetupWithTable() {
+        TVector<TServerSettings::TProxyDSPtr> proxyDSs {
+            MakeIntrusive<NFake::TProxyDS>(TGroupId::FromValue(0)),
+            MakeIntrusive<NFake::TProxyDS>(TGroupId::FromValue(2181038080)),
+        };
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetKeepSnapshotTimeout(TDuration::Seconds(1))
+            .SetProxyDSMocks(proxyDSs);
 
         Tests::TServer::TPtr server = MakeIntrusive<TServer>(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -17,11 +40,43 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
 
         InitRoot(server, sender);
 
-        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (2, 200), (3, 300), (4, 400);");
-        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` WHERE key IN (1, 2, 4);");
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key",   "Uint32", true,  false},
+                {"value", "Utf8",   false, false}
+            });
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
-        return {server, sender, shards};
+        UploadRows(runtime, "/Root/table-1",
+            {{"key", Ydb::Type::UINT32}, {"value", Ydb::Type::UTF8}},
+            {TCell::Make(ui32(1))}, {TCell(DeletedShortValue)}
+        );
+        UploadRows(runtime, "/Root/table-1",
+            {{"key", Ydb::Type::UINT32}, {"value", Ydb::Type::UTF8}},
+            {TCell::Make(ui32(2))}, {TCell(PresentLongValue)}
+        );
+        UploadRows(runtime, "/Root/table-1",
+            {{"key", Ydb::Type::UINT32}, {"value", Ydb::Type::UTF8}},
+            {TCell::Make(ui32(3))}, {TCell(PresentShortValue)}
+        );
+        UploadRows(runtime, "/Root/table-1",
+            {{"key", Ydb::Type::UINT32}, {"value", Ydb::Type::UTF8}},
+            {TCell::Make(ui32(4))}, {TCell(DeletedLongValue)}
+        );
+
+        auto compactionResult = CompactTable(runtime, shards.at(0), tableId, true);
+        UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+
+        UNIT_ASSERT(BlobStorageContains(proxyDSs, DeletedShortValue));
+        UNIT_ASSERT(BlobStorageContains(proxyDSs, PresentLongValue));
+        UNIT_ASSERT(BlobStorageContains(proxyDSs, PresentShortValue));
+        UNIT_ASSERT(BlobStorageContains(proxyDSs, DeletedLongValue));
+
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` WHERE key IN (1, 4);");
+
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        return std::make_tuple(server, sender, shards, proxyDSs);
     }
 
     void CheckResultEvent(const TEvDataShard::TEvForceDataCleanupResult& ev, ui64 tabletId, ui64 generation) {
@@ -30,13 +85,20 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT_VALUES_EQUAL(ev.Record.GetDataCleanupGeneration(), generation);
     }
 
-    void CheckTableData(Tests::TServer::TPtr server) {
+    void CheckTableData(Tests::TServer::TPtr server, const TVector<TServerSettings::TProxyDSPtr>& proxyDSs) {
         auto result = ReadShardedTable(server, "/Root/table-1");
-        UNIT_ASSERT_VALUES_EQUAL(result, "key = 3, value = 300\n");
+        UNIT_ASSERT_EQUAL(result,
+            "key = 2, value = " + PresentLongValue + "\n"
+            "key = 3, value = " + PresentShortValue + "\n"
+        );
+        UNIT_ASSERT(!BlobStorageContains(proxyDSs, DeletedShortValue));
+        UNIT_ASSERT(BlobStorageContains(proxyDSs, PresentLongValue));
+        UNIT_ASSERT(BlobStorageContains(proxyDSs, PresentShortValue));
+        UNIT_ASSERT(!BlobStorageContains(proxyDSs, DeletedLongValue));
     }
 
     Y_UNIT_TEST(ForceDataCleanup) {
-        auto [server, sender, tableShards] = SetupWithTable();
+        auto [server, sender, tableShards, proxyDSs] = SetupWithTable();
         auto& runtime = *server->GetRuntime();
 
         auto cleanupAndCheck = [&runtime, &sender, &tableShards](ui64 expectedDataCleanupGeneration) {
@@ -52,11 +114,11 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         cleanupAndCheck(24);
         cleanupAndCheck(25);
 
-        CheckTableData(server);
+        CheckTableData(server, proxyDSs);
     }
 
     Y_UNIT_TEST(MultipleDataCleanups) {
-        auto [server, sender, tableShards] = SetupWithTable();
+        auto [server, sender, tableShards, proxyDSs] = SetupWithTable();
         auto& runtime = *server->GetRuntime();
 
         ui64 expectedGenFirst = 42;
@@ -77,11 +139,11 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
             CheckResultEvent(*ev->Get(), tableShards.at(0), expectedGenLast);
         }
 
-        CheckTableData(server);
+        CheckTableData(server, proxyDSs);
     }
 
     Y_UNIT_TEST(MultipleDataCleanupsWithOldGenerations) {
-        auto [server, sender, tableShards] = SetupWithTable();
+        auto [server, sender, tableShards, proxyDSs] = SetupWithTable();
         auto& runtime = *server->GetRuntime();
 
         ui64 expectedGenFirst = 42;
@@ -102,11 +164,11 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
             CheckResultEvent(*ev->Get(), tableShards.at(0), expectedGenFirst);
         }
 
-        CheckTableData(server);
+        CheckTableData(server, proxyDSs);
     }
 
     Y_UNIT_TEST(ForceDataCleanupWithRestart) {
-        auto [server, sender, tableShards] = SetupWithTable();
+        auto [server, sender, tableShards, proxyDSs] = SetupWithTable();
         auto& runtime = *server->GetRuntime();
 
         ui64 cleanupGeneration = 33;
@@ -145,7 +207,7 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
             CheckResultEvent(*ev->Get(), tableShards.at(0), cleanupGeneration);
         }
 
-        CheckTableData(server);
+        CheckTableData(server, proxyDSs);
     }
 }
 

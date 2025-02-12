@@ -50,15 +50,19 @@ public:
             return true;
         }
 
+        if (Self->GetSnapshotManager().RemoveExpiredSnapshots(ctx.Now(), txc)) {
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "DataCleanup of tablet# " << Self->TabletID()
+                << ": expired snapshots removed");
+        }
+        Self->Executor()->CleanupData(Ev->Get()->Record.GetDataCleanupGeneration());
+        Self->DataCleanupWaiters.insert({Ev->Get()->Record.GetDataCleanupGeneration(), Ev->Sender});
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         if (Response) {
             ctx.Send(Ev->Sender, std::move(Response));
-        } else {
-            Self->Executor()->CleanupData(Ev->Get()->Record.GetDataCleanupGeneration());
-            Self->DataCleanupWaiters.insert({Ev->Get()->Record.GetDataCleanupGeneration(), Ev->Sender});
         }
     }
 };

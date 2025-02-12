@@ -25,9 +25,10 @@ namespace NKikimr {
         static constexpr bool USE_SYNC_PDISK = false;
         static constexpr bool USE_MEM_SYNC_PDISK = true;
 
-        TTestStorageFactory(TRuntime &runtime, NFake::TStorage conf, bool mock)
+        TTestStorageFactory(TRuntime &runtime, NFake::TStorage conf, bool mock, bool addGroups)
             : DomainsNum(TBlobStorageGroupType(BootGroupErasure).BlobSubgroupSize())
             , Mock(mock)
+            , AddGroups(addGroups)
             , Conf(FixConf(conf))
             , Runtime(runtime)
         {
@@ -142,26 +143,28 @@ namespace NKikimr {
                 }
             }
 
-            str << "" << Endl;
-            str << "Groups {" << Endl;
-            str << "    GroupID: 0" << Endl;
-            str << "    GroupGeneration: 1 " << Endl;
-            str << "    ErasureSpecies: " << (ui32)BootGroupErasure << Endl;
+            if (AddGroups) {
+                str << "" << Endl;
+                str << "Groups {" << Endl;
+                str << "    GroupID: 0" << Endl;
+                str << "    GroupGeneration: 1 " << Endl;
+                str << "    ErasureSpecies: " << (ui32)BootGroupErasure << Endl;
 
-            for (const ui32 ringIdx : xrange(1)) {
-                str << "    Rings {" << Endl;
-                for (const ui32 domainIdx : xrange(DomainsNum)) {
-                    str << "        FailDomains {" << Endl;
-                    for (const ui32 vDiskIdx : xrange(DisksInDomain)) {
-                        ui32 slotId = vDiskIdx + domainIdx * DisksInDomain + ringIdx * DomainsNum * DisksInDomain;
-                        str << "            VDiskLocations { NodeID: " << Runtime.GetNodeId(0) << " PDiskID: 1 VDiskSlotID: " << slotId
-                            << " PDiskGuid: " << PDiskGuid << " }" << Endl;
+                for (const ui32 ringIdx : xrange(1)) {
+                    str << "    Rings {" << Endl;
+                    for (const ui32 domainIdx : xrange(DomainsNum)) {
+                        str << "        FailDomains {" << Endl;
+                        for (const ui32 vDiskIdx : xrange(DisksInDomain)) {
+                            ui32 slotId = vDiskIdx + domainIdx * DisksInDomain + ringIdx * DomainsNum * DisksInDomain;
+                            str << "            VDiskLocations { NodeID: " << Runtime.GetNodeId(0) << " PDiskID: 1 VDiskSlotID: " << slotId
+                                << " PDiskGuid: " << PDiskGuid << " }" << Endl;
+                        }
+                        str << "        }" << Endl;
                     }
-                    str << "        }" << Endl;
+                    str << "    }" << Endl;
                 }
-                str << "    }" << Endl;
+                str << "}";
             }
-            str << "}";
 
             return str.Str();
         }
@@ -170,6 +173,7 @@ namespace NKikimr {
         const ui32 DomainsNum = 0;
         const ui64 PDiskGuid = 123;
         const bool Mock = false;
+        const bool AddGroups = true;
         const NFake::TStorage Conf;
 
     private:

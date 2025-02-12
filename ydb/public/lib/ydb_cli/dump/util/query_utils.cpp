@@ -241,6 +241,10 @@ bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreR
     return RewriteRefs<TRule_table_ref>(query, backupRoot, restoreRoot, issues);
 }
 
+bool RewriteObjectRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, NYql::TIssues& issues) {
+    return RewriteRefs<TRule_object_ref>(query, backupRoot, restoreRoot, issues);
+}
+
 bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::string& dbPath, NYql::TIssues& issues) {
     const auto searchPattern = std::vformat(pattern, std::make_format_args("\\S+"));
     if (re2::RE2::Replace(&query, searchPattern, std::vformat(pattern, std::make_format_args(dbPath)))) {
@@ -252,8 +256,8 @@ bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::str
 }
 
 TString GetBackupRoot(TStringInput query) {
-    constexpr TStringBuf targetLinePrefix = R"("-- backup root: ")";
-    constexpr TStringBuf discardedSuffix = R"(")";
+    constexpr TStringBuf targetLinePrefix = "-- backup root: \"";
+    constexpr TStringBuf discardedSuffix = "\"";
 
     TString line;
     while (query.ReadLine(line)) {

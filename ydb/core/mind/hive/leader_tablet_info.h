@@ -50,14 +50,14 @@ public:
     };
 
     struct TChannelHistoryEntry {
-        ui32 Channel;
         TTabletChannelInfo::THistoryEntry Entry;
         ui32 DeletedAtGeneration;
+        NKikimrTabletBase::TEvCutTabletHistory::ECutHistoryMode CutHistoryMode;
 
-        TChannelHistoryEntry(ui32 channel, const TTabletChannelInfo::THistoryEntry& entry, ui32 deletedAtGeneration)
-            : Channel(channel)
-            , Entry(entry)
+        TChannelHistoryEntry(const TTabletChannelInfo::THistoryEntry& entry, ui32 deletedAtGeneration, NKikimrTabletBase::TEvCutTabletHistory::ECutHistoryMode cutHistoryMode)
+            : Entry(entry)
             , DeletedAtGeneration(deletedAtGeneration)
+            , CutHistoryMode(cutHistoryMode)
         {
         }
     };
@@ -71,7 +71,7 @@ public:
     TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
     TChannelsBindings BoundChannels;
     std::bitset<MAX_TABLET_CHANNELS> ChannelProfileNewGroup;
-    std::queue<TChannelHistoryEntry> DeletedHistory;
+    std::vector<std::queue<TChannelHistoryEntry>> DeletedHistory; // channel -> deleted history for channel
     bool WasAliveSinceCutHistory = true;
     NKikimrHive::TEvReassignTablet::EHiveReassignReason ChannelProfileReassignReason;
     ui32 KnownGeneration;
@@ -351,7 +351,8 @@ public:
     TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) const;
     TString GetChannelStoragePoolName(ui32 channelId) const;
     TStoragePoolInfo& GetStoragePool(ui32 channelId) const;
-    void RestoreDeletedHistory(TTransactionContext& txc);
+    void RestoreDeletedHistory(TTransactionContext& txc, ui32 channel);
+    bool HasDeletedHistory() const;
 
     void SetType(TTabletTypes::EType type);
 };

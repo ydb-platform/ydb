@@ -552,6 +552,11 @@
                 "ColumnId": 6,
                 "ColumnName": "DeletedAtGeneration",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "CutHistoryMode",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -564,7 +569,8 @@
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7
                 ],
                 "RoomID": 0,
                 "Codec": 0,

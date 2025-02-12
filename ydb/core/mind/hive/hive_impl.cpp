@@ -3083,6 +3083,8 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvGenerateTestData, Handle);
         hFunc(TEvPrivate::TEvRefreshScaleRecommendation, Handle);
         hFunc(TEvHive::TEvConfigureScaleRecommender, Handle);
+        hFunc(TEvHive::TEvCommitCutTabletHistory, Handle);
+        hFunc(TEvHive::TEvRevertCutTabletHistory, Handle);
         hFunc(TEvPrivate::TEvUpdateFollowers, Handle);
     }
 }
@@ -3191,6 +3193,8 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvGenerateTestData::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvRefreshScaleRecommendation::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvConfigureScaleRecommender::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvCommitCutTabletHistory::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvRevertCutTabletHistory::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvUpdateFollowers::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
@@ -3657,6 +3661,14 @@ void THive::Handle(TEvPrivate::TEvGenerateTestData::TPtr&) {
 void THive::Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev) {
     BLOG_D("Handle TEvHive::TEvConfigureScaleRecommender(" << ev->Get()->Record.ShortDebugString() << ")");
     Execute(CreateConfigureScaleRecommender(ev));
+}
+
+void THive::Handle(TEvHive::TEvCommitCutTabletHistory::TPtr& ev) {
+    Execute(CreateCommitCutTabletHistory(std::move(ev)));
+}
+
+void THive::Handle(TEvHive::TEvRevertCutTabletHistory::TPtr& ev) {
+    Execute(CreateRevertCutTabletHistory(std::move(ev)));
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

@@ -81,7 +81,10 @@ TTransaction::TTransaction(
         PingPeriod_,
         /*sticky*/ stickyParameters.has_value(),
         StickyProxyAddress_);
+}
 
+void TTransaction::Initialize()
+{
     // TODO(babenko): don't run periodic pings if client explicitly disables them in options
     RunPeriodicPings();
 }

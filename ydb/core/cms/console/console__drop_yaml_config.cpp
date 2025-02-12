@@ -69,7 +69,7 @@ public:
 
         if (!Error && Modify) {
             Self->YamlVersion = 0;
-            Self->YamlConfig.clear();
+            Self->MainYamlConfig.clear();
             Self->YamlDropped = true;
 
             Self->VolatileYamlConfigs.clear();

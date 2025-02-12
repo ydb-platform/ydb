@@ -1,7 +1,6 @@
 /* syntax version 1 */
 SELECT
     value AS value,
-    Unicode::Normalize(value) AS normalize,
     Unicode::IsUtf(value) AS is,
     Unicode::GetLength(value) AS length,
     Unicode::Substring(value, 1) AS one_end_substring,

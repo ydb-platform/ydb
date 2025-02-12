@@ -1,5 +1,3 @@
-#include "src/kqp_runner.h"
-
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 
 #include <library/cpp/colorizer/colors.h>
@@ -9,11 +7,12 @@
 #include <util/stream/file.h>
 #include <util/system/env.h>
 
-#include <ydb/core/base/backtrace.h>
 #include <ydb/core/blob_depot/mon_main.h>
-
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
+#include <ydb/tests/tools/kqprun/runlib/application.h>
+#include <ydb/tests/tools/kqprun/runlib/utils.h>
+#include <ydb/tests/tools/kqprun/src/kqp_runner.h>
 
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/udf/udf_static_registry.h>
@@ -26,6 +25,7 @@
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
 #endif
 
+using namespace NKikimrRun;
 
 namespace NKqpRun {
 
@@ -44,6 +44,7 @@ struct TExecutionOptions {
     bool UseTemplates = false;
 
     ui32 LoopCount = 1;
+    TDuration QueryDelay;
     TDuration LoopDelay;
     bool ContinueAfterFail = false;
 
@@ -95,16 +96,17 @@ struct TExecutionOptions {
             .TraceId = DefaultTraceId,
             .PoolId = "",
             .UserSID = BUILTIN_ACL_ROOT,
-            .Database = "",
+            .Database = GetValue(0, Databases, TString()),
             .Timeout = TDuration::Zero()
         };
     }
 
-    TRequestOptions GetScriptQueryOptions(size_t index, size_t queryId, TInstant startTime) const {
+    TRequestOptions GetScriptQueryOptions(size_t index, size_t loopId, size_t queryId, TInstant startTime) const {
         Y_ABORT_UNLESS(index < ScriptQueries.size());
 
         TString sql = ScriptQueries[index];
         if (UseTemplates) {
+            SubstGlobal(sql, "${LOOP_ID}", ToString(loopId));
             SubstGlobal(sql, "${QUERY_ID}", ToString(queryId));
         }
 
@@ -135,15 +137,15 @@ struct TExecutionOptions {
 
 private:
     void ValidateOptionsSizes(const TRunnerOptions& runnerOptions) const {
-        const auto checker = [numberQueries = ScriptQueries.size()](size_t checkSize, const TString& optionName) {
-            if (checkSize > numberQueries) {
+        const auto checker = [numberQueries = ScriptQueries.size()](size_t checkSize, const TString& optionName, bool useInSchemeQuery = false) {
+            if (checkSize > std::max(numberQueries, static_cast<size_t>(useInSchemeQuery ? 1 : 0))) {
                 ythrow yexception() << "Too many " << optionName << ". Specified " << checkSize << ", when number of script queries is " << numberQueries;
             }
         };
 
         checker(ExecutionCases.size(), "execution cases");
         checker(ScriptQueryActions.size(), "script query actions");
-        checker(Databases.size(), "databases");
+        checker(Databases.size(), "databases", true);
         checker(TraceIds.size(), "trace ids");
         checker(PoolIds.size(), "pool ids");
         checker(UserSIDs.size(), "user SIDs");
@@ -257,7 +259,7 @@ private:
 
     static void ValidateStorageSettings(const TYdbSetupSettings& ydbSettings) {
         if (ydbSettings.DisableDiskMock) {
-            if (ydbSettings.NodeCount + ydbSettings.SharedTenants.size() + ydbSettings.DedicatedTenants.size() > 1) {
+            if (ydbSettings.NodeCount + ydbSettings.Tenants.size() > 1) {
                 ythrow yexception() << "Disable disk mock cannot be used for multi node clusters (already disabled)";
             } else if (ydbSettings.PDisksPath) {
                 ythrow yexception() << "Disable disk mock cannot be used with real PDisks (already disabled)";
@@ -270,12 +272,12 @@ private:
 };
 
 
-void RunArgumentQuery(size_t index, size_t queryId, TInstant startTime, const TExecutionOptions& executionOptions, TKqpRunner& runner) {
+void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant startTime, const TExecutionOptions& executionOptions, TKqpRunner& runner) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     switch (executionOptions.GetExecutionCase(index)) {
         case TExecutionOptions::EExecutionCase::GenericScript: {
-            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(index, queryId, startTime))) {
+            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
@@ -292,21 +294,21 @@ void RunArgumentQuery(size_t index, size_t queryId, TInstant startTime, const TE
         }
 
         case TExecutionOptions::EExecutionCase::GenericQuery: {
-            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(index, queryId, startTime))) {
+            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             break;
         }
 
         case TExecutionOptions::EExecutionCase::YqlScript: {
-            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(index, queryId, startTime))) {
+            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
             break;
         }
 
         case TExecutionOptions::EExecutionCase::AsyncQuery: {
-            runner.ExecuteQueryAsync(executionOptions.GetScriptQueryOptions(index, queryId, startTime));
+            runner.ExecuteQueryAsync(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime));
             break;
         }
     }
@@ -327,24 +329,25 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
     const size_t numberLoops = executionOptions.LoopCount;
     for (size_t queryId = 0; queryId < numberQueries * numberLoops || numberLoops == 0; ++queryId) {
         size_t id = queryId % numberQueries;
-        if (id == 0 && queryId > 0) {
-            Sleep(executionOptions.LoopDelay);
+        if (queryId > 0) {
+            Sleep(id == 0 ? executionOptions.LoopDelay : executionOptions.QueryDelay);
         }
 
         const TInstant startTime = TInstant::Now();
+        const size_t loopId = queryId / numberQueries;
         if (executionOptions.GetExecutionCase(id) != TExecutionOptions::EExecutionCase::AsyncQuery) {
             Cout << colors.Yellow() << startTime.ToIsoStringLocal() << " Executing script";
             if (numberQueries > 1) {
                 Cout << " " << id;
             }
             if (numberLoops != 1) {
-                Cout << ", loop " << queryId / numberQueries;
+                Cout << ", loop " << loopId;
             }
             Cout << "..." << colors.Default() << Endl;
         }
 
         try {
-            RunArgumentQuery(id, queryId, startTime, executionOptions, runner);
+            RunArgumentQuery(id, loopId, queryId, startTime, executionOptions, runner);
         } catch (const yexception& exception) {
             if (executionOptions.ContinueAfterFail) {
                 Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
@@ -423,9 +426,8 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistr
 }
 
 
-class TMain : public TMainClassArgs {
+class TMain : public TMainBase {
     inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
-    inline static std::vector<std::unique_ptr<TFileOutput>> FileHolders;
     inline static IOutputStream* ProfileAllocationsOutput = nullptr;
     inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
 
@@ -438,52 +440,6 @@ class TMain : public TMainClassArgs {
     TString UdfsDirectory;
     bool ExcludeLinkedUdfs = false;
     bool EmulateYt = false;
-
-    std::optional<NActors::NLog::EPriority> DefaultLogPriority;
-    std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> LogPriorities;
-
-    static TString LoadFile(const TString& file) {
-        return TFileInput(file).ReadAll();
-    }
-
-    static IOutputStream* GetDefaultOutput(const TString& file) {
-        if (file == "-") {
-            return &Cout;
-        }
-        if (file) {
-            FileHolders.emplace_back(new TFileOutput(file));
-            return FileHolders.back().get();
-        }
-        return nullptr;
-    }
-
-    template <typename TResult>
-    class TChoices {
-    public:
-        explicit TChoices(std::map<TString, TResult> choicesMap)
-            : ChoicesMap(std::move(choicesMap))
-        {}
-
-        TResult operator()(const TString& choice) const {
-            return ChoicesMap.at(choice);
-        }
-
-        TVector<TString> GetChoices() const {
-            TVector<TString> choices;
-            choices.reserve(ChoicesMap.size());
-            for (const auto& [choice, _] : ChoicesMap) {
-                choices.emplace_back(choice);
-            }
-            return choices;
-        }
-
-        bool Contains(const TString& choice) const {
-            return ChoicesMap.contains(choice);
-        }
-
-    private:
-        const std::map<TString, TResult> ChoicesMap;
-    };
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 public:
@@ -590,51 +546,6 @@ protected:
 
         // Outputs
 
-        options.AddLongOption("log-file", "File with execution logs (writes in stderr if empty)")
-            .RequiredArgument("file")
-            .StoreResult(&RunnerOptions.YdbSettings.LogOutputFile)
-            .Handler1([](const NLastGetopt::TOptsParser* option) {
-                if (const TString& file = option->CurVal()) {
-                    std::remove(file.c_str());
-                }
-            });
-
-        TChoices<NActors::NLog::EPriority> logPriority({
-            {"emerg", NActors::NLog::EPriority::PRI_EMERG},
-            {"alert", NActors::NLog::EPriority::PRI_ALERT},
-            {"crit", NActors::NLog::EPriority::PRI_CRIT},
-            {"error", NActors::NLog::EPriority::PRI_ERROR},
-            {"warn", NActors::NLog::EPriority::PRI_WARN},
-            {"notice", NActors::NLog::EPriority::PRI_NOTICE},
-            {"info", NActors::NLog::EPriority::PRI_INFO},
-            {"debug", NActors::NLog::EPriority::PRI_DEBUG},
-            {"trace", NActors::NLog::EPriority::PRI_TRACE},
-        });
-        options.AddLongOption("log-default", "Default log priority")
-            .RequiredArgument("priority")
-            .Choices(logPriority.GetChoices())
-            .StoreMappedResultT<TString>(&DefaultLogPriority, logPriority);
-
-        options.AddLongOption("log", "Component log priority in format <component>=<priority> (e. g. KQP_YQL=trace)")
-            .RequiredArgument("component priority")
-            .Handler1([this, logPriority](const NLastGetopt::TOptsParser* option) {
-                TStringBuf component;
-                TStringBuf priority;
-                TStringBuf(option->CurVal()).Split('=', component, priority);
-                if (component.empty() || priority.empty()) {
-                    ythrow yexception() << "Incorrect log setting, expected form component=priority, e. g. KQP_YQL=trace";
-                }
-
-                if (!logPriority.Contains(TString(priority))) {
-                    ythrow yexception() << "Incorrect log priority: " << priority;
-                }
-
-                const auto service = GetLogService(TString(component));
-                if (!LogPriorities.emplace(service, logPriority(TString(priority))).second) {
-                    ythrow yexception() << "Got duplicated log service name: " << component;
-                }
-            });
-
         TChoices<TRunnerOptions::ETraceOptType> traceOpt({
             {"all", TRunnerOptions::ETraceOptType::All},
             {"scheme", TRunnerOptions::ETraceOptType::Scheme},
@@ -669,10 +580,10 @@ protected:
             .DefaultValue(0)
             .StoreResult(&ExecutionOptions.ResultsRowsLimit);
 
-        TChoices<TRunnerOptions::EResultOutputFormat> resultFormat({
-            {"rows", TRunnerOptions::EResultOutputFormat::RowsJson},
-            {"full-json", TRunnerOptions::EResultOutputFormat::FullJson},
-            {"full-proto", TRunnerOptions::EResultOutputFormat::FullProto}
+        TChoices<EResultOutputFormat> resultFormat({
+            {"rows", EResultOutputFormat::RowsJson},
+            {"full-json", EResultOutputFormat::FullJson},
+            {"full-proto", EResultOutputFormat::FullProto}
         });
         options.AddLongOption('R', "result-format", "Script query result format")
             .RequiredArgument("result-format")
@@ -805,6 +716,11 @@ protected:
             .DefaultValue(0)
             .StoreMappedResultT<ui64>(&ExecutionOptions.LoopDelay, &TDuration::MilliSeconds<ui64>);
 
+        options.AddLongOption("query-delay", "Delay in milliseconds between queries starts")
+            .RequiredArgument("uint")
+            .DefaultValue(0)
+            .StoreMappedResultT<ui64>(&ExecutionOptions.QueryDelay, &TDuration::MilliSeconds<ui64>);
+
         options.AddLongOption("continue-after-fail", "Don't not stop requests execution after fails")
             .NoArgument()
             .SetFlag(&ExecutionOptions.ContinueAfterFail);
@@ -837,31 +753,13 @@ protected:
                 return nodeCount;
             });
 
-        options.AddLongOption('M', "monitoring", "Embedded UI port (use 0 to start on random free port), if used kqprun will be run as daemon")
-            .RequiredArgument("uint")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                if (const TString& port = option->CurVal()) {
-                    RunnerOptions.YdbSettings.MonitoringEnabled = true;
-                    RunnerOptions.YdbSettings.MonitoringPortOffset = FromString(port);
-                }
-            });
-
-        options.AddLongOption('G', "grpc", "gRPC port (use 0 to start on random free port), if used kqprun will be run as daemon")
-            .RequiredArgument("uint")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                if (const TString& port = option->CurVal()) {
-                    RunnerOptions.YdbSettings.GrpcEnabled = true;
-                    RunnerOptions.YdbSettings.GrpcPort = FromString(port);
-                }
-            });
-
         options.AddLongOption('E', "emulate-yt", "Emulate YT tables (use file gateway instead of native gateway)")
             .NoArgument()
             .SetFlag(&EmulateYt);
 
         options.AddLongOption('H', "health-check", TStringBuilder() << "Level of health check before start (max level " << static_cast<ui32>(TYdbSetupSettings::EHealthCheck::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EHealthCheck::NodesCount))
+            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EHealthCheck::FetchDatabase))
             .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.HealthCheckLevel, [](ui8 value) {
                 return static_cast<TYdbSetupSettings::EHealthCheck>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EHealthCheck::Max)));
             });
@@ -871,22 +769,50 @@ protected:
             .DefaultValue(10)
             .StoreMappedResultT<ui64>(&RunnerOptions.YdbSettings.HealthCheckTimeout, &TDuration::Seconds<ui64>);
 
-        options.AddLongOption("domain", "Test cluster domain name")
-            .RequiredArgument("name")
-            .DefaultValue(RunnerOptions.YdbSettings.DomainName)
-            .StoreResult(&RunnerOptions.YdbSettings.DomainName);
+        const auto addTenant = [this](const TString& type, TStorageMeta::TTenant::EType protoType, const NLastGetopt::TOptsParser* option) {
+            TStringBuf tenant;
+            TStringBuf nodesCountStr;
+            TStringBuf(option->CurVal()).Split(':', tenant, nodesCountStr);
+            if (tenant.empty()) {
+                ythrow yexception() << type << " tenant name should not be empty";
+            }
 
-        options.AddLongOption("dedicated", "Dedicated tenant path, relative inside domain")
-            .RequiredArgument("path")
-            .InsertTo(&RunnerOptions.YdbSettings.DedicatedTenants);
+            TStorageMeta::TTenant tenantInfo;
+            tenantInfo.SetType(protoType);
+            tenantInfo.SetNodesCount(nodesCountStr ? FromString<ui32>(nodesCountStr) : 1);
+            if (tenantInfo.GetNodesCount() == 0) {
+                ythrow yexception() << type << " tenant should have at least one node";
+            }
 
-        options.AddLongOption("shared", "Shared tenant path, relative inside domain")
+            if (!RunnerOptions.YdbSettings.Tenants.emplace(tenant, tenantInfo).second) {
+                ythrow yexception() << "Got duplicated tenant name: " << tenant;
+            }
+        };
+        options.AddLongOption("dedicated", "Dedicated tenant path, relative inside domain (for node count use dedicated-name:node-count)")
             .RequiredArgument("path")
-            .InsertTo(&RunnerOptions.YdbSettings.SharedTenants);
+            .Handler1(std::bind(addTenant, "Dedicated", TStorageMeta::TTenant::DEDICATED, std::placeholders::_1));
+
+        options.AddLongOption("shared", "Shared tenant path, relative inside domain (for node count use dedicated-name:node-count)")
+            .RequiredArgument("path")
+            .Handler1(std::bind(addTenant, "Shared", TStorageMeta::TTenant::SHARED, std::placeholders::_1));
 
         options.AddLongOption("serverless", "Serverless tenant path, relative inside domain (use string serverless-name@shared-name to specify shared database)")
             .RequiredArgument("path")
-            .InsertTo(&RunnerOptions.YdbSettings.ServerlessTenants);
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TStringBuf serverless;
+                TStringBuf shared;
+                TStringBuf(option->CurVal()).Split('@', serverless, shared);
+                if (serverless.empty()) {
+                    ythrow yexception() << "Serverless tenant name should not be empty";
+                }
+
+                TStorageMeta::TTenant tenantInfo;
+                tenantInfo.SetType(TStorageMeta::TTenant::SERVERLESS);
+                tenantInfo.SetSharedTenant(TString(shared));
+                if (!RunnerOptions.YdbSettings.Tenants.emplace(serverless, tenantInfo).second) {
+                    ythrow yexception() << "Got duplicated tenant name: " << serverless;
+                }
+            });
 
         options.AddLongOption("storage-size", TStringBuilder() << "Domain storage size in gigabytes (" << NKikimr::NBlobDepot::FormatByteSize(DEFAULT_STORAGE_SIZE) << " by default)")
             .RequiredArgument("uint")
@@ -906,18 +832,7 @@ protected:
             .NoArgument()
             .SetFlag(&RunnerOptions.YdbSettings.DisableDiskMock);
 
-        TChoices<std::function<void()>> backtrace({
-            {"heavy", &NKikimr::EnableYDBBacktraceFormat},
-            {"light", []() { SetFormatBackTraceFn(FormatBackTrace); }}
-        });
-        options.AddLongOption("backtrace", "Default backtrace format function")
-            .RequiredArgument("backtrace-type")
-            .DefaultValue("heavy")
-            .Choices(backtrace.GetChoices())
-            .Handler1([backtrace](const NLastGetopt::TOptsParser* option) {
-                TString choice(option->CurValOrDef());
-                backtrace(choice)();
-            });
+        RegisterKikimrOptions(options, RunnerOptions.YdbSettings);
     }
 
     int DoRun(NLastGetopt::TOptsParseResult&&) override {
@@ -936,10 +851,7 @@ protected:
             appConfig.MutableQueryServiceConfig()->SetScriptResultRowsLimit(ExecutionOptions.ResultsRowsLimit);
         }
 
-        if (DefaultLogPriority) {
-            appConfig.MutableLogConfig()->SetDefaultLevel(*DefaultLogPriority);
-        }
-        ModifyLogPriorities(LogPriorities, *appConfig.MutableLogConfig());
+        FillLogConfig(*appConfig.MutableLogConfig());
 
         if (EmulateYt) {
             const auto& fileStorageConfig = appConfig.GetQueryServiceConfig().GetFileStorage();
@@ -990,38 +902,6 @@ private:
     }
 };
 
-
-void KqprunTerminateHandler() {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-
-void SegmentationFaultHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= segmentation fault call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "==============================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-void FloatingPointExceptionHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= floating point exception call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "====================================================" << colors.Default() << Endl;
-
-    abort();
-}
-
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 void InterruptHandler(int) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
@@ -1038,9 +918,7 @@ void InterruptHandler(int) {
 }  // namespace NKqpRun
 
 int main(int argc, const char* argv[]) {
-    std::set_terminate(NKqpRun::KqprunTerminateHandler);
-    signal(SIGSEGV, &NKqpRun::SegmentationFaultHandler);
-    signal(SIGFPE, &NKqpRun::FloatingPointExceptionHandler);
+    SetupSignalActions();
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     signal(SIGINT, &NKqpRun::InterruptHandler);

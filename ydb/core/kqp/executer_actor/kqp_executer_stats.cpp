@@ -197,14 +197,16 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     SpillingComputeTimeUs.Resize(taskCount);
     SpillingChannelTimeUs.Resize(taskCount);
 
-    for (auto& p : Ingress) p.second.Resize(taskCount);
-    for (auto& p : Input)   p.second.Resize(taskCount);
-    for (auto& p : Output)  p.second.Resize(taskCount);
-    for (auto& p : Egress)  p.second.Resize(taskCount);
+    for (auto& [_, t] : Tables) t.Resize(taskCount);
 
-    for (auto& [id, j] : Joins) j.Resize(taskCount);
-    for (auto& [id, f] : Filters) f.Resize(taskCount);
-    for (auto& [id, a] : Aggregations) a.Resize(taskCount);
+    for (auto& [_, i] : Ingress) i.Resize(taskCount);
+    for (auto& [_, i] : Input)   i.Resize(taskCount);
+    for (auto& [_, o] : Output)  o.Resize(taskCount);
+    for (auto& [_, e] : Egress)  e.Resize(taskCount);
+
+    for (auto& [_, j] : Joins) j.Resize(taskCount);
+    for (auto& [_, f] : Filters) f.Resize(taskCount);
+    for (auto& [_, a] : Aggregations) a.Resize(taskCount);
 
     MaxMemoryUsage.Resize(taskCount);
 }

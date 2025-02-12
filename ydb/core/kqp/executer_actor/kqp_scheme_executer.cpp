@@ -113,7 +113,7 @@ public:
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
         RegisterWithSameMailbox(requestHandler);
 
-        auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+        auto actorSystem = TActivationContext::ActorSystem();
         auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
             auto ev = MakeHolder<TEvPrivate::TEvMakeTempDirResult>();
@@ -377,7 +377,7 @@ public:
                 TVector<TString> columns{analyzeOperation.columns().begin(), analyzeOperation.columns().end()};
                 IActor* analyzeActor = new TAnalyzeActor(analyzeOperation.GetTablePath(), columns, analyzePromise);
 
-                auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+                auto actorSystem = TActivationContext::ActorSystem();
                 RegisterWithSameMailbox(analyzeActor);
 
                 auto selfId = SelfId();
@@ -453,7 +453,7 @@ public:
         );
         RegisterWithSameMailbox(requestHandler);
 
-        auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+        auto actorSystem = TActivationContext::ActorSystem();
         auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
             auto ev = MakeHolder<TEvPrivate::TEvResult>();

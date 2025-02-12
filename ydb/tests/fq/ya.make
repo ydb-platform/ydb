@@ -2,6 +2,8 @@ RECURSE(
     common
     generic
     pq_async_io
+    solomon
+    tools
     yt
 )
 

@@ -26,6 +26,7 @@ PEERDIR(
     ydb/core/testlib/actors
     ydb/core/tx/columnshard
     ydb/core/tx/scheme_board
+    ydb/core/tx/schemeshard
     ydb/core/util
     yql/essentials/minikql/invoke_builtins/llvm14
     yql/essentials/public/udf/service/exception_policy

@@ -71,7 +71,7 @@ def get_viewer_db(url, params=None):
 
 wait_good = False
 wait_time = 0
-max_wait_time = 120
+max_wait_time = 300
 
 
 def wait_for_cluster_ready():
@@ -109,6 +109,13 @@ def wait_for_cluster_ready():
             time.sleep(1)
             wait_time += 1
     for database in databases:
+        if database != domain_name:
+            call_viewer("/viewer/query", {
+                'database': database,
+                'query': 'create table table1(id int64, name text, primary key(id)))',
+                'schema': 'multi'
+            })
+    for database in databases:
         while wait_time < max_wait_time:
             all_good = False
             print("Waiting for database %s to be ready" % database)
@@ -132,14 +139,22 @@ def wait_for_cluster_ready():
     while wait_time < max_wait_time:
         all_good = False
         while True:
-            result = get_result(requests.get("http://localhost:%s/storage/groups?fields_required=all" % (cluster.nodes[1].mon_port)))  # force connect between nodes
+            result = call_viewer("/viewer/query", {
+                'database': domain_name,
+                'query': 'SELECT * FROM `.sys/ds_vslots`',
+            })
             if 'status_code' in result and result['status_code'] != 200:
                 break
             bad = 0
-            for group in result['StorageGroups']:
-                if group['Available'] == 0 or group['Limit'] == 0:
+            for vslot in result:
+                if 'State' not in vslot or vslot['State'] != 'OK':
                     bad += 1
             if bad > 0:
+                break
+            result = get_result(requests.get("http://localhost:%s/storage/groups?fields_required=all" % (cluster.nodes[1].mon_port)))  # force connect between nodes
+            if 'status_code' in result and result['status_code'] != 200:
+                break
+            if len(result['StorageGroups']) < 5:
                 break
             result = get_result(requests.get("http://localhost:%s/viewer/cluster" % (cluster.nodes[1].mon_port)))  # force connect between nodes
             if 'status_code' in result and result['status_code'] != 200:
@@ -311,6 +326,7 @@ def normalize_result_nodes(result):
                                            'NetworkUtilization',
                                            'NetworkUtilizationMin',
                                            'NetworkUtilizationMax',
+                                           'NetworkWriteThroughput',
                                            'PingTimeUs',
                                            'PingTimeMinUs',
                                            'PingTimeMaxUs',
@@ -360,6 +376,7 @@ def normalize_result_schema(result):
                                           'ACL',
                                           'EffectiveACL',
                                           'CreateTxId',
+                                          'PathId',
                                           ])
 
 
@@ -421,9 +438,9 @@ def test_viewer_nodes():
 
 
 def test_storage_groups():
-    return get_viewer_normalized("/storage/groups", {
+    return normalize_result(get_viewer("/storage/groups", {
         'fields_required': 'all'
-    })
+    }))
 
 
 def test_viewer_sysinfo():
@@ -517,3 +534,29 @@ def test_viewer_query_issue_13945():
         'query': 'SELECT AsList();',
         'schema': 'multi'
     })
+
+
+def test_pqrb_tablet():
+    response_create_topic = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TOPIC topic1(CONSUMER consumer1)',
+        'schema': 'multi'
+    })
+    response_tablet_info = call_viewer("/viewer/tabletinfo", {
+        'database': dedicated_db,
+        'path': dedicated_db + '/topic1',
+        'enums': 'true'
+    })
+    result = {
+        'response_create_topic': response_create_topic,
+        'response_tablet_info': response_tablet_info,
+    }
+    return replace_values_by_key(result, ['version',
+                                          'ResponseTime',
+                                          'ChangeTime',
+                                          'HiveId',
+                                          'NodeId',
+                                          'TabletId',
+                                          'PathId',
+                                          'SchemeShard'
+                                          ])

@@ -490,6 +490,11 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.WithMonitoringDescriptor; })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "operation_incarnation",
+        [] (TThis* command) -> auto& { return command->Options.OperationIncarnation; })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
         "from_time",
         [] (TThis* command) -> auto& { return command->Options.FromTime; })
@@ -851,6 +856,12 @@ void TSuspendOperationCommand::Register(TRegistrar registrar)
             return command->Options.AbortRunningJobs;
         })
         .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "reason",
+        [] (TThis* command) -> auto& {
+            return command->Options.Reason;
+        })
+        .Optional();
 }
 
 void TSuspendOperationCommand::DoExecute(ICommandContextPtr context)

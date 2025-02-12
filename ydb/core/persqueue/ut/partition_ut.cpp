@@ -246,7 +246,8 @@ protected:
     void SendInfoRangeResponse(ui32 partition,
                                const TVector<TCreateConsumerParams>& consumers);
     void WaitDataRangeRequest();
-    void SendDataRangeResponse(ui64 begin, ui64 end, bool isHead);
+    void SendDataRangeResponse(ui32 partitionId,
+                               ui64 begin, ui64 end, bool isHead);
     void WaitDataReadRequest();
     void SendDataReadResponse();
 
@@ -423,7 +424,7 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         SendInfoRangeResponse(params.Partition.InternalPartitionId, params.Config.Consumers);
 
         WaitDataRangeRequest();
-        SendDataRangeResponse(params.Begin, params.End, params.FillHead);
+        SendDataRangeResponse(params.Partition.InternalPartitionId, params.Begin, params.End, params.FillHead);
 
         if (params.FillHead) {
             WaitBlobReadRequest();
@@ -922,7 +923,8 @@ void TPartitionFixture::WaitDataRangeRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadRangeSize(), 1);
 }
 
-void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end, bool isHead)
+void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
+                                              ui64 begin, ui64 end, bool isHead)
 {
     Y_ABORT_UNLESS(begin <= end);
 
@@ -932,7 +934,7 @@ void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end, bool isHead)
     auto read = event->Record.AddReadRangeResult();
     read->SetStatus(NKikimrProto::OK);
     auto pair = read->AddPair();
-    NPQ::TKey key(NPQ::TKeyPrefix::TypeData, TPartitionId(1), begin, 0, end - begin, 0, isHead);
+    NPQ::TKey key(NPQ::TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0, isHead);
     pair->SetStatus(NKikimrProto::OK);
     pair->SetKey(key.ToString());
     pair->SetValueSize(684);
@@ -1106,9 +1108,25 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
     ui64 cookie = 1;
 
     SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
+#if 0
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
     auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+#else
+    TString ownerCookie;
+    while (true) {
+        TAutoPtr<IEventHandle> handle;
+        auto events =
+            Ctx->Runtime->GrabEdgeEvents<TEvPQ::TEvProxyResponse, TEvKeyValue::TEvRequest>(handle,
+                                                                                           TDuration::Seconds(1));
+        if (std::get<TEvKeyValue::TEvRequest*>(events)) {
+            SendDiskStatusResponse(nullptr);
+        } else if (auto* event = std::get<TEvPQ::TEvProxyResponse*>(events)) {
+            ownerCookie = event->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+            break;
+        }
+    }
+#endif
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
@@ -1131,10 +1149,10 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
                         auto& counterData = meta.GetCounterData();
                         UNIT_ASSERT_VALUES_EQUAL(counterData.GetMessagesWrittenTotal(), cookie - 1);
                         UNIT_ASSERT_VALUES_EQUAL(counterData.GetMessagesWrittenGrpc(),isFirstClass ? cookie - 1 : 0);
-                        UNIT_ASSERT(counterData.GetBytesWrittenUncompressed() > currUncSize);
+                        UNIT_ASSERT(counterData.GetBytesWrittenUncompressed() >= currUncSize);
                         currUncSize = counterData.GetBytesWrittenUncompressed();
                         UNIT_ASSERT_VALUES_EQUAL(counterData.GetBytesWrittenGrpc(), isFirstClass ? counterData.GetBytesWrittenTotal() : 0);
-                        UNIT_ASSERT(counterData.GetBytesWrittenTotal() > currTotalSize);
+                        UNIT_ASSERT(counterData.GetBytesWrittenTotal() >= currTotalSize);
                         currTotalSize = counterData.GetBytesWrittenTotal();
 
                         if (cookie == 11) {
@@ -1756,10 +1774,26 @@ TString TPartitionTxTestHelper::GetOwnerCookie(const TString& srcId, const TActo
 
 void TPartitionTxTestHelper::WaitTxPredicateReplyImpl(ui64 userActId, bool status) {
     auto txId = UserActs.find(userActId)->second.TxId;
+#if 0
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxCalcPredicateResult>(TDuration::Seconds(1));
     UNIT_ASSERT(event != nullptr);
     UNIT_ASSERT_VALUES_EQUAL(event->TxId, txId);
     UNIT_ASSERT_VALUES_EQUAL(event->Predicate, status);
+#else
+    while (true) {
+        TAutoPtr<IEventHandle> handle;
+        auto events =
+            Ctx->Runtime->GrabEdgeEvents<TEvPQ::TEvTxCalcPredicateResult, TEvKeyValue::TEvRequest>(handle,
+                                                                                                   TDuration::Seconds(1));
+        if (std::get<TEvKeyValue::TEvRequest*>(events)) {
+            SendDiskStatusResponse(nullptr);
+        } else if (auto* event = std::get<TEvPQ::TEvTxCalcPredicateResult*>(events)) {
+            UNIT_ASSERT_VALUES_EQUAL(event->TxId, txId);
+            UNIT_ASSERT_VALUES_EQUAL(event->Predicate, status);
+            break;
+        }
+    }
+#endif
 }
 
 Y_UNIT_TEST_F(Batching, TPartitionFixture)
@@ -2483,9 +2517,25 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
     ui64 cookie = 1;
 
     SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
+#if 0
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
     auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+#else
+    TString ownerCookie;
+    while (true) {
+        TAutoPtr<IEventHandle> handle;
+        auto events =
+            Ctx->Runtime->GrabEdgeEvents<TEvPQ::TEvProxyResponse, TEvKeyValue::TEvRequest>(handle,
+                                                                                           TDuration::Seconds(1));
+        if (std::get<TEvKeyValue::TEvRequest*>(events)) {
+            SendDiskStatusResponse(nullptr);
+        } else if (auto* event = std::get<TEvPQ::TEvProxyResponse*>(events)) {
+            ownerCookie = event->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+            break;
+        }
+    }
+#endif
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvError&)> truth = [&](const TEvPQ::TEvError& e) { return cookie == e.Cookie; };

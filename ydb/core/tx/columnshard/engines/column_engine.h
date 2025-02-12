@@ -60,21 +60,13 @@ private:
 
 public:
     class TPortionsStats {
-    private:
-        template <class T>
-        T SumVerifiedPositive(const T v1, const T v2) const {
-            T result = v1 + v2;
-            Y_ABORT_UNLESS(result >= 0);
-            return result;
-        }
-
     public:
-        i64 Portions = 0;
-        i64 Blobs = 0;
-        i64 Rows = 0;
-        i64 Bytes = 0;
-        i64 RawBytes = 0;
-        std::vector<i64> ByChannel;
+        TPositiveControlInteger Portions;
+        TPositiveControlInteger Blobs;
+        TPositiveControlInteger Rows;
+        TPositiveControlInteger Bytes;
+        TPositiveControlInteger RawBytes;
+        THashMap<ui32, TPositiveControlInteger> BytesByChannel;
 
         TString DebugString() const {
             return TStringBuilder() << "portions=" << Portions << ";blobs=" << Blobs << ";rows=" << Rows << ";bytes=" << Bytes
@@ -93,28 +85,34 @@ public:
             result.Rows = kff * Rows;
             result.Bytes = kff * Bytes;
             result.RawBytes = kff * RawBytes;
-            result.ByChannel.reserve(ByChannel.size());
-            for (ui64 channelBytes: ByChannel) {
-                result.ByChannel.push_back(channelBytes * kff);
+            for (const auto& [channel, bytes] : BytesByChannel) {
+                result.BytesByChannel[channel] = kff * bytes;
             }
             return result;
         }
 
         TPortionsStats& operator-=(const TPortionsStats& item) {
-            return *this += item * -1;
+            Portions.Sub(item.Portions);
+            Blobs.Sub(item.Blobs);
+            Rows.Sub(item.Rows);
+            Bytes.Sub(item.Bytes);
+            RawBytes.Sub(item.RawBytes);
+            for (const auto& [channel, bytes] : item.BytesByChannel) {
+                auto findChannel = BytesByChannel.FindPtr(channel);
+                AFL_VERIFY(findChannel)("channel", channel);
+                findChannel->Sub(bytes);
+            }
+            return *this;
         }
 
         TPortionsStats& operator+=(const TPortionsStats& item) {
-            Portions = SumVerifiedPositive(Portions, item.Portions);
-            Blobs = SumVerifiedPositive(Blobs, item.Blobs);
-            Rows = SumVerifiedPositive(Rows, item.Rows);
-            Bytes = SumVerifiedPositive(Bytes, item.Bytes);
-            RawBytes = SumVerifiedPositive(RawBytes, item.RawBytes);
-            if (ByChannel.size() < item.ByChannel.size()) {
-                ByChannel.resize(item.ByChannel.size());
-            }
-            for (ui32 ch = 0; ch < item.ByChannel.size(); ch++) {
-                ByChannel[ch] = SumVerifiedPositive(ByChannel[ch], item.ByChannel[ch]);
+            Portions.Add(item.Portions);
+            Blobs.Add(item.Blobs);
+            Rows.Add(item.Rows);
+            Bytes.Add(item.Bytes);
+            RawBytes.Add(item.RawBytes);
+            for (const auto& [channel, bytes] : item.BytesByChannel) {
+                BytesByChannel[channel].Add(bytes);
             }
             return *this;
         }

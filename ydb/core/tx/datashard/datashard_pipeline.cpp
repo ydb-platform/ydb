@@ -2313,7 +2313,7 @@ bool TPipeline::WaitCompletion(const TOperation::TPtr& op) const {
     if(!op->Result() || op->Result()->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE)
         return true;
 
-    return HasCommittingOpsBelow(op->GetMvccSnapshot());
+    return HasCommittingOpsBelow(op->GetMvccSnapshot()) || Self->GetVolatileTxManager().HasUnstableVolatileTxsAtSnapshot(op->GetMvccSnapshot());
 }
 
 bool TPipeline::HasCommittingOpsBelow(TRowVersion upperBound) const {

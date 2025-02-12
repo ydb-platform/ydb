@@ -1,0 +1,9 @@
+$f = Python::f(Callable<(String,y:String)->String>,@@
+def f(x,y):
+    return x + y
+@@);
+
+$f = Udf($f, Int32); -- no custom user type
+
+SELECT
+    $f('foo', '?')

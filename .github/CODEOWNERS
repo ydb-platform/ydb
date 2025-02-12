@@ -13,6 +13,7 @@
 /yt @ydb-platform/ci
 
 /ydb/core/fq/ @ydb-platform/fq
+/ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/public_http/ @ydb-platform/fq
 
 /ydb/docs/ @ydb-platform/docs
@@ -41,7 +42,11 @@
 /ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
 /ydb/services/persqueue_v1 @ydb-platform/Topics
 
-/ydb/core/config/ut @ydb-platform/core
+/ydb/core/change_exchange @ydb-platform/core
+/ydb/core/config @ydb-platform/core
+/ydb/core/protos/counters_replication.proto @ydb-platform/core
+/ydb/core/protos/replication.proto @ydb-platform/core
+/ydb/core/tx/replication @ydb-platform/core
 
 /ydb/core/viewer @ydb-platform/ui-backend
 /ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend
@@ -50,6 +55,7 @@
 /ydb/core/protos/flat_tx_scheme.proto @ydb-platform/schemeshard
 /ydb/core/protos/counters_schemeshard.proto @ydb-platform/schemeshard
 /ydb/core/protos/schemeshard @ydb-platform/schemeshard
+/ydb/core/tx/scheme_board @ydb-platform/schemeshard
 /ydb/core/tx/schemeshard @ydb-platform/schemeshard
 /ydb/tests/functional/limits @ydb-platform/schemeshard
 /ydb/tests/functional/scheme_shard @ydb-platform/schemeshard

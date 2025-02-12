@@ -20,25 +20,13 @@ TSignaturePtr TSignatureGeneratorBase::Sign(TYsonString data)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYsonString& TSignatureGeneratorBase::GetHeader(const TSignaturePtr& signature)
-{
-    return signature->Header_;
-}
-
-std::vector<std::byte>& TSignatureGeneratorBase::GetSignature(const TSignaturePtr& signature)
-{
-    return signature->Signature_;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TDummySignatureGenerator
     : public TSignatureGeneratorBase
 {
 public:
     void Sign(const TSignaturePtr& signature) override
     {
-        GetHeader(signature) = NYson::TYsonString("DummySignature"_sb);
+        signature->Header_ = NYson::TYsonString("DummySignature"_sb);
     }
 };
 

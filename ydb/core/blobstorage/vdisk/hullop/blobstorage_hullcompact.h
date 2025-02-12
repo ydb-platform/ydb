@@ -127,12 +127,9 @@ namespace NKikimr {
             Gcmp->BuildMap(ctx, brs, LevelSnap, It);
             TGcMapIterator gcmpIt = TGcMapIterator(Gcmp.Get());
 
-            // free level snapshot
-            LevelSnap.Destroy();
-
             // enter work state, prepare, and kick worker class
             TThis::Become(&TThis::WorkFunc);
-            Worker.Prepare(Hmp, gcmpIt);
+            Worker.Prepare(Hmp, gcmpIt, &LevelSnap);
             MainCycle(ctx);
         }
 

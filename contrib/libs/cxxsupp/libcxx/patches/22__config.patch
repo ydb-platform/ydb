@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index d32ad24..a7d7799 100644
+index d32ad24..1bb99ee 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -39,13 +39,35 @@
+@@ -39,13 +39,25 @@
  #  define _LIBCPP_GCC_VER (__GNUC__ * 100 + __GNUC_MINOR__)
  #endif
  
@@ -16,16 +16,6 @@ index d32ad24..a7d7799 100644
 +#  define _LIBCPP_CLANG_VER (__clang_major__ * 100 + __clang_minor__)
 +#elif defined(__GNUC__)
 +#  define _LIBCPP_COMPILER_GCC
-+#elif defined(_MSC_VER)
-+#  define _LIBCPP_COMPILER_MSVC
-+
-+#  if _MSVC_LANG == 201705L
-+#    define _LIBCPP_STD_VER 20
-+#  elif _MSVC_LANG == 201703L
-+#    define _LIBCPP_STD_VER 17
-+#  else
-+#    define _LIBCPP_STD_VER 14
-+#  endif
 +#endif
 +
  #ifdef __cplusplus
@@ -39,7 +29,7 @@ index d32ad24..a7d7799 100644
  #    endif
  #  elif defined(_LIBCPP_APPLE_CLANG_VER)
  #    if _LIBCPP_APPLE_CLANG_VER < 1500
-@@ -94,7 +116,7 @@
+@@ -94,7 +106,7 @@
  #    define _LIBCPP_OBJECT_FORMAT_ELF 1
  #  elif defined(__MACH__)
  #    define _LIBCPP_OBJECT_FORMAT_MACHO 1
@@ -48,7 +38,7 @@ index d32ad24..a7d7799 100644
  #    define _LIBCPP_OBJECT_FORMAT_COFF 1
  #  elif defined(__wasm__)
  #    define _LIBCPP_OBJECT_FORMAT_WASM 1
-@@ -819,7 +841,7 @@ typedef __char32_t char32_t;
+@@ -819,7 +831,7 @@ typedef __char32_t char32_t;
  // TODO: We provide a escape hatch with _LIBCPP_NO_ABI_TAG for folks who want to avoid increasing
  //       the length of symbols with an ABI tag. In practice, we should remove the escape hatch and
  //       use compression mangling instead, see https://github.com/itanium-cxx-abi/cxx-abi/issues/70.
@@ -57,7 +47,7 @@ index d32ad24..a7d7799 100644
  #    define _LIBCPP_HIDE_FROM_ABI                                                                                      \
        _LIBCPP_HIDDEN _LIBCPP_EXCLUDE_FROM_EXPLICIT_INSTANTIATION                                                       \
            __attribute__((__abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE))))
-@@ -1101,7 +1123,8 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1101,7 +1113,8 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
          defined(__APPLE__) ||                                                                                          \
          defined(__MVS__) ||                                                                                            \
          defined(_AIX) ||                                                                                               \
@@ -67,7 +57,7 @@ index d32ad24..a7d7799 100644
  // clang-format on
  #      define _LIBCPP_HAS_THREAD_API_PTHREAD
  #    elif defined(__Fuchsia__)
-@@ -1267,6 +1290,10 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1267,6 +1280,10 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
  #    define _LIBCPP_ENABLE_CXX20_REMOVED_TYPE_TRAITS
  #  endif // _LIBCPP_ENABLE_CXX20_REMOVED_FEATURES
  
@@ -78,7 +68,7 @@ index d32ad24..a7d7799 100644
  // clang-format off
  #  define _LIBCPP_PUSH_MACROS _Pragma("push_macro(\"min\")") _Pragma("push_macro(\"max\")") _Pragma("push_macro(\"refresh\")") _Pragma("push_macro(\"move\")") _Pragma("push_macro(\"erase\")")
  #  define _LIBCPP_POP_MACROS _Pragma("pop_macro(\"min\")") _Pragma("pop_macro(\"max\")") _Pragma("pop_macro(\"refresh\")") _Pragma("pop_macro(\"move\")") _Pragma("pop_macro(\"erase\")")
-@@ -1452,6 +1479,11 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1452,6 +1469,11 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
  #    define _LIBCPP_NO_DESTROY
  #  endif
  
@@ -90,7 +80,7 @@ index d32ad24..a7d7799 100644
  #  if __has_attribute(__diagnose_if__) && !defined(_LIBCPP_DISABLE_ADDITIONAL_DIAGNOSTICS)
  #    define _LIBCPP_DIAGNOSE_WARNING(...) __attribute__((__diagnose_if__(__VA_ARGS__, "warning")))
  #  else
-@@ -1473,6 +1505,12 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1473,6 +1495,12 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
  #    define _LIBCPP_LIFETIMEBOUND
  #  endif
  

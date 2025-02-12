@@ -8,7 +8,7 @@ TString BuildCreateViewQuery(
 );
 
 bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool restoreRootIsDatabase,
-    const TString& dbPath, const TString& source, NYql::TIssues& issues
+    const TString& dbPath, NYql::TIssues& issues
 );
 
 }

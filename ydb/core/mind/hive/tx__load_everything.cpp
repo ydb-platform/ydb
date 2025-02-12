@@ -281,6 +281,7 @@ public:
                 if (domainRowset.HaveValue<Schema::SubDomain::ScaleRecommenderPolicies>()) {
                     domain.SetScaleRecommenderPolicies(domainRowset.GetValue<Schema::SubDomain::ScaleRecommenderPolicies>());
                 }
+                domain.Stopped = domainRowset.GetValueOrDefault<Schema::SubDomain::Stopped>();
 
                 if (!domainRowset.Next())
                     return false;
@@ -332,6 +333,7 @@ public:
                         node.LocationAcquired = true;
                     }
                 }
+                node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
                 if (!node.ServicedDomains) {
                     node.ServicedDomains = { Self->RootDomainKey };
                 }
@@ -454,6 +456,16 @@ public:
                 tablet.NeedToReleaseFromParent = tabletRowset.GetValueOrDefault<Schema::Tablet::NeedToReleaseFromParent>();
                 tablet.ChannelProfileReassignReason = tabletRowset.GetValueOrDefault<Schema::Tablet::ReassignReason>();
                 tablet.Statistics = tabletRowset.GetValueOrDefault<Schema::Tablet::Statistics>();
+                tablet.StoppedByTenant = tabletRowset.GetValueOrDefault<Schema::Tablet::StoppedByTenant>();
+
+                TDomainInfo* domain = Self->FindDomain(objectDomain);
+                if (domain) {
+                    if (domain->Stopped && !tablet.StoppedByTenant) {
+                        Self->StopTenantTabletsQueue.push(tabletId);
+                    } else if (!domain->Stopped && tablet.StoppedByTenant) {
+                        Self->ResumeTenantTabletsQueue.push(tabletId);
+                    }
+                }
 
                 if (tablet.NodeId == 0) {
                     tablet.BecomeStopped();
@@ -863,6 +875,9 @@ public:
             ctx.Send(Self->SelfId(), new TEvPrivate::TEvUpdateFollowers);
             Self->ProcessFollowerUpdatesScheduled = true;
         }
+
+        Self->ProcessPendingStopTablet();
+        Self->ProcessPendingResumeTablet();
 
         for (auto it = Self->Nodes.begin(); it != Self->Nodes.end(); ++it) {
             Self->ScheduleUnlockTabletExecution(it->second, NKikimrHive::LOCK_LOST_REASON_HIVE_RESTART);

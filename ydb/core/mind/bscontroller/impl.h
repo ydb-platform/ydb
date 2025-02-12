@@ -1547,7 +1547,6 @@ private:
     TMap<TGroupId, TBlobDepotDeleteQueueInfo> BlobDepotDeleteQueue;
     ui64 NextOperationLogIndex = 1;
     TActorId StatProcessorActorId;
-    TInstant LastMetricsCommit;
     bool SelfHealEnable = false;
     bool UseSelfHealLocalPolicy = false;
     bool TryToRelocateBrokenDisksLocallyFirst = false;
@@ -1603,6 +1602,7 @@ private:
             EvProcessIncomingEvent,
             EvUpdateHostRecords,
             EvUpdateShredState,
+            EvCommitMetrics,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1825,6 +1825,8 @@ private:
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void OnHostRecordsInitiate();
+
+    void CommitMetrics();
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
@@ -2177,6 +2179,7 @@ public:
         }
 
         ShredState.Initialize();
+        CommitMetrics();
     }
 
     void UpdatePDisksCounters() {

@@ -11,6 +11,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/counters/common
+    ydb/core/tx/columnshard/engines/changes/counters
     ydb/core/tablet_flat
     yql/essentials/core/expr_nodes
     ydb/core/tx/columnshard/blobs_action

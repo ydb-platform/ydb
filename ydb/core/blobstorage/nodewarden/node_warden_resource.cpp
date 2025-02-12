@@ -275,7 +275,7 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
     TActorId actorId = Register(CreateIncrHugeKeeper(settings), TMailboxType::HTSwap, AppData()->SystemPoolId);
 
     // bind it to service
-    TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(keeperId, actorId);
+    TActivationContext::ActorSystem()->RegisterLocalService(keeperId, actorId);
 
     // forward to just created service
     TActivationContext::Send(ev->Forward(keeperId));

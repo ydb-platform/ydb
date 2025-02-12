@@ -2880,6 +2880,10 @@ struct TListJobsOptions
     FLUENT_FIELD_OPTION(bool, WithMonitoringDescriptor);
 
     ///
+    /// @brief Return only jobs with given operation incarnation.
+    FLUENT_FIELD_OPTION(TString, OperationIncarnation);
+
+    ///
     /// @brief Search for jobs with start time >= `FromTime`.
     FLUENT_FIELD_OPTION(TInstant, FromTime);
 

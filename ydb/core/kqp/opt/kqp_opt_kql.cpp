@@ -163,6 +163,25 @@ TExprNode::TPtr IsUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
     .Done().Ptr();
 }
 
+TExprNode::TPtr IsConditionalUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add()
+            .Name().Build("IsUpdate")
+        .Build()
+        .Add()
+            .Name().Build("IsConditionalUpdate")
+        .Build()
+    .Done().Ptr();
+}
+
+TExprNode::TPtr IsConditionalDeleteSetting(TExprContext& ctx, const TPositionHandle& pos) {
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add()
+            .Name().Build("IsConditionalDelete")
+        .Build()
+    .Done().Ptr();
+}
+
 TExprBase BuildKqlSequencer(TExprBase& input, const TKikimrTableDescription& table,
     const TCoAtomList& outputCols, const TCoAtomList& defaultConstraintColumns,
     TPositionHandle pos, TExprContext& ctx)
@@ -429,6 +448,7 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
         .Input(keysToDelete)
         .ReturningColumns<TCoAtomList>().Build()
         .IsBatch(del.IsBatch())
+        .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
         .Done();
 }
 
@@ -450,6 +470,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
         .Input(ProjectColumns(rowsToDelete, pk, ctx))
         .ReturningColumns<TCoAtomList>().Build()
         .IsBatch(del.IsBatch())
+        .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
         .Done();
 
     TVector<TExprBase> effects;
@@ -475,6 +496,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
             .Input(ProjectColumns(rowsToDelete, indexTableColumns, ctx))
             .ReturningColumns<TCoAtomList>().Build()
             .IsBatch(del.IsBatch())
+            .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
             .Done();
 
         effects.push_back(indexDelete);
@@ -573,7 +595,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
             .Add(updateColumnsList)
             .Build()
         .IsBatch(update.IsBatch())
-        .Settings(IsUpdateSetting(ctx, update.Pos()))
+        .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
 }
@@ -618,7 +640,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Columns<TCoAtomList>()
                 .Add(updateColumnsList)
                 .Build()
-            .Settings(IsUpdateSetting(ctx, update.Pos()))
+            .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
             .Done();
 
         effects.emplace_back(effect);
@@ -637,7 +659,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Add(updateColumnsList)
             .Build()
         .IsBatch(ctx.NewAtom(update.Pos(), "false"))
-        .Settings(IsUpdateSetting(ctx, update.Pos()))
+        .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
 

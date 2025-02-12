@@ -18,6 +18,7 @@
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/system/info.h>
 #include <util/system/mutex.h>
 #include <util/thread/pool.h>
 
@@ -406,7 +407,14 @@ public:
             }
 
             TYdbDumpValueParser parser(value, GetPrimitiveType(column.Type));
-            values.emplace(it->second, TValueConverter<TYdbDumpValueParser>(parser).ConvertSingle());
+            try {
+                values.emplace(it->second, TValueConverter<TYdbDumpValueParser>(parser).ConvertSingle());
+            } catch (const TFromStringException& e) {
+                auto loc = TStringBuilder() << line.GetLocation();
+                throw NStatusHelpers::TYdbErrorException(Result<TStatus>(loc, EStatus::SCHEME_ERROR, e.what()));
+            } catch (...) {
+                std::rethrow_exception(std::current_exception());
+            }
         }
 
         TKey key;
@@ -823,6 +831,7 @@ class TDataWriter: public NPrivate::IDataWriter {
 
             if (retryNumber == maxRetries) {
                 LOG_E("There is no retries left, last result: " << importResult);
+                SetError(std::move(importResult));
                 return false;
             }
 
@@ -833,6 +842,7 @@ class TDataWriter: public NPrivate::IDataWriter {
                     auto descResult = DescribeTable(TableClient, Path, desc);
                     if (!descResult.IsSuccess()) {
                         LOG_E("Error describing table " << Path.Quote() << ": " << descResult.GetIssues().ToOneLineString());
+                        SetError(std::move(descResult));
                         return false;
                     }
 
@@ -867,11 +877,19 @@ class TDataWriter: public NPrivate::IDataWriter {
                     LOG_E("Can't import data to " << Path.Quote()
                           << " at location " << data.GetLocation() 
                           << ", result: " << importResult);
+                    SetError(std::move(importResult));
                     return false;
             }
         }
 
         return false;
+    }
+
+    void SetError(TStatus&& error) {
+        TGuard<TMutex> lock(Mutex);
+        if (!Error) {
+            Error = std::move(error);
+        }
     }
 
     void Stop() {
@@ -886,6 +904,7 @@ public:
     explicit TDataWriter(
             const TString& path,
             const TTableDescription& desc,
+            ui32 partitionCount,
             const TRestoreSettings& settings,
             TImportClient& importClient,
             TTableClient& tableClient,
@@ -908,11 +927,17 @@ public:
         }
 
         TasksQueue = MakeHolder<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
-        TasksQueue->Start(settings.InFly_, settings.InFly_ + 1);
+
+        size_t threadCount = settings.MaxInFlight_;
+        if (!threadCount) {
+            threadCount = Min<size_t>(partitionCount, NSystemInfo::CachedNumberOfCpus());
+        }
+
+        TasksQueue->Start(threadCount, threadCount + 1);
     }
 
     bool Push(NPrivate::TBatch&& data) override {
-        if (data.size() > TRestoreSettings::MaxBytesPerRequest) {
+        if (data.size() > TRestoreSettings::MaxImportDataBytesPerRequest) {
             LOG_E("Too much data: " << data.GetLocation());
             return false;
         }
@@ -932,6 +957,9 @@ public:
 
     void Wait() override {
         TasksQueue->Stop();
+        if (Error) {
+            throw NStatusHelpers::TYdbErrorException(std::move(*Error));
+        }
     }
 
 private:
@@ -950,27 +978,33 @@ private:
     THolder<IThreadPool> TasksQueue;
     TAtomic Stopped;
 
+    TMaybe<TStatus> Error;
+    TMutex Mutex;
+
 }; // TDataWriter
 
 } // anonymous
 
 NPrivate::IDataAccumulator* CreateImportDataAccumulator(
-        const NTable::TTableDescription& dumpedDesc,
-        const NTable::TTableDescription& actualDesc,
+        const TTableDescription& dumpedDesc,
+        const TTableDescription& actualDesc,
         const TRestoreSettings& settings,
-        const std::shared_ptr<TLog>& log) {
+        const std::shared_ptr<TLog>& log)
+{
     return new TDataAccumulator(dumpedDesc, actualDesc, settings, log);
 }
 
 NPrivate::IDataWriter* CreateImportDataWriter(
         const TString& path,
         const TTableDescription& desc,
+        ui32 partitionCount,
         TImportClient& importClient,
         TTableClient& tableClient,
         const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators,
         const TRestoreSettings& settings,
-        const std::shared_ptr<TLog>& log) {
-    return new TDataWriter(path, desc, settings, importClient, tableClient, accumulators, log);
+        const std::shared_ptr<TLog>& log)
+{
+    return new TDataWriter(path, desc, partitionCount, settings, importClient, tableClient, accumulators, log);
 }
 
 } // NDump

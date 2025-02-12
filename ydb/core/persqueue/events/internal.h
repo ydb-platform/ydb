@@ -5,6 +5,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/blob.h>
+#include <ydb/core/persqueue/blob_refcounter.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/metering_sink.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
@@ -73,9 +74,10 @@ namespace NPQ {
 
     struct TDataKey {
         TKey Key;
-        ui32 Size;
+        ui32 Size = 0;
         TInstant Timestamp;
-        ui64 CumulativeSize;
+        ui64 CumulativeSize = 0;
+        TBlobKeyTokenPtr BlobKeyToken = nullptr;
     };
 
     struct TErrorInfo {
@@ -186,7 +188,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
-	EvTxBatchComplete,
+	    EvTxBatchComplete,
         EvReadingPartitionStatusRequest,
         EvProcessChangeOwnerRequests,
         EvWakeupReleasePartition,
@@ -196,6 +198,7 @@ struct TEvPQ {
         EvDeletePartition,
         EvDeletePartitionDone,
         EvTransactionCompleted,
+        EvListAllTopicsResponse,
         EvEnd
     };
 
@@ -1176,6 +1179,16 @@ struct TEvPQ {
         }
 
         TMaybe<NPQ::TWriteId> WriteId;
+    };
+
+    struct TEvListAllTopicsResponse : TEventLocal<TEvListAllTopicsResponse, EvListAllTopicsResponse> {
+        explicit TEvListAllTopicsResponse() = default;
+        explicit TEvListAllTopicsResponse(Ydb::StatusIds status, const TString& error);
+
+        TVector<TString> Topics;
+        bool HaveMoreTopics = false;
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        TString Error;
     };
 };
 

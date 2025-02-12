@@ -3971,6 +3971,39 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
+    map["FilterNullMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        YQL_ENSURE(optCtx.Types);
+        static const char optName[] = "FilterNullMembersOverJust";
+        if (!IsOptimizerEnabled<optName>(*optCtx.Types) || IsOptimizerDisabled<optName>(*optCtx.Types)) {
+            return node;
+        }
+        const auto self = TCoFilterNullMembers(node);
+        if (self.Members() && self.Members().Cast().Size() == 1) {
+            if (auto maybeJust = self.Input().Maybe<TCoJust>()) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " with single member over Just";
+                auto name = self.Members().Cast().Item(0);
+                return Build<TCoFlatMap>(ctx, node->Pos())
+                    .Input<TCoMember>()
+                        .Struct(maybeJust.Cast().Input())
+                        .Name(name)
+                    .Build()
+                    .Lambda()
+                        .Args({"unwrapped"})
+                        .Body<TCoJust>()
+                            .Input<TCoReplaceMember>()
+                                .Struct(maybeJust.Cast().Input())
+                                .Name(name)
+                                .Item("unwrapped")
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Done()
+                    .Ptr();
+            }
+        }
+        return node;
+    };
+
     map["Filter"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (const auto sorted = node->Head().GetConstraint<TSortedConstraintNode>()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << ' ' << node->Head().Content();
@@ -6103,7 +6136,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         Y_UNREACHABLE();
     };
 
-    map["Unordered"] = map["UnorderedSubquery"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+    map["Unordered"] = map["UnorderedSubquery"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (node->Head().IsCallable({"AsList","EquiJoin","Filter","Map","FlatMap","MultiMap","Extend", "Apply","PartitionByKey","PartitionsByKeys"})) {
             YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " over " << node->Head().Content();
             return node->HeadPtr();
@@ -6112,6 +6145,18 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable("AssumeSorted")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+        }
+
+        static const char optName[] = "UnorderedOverSortImproved";
+        YQL_ENSURE(optCtx.Types);
+        const bool optEnabled = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+        if (optEnabled) {
+            if (node->Head().IsCallable(node->Content()) ||
+                node->Head().IsCallable("Sort") && node->IsCallable("Unordered"))
+            {
+                YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
+                return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+            }
         }
 
         if (node->Head().IsCallable("AssumeConstraints") && node->Head().GetConstraint<TSortedConstraintNode>()) {

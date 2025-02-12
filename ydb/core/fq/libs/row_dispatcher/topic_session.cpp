@@ -37,7 +37,7 @@ struct TTopicSessionMetrics {
         RestartSessionByOffsets = PartitionGroup->GetCounter("RestartSessionByOffsets", true);
         SessionDataRate = PartitionGroup->GetCounter("SessionDataRate", true);
         WaitEventTimeMs = PartitionGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
-        UnreadBytes = PartitionGroup->GetCounter("UnreadBytes");
+        QueuedBytes = PartitionGroup->GetCounter("QueuedBytes");
     }
 
     ::NMonitoring::TDynamicCounterPtr TopicGroup;
@@ -50,7 +50,7 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr SessionDataRate;
     ::NMonitoring::THistogramPtr WaitEventTimeMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr AllSessionsDataRate;
-    ::NMonitoring::TDynamicCounters::TCounterPtr UnreadBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueuedBytes;
 };
 
 struct TEvPrivate {
@@ -162,11 +162,11 @@ private:
             LOG_ROW_DISPATCHER_TRACE("AddDataToClient to " << ReadActorId << ", offset: " << offset << ", serialized size: " << rowSize);
 
             NextMessageOffset = offset + 1;
-            UnreadRows++;
-            UnreadBytes += rowSize;
-            Self.UnreadBytes += rowSize;
+            QueuedRows++;
+            QueuedBytes += rowSize;
+            Self.QueuedBytes += rowSize;
             Self.SendDataArrived(*this);
-            Self.Metrics.UnreadBytes->Add(rowSize);
+            Self.Metrics.QueuedBytes->Add(rowSize);
         }
 
         void UpdateClientOffset(ui64 offset) override {
@@ -174,7 +174,7 @@ private:
             if (!NextMessageOffset || *NextMessageOffset < offset + 1) {
                 NextMessageOffset = offset + 1;
             }
-            if (!UnreadRows) {
+            if (!QueuedRows) {
                 if (!ProcessedNextMessageOffset || *ProcessedNextMessageOffset < offset + 1) {
                     ProcessedNextMessageOffset = offset + 1;
                 }
@@ -190,8 +190,8 @@ private:
         TDuration ReconnectPeriod;
 
         // State
-        ui64 UnreadRows = 0;
-        ui64 UnreadBytes = 0;
+        ui64 QueuedRows = 0;
+        ui64 QueuedBytes = 0;
         bool DataArrivedSent = false;
         std::optional<ui64> NextMessageOffset;          // offset to restart topic session
         TMaybe<ui64> ProcessedNextMessageOffset;        // offset of fully processed data (to save to checkpoint)
@@ -246,7 +246,7 @@ private:
 
     ui64 LastMessageOffset = 0;
     bool IsWaitingEvents = false;
-    ui64 UnreadBytes = 0;
+    ui64 QueuedBytes = 0;
     TMaybe<TString> ConsumerName;
 
     // Metrics
@@ -395,8 +395,8 @@ void TTopicSession::SubscribeOnNextEvent() {
         return;
     }
 
-    if (Config.GetMaxSessionUsedMemory() && UnreadBytes > Config.GetMaxSessionUsedMemory()) {
-        LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << UnreadBytes << " bytes), skip subscribing to WaitEvent()");
+    if (Config.GetMaxSessionUsedMemory() && QueuedBytes > Config.GetMaxSessionUsedMemory()) {
+        LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << QueuedBytes << " bytes), skip subscribing to WaitEvent()");
         return;
     }
 
@@ -527,8 +527,8 @@ void TTopicSession::HandleNewEvents() {
         if (!ReadSession) {
             return;
         }
-        if (Config.GetMaxSessionUsedMemory() && UnreadBytes > Config.GetMaxSessionUsedMemory()) {
-            LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << UnreadBytes << " bytes), stop reading from yds");
+        if (Config.GetMaxSessionUsedMemory() && QueuedBytes > Config.GetMaxSessionUsedMemory()) {
+            LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << QueuedBytes << " bytes), stop reading from yds");
             break;
         }
         std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
@@ -627,11 +627,11 @@ void TTopicSession::SendData(TClientsInfo& info) {
         LOG_ROW_DISPATCHER_TRACE("Buffer empty");
     }
     ui64 dataSize = 0;
-    ui64 eventsSize = info.UnreadRows;
+    ui64 eventsSize = info.QueuedRows;
 
     if (!info.NextMessageOffset) {
         LOG_ROW_DISPATCHER_ERROR("Try SendData() without NextMessageOffset, " << info.ReadActorId 
-            << " unread " << info.UnreadBytes << " DataArrivedSent " << info.DataArrivedSent);
+            << " unread " << info.QueuedBytes << " DataArrivedSent " << info.DataArrivedSent);
         return;
     }
 
@@ -666,10 +666,10 @@ void TTopicSession::SendData(TClientsInfo& info) {
         Send(RowDispatcherActorId, event.release());
     } while(!buffer.empty());
 
-    UnreadBytes -= info.UnreadBytes;
-    Metrics.UnreadBytes->Sub(info.UnreadBytes);
-    info.UnreadRows = 0;
-    info.UnreadBytes = 0;
+    QueuedBytes -= info.QueuedBytes;
+    Metrics.QueuedBytes->Sub(info.QueuedBytes);
+    info.QueuedRows = 0;
+    info.QueuedBytes = 0;
 
     info.FilteredStat.Add(dataSize, eventsSize);
     info.FilteredDataRate->Add(dataSize);
@@ -736,8 +736,8 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     auto& info = *it->second;
     RestartSessionIfOldestClient(info);
 
-    UnreadBytes -= info.UnreadBytes;
-    Metrics.UnreadBytes->Sub(info.UnreadBytes);
+    QueuedBytes -= info.QueuedBytes;
+    Metrics.QueuedBytes->Sub(info.QueuedBytes);
     if (const auto formatIt = FormatHandlers.find(info.HandlerSettings); formatIt != FormatHandlers.end()) {
         formatIt->second->RemoveClient(info.GetClientId());
         if (!formatIt->second->HasClients()) {
@@ -822,7 +822,7 @@ void TTopicSession::StopReadSession() {
 }
 
 void TTopicSession::SendDataArrived(TClientsInfo& info) {
-    if (!info.UnreadBytes || info.DataArrivedSent) {
+    if (!info.QueuedBytes || info.DataArrivedSent) {
         return;
     }
     info.DataArrivedSent = true;
@@ -845,7 +845,7 @@ void TTopicSession::SendStatistics() {
     LOG_ROW_DISPATCHER_TRACE("SendStatistics");
     TTopicSessionStatistic sessionStatistic;
     auto& commonStatistic = sessionStatistic.Common;
-    commonStatistic.UnreadBytes = UnreadBytes;
+    commonStatistic.QueuedBytes = QueuedBytes;
     commonStatistic.RestartSessionByOffsets = RestartSessionByOffsets;
     commonStatistic.ReadBytes = Statistics.Bytes;
     commonStatistic.ReadEvents = Statistics.Events;
@@ -858,10 +858,11 @@ void TTopicSession::SendStatistics() {
         TTopicSessionClientStatistic clientStatistic;
         clientStatistic.PartitionId = PartitionId;
         clientStatistic.ReadActorId = readActorId;
-        clientStatistic.UnreadRows = info.UnreadRows;
-        clientStatistic.UnreadBytes = info.UnreadBytes;
+        clientStatistic.QueuedRows = info.QueuedRows;
+        clientStatistic.QueuedBytes = info.QueuedBytes;
         clientStatistic.Offset = info.ProcessedNextMessageOffset.GetOrElse(0);
-        clientStatistic.FilteredReadBytes = info.FilteredStat.Bytes;
+        clientStatistic.FilteredBytes = info.FilteredStat.Bytes;
+        clientStatistic.FilteredRows = info.FilteredStat.Events;
         clientStatistic.ReadBytes = Statistics.Bytes;
         clientStatistic.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.value_or(0);
         clientStatistic.ReadLagMessages = info.NextMessageOffset.value_or(0) - LastMessageOffset - 1;

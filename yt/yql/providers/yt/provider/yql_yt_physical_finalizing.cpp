@@ -2144,6 +2144,10 @@ private:
                     }
                     auto section = std::get<1>(reader); // section
                     auto op = std::get<0>(reader); // operation
+                    if (!section && !TYtPublish::Match(op)) {
+                        // Used in unknown callables. Don't process
+                        exclusiveOuts.insert(outIndex);
+                    }
                     // Section may be used multiple times in different operations
                     // So, check only unique pair of operation + section
                     if (!duplicateCheck[outIndex].insert(std::make_pair(op, section)).second) {

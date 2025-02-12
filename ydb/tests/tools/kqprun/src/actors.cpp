@@ -4,7 +4,7 @@
 
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-
+#include <ydb/core/kqp/workload_service/actors/actors.h>
 
 namespace NKqpRun {
 
@@ -254,6 +254,8 @@ public:
     void Bootstrap() {
         Become(&TResourcesWaiterActor::StateFunc);
 
+        Schedule(Settings_.HealthCheckTimeout, new NActors::TEvents::TEvWakeup());
+
         HealthCheckStage_ = EHealthCheck::NodesCount;
         DoHealthCheck();
     }
@@ -264,17 +266,26 @@ public:
             return;
         }
 
+        if (TInstant::Now() - StartTime_ >= Settings_.HealthCheckTimeout) {
+            FailTimeout();
+            return;
+        }
+
         switch (HealthCheckStage_) {
-            case TYdbSetupSettings::EHealthCheck::NodesCount:
+            case EHealthCheck::NodesCount:
                 CheckResourcesPublish();
                 break;
 
-            case TYdbSetupSettings::EHealthCheck::ScriptRequest:
+            case EHealthCheck::FetchDatabase:
+                FetchDatabase();
+                break;
+
+            case EHealthCheck::ScriptRequest:
                 StartScriptQuery();
                 break;
 
-            case TYdbSetupSettings::EHealthCheck::None:
-            case TYdbSetupSettings::EHealthCheck::Max:
+            case EHealthCheck::None:
+            case EHealthCheck::Max:
                 Finish();
                 break;
         }
@@ -283,12 +294,23 @@ public:
     void Handle(TEvPrivate::TEvResourcesInfo::TPtr& ev) {
         const auto nodeCount = ev->Get()->NodeCount;
         if (nodeCount == Settings_.ExpectedNodeCount) {
-            HealthCheckStage_ = EHealthCheck::ScriptRequest;
+            HealthCheckStage_ = EHealthCheck::FetchDatabase;
             DoHealthCheck();
             return;
         }
 
         Retry(TStringBuilder() << "invalid node count, got " << nodeCount << ", expected " << Settings_.ExpectedNodeCount, true);
+    }
+
+    void Handle(NKikimr::NKqp::NWorkload::TEvFetchDatabaseResponse::TPtr& ev) {
+        const auto status = ev->Get()->Status;
+        if (status == Ydb::StatusIds::SUCCESS) {
+            HealthCheckStage_ = EHealthCheck::ScriptRequest;
+            DoHealthCheck();
+            return;
+        }
+
+        Retry(TStringBuilder() << "failed to fetch database with status " << status << ", reason:\n" << CoutColors_.Default() << ev->Get()->Issues.ToString(), true);
     }
 
     void Handle(NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr& ev) {
@@ -304,6 +326,7 @@ public:
     STRICT_STFUNC(StateFunc,
         sFunc(NActors::TEvents::TEvWakeup, DoHealthCheck);
         hFunc(TEvPrivate::TEvResourcesInfo, Handle);
+        hFunc(NKikimr::NKqp::NWorkload::TEvFetchDatabaseResponse, Handle);
         hFunc(NKikimr::NKqp::TEvKqp::TEvScriptResponse, Handle);
     )
 
@@ -322,6 +345,10 @@ private:
         [selfId = SelfId(), actorContext = ActorContext()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
             actorContext.Send(selfId, new TEvPrivate::TEvResourcesInfo(resources.size()));
         });
+    }
+
+    void FetchDatabase() {
+        Register(NKikimr::NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), Settings_.Database));
     }
 
     void StartScriptQuery() {
@@ -344,17 +371,22 @@ private:
 
         if (auto delay = RetryState_->GetNextRetryDelay(shortRetry)) {
             if (Settings_.VerboseLevel >= EVerbose::InitLogs) {
-                Cout << CoutColors_.Cyan() << "Retry in " << *delay << " " << message << CoutColors_.Default() << Endl;
+                const TString str = TStringBuilder() << CoutColors_.Cyan() << "Retry for database '" << Settings_.Database << "' in " << *delay << " " << message << CoutColors_.Default();
+                Cout << str << Endl;
             }
             Schedule(*delay, new NActors::TEvents::TEvWakeup());
         } else {
-            Fail(TStringBuilder() << "Health check timeout " << Settings_.HealthCheckTimeout << " exceeded, use --health-check-timeout for increasing it or check out health check logs by using --verbose " << static_cast<ui32>(EVerbose::InitLogs));
+            FailTimeout();
         }
     }
 
     void Finish() {
         Promise_.SetValue();
         PassAway();
+    }
+
+    void FailTimeout() {
+        Fail(TStringBuilder() << "Health check timeout " << Settings_.HealthCheckTimeout << " exceeded for database '" << Settings_.Database << "', use --health-check-timeout for increasing it or check out health check logs by using --verbose " << static_cast<ui32>(EVerbose::InitLogs));
     }
 
     void Fail(const TString& error) {
@@ -368,6 +400,7 @@ private:
 
 private:
     const TWaitResourcesSettings Settings_;
+    const TInstant StartTime_ = TInstant::Now();
     const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
     const IRetryPolicy::TPtr RetryPolicy_;
     IRetryPolicy::IRetryState::TPtr RetryState_ = nullptr;

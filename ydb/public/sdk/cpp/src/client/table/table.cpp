@@ -1367,7 +1367,7 @@ TScanQueryPartIterator::TScanQueryPartIterator(
 TAsyncScanQueryPart TScanQueryPartIterator::ReadNext() {
     if (!ReaderImpl_ || ReaderImpl_->IsFinished()) {
         if (!IsSuccess())
-            RaiseError(TStringBuilder() << "Attempt to perform read on an unsuccessful result " 
+            RaiseError(TStringBuilder() << "Attempt to perform read on an unsuccessful result "
                 << GetIssues().ToString());
         RaiseError("Attempt to perform read on invalid or finished stream");
     }
@@ -2340,7 +2340,7 @@ const std::vector<std::string>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
-const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetVectorIndexSettings() const {
+const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetIndexSettings() const {
     return SpecializedIndexSettings_;
 }
 

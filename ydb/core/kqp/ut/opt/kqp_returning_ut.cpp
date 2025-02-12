@@ -13,8 +13,6 @@ Y_UNIT_TEST_SUITE(KqpReturning) {
 
 Y_UNIT_TEST(ReturningTwice) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
-    appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(serverSettings);
 
@@ -120,8 +118,6 @@ Y_UNIT_TEST(ReturningTwice) {
 
 Y_UNIT_TEST(ReplaceSerial) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
-    appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(serverSettings);
 
@@ -178,8 +174,6 @@ Y_UNIT_TEST(ReplaceSerial) {
 
 Y_UNIT_TEST(ReturningSerial) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
-    appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(serverSettings);
 
@@ -316,7 +310,7 @@ Y_UNIT_TEST(ReturningColumnsOrder) {
     auto client = kikimr.GetTableClient();
     auto session = client.CreateSession().GetValueSync().GetSession();
     auto db = kikimr.GetQueryClient();
-    
+
     const auto queryCreate = Q_(R"(
         CREATE TABLE test1 (id Int32, v Text, PRIMARY KEY(id));
         )");
@@ -356,7 +350,7 @@ Y_UNIT_TEST(ReturningColumnsOrder) {
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
         Cerr << StreamResultToYson(it);
     }
-    
+
 }
 
 Y_UNIT_TEST(Random) {

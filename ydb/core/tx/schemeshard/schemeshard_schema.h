@@ -1940,7 +1940,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct DataErasureScheduler : Table<114> {
+    struct DataErasureScheduler : Table<115> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
         struct IsCompleted : Column<2, NScheme::NTypeIds::Bool> {};
         struct StartTime : Column<3, NScheme::NTypeIds::Timestamp> {};
@@ -1953,7 +1953,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct ActiveDataErasureTenants : Table<115> {
+    struct ActiveDataErasureTenants : Table<116> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct IsCompleted : Column<3, NScheme::NTypeIds::Bool> {};
@@ -1966,7 +1966,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct TenantDataErasure : Table<116> {
+    struct TenantDataErasure : Table<117> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
         struct IsCompleted : Column<2, NScheme::NTypeIds::Bool> {};
 
@@ -1977,7 +1977,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct ActiveDataErasureShards : Table<117> {
+    struct ActiveDataErasureShards : Table<118> {
         struct OwnerShardIdx :  Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalShardIdx :  Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
         struct IsCompleted : Column<3, NScheme::NTypeIds::Bool> {};

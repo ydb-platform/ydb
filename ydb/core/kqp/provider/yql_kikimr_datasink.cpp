@@ -7,6 +7,8 @@
 
 #include <yql/essentials/utils/log/log.h>
 
+#include <ydb/core/kqp/common/batch/params.h>
+
 namespace NYql {
 namespace {
 
@@ -76,8 +78,8 @@ TCoLambda RewriteBatchFilter(const TCoLambda& node, const TKikimrTableDescriptio
 
     for (size_t i = 0; i < primaryColumns.size(); ++i) {
         auto colType = tableDesc.GetColumnType(primaryColumns[i]);
-        beginParamsList.push_back(CreateNodeTypeParameter("_kqp_batch_begin_" + ToString(i + 1), colType, pos, ctx));
-        endParamsList.push_back(CreateNodeTypeParameter("_kqp_batch_end_" + ToString(i + 1), colType, pos, ctx));
+        beginParamsList.push_back(CreateNodeTypeParameter(NKqp::NBatchParams::Begin + ToString(i + 1), colType, pos, ctx));
+        endParamsList.push_back(CreateNodeTypeParameter(NKqp::NBatchParams::End + ToString(i + 1), colType, pos, ctx));
 
         primaryMembersList.push_back(ctx.NewCallable(pos, "Member", {
             row,
@@ -98,37 +100,43 @@ TCoLambda RewriteBatchFilter(const TCoLambda& node, const TKikimrTableDescriptio
     TExprNode::TPtr newFilter = ctx.ChangeChild(*filter, 0, ctx.NewCallable(pos, "And", {
         ctx.NewCallable(pos, "Or", {
             ctx.NewCallable(pos, "And", {
-                CreateNodeBoolParameter("_kqp_batch_is_inclusive", pos, ctx),
+                CreateNodeBoolParameter(NKqp::NBatchParams::IsInclusive, pos, ctx),
                 ctx.NewCallable(pos, "And", {
                     ctx.NewCallable(pos, "Or", {
-                        CreateNodeBoolParameter("_kqp_batch_is_first_query", pos, ctx),
+                        CreateNodeBoolParameter(NKqp::NBatchParams::IsFirstQuery, pos, ctx),
                         ctx.NewCallable(pos, ">", {
                             primaryNodeMember,
                             beginNodeParams
                         })
                     }),
-                    ctx.NewCallable(pos, "<=", {
-                        primaryNodeMember,
-                        endNodeParams
+                    ctx.NewCallable(pos, "Or", {
+                        CreateNodeBoolParameter(NKqp::NBatchParams::IsLastQuery, pos, ctx),
+                        ctx.NewCallable(pos, "<=", {
+                            primaryNodeMember,
+                            endNodeParams
+                        })
                     })
                 })
             }),
             ctx.NewCallable(pos, "And", {
                 ctx.NewCallable(pos, "Not", {
-                    CreateNodeBoolParameter("_kqp_batch_is_inclusive", pos, ctx)
+                    CreateNodeBoolParameter(NKqp::NBatchParams::IsInclusive, pos, ctx)
                 }),
                 ctx.NewCallable(pos, "And", {
                     ctx.NewCallable(pos, "Or", {
-                        CreateNodeBoolParameter("_kqp_batch_is_first_query", pos, ctx),
+                        CreateNodeBoolParameter(NKqp::NBatchParams::IsFirstQuery, pos, ctx),
                         ctx.NewCallable(pos, ">=", {
                             primaryNodeMember,
                             beginNodeParams
                         })
                     }),
-                    ctx.NewCallable(pos, "<", {
-                        primaryNodeMember,
-                        endNodeParams
-                    })
+                    ctx.NewCallable(pos, "Or", {
+                        CreateNodeBoolParameter(NKqp::NBatchParams::IsLastQuery, pos, ctx),
+                        ctx.NewCallable(pos, "<", {
+                            primaryNodeMember,
+                            endNodeParams
+                        })
+                    }),
                 })
             })
         }),
@@ -447,6 +455,11 @@ private:
                     return TStatus::Error;
                 } else if (mode == "update") {
                     if (settings.IsBatch) {
+                        if (true) { // todo ditimizhev
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Not implemented."));
+                            return TStatus::Error;
+                        }
+
                         if (SessionCtx->Tables().GetTables().size() != 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Batch update is not supported for multiple tables."));
                             return TStatus::Error;
@@ -472,6 +485,11 @@ private:
                     return TStatus::Ok;
                 } else if (mode == "delete") {
                     if (settings.IsBatch) {
+                        if (true) { // todo ditimizhev
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Not implemented."));
+                            return TStatus::Error;
+                        }
+
                         if (SessionCtx->Tables().GetTables().size() != 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Batch delete is not supported for multiple tables."));
                             return TStatus::Error;

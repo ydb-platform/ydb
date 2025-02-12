@@ -557,6 +557,62 @@ TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const std::string& 
     return promise.GetFuture();
 }
 
+TAsyncDescribeExternalDataSourceResult TTableClient::TImpl::DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings) {
+    auto request = MakeOperationRequest<Ydb::Table::DescribeExternalDataSourceRequest>(settings);
+    request.set_path(path);
+
+    auto promise = NewPromise<TDescribeExternalDataSourceResult>();
+
+    auto extractor = [promise, settings](google::protobuf::Any* any, TPlainStatus status) mutable {
+        Ydb::Table::DescribeExternalDataSourceResult proto;
+        if (any) {
+            any->UnpackTo(&proto);
+        }
+        promise.SetValue(TDescribeExternalDataSourceResult(TStatus(std::move(status)), std::move(proto)));
+    };
+
+    Connections_->RunDeferred<Ydb::Table::V1::TableService,
+                              Ydb::Table::DescribeExternalDataSourceRequest,
+                              Ydb::Table::DescribeExternalDataSourceResponse>(
+        std::move(request),
+        extractor,
+        &Ydb::Table::V1::TableService::Stub::AsyncDescribeExternalDataSource,
+        DbDriverState_,
+        INITIAL_DEFERRED_CALL_DELAY,
+        TRpcRequestSettings::Make(settings)
+    );
+
+    return promise.GetFuture();
+}
+
+TAsyncDescribeExternalTableResult TTableClient::TImpl::DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings) {
+    auto request = MakeOperationRequest<Ydb::Table::DescribeExternalTableRequest>(settings);
+    request.set_path(path);
+
+    auto promise = NewPromise<TDescribeExternalTableResult>();
+
+    auto extractor = [promise, settings](google::protobuf::Any* any, TPlainStatus status) mutable {
+        Ydb::Table::DescribeExternalTableResult proto;
+        if (any) {
+            any->UnpackTo(&proto);
+        }
+        promise.SetValue(TDescribeExternalTableResult(TStatus(std::move(status)), std::move(proto)));
+    };
+
+    Connections_->RunDeferred<Ydb::Table::V1::TableService,
+                              Ydb::Table::DescribeExternalTableRequest,
+                              Ydb::Table::DescribeExternalTableResponse>(
+        std::move(request),
+        extractor,
+        &Ydb::Table::V1::TableService::Stub::AsyncDescribeExternalTable,
+        DbDriverState_,
+        INITIAL_DEFERRED_CALL_DELAY,
+        TRpcRequestSettings::Make(settings)
+    );
+
+    return promise.GetFuture();
+}
+
 TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& session, const std::string& query,
     const TPrepareDataQuerySettings& settings)
 {

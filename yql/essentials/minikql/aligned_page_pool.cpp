@@ -267,13 +267,14 @@ inline int TSystemMmap::Munmap(void* addr, size_t size)
     static std::mutex decontaminationMutex;
     static std::queue<TPage> decontaminationChamber;
     static size_t decontaminationSize = 0;
-    static const size_t MAX_DECONTAMINATION_SIZE = 100 * (1 << 20); // 100Mb
+    static const size_t MAX_DECONTAMINATION_SIZE_IN_BYTES = 100 * (1 << 20); // 100Mb
+    static const size_t MAX_DECONTAMINATION_PAGE_COUNT = 1000;
 
     std::unique_lock lock(decontaminationMutex);
     decontaminationChamber.emplace(addr, size);
     decontaminationSize += size;
 
-    while (decontaminationSize > MAX_DECONTAMINATION_SIZE) {
+    while (decontaminationSize > MAX_DECONTAMINATION_SIZE_IN_BYTES || decontaminationChamber.size() > MAX_DECONTAMINATION_PAGE_COUNT) {
         std::tie(addr, size) = decontaminationChamber.front();
         if (auto error = ::munmap(addr, size)) {
             return error;

@@ -139,13 +139,19 @@ namespace {
         }
     };
 
+    struct TImportChangefeed {
+        const TString ChangefeedName;
+        const TString Changefeed;
+        const TString Topic;
+    };
+
     struct TTestDataWithScheme {
         TString Metadata;
         EPathType Type = EPathTypeTable;
         TString Scheme;
         TString CreationQuery;
         TString Permissions;
-        TVector<TString> Changefeeds;
+        TVector<TImportChangefeed> Changefeeds;
         TVector<TTestData> Data;
 
         TTestDataWithScheme() = default;
@@ -253,7 +259,7 @@ namespace {
         const TVector<std::pair<TString, ui64>>& shardsConfig = {{"a", 1}},
         const TString& permissions = "",
         const TString& metadata = "",
-        const TVector<TString> changefeeds = {}
+        const TVector<TImportChangefeed> changefeeds = {}
     ) {
         TTestDataWithScheme result;
         result.Type = typedScheme.Type;
@@ -304,6 +310,13 @@ namespace {
             if (item.Permissions) {
                 result.emplace(prefix + "/permissions.pb", item.Permissions);
             }
+
+            for (const auto& importChangefeed : item.Changefeeds) {
+                const TString newPrefix = TStringBuilder() << prefix << "/" << importChangefeed.ChangefeedName;
+                result.emplace(newPrefix +  "/changefeed_description.pb", importChangefeed.Changefeed);
+                result.emplace(newPrefix +  "/topic_description.pb", importChangefeed.Topic);
+            }
+
             for (ui32 i = 0; i < item.Data.size(); ++i) {
                 const auto& data = item.Data.at(i);
                 result.emplace(Sprintf("%s/data_%02d%s", prefix.data(), i, data.Ext().c_str()), data.Data);
@@ -5114,5 +5127,51 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             )"
         );
+    }
+
+    Y_UNIT_TEST(Changefeeds) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // const auto changefeedDesc = ;
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, permissions);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::HasOwner("eve"),
+            NLs::HasRight("+R:alice"),
+            NLs::HasRight("+W:alice"),
+            NLs::HasRight("+R:bob")
+        });
     }
 }

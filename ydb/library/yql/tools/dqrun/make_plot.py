@@ -1,20 +1,28 @@
 
 import pandas as pd
 import plotly.graph_objects as go
+import os
+import datetime
+import subprocess
 
-# Загружаем данные из CSV файла
+timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+try:
+    commit_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8').strip()[:7]
+except Exception:
+    commit_hash = "no-git"
+
+output_dir = "graphs"
+os.makedirs(output_dir, exist_ok=True)
+
 df = pd.read_csv('memUsage.csv')
 
-# Создаем интерактивный график
 fig = go.Figure()
 
-# Линия для лимита памяти
 fig.add_trace(go.Scatter(x=df.index, y=df['limit'], mode='lines', name='Limit', line=dict(color='blue')))
 
-# Линия для использования памяти
 fig.add_trace(go.Scatter(x=df.index, y=df['usage'], mode='lines', name='Usage', line=dict(color='green')))
 
-# Настройки графика
 fig.update_layout(
     title="Memory Usage and Limit Over Time",
     xaxis_title="Time",
@@ -23,9 +31,11 @@ fig.update_layout(
     hovermode="x unified"
 )
 
-# Сохраняем интерактивный график в файл HTML
-fig.write_html('memory_usage_plot.html')
+filename = f"{output_dir}/memory_usage_{timestamp}_{commit_hash}.html"
 
-# Отображаем график в браузере
+fig.write_html(filename)
+
+print(filename)
+
 fig.show()
 

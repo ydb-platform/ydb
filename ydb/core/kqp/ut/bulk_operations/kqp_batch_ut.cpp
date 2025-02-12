@@ -2,7 +2,6 @@
 
 #include <format>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -33,14 +32,19 @@ static void CreateTestTable(auto session, const TString& name = "TestTable") {
             Age Uint64,
             Amount Uint64,
             Comment String,
-            PRIMARY KEY (Group, Name)
+            PRIMARY KEY (Group)
+        ) WITH (
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+            PARTITION_AT_KEYS = (3u)
         );)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
 
     auto result = session.ExecuteQuery(TStringBuilder() << R"(
         UPSERT INTO `/Root/)" << name << R"(` (Group, Name, Age, Amount, Comment) VALUES
                 (1u, "Anna", 23ul, 3500ul, "None"),
-                (1u, "Paul", 36, 300ul, "None"),
-                (2u, "Tony", 81, 7200ul, "None");
+                (2u, "Paul", 36ul, 300ul, "None"),
+                (3u, "Tony", 81ul, 7200ul, "None"),
+                (4u, "Bear", 11ul, 0ul, "Roar"),
+                (5u, "Ydb", 3ul, 100ul, "?");
     )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
@@ -54,13 +58,13 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            BATCH UPDATE TestTable SET Amount = 1000 WHERE Group >= 1 AND Age <= 30;
+            BATCH UPDATE TestTable SET Amount = 1000 WHERE Age <= 30;
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
 
         auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR); // not implemented yet
     }
 
     Y_UNIT_TEST(UpdateNotIdempotent_1) {
@@ -214,13 +218,13 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         CreateTestTable(session);
 
         auto query = Q_(R"(
-            BATCH DELETE FROM TestTable WHERE Group = 2;
+            BATCH DELETE FROM TestTable WHERE Age >= 10ul;
         )");
 
         auto txControl = NYdb::NQuery::TTxControl::NoTx();
 
         auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR); // not implemented yet
     }
 
     Y_UNIT_TEST(DeleteMultiTable_1) {

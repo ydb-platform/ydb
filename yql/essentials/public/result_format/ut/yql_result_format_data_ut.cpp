@@ -182,45 +182,45 @@ Y_UNIT_TEST_SUITE(ParseData) {
     }
 
     Y_UNIT_TEST(Int8) {
-        Test("[DataType;Int8]","\"1\"");
+        Test("[DataType;Int8]","\"1\"","1");
     }
 
     Y_UNIT_TEST(Uint8) {
-        Test("[DataType;Uint8]","\"1\"");
+        Test("[DataType;Uint8]","\"1\"","1u");
     }
 
     Y_UNIT_TEST(Int16) {
-        Test("[DataType;Int16]","\"1\"");
+        Test("[DataType;Int16]","\"1\"","1");
     }
 
     Y_UNIT_TEST(Uint16) {
-        Test("[DataType;Uint16]","\"1\"");
+        Test("[DataType;Uint16]","\"1\"","1u");
     }
 
     Y_UNIT_TEST(Int32) {
-        Test("[DataType;Int32]","\"1\"");
+        Test("[DataType;Int32]","\"1\"","1");
     }
 
     Y_UNIT_TEST(Uint32) {
-        Test("[DataType;Uint32]","\"1\"");
+        Test("[DataType;Uint32]","\"1\"","1u");
     }
 
     Y_UNIT_TEST(Int64) {
-        Test("[DataType;Int64]","\"1\"");
+        Test("[DataType;Int64]","\"1\"","1");
     }
 
     Y_UNIT_TEST(Uint64) {
-        Test("[DataType;Uint64]","\"1\"");
+        Test("[DataType;Uint64]","\"1\"","1u");
     }
 
     Y_UNIT_TEST(Float) {
-        Test("[DataType;Float]","\"1.2\"");
+        Test("[DataType;Float]","\"1.2\"","1.2");
         Test("[DataType;Float]","\"-inf\"");
         Test("[DataType;Float]","\"nan\"");
     }
 
     Y_UNIT_TEST(Double) {
-        Test("[DataType;Double]","\"1.2\"");
+        Test("[DataType;Double]","\"1.2\"","1.2");
         Test("[DataType;Double]","\"-inf\"");
         Test("[DataType;Double]","\"nan\"");
     }

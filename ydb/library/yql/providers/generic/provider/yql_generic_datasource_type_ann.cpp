@@ -62,6 +62,27 @@ namespace NYql {
                 return TStatus::Error;
             }
 
+            const auto totalSplits = input->Child(TGenTable::idx_Splits)->ChildrenSize();
+
+            switch (totalSplits) {
+                case 0: {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Child(TGenTable::idx_Splits)->Pos()),
+                                        "Expected at least 1 split, got 0"));
+                    return TStatus::Error;
+                }
+                case 1:
+                    // For the elder versions of the Connector it's normal to send single empty split
+                    break;
+                default:
+                    // Newer versions of the Connector may send multiple splits, and each of them must be non-empty
+                    for (const auto& split : input->Child(TGenTable::idx_Splits)->Children()) {
+                        if (split->Content().empty()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(split->Pos()), "Split is empty"));
+                            return TStatus::Error;
+                        }
+                    }
+            }
+
             input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
 
             return TStatus::Ok;

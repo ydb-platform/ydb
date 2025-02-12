@@ -875,7 +875,7 @@ private:
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
-        Cout << "Compact(" << KeyRevision << ')' << Endl;
+        std::cout << "Compact(" << KeyRevision << ')' << std::endl;
         sql << "delete from `verhaal` where `modified` < " << AddParam("Revision", params, KeyRevision) << ';' << Endl;
     }
 
@@ -904,6 +904,7 @@ private:
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        std::cout << "Grant(" << TTL << ")=" << Lease << std::endl;
         sql << "insert into `leases` (`id`,`ttl`,`created`,`updated`)" << Endl;
         sql << '\t' << "values (" << AddParam("Lease", params, Lease) << ',' << AddParam("TimeToLive", params, TTL) << ",CurrentUtcDatetime(),CurrentUtcDatetime());" << Endl;
     }
@@ -934,6 +935,8 @@ private:
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        std::cout << "Revoke(" << Lease << ')' << std::endl;
+
         const auto& revisionParamName = AddParam("Revision", params, Revision);
         const auto& leaseParamName = AddParam("Lease", params, Lease);
 
@@ -994,6 +997,8 @@ private:
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        std::cout << "TimeToLive(" << Lease << ')' << std::endl;
+
         const auto& leaseParamName = AddParam("Lease", params, Lease);
 
         sql << "select `ttl`, `ttl` - unwrap(cast(CurrentUtcDatetime() - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leaseParamName << " = `id`;" << Endl;
@@ -1037,6 +1042,7 @@ private:
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder&) final {
+        std::cout << "Leases()" << std::endl;
         sql << "select `id` from `leases`;" << Endl;
     }
 

@@ -202,6 +202,8 @@ private:
         const auto watchId = req.watch_id();
         const auto range = UserSubscriptionsMap.equal_range(watchId);
 
+        std::cout << __func__ << '(' << watchId << ')' << std::endl;
+
         for (auto it = range.first; range.second != it; ++it) {
             Y_UNUSED(it);
         }
@@ -217,6 +219,7 @@ private:
     }
 
     void Progress(const etcdserverpb::WatchProgressRequest&, etcdserverpb::WatchResponse& res, const TActorContext& ctx)  {
+        std::cout << __func__ << std::endl;
         if (!Ctx->Write(std::move(res)))
             return UnsubscribeAndDie(ctx);
     }

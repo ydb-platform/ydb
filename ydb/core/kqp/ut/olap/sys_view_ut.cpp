@@ -196,6 +196,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         NKikimrConfig::TAppConfig appConfig;
         auto* CSConfig = appConfig.MutableColumnShardConfig();
         CSConfig->SetAlterObjectEnabled(true);
+        CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -268,6 +269,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         NKikimrConfig::TAppConfig appConfig;
         auto* CSConfig = appConfig.MutableColumnShardConfig();
         CSConfig->SetAlterObjectEnabled(true);
+        CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -309,6 +311,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         NKikimrConfig::TAppConfig appConfig;
         auto* CSConfig = appConfig.MutableColumnShardConfig();
         CSConfig->SetAlterObjectEnabled(true);
+        CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

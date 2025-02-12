@@ -11,6 +11,10 @@
 #include <util/thread/lfstack.h>
 
 #include <sanitizer/asan_interface.h>
+#if defined(_asan_enabled_)
+#   include <mutex>
+#   include <queue>
+#endif
 
 #if defined(_win_)
 #   include <util/system/winint.h>
@@ -257,6 +261,30 @@ inline int TSystemMmap::Munmap(void* addr, size_t size)
 {
     Y_DEBUG_ABORT_UNLESS(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
     Y_DEBUG_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
+
+#if defined(_asan_enabled_)
+    using TPage = std::pair<void*, size_t>;
+    static std::mutex decontaminationMutex;
+    static std::queue<TPage> decontaminationChamber;
+    static size_t decontaminationSize = 0;
+    static const size_t MAX_DECONTAMINATION_SIZE = 100 * (1 << 20); // 100Mb
+
+    std::unique_lock lock(decontaminationMutex);
+    decontaminationChamber.emplace(addr, size);
+    decontaminationSize += size;
+
+    while (decontaminationSize > MAX_DECONTAMINATION_SIZE) {
+        std::tie(addr, size) = decontaminationChamber.front();
+        if (auto error = ::munmap(addr, size)) {
+            return error;
+        }
+        decontaminationSize -= size;
+        decontaminationChamber.pop();
+    }
+
+    return 0;
+#endif
+
     return ::munmap(addr, size);
 }
 #endif
@@ -590,28 +618,35 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
         }
 
         res = AlignUp(mem, POOL_PAGE_SIZE);
-        const size_t off = reinterpret_cast<intptr_t>(res) - reinterpret_cast<intptr_t>(mem);
-        if (Y_UNLIKELY(off)) {
-            // unmap prefix
-            globalPool.DoMunmap(mem, off);
+
+        // Unmap unaligned prefix before offset
+        const size_t offset = reinterpret_cast<intptr_t>(res) - reinterpret_cast<intptr_t>(mem);
+        if (Y_UNLIKELY(offset)) {
+            globalPool.DoMunmap(mem, offset);
         }
-        // Extra space is also page-aligned. Put it to the free page list
+
         auto alignedSize = AlignUp(size, POOL_PAGE_SIZE);
-        ui64 extraPages = (allocSize - off - alignedSize) / POOL_PAGE_SIZE;
-        ui64 tail = (allocSize - off - alignedSize) % POOL_PAGE_SIZE;
+        ui64 extraPages = (allocSize - offset - alignedSize) / POOL_PAGE_SIZE;
+        ui64 tail = (allocSize - offset - alignedSize) % POOL_PAGE_SIZE;
         auto extraPage = reinterpret_cast<ui8*>(res) + alignedSize;
+
+        // TODO: when POOL_PAGE_SIZE == 1 then we shouldn't get any extra pages anyway?
+#if !defined(_asan_enabled_)
+        // Extra space is also page-aligned. Put it to the free page list
         for (ui64 i = 0; i < extraPages; ++i) {
             AllPages.emplace(extraPage);
             FreePages.emplace(extraPage);
             extraPage += POOL_PAGE_SIZE;
         }
+#endif
+
+        // Unmap unaligned hole
         if (size != alignedSize) {
-            // unmap unaligned hole
             globalPool.DoMunmap(reinterpret_cast<ui8*>(res) + size, alignedSize - size);
         }
 
+        // Unmap suffix
         if (tail) {
-            // unmap suffix
             Y_DEBUG_ABORT_UNLESS(extraPage+tail <= reinterpret_cast<ui8*>(mem) + size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE);
             globalPool.DoMunmap(extraPage, tail);
         }

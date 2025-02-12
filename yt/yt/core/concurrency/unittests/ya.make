@@ -12,6 +12,7 @@ SRCS(
     async_stream_pipe_ut.cpp
     async_stream_ut.cpp
     async_yson_writer_ut.cpp
+    bounded_concurrency_invoker_ut.cpp
     coroutines_ut.cpp
     count_down_latch_ut.cpp
     delayed_executor_ut.cpp

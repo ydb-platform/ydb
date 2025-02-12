@@ -112,7 +112,7 @@ namespace NMonitoring {
     class TBusNgMonPage;
 }
 
-namespace NYdb {
+namespace NYdb::inline V3 {
     class TDriver;
 }
 
@@ -147,6 +147,10 @@ namespace NPQ {
     class IPersQueueMirrorReaderFactory;
 }
 
+namespace NSchemeShard {
+    class IOperationFactory;
+}
+
 class TFormatFactory;
 
 struct TAppData {
@@ -167,6 +171,7 @@ struct TAppData {
     const NDataShard::IExportFactory *DataShardExportFactory = nullptr;
     const TFormatFactory* FormatFactory = nullptr;
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
+    const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 
@@ -238,7 +243,7 @@ struct TAppData {
     bool EnableMvccSnapshotWithLegacyDomainRoot = false;
     bool UsePartitionStatsCollectorForTests = false;
     bool DisableCdcAutoSwitchingToReadyStateForTests = false;
-    TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks
+    TVector<TString> AdministrationAllowedSIDs; // use IsAdministrator method to check whether a user or a group is allowed to perform administrative tasks
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers = "all-users@well-known";
     TVector<TString> RegisterDynamicNodeAllowedSIDs;
@@ -297,20 +302,21 @@ inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
 }
 
 inline bool HasAppData() {
-    return !!NActors::TlsActivationContext;
+    return !!NActors::TlsActivationContext
+        && NActors::TActivationContext::ActorSystem()
+        && NActors::TActivationContext::ActorSystem()->AppData<TAppData>();
 }
 
 inline TAppData& AppDataVerified() {
     Y_ABORT_UNLESS(HasAppData());
-    auto& actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-    Y_ABORT_UNLESS(actorSystem);
+    NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
     TAppData* const x = actorSystem->AppData<TAppData>();
-    Y_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
+    Y_ABORT_UNLESS(x->Magic == TAppData::MagicTag);
     return *x;
 }
 
 inline TAppData* AppData() {
-    return AppData(NActors::TlsActivationContext->ExecutorThread.ActorSystem);
+    return AppData(NActors::TActivationContext::ActorSystem());
 }
 
 inline TAppData* AppData(const NActors::TActorContext &ctx) {

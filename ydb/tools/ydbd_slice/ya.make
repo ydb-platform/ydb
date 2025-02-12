@@ -45,6 +45,7 @@ RESOURCE(
     baremetal/templates/block-4-2-2-nodes.yaml /ydbd_slice/baremetal/templates/block-4-2-2-nodes.yaml
     baremetal/templates/mirror-3-dc-9-nodes.yaml /ydbd_slice/baremetal/templates/mirror-3-dc-9-nodes.yaml
     baremetal/templates/mirror-3-dc-3-nodes.yaml /ydbd_slice/baremetal/templates/mirror-3-dc-3-nodes.yaml
+    baremetal/templates/none-1-node.yaml /ydbd_slice/baremetal/templates/none-1-node.yaml
 )
 
 END()

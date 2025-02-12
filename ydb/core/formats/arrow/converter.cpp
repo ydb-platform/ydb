@@ -18,6 +18,10 @@
 namespace NKikimr::NArrow {
 
 static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryPool& memPool, TString& errorMessage) {
+    if (!cell.AsBuf()) {
+        cell = TCell();
+        return true;
+    }
     switch (colType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber: {
             const auto dyNumber = NDyNumber::ParseDyNumberString(cell.AsBuf());

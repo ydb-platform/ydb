@@ -7,6 +7,8 @@ enum EFilesType {
     PERMISSIONS,
     CHANGEFEED_DESCRIPTION,
     TOPIC_DESCRIPTION,
+    CREATE_TOPIC,
+    CREATE_COORDINATION_NODE,
     INCOMPLETE_DATA,
     INCOMPLETE,
     EMPTY,
@@ -18,6 +20,8 @@ static constexpr TFileInfo FILES_INFO[] = {
     {"permissions.pb", "ACL"},
     {"changefeed_description.pb", "changefeed"},
     {"topic_description.pb", "topic"},
+    {"create_topic.pb", "topic"},
+    {"create_coordination_node.pb", "coordination node"},
     {"incomplete.csv", "incomplete"},
     {"incomplete", "incomplete"},
     {"empty_dir", "empty_dir"},
@@ -36,8 +40,16 @@ const TFileInfo& Changefeed() {
     return FILES_INFO[CHANGEFEED_DESCRIPTION];
 }
 
-const TFileInfo& Topic() {
+const TFileInfo& TopicDescription() {
     return FILES_INFO[TOPIC_DESCRIPTION];
+}
+
+const TFileInfo& CreateTopic() {
+    return FILES_INFO[CREATE_TOPIC];
+}
+
+const TFileInfo& CreateCoordinationNode() {
+    return FILES_INFO[CREATE_COORDINATION_NODE];
 }
 
 const TFileInfo& IncompleteData() {

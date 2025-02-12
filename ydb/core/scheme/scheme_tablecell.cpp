@@ -396,10 +396,8 @@ namespace {
         return true;
     }
 
-    Y_FORCE_INLINE bool TryDeserializeCellVec(const TString& data, TString& resultBuffer, TVector<TCell> & resultCells) {
-        resultBuffer.clear();
+    Y_FORCE_INLINE bool TryDeserializeCellVec(const TString& data, TVector<TCell>& resultCells) {
         resultCells.clear();
-
         if (data.empty()) {
             return true;
         }
@@ -415,14 +413,11 @@ namespace {
             return false;
         }
 
-        resultBuffer = data;
         return true;
     }
 
-    Y_FORCE_INLINE bool TryDeserializeCellMatrix(const TString& data, TString& resultBuffer, TVector<TCell>& resultCells, ui32& rowCount, ui16& colCount) {
-        resultBuffer.clear();
+    Y_FORCE_INLINE bool TryDeserializeCellMatrix(const TString& data, TVector<TCell>& resultCells, ui32& rowCount, ui16& colCount) {
         resultCells.clear();
-
         if (data.empty()) {
             return true;
         }
@@ -437,7 +432,6 @@ namespace {
             return false;
         }
 
-        resultBuffer = data;
         return true;
     }
 }
@@ -466,8 +460,31 @@ size_t TSerializedCellVec::SerializedSize(TConstArrayRef<TCell> cells) {
     return size;
 }
 
-bool TSerializedCellVec::DoTryParse(const TString& data) {
-    return TryDeserializeCellVec(data, Buf, Cells);
+TCell TSerializedCellVec::ExtractCell(std::string_view data, size_t pos) {
+    TSerializedCellReader reader{data};
+
+    ui16 cellCount = 0;
+    if (!reader.Read(&cellCount) || cellCount <= pos) {
+        return {};
+    }
+
+    TCell cell;
+    for (ui16 i = 0; i <= pos; ++i) {
+        cell = {};
+        if (!reader.ReadNewCell(&cell)) {
+            return {};
+        }
+    }
+    return cell;
+}
+
+bool TSerializedCellVec::DoTryParse() {
+    if (!TryDeserializeCellVec(Buf, Cells)) {
+        Buf.clear();
+        Cells.clear();
+        return false;
+    }
+    return true;
 }
 
 bool TSerializedCellVec::UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec) {
@@ -554,8 +571,15 @@ TString TSerializedCellMatrix::Serialize(TConstArrayRef<TCell> cells, ui32 rowCo
     return result;
 }
 
-bool TSerializedCellMatrix::DoTryParse(const TString& data) {
-    return TryDeserializeCellMatrix(data, Buf, Cells, RowCount, ColCount);
+bool TSerializedCellMatrix::DoTryParse() {
+    if (!TryDeserializeCellMatrix(Buf, Cells, RowCount, ColCount)) {
+        Buf.clear();
+        Cells.clear();
+        RowCount = 0;
+        ColCount = 0;
+        return false;
+    }
+    return true;
 }
 
 void TCellsStorage::Reset(TArrayRef<const TCell> cells)
@@ -708,4 +732,3 @@ size_t GetCellHeaderSize() {
 }
 
 } // namespace NKikimr
-

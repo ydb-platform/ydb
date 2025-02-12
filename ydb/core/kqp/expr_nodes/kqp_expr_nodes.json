@@ -524,7 +524,8 @@
             "Base": "TKqlDeleteRowsBase",
             "Match": {"Type": "Callable", "Name": "KqlDeleteRows"},
             "Children": [
-                {"Index": 2, "Name": "ReturningColumns", "Type": "TCoAtomList"}
+                {"Index": 2, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -532,7 +533,8 @@
             "Base": "TKqlDeleteRowsBase",
             "Match": {"Type": "Callable", "Name": "KqlDeleteRowsIndex"},
             "Children": [
-                {"Index": 2, "Name": "ReturningColumns", "Type": "TCoAtomList"}
+                {"Index": 2, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -550,7 +552,8 @@
                 {"Index": 2, "Name": "Mode", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Priority", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "TableType", "Type": "TCoAtom"},
-                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 5, "Name": "StreamWrite", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

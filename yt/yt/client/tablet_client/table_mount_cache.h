@@ -20,7 +20,7 @@
 
 #include <yt/yt/core/actions/future.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <util/datetime/base.h>
 
@@ -51,7 +51,7 @@ DEFINE_REFCOUNTED_TYPE(TTabletInfo)
 struct TTableReplicaInfo final
 {
     TTableReplicaId ReplicaId;
-    TString ClusterName;
+    std::string ClusterName;
     NYPath::TYPath ReplicaPath;
     ETableReplicaMode Mode;
 };

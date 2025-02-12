@@ -2,7 +2,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -1235,7 +1235,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertFromSelect_NoReorder) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -1278,8 +1277,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertFromSelect_Serial) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -1464,7 +1461,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(Returning) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
@@ -1639,7 +1635,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateTableSerialColumns) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false)
@@ -1732,7 +1727,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CopyTableSerialColumns) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false)
@@ -1868,7 +1862,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -1951,7 +1944,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(SelectIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2009,7 +2001,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(DropIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2263,7 +2254,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateTempTable) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2295,7 +2285,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
             bool allDoneOk = true;
-            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+            NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
             UNIT_ASSERT(allDoneOk);
         }
@@ -2314,8 +2304,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateTempTableSerial) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2347,7 +2335,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
             bool allDoneOk = true;
-            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+            NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
             UNIT_ASSERT(allDoneOk);
         }
@@ -2366,8 +2354,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateSequence) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2414,8 +2400,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(DropSequence) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2500,8 +2484,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(AlterSequence) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2695,8 +2677,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(AlterColumnSetDefaultFromSequence) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2730,7 +2710,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -2801,7 +2781,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -2849,7 +2829,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -2890,7 +2870,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -2952,7 +2932,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto queryAlter = R"(
@@ -2988,12 +2968,11 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             CompareYson(R"(
                 [["1";"1"];["5";"4"];["8";"5"];["10";"2"];["12";"3"];["13";"14"];["14";"16"];["105"; "105"];["107";"107"];["206"; "206"];["208";"208"]]
             )", FormatResultSetYson(result.GetResultSet(0)));
-        } 
+        }
     }
 
     Y_UNIT_TEST(TempTablesSessionsIsolation) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3025,7 +3004,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
         bool allDoneOk = true;
-        NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+        NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
         UNIT_ASSERT(allDoneOk);
 
@@ -3045,7 +3024,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(TempTablesDrop) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3099,7 +3077,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
 
         bool allDoneOk = true;
-        NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+        NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
         UNIT_ASSERT(allDoneOk);
 
@@ -3121,7 +3099,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(TempTablesWithCache) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3320,7 +3297,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             }
 
             bool allDoneOk = true;
-            NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+            NTestHelpers::CheckDelete(clientConfig, TString{id}, Ydb::StatusIds::SUCCESS, allDoneOk);
 
             UNIT_ASSERT(allDoneOk);
         }
@@ -3600,14 +3577,14 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 UPDATE test SET key = key, value = 121 WHERE key = 123;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot update primary key column: key"));
         }
         {
             auto result = db.ExecuteQuery(R"(
                 UPDATE test SET key = 12 WHERE key = 123;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot update primary key column: key"));
         }
         {
             auto result = db.ExecuteQuery(R"(
@@ -3656,8 +3633,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 UPDATE test SET key1 = 1, key2 = 2, value = 2 WHERE key1 = 1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key1"));
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key2"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot update primary key column: key1"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot update primary key column: key2"));
         }
         {
             kikimr.GetTestClient().CreateTable("/Root", R"(
@@ -3701,7 +3678,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateTableIfNotExists_GenericQuery) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3752,7 +3728,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 SELECT * FROM test;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot find table 'db.[/Root/test]'"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot find table 'db.[/Root/test]'"));
         }
     }
 
@@ -3804,14 +3780,12 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 SELECT * FROM test;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot find table 'db.[/Root/test]'"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot find table 'db.[/Root/test]'"));
         }
     }
 
     Y_UNIT_TEST(AlterColumnSetDefaultFromSequenceWithSchemaname) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        NKikimrConfig::TAppConfig appConfig;;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3845,7 +3819,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -3917,7 +3891,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -3965,7 +3939,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -4006,7 +3980,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -4026,7 +4000,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(DropTableIfExists_GenericQuery) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4067,7 +4040,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 SELECT * FROM test;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot find table 'db.[/Root/test]'"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Cannot find table 'db.[/Root/test]'"));
         }
     }
 
@@ -4191,7 +4164,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertNoTargetColumns_Simple) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4226,7 +4198,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertNoTargetColumns_ColumnOrder) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4261,7 +4232,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertNoTargetColumns_NotOneSize) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4301,27 +4271,26 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 INSERT INTO t VALUES (1, 'a', 'a');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("values have 3 columns, INSERT INTO expects: 2"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("values have 3 columns, INSERT INTO expects: 2"));
         }
         {
             auto result = db.ExecuteQuery(R"(
                 INSERT INTO t VALUES ('a', 1);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type integer: \"a\""));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("invalid input syntax for type integer: \"a\""));
         }
         {
             auto result = db.ExecuteQuery(R"(
                 INSERT INTO nopg VALUES ('a');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Failed to convert 'id': pgunknown to Optional<Uint64>"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Failed to convert 'id': pgunknown to Optional<Uint64>"));
         }
     }
 
     Y_UNIT_TEST(InsertNoTargetColumns_Alter) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4370,8 +4339,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(Insert_Serial) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4407,8 +4374,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertNoTargetColumns_Serial) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4443,7 +4408,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertValuesFromTableWithDefault) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4478,7 +4442,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertValuesFromTableWithDefaultAndCast) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4522,7 +4485,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertValuesFromTableWithDefaultBool) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4557,7 +4519,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertValuesFromTableWithDefaultText) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4592,7 +4553,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertValuesFromTableWithDefaultTextNotNull) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4627,7 +4587,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertValuesFromTableWithDefaultTextNotNullButNull) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4646,7 +4605,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertValuesFromTableWithDefaultNegativeCase) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4665,8 +4623,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(InsertNoTargetColumns_SerialNotNull) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4713,7 +4669,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CheckPgAutoParams) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
             .Syntax(NYdb::NQuery::ESyntax::Pg)
@@ -4868,7 +4823,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("alternative is not implemented yet : 34"));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("alternative is not implemented yet : 34"));
             }
         }
 
@@ -4888,7 +4843,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("Unable to find an overload for operator = with given argument type(s): (text,int4)"));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("Unable to find an overload for operator = with given argument type(s): (text,int4)"));
             }
 
             {
@@ -4897,7 +4852,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("Unable to find an overload for operator = with given argument type(s): (text,int4)"));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("Unable to find an overload for operator = with given argument type(s): (text,int4)"));
             }
 
             {
@@ -4906,7 +4861,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type integer: \"a\""));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("invalid input syntax for type integer: \"a\""));
             }
         }
 
@@ -4927,21 +4882,21 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     INSERT INTO PgTable1 VALUES (1, 'a', 'a');
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("values have 3 columns, INSERT INTO expects: 2"));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("values have 3 columns, INSERT INTO expects: 2"));
             }
             {
                 auto result = db.ExecuteQuery(R"(
                     INSERT INTO PgTable2 VALUES ('a');
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("Failed to convert 'id': pgunknown to Optional<Uint64>"));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("Failed to convert 'id': pgunknown to Optional<Uint64>"));
             }
             {
                 auto result = db.ExecuteQuery(R"(
                     INSERT INTO PgTable1 VALUES ('a', 1);
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type integer: \"a\""));
+                UNIT_ASSERT(result.GetIssues().ToString().contains("invalid input syntax for type integer: \"a\""));
             }
         }
 
@@ -4980,7 +4935,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(MkqlTerminate) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -5014,13 +4968,12 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 INSERT INTO t (id, data2) VALUES ($1, $2);
             )", NYdb::NQuery::TTxControl::NoTx(), params, settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid byte sequence for encoding \"UTF8\": 0x00"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("invalid byte sequence for encoding \"UTF8\": 0x00"));
         }
     }
 
     Y_UNIT_TEST(NoSelectFullScan) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -5198,7 +5151,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(LongDomainName) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)

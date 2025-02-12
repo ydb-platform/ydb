@@ -1,3 +1,4 @@
+Use the amd64 binary if you have an Intel-based Mac.
 | Version | Release date | Download | Changelog |
 :--- | :--- | :--- | :---
 | v.2.18.0 | 24/12/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.18.0/darwin/amd64/ydb) | [See the changelog](../../../changelog-cli.md#2-18-0) |

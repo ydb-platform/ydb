@@ -2144,6 +2144,10 @@ private:
                     }
                     auto section = std::get<1>(reader); // section
                     auto op = std::get<0>(reader); // operation
+                    if (!section && !TYtPublish::Match(op)) {
+                        // Used in unknown callables. Don't process
+                        exclusiveOuts.insert(outIndex);
+                    }
                     // Section may be used multiple times in different operations
                     // So, check only unique pair of operation + section
                     if (!duplicateCheck[outIndex].insert(std::make_pair(op, section)).second) {
@@ -2815,9 +2819,15 @@ private:
                 } else {
                     const size_t pathNdx = uniquePaths.emplace(rawPath, uniquePaths.size()).first->second;
                     auto& cu = usage.ColumnUsage[outIndex];
+                    THashMap<TString, TString> renames;
+                    if (auto& colRenames = columns.GetRenames()) {
+                        for (auto& [k, v]: *colRenames) {
+                            renames[v] = k;
+                        }
+                    }
                     std::for_each(columns.GetColumns()->cbegin(), columns.GetColumns()->cend(),
-                        [&cu, pathNdx](const TYtColumnsInfo::TColumn& c) {
-                            cu[c.Name].insert(pathNdx);
+                        [&cu, pathNdx, &renames](const TYtColumnsInfo::TColumn& c) {
+                            cu[renames.Value(c.Name, c.Name)].insert(pathNdx);
                         }
                     );
                 }

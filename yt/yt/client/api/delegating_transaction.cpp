@@ -41,12 +41,12 @@ DELEGATE_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookupR
     (subrequests, options))
 
 DELEGATE_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options),
     (query, options))
 
 DELEGATE_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options),
     (query, options))
 

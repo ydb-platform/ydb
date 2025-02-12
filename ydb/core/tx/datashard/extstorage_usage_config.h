@@ -46,6 +46,14 @@ public:
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::PermissionsKeySuffix();
     }
 
+    inline TString GetTopicKey(const TString& changefeedName) const {
+        return TStringBuilder() << ObjectKeyPattern << '/'<< changefeedName << '/' << NBackupRestoreTraits::TopicKeySuffix();
+    }
+
+     inline TString GetChangefeedKey(const TString& changefeedName) const {
+        return TStringBuilder() << ObjectKeyPattern << '/' << changefeedName << '/' << NBackupRestoreTraits::ChangefeedKeySuffix();
+    }
+
     inline TString GetMetadataKey() const {
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::MetadataKeySuffix();
     }

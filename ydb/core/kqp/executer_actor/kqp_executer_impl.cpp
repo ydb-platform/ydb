@@ -88,8 +88,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
         // commit-only or rollback-only data transaction
         return CreateKqpDataExecuter(
             std::move(request), database, userToken, counters, false, tableServiceConfig,
-            std::move(asyncIoFactory), creator, 
-            userRequestContext, statementResultIndex, 
+            std::move(asyncIoFactory), creator,
+            userRequestContext, statementResultIndex,
             federatedQuerySetup, /*GUCSettings*/nullptr,
             shardIdToTableInfo, txManager, bufferActorId
         );
@@ -112,8 +112,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
         case NKqpProto::TKqpPhyTx::TYPE_DATA:
             return CreateKqpDataExecuter(
                 std::move(request), database, userToken, counters, false, tableServiceConfig,
-                std::move(asyncIoFactory), creator, 
-                userRequestContext, statementResultIndex, 
+                std::move(asyncIoFactory), creator,
+                userRequestContext, statementResultIndex,
                 federatedQuerySetup, /*GUCSettings*/nullptr,
                 shardIdToTableInfo, txManager, bufferActorId
             );
@@ -121,8 +121,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
             return CreateKqpScanExecuter(
                 std::move(request), database, userToken, counters,
-                tableServiceConfig, preparedQuery, userRequestContext, 
-                statementResultIndex
+                tableServiceConfig, std::move(asyncIoFactory), preparedQuery, userRequestContext,
+                statementResultIndex, federatedQuerySetup, nullptr
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:

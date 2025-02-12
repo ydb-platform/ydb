@@ -63,6 +63,9 @@ std::pair<bool, size_t> fileSegmentationEngineJSONEachRowImpl(ReadBuffer & in, M
             }
             else if (*pos == '}')
             {
+                if (balance <= 0)
+                    throw ParsingException("Unexpected closing curly brace", ErrorCodes::INCORRECT_DATA);
+                
                 --balance;
                 ++pos;
             }

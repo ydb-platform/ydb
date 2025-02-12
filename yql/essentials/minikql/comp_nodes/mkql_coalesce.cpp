@@ -37,7 +37,7 @@ public:
 
         const auto result = PHINode::Create(left->getType(), 2, "result", done);
 
-        BranchInst::Create(good, null, IsExists(left, block), block);
+        BranchInst::Create(good, null, IsExists(left, block, context), block);
 
         block = null;
         const auto right = GetNodeValue(this->Right, ctx, block);

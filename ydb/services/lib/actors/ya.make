@@ -12,12 +12,12 @@ PEERDIR(
     ydb/core/metering
     ydb/core/mind
     ydb/core/protos
-    ydb/library/persqueue/obfuscate
+    ydb/public/sdk/cpp/src/library/persqueue/obfuscate
     ydb/library/persqueue/topic_parser
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
-    ydb/public/lib/jwt
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp/src/library/jwt
+    ydb/public/sdk/cpp/src/library/operation_id
 )
 
 END()

@@ -20,7 +20,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     using EVisibility = NMonitoring::TCountableBase::EVisibility;
 
     bool extendedPDiskSensors = NActors::TlsActivationContext
-        && NActors::TlsActivationContext->ExecutorThread.ActorSystem
+        && NActors::TActivationContext::ActorSystem()
         && AppData()->FeatureFlags.GetExtendedPDiskSensors();
 
     EVisibility visibilityForExtended = extendedPDiskSensors
@@ -224,6 +224,11 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, Harakiri, YardHarakiri);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardSlay, YardSlay);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardControl, YardControl);
+
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ShredPDisk, ShredPDisk);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, PreShredCompactVDisk, PreShredCompactVDisk);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ShredVDiskResult, ShredVDiskResult);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, MarkDirty, MarkDirty);
 
     IO_REQ_INIT(PDiskGroup, WriteSyncLog, WriteSyncLog);
     IO_REQ_INIT(PDiskGroup, WriteFresh, WriteFresh);

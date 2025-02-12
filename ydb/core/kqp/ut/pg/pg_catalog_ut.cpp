@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -45,7 +45,6 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
 
     Y_UNIT_TEST(CheckSetConfig) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
             .Syntax(NYdb::NQuery::ESyntax::Pg)
@@ -98,7 +97,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             )");
             result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unsupported table: pgtable"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Unsupported table: pgtable"));
 
             query = Q_(R"(
                 select set_config('search_path', 'public', false);
@@ -317,7 +316,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             )");
             result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Unsupported table: pgtable"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Unsupported table: pgtable"));
 
             query = Q_(R"(
                 select set_config('search_path', 'public', false);
@@ -511,7 +510,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
                 select tablename from pg_tables where hasindexes='pg_proc';
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type boolean: \"pg_proc\""));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("invalid input syntax for type boolean: \"pg_proc\""));
         }
     }
 }

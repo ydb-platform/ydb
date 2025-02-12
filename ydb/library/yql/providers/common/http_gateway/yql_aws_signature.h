@@ -32,7 +32,7 @@ private:
 
     static TString HashSHA256(TStringBuf data);
 
-    static TString UriEncode(const TStringBuf input, bool encodeSlash = false);
+    static TString UriEncode(const TStringBuf input, bool encodeSlash = false, bool encodePercent = false);
 
     void PrepareCgiParameters();
 

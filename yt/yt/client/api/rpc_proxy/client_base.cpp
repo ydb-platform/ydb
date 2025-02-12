@@ -487,6 +487,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::CopyNode(
     req->set_preserve_acl(options.PreserveAcl);
     req->set_pessimistic_quota_check(options.PessimisticQuotaCheck);
     req->set_enable_cross_cell_copying(options.EnableCrossCellCopying);
+    req->set_allow_secondary_index_abandonment(options.AllowSecondaryIndexAbandonment);
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
@@ -521,6 +522,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::MoveNode(
     req->set_preserve_acl(options.PreserveAcl);
     req->set_pessimistic_quota_check(options.PessimisticQuotaCheck);
     req->set_enable_cross_cell_copying(options.EnableCrossCellCopying);
+    req->set_allow_secondary_index_abandonment(options.AllowSecondaryIndexAbandonment);
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
@@ -812,10 +814,10 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
             for (const auto& cookie : result->signed_cookies()) {
                 cookies.push_back(ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(cookie)));
             }
-            return TDistributedWriteSessionWithCookies{
-                .Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(result->signed_session())),
-                .Cookies = std::move(cookies),
-            };
+            TDistributedWriteSessionWithCookies sessionWithCookies;
+            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(result->signed_session())),
+            sessionWithCookies.Cookies = std::move(cookies);
+            return std::move(sessionWithCookies);
         }));
 }
 
@@ -874,6 +876,7 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     req->set_multiplexing_band(static_cast<NProto::EMultiplexingBand>(options.MultiplexingBand));
 
     ToProto(req->mutable_tablet_read_options(), options);
+    ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspLookupRowsPtr& rsp) {
         auto rowset = DeserializeRowset<TUnversionedRow>(
@@ -926,6 +929,10 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     if (options.RetentionConfig) {
         ToProto(req->mutable_retention_config(), *options.RetentionConfig);
     }
+    if (options.VersionedReadOptions.ReadMode != NTableClient::EVersionedIOMode::Default) {
+        THROW_ERROR_EXCEPTION("Versioned lookup does not support versioned read mode %Qlv",
+            options.VersionedReadOptions.ReadMode);
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspVersionedLookupRowsPtr& rsp) {
         auto rowset = DeserializeRowset<TVersionedRow>(
@@ -971,6 +978,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
             subrequest.Keys,
             protoSubrequest->mutable_rowset_descriptor());
         protoSubrequest->set_attachment_count(rowset.size());
+        ToProto(protoSubrequest->mutable_versioned_read_options(), subrequest.Options.VersionedReadOptions);
         req->Attachments().insert(req->Attachments().end(), rowset.begin(), rowset.end());
     }
 
@@ -1045,7 +1053,7 @@ void FillRequestBySelectRowsOptionsBase(
 }
 
 TFuture<TSelectRowsResult> TClientBase::SelectRows(
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1117,7 +1125,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
 }
 
 TFuture<TYsonString> TClientBase::ExplainQuery(
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

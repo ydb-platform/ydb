@@ -16,7 +16,7 @@ TContext CreateDefaultParserContext(NYql::TIssues& issues) {
     settings.DefaultCluster = "/Cluster";
     settings.AssumeYdbOnClusterWithSlash = true;
 
-    return TContext(settings, {}, issues);
+    return TContext(settings, { /* hints */ }, issues, { /* query */ });
 }
 
 TAstNode* CreateAlterTable(TContext& parserContext, const TString& tableName, const TAlterTableParameters& params) {

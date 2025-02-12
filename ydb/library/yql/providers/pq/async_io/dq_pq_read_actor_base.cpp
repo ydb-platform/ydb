@@ -29,6 +29,8 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
     topic->SetDatabase(SourceParams.GetDatabase());
     topic->SetTopicPath(SourceParams.GetTopicPath());
 
+    TStringStream str;
+    str << "SessionId: " << GetSessionId() << " SaveState, offsets: ";
     for (const auto& [clusterAndPartition, offset] : PartitionToOffset) {
         const auto& [cluster, partition] = clusterAndPartition;
         NPq::NProto::TDqPqTopicSourceState::TPartitionReadState* partitionState = stateProto.AddPartitions();
@@ -36,8 +38,9 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
         partitionState->SetCluster(cluster);
         partitionState->SetPartition(partition);
         partitionState->SetOffset(offset);
-        SRC_LOG_D("SessionId: " << GetSessionId() << " SaveState: partition " << partition << ", offset: " << offset);
+        str << "{" << partition << "," << offset << "},";
     }
+    SRC_LOG_D(str.Str());
 
     stateProto.SetStartingMessageTimestampMs(StartingMessageTimestamp.MilliSeconds());
     stateProto.SetIngressBytes(IngressStats.Bytes);
@@ -70,9 +73,12 @@ void TDqPqReadActorBase::LoadState(const TSourceState& state) {
         minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));
         ingressBytes += stateProto.GetIngressBytes();
     }
+    TStringStream str;
+    str << "SessionId: " << GetSessionId() << " Restoring offset: ";
     for (const auto& [key, value] : PartitionToOffset) {
-        SRC_LOG_D("SessionId: " << GetSessionId() << " Restoring offset: cluster " << key.first << ", partition id " << key.second << ", offset: " << value);
+        str << "{" << key.first << "," << key.second << "," << value << "},";
     }
+    SRC_LOG_D(str.Str());
     StartingMessageTimestamp = minStartingMessageTs;
     IngressStats.Bytes += ingressBytes;
     IngressStats.Chunks++;

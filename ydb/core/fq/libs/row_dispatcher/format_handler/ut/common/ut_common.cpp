@@ -154,7 +154,7 @@ TBaseFixture::TBaseFixture()
     : TTypeParser(__LOCATION__, {})
     , MemoryInfo("TBaseFixture alloc")
     , HolderFactory(std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemoryInfo))
-    , Runtime(1)
+    , Runtime(1, true)
 {
     NKikimr::EnableYDBBacktraceFormat();
     signal(SIGSEGV, &SegmentationFaultHandler);
@@ -173,7 +173,7 @@ void TBaseFixture::SetUp(NUnitTest::TTestContext&) {
     // Init tls context
     auto* actorSystem = Runtime.GetActorSystem(0);
     Mailbox = std::make_unique<NActors::TMailbox>();
-    ExecutorThread = std::make_unique<NActors::TExecutorThread>(0, actorSystem, nullptr, nullptr, "test thread");
+    ExecutorThread = std::make_unique<NActors::TExecutorThread>(0, actorSystem, nullptr, "test thread");
     ActorCtx = std::make_unique<NActors::TActorContext>(*Mailbox, *ExecutorThread, GetCycleCountFast(), NActors::TActorId());
     PrevActorCtx = NActors::TlsActivationContext;
     NActors::TlsActivationContext = ActorCtx.get();

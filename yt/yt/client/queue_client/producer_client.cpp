@@ -216,7 +216,7 @@ private:
 
     bool IsCurrentBufferFull() const
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         return (Options_.BatchOptions.ByteSize && static_cast<i64>(CurrentBufferWriter_->GetByteSize()) >= *Options_.BatchOptions.ByteSize)
             || (Options_.BatchOptions.RowCount && CurrentBufferRowCount_ >= *Options_.BatchOptions.RowCount);
@@ -224,14 +224,14 @@ private:
 
     bool IsFlushNeeded() const
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         return IsCurrentBufferFull() || !BufferQueue_.empty();
     }
 
     std::optional<TBuffer> GetBufferToFlush()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         RotateBuffer();
 
@@ -265,7 +265,7 @@ private:
 
     void RotateBuffer()
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         if (CurrentBufferRowCount_ <= 0) {
             return;
@@ -345,6 +345,7 @@ private:
                 if (Options_.AutoSequenceNumber) {
                     pushQueueProducerOptions.SequenceNumber = TQueueProducerSequenceNumber{LastSequenceNumber_.load().Underlying() + 1};
                 }
+                pushQueueProducerOptions.RequireSyncReplica = Options_.RequireSyncReplica;
 
                 return transaction->PushQueueProducer(ProducerPath_, QueuePath_, SessionId_, Epoch_, NameTable_, buffer.SerializedRows, pushQueueProducerOptions)
                     .Apply(BIND([=, this, this_ = MakeStrong(this)] (const TPushQueueProducerResult& pushQueueProducerResult) {

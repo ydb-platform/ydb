@@ -382,6 +382,11 @@ struct TSuspendOperationOptions
     ///
     /// By default running jobs are not aborted.
     FLUENT_FIELD_OPTION(bool, AbortRunningJobs);
+
+    ///
+    /// @brief Something to show in the alert.
+    ///
+    FLUENT_FIELD_OPTION(std::optional<TString>, Reason);
 };
 
 ///

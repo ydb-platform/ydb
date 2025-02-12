@@ -147,8 +147,6 @@ TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,
     return response.Release();
 }
 
-//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_request.cpp
-
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatTxRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp
 
@@ -175,11 +173,11 @@ void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
     DbOperationsCounters = new TMessageBusDbOpsCounters(AppData(ctx)->Counters);
 
     auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), SchemeCacheCounters);
-    SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
+    SchemeCache = ctx.Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
     PqMetaCache = CreatePersQueueMetaCacheV2Id();
 
     if (Server) {
-        Server->InitSession(ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        Server->InitSession(ctx.ActorSystem(), ctx.SelfID);
     }
 
     Become(&TThis::StateFunc);

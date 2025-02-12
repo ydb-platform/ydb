@@ -5,14 +5,16 @@
 
 #include <ydb/public/api/protos/ydb_bsconfig.pb.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/base/tabletid.h>
+#include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -169,6 +171,8 @@ protected:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerFetchConfigResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerReplaceConfigResponse, Handle);
             hFunc(TEvNodeWardenStorageConfig, Handle);
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         default:
@@ -185,7 +189,7 @@ protected:
         } else { // classic BSC
             BSCTabletId = MakeBSControllerID();
             CreatePipe();
-            SendRequest();
+            SendGetInterfaceVersion();
         }
     }
 
@@ -194,11 +198,11 @@ protected:
         auto& record = ev->Get()->Record;
         if (record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
             self->Reply(Ydb::StatusIds::INTERNAL_ERROR, record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                TActivationContext::AsActorContext());
+                self->ActorContext());
         } else {
             TResultRecord result;
             self->FillDistconfResult(record, result);
-            self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, TActivationContext::AsActorContext());
+            self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
         }
     }
 
@@ -211,50 +215,137 @@ protected:
     }
 
     void CreatePipe() {
-        BSCPipeClient = this->Register(NTabletPipe::CreateClient(this->SelfId(), BSCTabletId, GetPipeConfig()));
+        auto *self = Self();
+        BSCPipeClient = self->Register(NTabletPipe::CreateClient(self->SelfId(), BSCTabletId, GetPipeConfig()));
     }
 
-    void SendRequest() {
-        auto self = static_cast<TDerived*>(this);
-        std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> req = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
-        auto &rec = *this->GetProtoRequest();
-        if (!CopyToConfigRequest(rec, req->Record.MutableRequest())) {
-            return this->Reply(Ydb::StatusIds::BAD_REQUEST, self->ActorContext());
-        }
-        NTabletPipe::SendData(this->SelfId(), BSCPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
+    void SendGetInterfaceVersion() {
+        auto req = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto& record = req->Record;
+        auto *request = record.MutableRequest();
+        request->AddCommand()->MutableGetInterfaceVersion();
+        NTabletPipe::SendData(Self()->SelfId(), BSCPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
+        State = EState::GET_INTERFACE_VERSION;
     }
 
     void Handle(typename TEvBlobStorage::TEvControllerConfigResponse::TPtr &ev) {
-        auto self = static_cast<TDerived*>(this);
-        auto status = PullStatus(ev->Get()->Record);
-        auto ctx = self->ActorContext();
-        if (status != Ydb::StatusIds::SUCCESS) {
-            this->Reply(status, ev->Get()->Record.GetResponse().GetErrorDescription(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-            return;
+        auto *self = Self();
+        auto& record = ev->Get()->Record;
+        switch (State) {
+            case EState::GET_INTERFACE_VERSION:
+                if (!record.HasResponse()) {
+                    // strange, but ok
+                } else if (const auto& response = record.GetResponse(); !response.GetSuccess()) {
+                    // probably unsupported command (old version of BSC)
+                } else if (response.StatusSize() != 1) {
+                    // unexpected number of response statuses (?)
+                } else {
+                    InterfaceVersion = response.GetStatus(0).GetInterfaceVersion();
+                }
+                if (InterfaceVersion >= BSC_INTERFACE_REPLACE_CONFIG) {
+                    // ask to replace/fetch config if needed
+                    auto ev = self->ProcessControllerQuery();
+                    NTabletPipe::SendData(self->SelfId(), BSCPipeClient, ev.release(), 0, TBase::Span_.GetTraceId());
+                } else {
+                    // no support for 'replace config' feature, fall back to generic mode
+                    auto req = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+                    auto& rec = *self->GetProtoRequest();
+                    if (!CopyToConfigRequest(rec, req->Record.MutableRequest())) {
+                        return self->Reply(Ydb::StatusIds::BAD_REQUEST, self->ActorContext());
+                    }
+                    NTabletPipe::SendData(self->SelfId(), BSCPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
+                    State = EState::GENERIC_OPERATION;
+                }
+                return;
+
+            case EState::GENERIC_OPERATION: {
+                auto status = PullStatus(record);
+                auto ctx = self->ActorContext();
+                if (status != Ydb::StatusIds::SUCCESS) {
+                    return self->Reply(status, ev->Get()->Record.GetResponse().GetErrorDescription(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                }
+                TResultRecord result;
+                CopyFromConfigResponse(ev->Get()->Record.GetResponse(), &result);
+                self->ReplyWithResult(status, result, self->ActorContext());
+                return;
+            }
+
+            case EState::UNKNOWN:
+                break;
         }
-        TResultRecord result;
-        CopyFromConfigResponse(ev->Get()->Record.GetResponse(), &result);
-        this->ReplyWithResult(status, result, TActivationContext::AsActorContext());
+
+        Y_DEBUG_ABORT("unexpected state");
+        self->Reply(Ydb::StatusIds::INTERNAL_ERROR, "unexpected state", NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+            self->ActorContext());
+    }
+
+    void Handle(TEvBlobStorage::TEvControllerFetchConfigResponse::TPtr ev) {
+        auto *self = Self();
+        if constexpr (std::is_same_v<TResultRecord, Ydb::BSConfig::FetchStorageConfigResult>) {
+            TResultRecord result;
+            const auto& record = ev->Get()->Record;
+            if (record.HasClusterYaml()) {
+                result.set_yaml_config(ev->Get()->Record.GetClusterYaml());
+            }
+            if (record.HasStorageYaml()) {
+                result.set_storage_yaml_config(ev->Get()->Record.GetStorageYaml());
+            }
+            self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
+        } else {
+            self->Reply(Ydb::StatusIds::INTERNAL_ERROR, "unexpected event", NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                self->ActorContext());
+        }
+    }
+
+    void Handle(TEvBlobStorage::TEvControllerReplaceConfigResponse::TPtr ev) {
+        auto *self = Self();
+        if constexpr (std::is_same_v<TResultRecord, Ydb::BSConfig::ReplaceStorageConfigResult>) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetStatus() == NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success) {
+                TResultRecord result;
+                self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
+            } else {
+                self->Reply(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "failed to replace configuration: "
+                    << NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus_Name(record.GetStatus())
+                    << ": " << record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+            }
+        } else {
+            self->Reply(Ydb::StatusIds::INTERNAL_ERROR, "unexpected event", NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                self->ActorContext());
+        }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            this->Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to connect to coordination node.", NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, this->ActorContext());
+            auto *self = Self();
+            self->Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to connect to BSC tablet",
+                NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        this->Reply(Ydb::StatusIds::UNAVAILABLE, "Connection to coordination node was lost.", NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, this->ActorContext());
+        auto *self = Self();
+        self->Reply(Ydb::StatusIds::UNAVAILABLE, "Connection to BSC tablet was lost",
+            NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
     }
 
     virtual bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) = 0;
+    virtual std::unique_ptr<IEventBase> ProcessControllerQuery() = 0;
 
     const TDerived *Self() const { return static_cast<const TDerived*>(this); }
     TDerived *Self() { return static_cast<TDerived*>(this); }
 
 private:
+    enum class EState {
+        UNKNOWN,
+        GET_INTERFACE_VERSION,
+        GENERIC_OPERATION,
+    };
+
+    EState State = EState::UNKNOWN;
     ui64 BSCTabletId = 0;
     TActorId BSCPipeClient;
+    ui32 InterfaceVersion = 0;
 };
 
 } // namespace NKikimr::NGRpcService

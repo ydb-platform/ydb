@@ -40,7 +40,7 @@ void DeserializeVector(T& value, TYsonPullParserCursor* cursor)
 {
     int index = 0;
     auto itemVisitor = [&] (TYsonPullParserCursor* cursor) {
-        if (index < static_cast<int>(value.size())) {
+        if (index < std::ssize(value)) {
             Deserialize(value[index], cursor);
         } else {
             value.emplace_back();

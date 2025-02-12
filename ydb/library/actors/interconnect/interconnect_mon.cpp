@@ -35,7 +35,7 @@ namespace NInterconnect {
             }
 
             void Handle(TEvInterconnect::TEvNodesInfo::TPtr ev, const TActorContext& ctx) {
-                TActorSystem* const as = ctx.ExecutorThread.ActorSystem;
+                TActorSystem* const as = ctx.ActorSystem();
                 for (const auto& node : ev->Get()->Nodes) {
                     Send(as->InterconnectProxy(node.NodeId), new TInterconnectProxyTCP::TEvQueryStats, IEventHandle::FlagTrackDelivery);
                     ++PendingReplies;

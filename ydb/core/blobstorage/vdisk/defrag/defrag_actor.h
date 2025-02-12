@@ -25,9 +25,10 @@ namespace NKikimr {
         const TActorId HugeKeeperId;
         NMonGroup::TDefragGroup DefragMonGroup;
         bool RunDefragBySchedule;
+        const bool AddHeader;
 
         // free up to this number of chunks in one quantum
-        static constexpr ui32 MaxChunksToDefrag = 20u;
+        ui32 MaxChunksToDefrag = 1u;
 
         TDefragCtx(
                 const TIntrusivePtr<TVDiskContext> &vctx,
@@ -60,6 +61,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateDefragActor(
             const std::shared_ptr<TDefragCtx> &dCtx,
-            const TIntrusivePtr<TBlobStorageGroupInfo> &info);
+            const TIntrusivePtr<TBlobStorageGroupInfo> &info,
+            ui32 minHugeBlobInBytes);
 
 } // NKikimr

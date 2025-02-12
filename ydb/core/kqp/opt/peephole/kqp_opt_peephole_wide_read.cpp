@@ -59,14 +59,18 @@ TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx, TTypeA
         auto read = maybeRead.Cast();
 
         if (typesCtx.IsBlockEngineEnabled()) {
-            wideRead = Build<TCoWideFromBlocks>(ctx, node.Pos())
-                .Input<TKqpBlockReadOlapTableRanges>()
-                    .Table(read.Table())
-                    .Ranges(read.Ranges())
-                    .Columns(read.Columns())
-                    .Settings(read.Settings())
-                    .ExplainPrompt(read.ExplainPrompt())
-                    .Process(read.Process())
+            wideRead = Build<TCoToFlow>(ctx, node.Pos())
+                .Input<TCoWideFromBlocks>()
+                    .Input<TCoFromFlow>()
+                        .Input<TKqpBlockReadOlapTableRanges>()
+                            .Table(read.Table())
+                            .Ranges(read.Ranges())
+                            .Columns(read.Columns())
+                            .Settings(read.Settings())
+                            .ExplainPrompt(read.ExplainPrompt())
+                            .Process(read.Process())
+                            .Build()
+                        .Build()
                     .Build()
                 .Done();
         } else {

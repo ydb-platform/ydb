@@ -13,8 +13,7 @@
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-#include <yt/cpp/mapreduce/raw_client/raw_batch_request.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
@@ -42,7 +41,7 @@ public:
         , Transaction_(std::move(transaction))
     { }
 
-    void PrepareRequest(NRawClient::TRawBatchRequest* batchRequest) override
+    void PrepareRequest(IRawBatchRequest* batchRequest) override
     {
         Future_ = batchRequest->GetOperation(
             OperationId_,
@@ -213,26 +212,26 @@ void TOperationPreparer::LockFiles(TVector<TRichYPath>* paths)
 
     TVector<::NThreading::TFuture<TLockId>> lockIdFutures;
     lockIdFutures.reserve(paths->size());
-    NRawClient::TRawBatchRequest lockRequest(GetContext().Config);
+    auto lockRequest = Client_->GetRawClient()->CreateRawBatchRequest();
     for (const auto& path : *paths) {
-        lockIdFutures.push_back(lockRequest.Lock(
+        lockIdFutures.push_back(lockRequest->Lock(
             FileTransaction_->GetId(),
             path.Path_,
             ELockMode::LM_SNAPSHOT,
             TLockOptions().Waitable(true)));
     }
-    ExecuteBatch(ClientRetryPolicy_->CreatePolicyForGenericRequest(), GetContext(), lockRequest);
+    lockRequest->ExecuteBatch();
 
     TVector<::NThreading::TFuture<TNode>> nodeIdFutures;
     nodeIdFutures.reserve(paths->size());
-    NRawClient::TRawBatchRequest getNodeIdRequest(GetContext().Config);
+    auto getNodeIdRequest = Client_->GetRawClient()->CreateRawBatchRequest();
     for (const auto& lockIdFuture : lockIdFutures) {
-        nodeIdFutures.push_back(getNodeIdRequest.Get(
+        nodeIdFutures.push_back(getNodeIdRequest->Get(
             FileTransaction_->GetId(),
             ::TStringBuilder() << '#' << GetGuidAsString(lockIdFuture.GetValue()) << "/@node_id",
             TGetOptions()));
     }
-    ExecuteBatch(ClientRetryPolicy_->CreatePolicyForGenericRequest(), GetContext(), getNodeIdRequest);
+    getNodeIdRequest->ExecuteBatch();
 
     for (size_t i = 0; i != paths->size(); ++i) {
         auto& richPath = (*paths)[i];
@@ -394,7 +393,7 @@ TJobPreparer::TJobPreparer(
 {
 
     CreateStorage();
-    auto cypressFileList = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, OperationPreparer_.GetContext(), spec.Files_);
+    auto cypressFileList = NRawClient::CanonizeYPaths(RawClient_, spec.Files_);
 
     for (const auto& file : cypressFileList) {
         UseFileInCypress(file);

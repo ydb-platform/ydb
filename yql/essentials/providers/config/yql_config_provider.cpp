@@ -768,6 +768,20 @@ namespace {
                 }
 
                 auto arg = TString{args[0]};
+                if (Types.EngineType == EEngineType::Ytflow) {
+                    if (arg == "force") {
+                        ctx.AddError(TIssue(pos, TStringBuilder()
+                            << "Expected `disable|auto` argument for DqEngine pragma "
+                            << "with Engine pragma argument `ytflow`"));
+
+                        return false;
+                    }
+
+                    arg = "disable";
+                } else if (Types.EngineType == EEngineType::Dq) {
+                    arg = "force";
+                }
+
                 if (Find(Types.AvailablePureResultDataSources, DqProviderName) == Types.AvailablePureResultDataSources.end() || arg == "disable") {
                     ; // reserved
                 } else if (arg == "auto") {
@@ -963,6 +977,15 @@ namespace {
                     Types.OptimizerFlags.insert(to_lower(ToString(arg)));
                 }
             }
+            else if (name == "PeepholeFlags") {
+                for (auto& arg : args) {
+                    if (arg.empty()) {
+                        ctx.AddError(TIssue(pos, "Empty flags are not supported"));
+                        return false;
+                    }
+                    Types.PeepholeFlags.insert(to_lower(ToString(arg)));
+                }
+            }
             else if (name == "_EnableStreamLookupJoin" || name == "DisableStreamLookupJoin") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -985,6 +1008,42 @@ namespace {
                     return false;
                 }
                 Types.MaxAggPushdownPredicates = value;
+            } else if (name == "Engine") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                    return false;
+                }
+
+                auto arg = TString{args[0]};
+                if (arg == "ytflow") {
+                    if (Types.ForceDq) {
+                        ctx.AddError(TIssue(pos, TStringBuilder()
+                            << "Expected `disable|auto` argument for DqEngine pragma "
+                            << "with Engine pragma argument `ytflow`"));
+
+                        return false;
+                    }
+
+                    if (Types.PureResultDataSource == DqProviderName) {
+                        Types.PureResultDataSource.clear();
+                    }
+
+                    Types.EngineType = EEngineType::Ytflow;
+                } else if (arg == "dq") {
+                    if (Find(Types.AvailablePureResultDataSources, DqProviderName) == Types.AvailablePureResultDataSources.end()) {
+                        ; // reserved
+                    } else {
+                        Types.PureResultDataSource = DqProviderName;
+                        Types.ForceDq = true;
+                    }
+
+                    Types.EngineType = EEngineType::Dq;
+                } else if (arg == "default") {
+                    Types.EngineType = EEngineType::Default;
+                } else {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `default|dq|ytflow', but got: " << arg));
+                    return false;
+                }
             } else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

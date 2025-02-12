@@ -495,16 +495,14 @@ public:
     {
         BuildTxTransformer = new TKqpBuildTxTransformer();
 
-        const bool enableSpillingGenericQuery =
-            kqpCtx->IsGenericQuery() && config->SpillingEnabled() &&
-            config->EnableSpillingGenericQuery;
+        config->EnableSpilling &= (kqpCtx->IsGenericQuery() || kqpCtx->IsScanQuery()) && config->SpillingEnabled();
 
         DataTxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(enableSpillingGenericQuery, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
+            .Add(CreateKqpBuildPhyStagesTransformer(config->EnableSpilling, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
             // TODO(ilezhankin): "BuildWideBlockChannels" transformer is required only for BLOCK_CHANNELS_FORCE mode.
             .Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->BlockChannelsMode), "BuildWideBlockChannels")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
@@ -513,16 +511,6 @@ public:
                 /* withFinalStageRules */ config->BlockChannelsMode == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE,
                 {"KqpPeephole-RewriteCrossJoin"}),
                 "Peephole")
-            .Build(false);
-
-        ScanTxTransformer = TTransformationPipeline(&typesCtx)
-            .AddServiceTransformers()
-            .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
-            .Add(*TypeAnnTransformer, "TypeAnnotation")
-            .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(config->SpillingEnabled(), typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
-            .Add(*BuildTxTransformer, "BuildPhysicalTx")
-            .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false, {"KqpPeephole-RewriteCrossJoin"}), "Peephole")
             .Build(false);
     }
 
@@ -581,7 +569,6 @@ public:
 
     void Rewind() final {
         DataTxTransformer->Rewind();
-        ScanTxTransformer->Rewind();
     }
 
 private:
@@ -880,7 +867,7 @@ private:
         YQL_CLOG(TRACE, ProviderKqp) << "[BuildTx] " << KqpExprToPrettyString(*result, ctx)
             << ", isPrecompute: " << isPrecompute;
 
-        auto& transformer = KqpCtx->IsScanQuery() ? *ScanTxTransformer : *DataTxTransformer;
+        auto& transformer = *DataTxTransformer;
 
         transformer.Rewind();
         BuildTxTransformer->Init(KqpCtx->QueryCtx->Type, isPrecompute);
@@ -904,7 +891,6 @@ private:
     TAutoPtr<IGraphTransformer> TypeAnnTransformer;
     TAutoPtr<TKqpBuildTxTransformer> BuildTxTransformer;
     TAutoPtr<IGraphTransformer> DataTxTransformer;
-    TAutoPtr<IGraphTransformer> ScanTxTransformer;
 };
 
 } // namespace

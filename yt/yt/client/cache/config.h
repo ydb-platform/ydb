@@ -18,9 +18,9 @@ namespace NYT::NClient::NCache {
 struct TClientsCacheConfig
     : public virtual NYTree::TYsonStruct
 {
-    NApi::NRpcProxy::TConnectionConfigPtr DefaultConfig;
+    NApi::NRpcProxy::TConnectionConfigPtr DefaultConnection;
 
-    THashMap<TString, NApi::NRpcProxy::TConnectionConfigPtr> ClusterConfigs;
+    THashMap<TString, NApi::NRpcProxy::TConnectionConfigPtr> PerClusterConnection;
 
     REGISTER_YSON_STRUCT(TClientsCacheConfig);
 

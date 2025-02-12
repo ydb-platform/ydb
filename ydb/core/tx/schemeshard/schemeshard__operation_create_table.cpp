@@ -672,8 +672,8 @@ public:
             newTable->SetAsyncReplica(true);
         }
 
-        if (tableInfo->IsRestoreTable()) {
-            newTable->SetRestoreTable();
+        if (tableInfo->IsIncrementalRestoreTable()) {
+            newTable->SetIncrementalRestoreTable();
         }
 
         context.SS->Tables[newTable->PathId] = tableInfo;
@@ -724,11 +724,11 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());
-        dstPath.DomainInfo()->IncPathsInside();
-        dstPath.DomainInfo()->AddInternalShards(txState);
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TCreateTable Propose creating new table"

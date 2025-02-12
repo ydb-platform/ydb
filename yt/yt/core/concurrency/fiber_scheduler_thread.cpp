@@ -445,7 +445,7 @@ private:
 
     void RemoveOverdrawnIdleFibers()
     {
-        // NB: size_t to int conversion.
+        // NB: Size_t to int conversion.
         int size = IdleFibers_.size_approx();
         int maxSize = TFiberManager::GetMaxIdleFibers();
         if (size <= maxSize) {
@@ -1046,7 +1046,6 @@ TFiberSchedulerThread::TFiberSchedulerThread(
     : TThread(std::move(threadName), std::move(options))
     , ThreadGroupName_(std::move(threadGroupName))
 { }
-
 
 void TFiberSchedulerThread::ThreadMain()
 {

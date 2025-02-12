@@ -980,5 +980,146 @@ namespace NTypeAnnImpl {
         }
     }
 
+    IGraphTransformer::TStatus BlockMapJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+
+        if (!EnsureArgsCount(*input, 8, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TTypeAnnotationNode::TListType leftItemTypes;
+        if (!EnsureWideStreamBlockType(input->Head(), leftItemTypes, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        leftItemTypes.pop_back();
+        auto leftItemType = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+
+        TTypeAnnotationNode::TListType rightItemTypes;
+        if (!EnsureWideStreamBlockType(*input->Child(1), rightItemTypes, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        rightItemTypes.pop_back();
+        auto rightItemType = input->Child(1)->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+
+        if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto joinKind = input->Child(2)->Content();
+        if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly"&& joinKind != "Cross") {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
+                << ", supported: Inner, Left, LeftSemi, LeftOnly, Cross"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Child(3)->ChildrenSize() != input->Child(5)->ChildrenSize()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(5)->Pos()), TStringBuilder() << "Mismatch of key column count"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto checkKeyColumns = [&](std::unordered_set<ui32>& keyColumns, bool isLeft, const TExprNode& keyColumnsNode, const TMultiExprType* itemType) {
+            if (joinKind == "Cross" && !keyColumnsNode.Children().empty()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyColumnsNode.Pos()), "Specifying key columns is not allowed for cross join"));
+                return false;
+            }
+            for (const auto& keyColumnNode : keyColumnsNode.Children()) {
+                auto position = GetWideBlockFieldPosition(*itemType, keyColumnNode->Content());
+                if (!position) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyColumnNode->Pos()), TStringBuilder() << "Unknown " << (isLeft ? "left" : "right") << " key column: " << keyColumnNode->Content()));
+                    return false;
+                }
+                keyColumns.insert(*position);
+            }
+            return true;
+        };
+
+        auto checkKeyDrops = [&](std::unordered_set<ui32>& keyDrops, bool isLeft, const std::unordered_set<ui32>& keyColumns, const TExprNode& keyDropsNode, const TMultiExprType* itemType) {
+            if (joinKind == "Cross" && !keyDropsNode.Children().empty()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropsNode.Pos()), "Specifying key drops is not allowed for cross join"));
+                return false;
+            }
+            for (const auto& keyDropNode : keyDropsNode.Children()) {
+                auto position = GetWideBlockFieldPosition(*itemType, keyDropNode->Content());
+                if (!position) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Unknown " << (isLeft ? "left" : "right") << " key column: " << keyDropNode->Content()));
+                    return false;
+                }
+                if (!keyColumns.contains(*position)) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Attempted to drop " << (isLeft ? "left" : "right") << " non-key column: " << keyDropNode->Content()));
+                    return false;
+                }
+                if (!keyDrops.insert(*position).second) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Duplicated " << (isLeft ? "left" : "right") << " key drop: " << keyDropNode->Content()));
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        for (size_t childIdx = 3; childIdx <= 6; childIdx++) {
+            if (!EnsureTupleOfAtoms(*input->Child(childIdx), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        std::unordered_set<ui32> leftKeyColumns;
+        if (!checkKeyColumns(leftKeyColumns, true, *input->Child(3), leftItemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        std::unordered_set<ui32> leftKeyDrops;
+        if (!checkKeyDrops(leftKeyDrops, true, leftKeyColumns, *input->Child(4), leftItemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        std::unordered_set<ui32> rightKeyColumns;
+        if (!checkKeyColumns(rightKeyColumns, false, *input->Child(5), rightItemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        std::unordered_set<ui32> rightKeyDrops;
+        if (!checkKeyDrops(rightKeyDrops, false, rightKeyColumns, *input->Child(6), rightItemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto settingsValidator = [&](TStringBuf, TExprNode& node, TExprContext&) { return node.ChildrenSize() == 1; };
+        if (!EnsureValidSettings(input->Tail(), {"rightAny"}, settingsValidator, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        std::vector<const TTypeAnnotationNode*> resultItems;
+        for (ui32 pos = 0; pos < leftItemTypes.size(); pos++) {
+            if (leftKeyDrops.contains(pos)) {
+                continue;
+            }
+
+            resultItems.push_back(ctx.Expr.MakeType<TBlockExprType>(leftItemTypes[pos]));
+        }
+
+        if (joinKind != "LeftSemi" && joinKind != "LeftOnly") {
+            for (ui32 pos = 0; pos < rightItemTypes.size(); pos++) {
+                if (rightKeyDrops.contains(pos)) {
+                    continue;
+                }
+
+                auto columnType = rightItemTypes[pos];
+                if (joinKind == "Left" && !rightItemTypes[pos]->IsOptionalOrNull()) {
+                    columnType = ctx.Expr.MakeType<TOptionalExprType>(columnType);
+                }
+
+                resultItems.push_back(ctx.Expr.MakeType<TBlockExprType>(columnType));
+            }
+        } else {
+            if (!rightKeyDrops.empty()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(6)->Pos()), TStringBuilder() << "Right key drops are not allowed for semi/only join"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        resultItems.push_back(ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
+        input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(ctx.Expr.MakeType<TMultiExprType>(resultItems)));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
 } // namespace NTypeAnnImpl
 } // namespace NYql

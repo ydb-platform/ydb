@@ -15,7 +15,10 @@ import "ydb/public/api/protos/ydb_operation.proto";
 
 message ReplaceStorageConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    string yaml_config = 2;
+    optional string yaml_config = 2; // cluster yaml config
+    optional string storage_yaml_config = 3; // dedicated storage yaml config (when dual-config mode is enabled)
+    optional bool switch_dedicated_storage_section = 4; // if filled, can turn on or off dedicated section of YAML config
+    bool dedicated_config_mode = 5; // if true, then user expects system to work in dual-config mode
 }
 
 message ReplaceStorageConfigResponse {
@@ -27,6 +30,8 @@ message ReplaceStorageConfigResult {
 
 message FetchStorageConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    bool dedicated_storage_section = 2;
+    bool dedicated_cluster_section = 3;
 }
 
 message FetchStorageConfigResponse {
@@ -34,7 +39,8 @@ message FetchStorageConfigResponse {
 }
 
 message FetchStorageConfigResult {
-    string yaml_config = 1;
+    optional string yaml_config = 1;
+    optional string storage_yaml_config = 2;
 }
 
 message BootstrapClusterRequest {

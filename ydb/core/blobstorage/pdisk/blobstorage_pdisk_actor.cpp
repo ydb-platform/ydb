@@ -1,6 +1,5 @@
 #include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_completion_impl.h"
-#include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_factory.h"
 #include "blobstorage_pdisk_impl.h"
@@ -9,13 +8,13 @@
 #include "blobstorage_pdisk_state.h"
 #include "blobstorage_pdisk_thread.h"
 #include "blobstorage_pdisk_tools.h"
-#include "blobstorage_pdisk_util_countedqueueoneone.h"
 #include "blobstorage_pdisk_util_cputimer.h"
 #include "blobstorage_pdisk_writer.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/html.h>
+#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
@@ -39,7 +38,7 @@ namespace NPDisk {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
-void CreatePDiskActor(TGenericExecutorThread& executorThread,
+void CreatePDiskActor(TExecutorThread& executorThread,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TIntrusivePtr<TPDiskConfig> &cfg,
         const NPDisk::TMainKey &mainKey,
@@ -58,13 +57,23 @@ void CreatePDiskActor(TGenericExecutorThread& executorThread,
 
 class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     struct TInitQueueItem {
-        TOwnerRound OwnerRound;
-        TVDiskID VDisk;
-        ui64 PDiskGuid;
+        TOwnerRound OwnerRound = 0;
+        TVDiskID VDisk = TVDiskID::InvalidId;
+        ui64 PDiskGuid = 0;
         TActorId Sender;
         TActorId CutLogId;
         TActorId WhiteboardProxyId;
-        ui32 SlotId;
+        ui32 SlotId = 0;
+        bool IsShred = false;
+        ui64 ShredGeneration = 0;
+        ui64 Cookie;
+
+        TInitQueueItem(const TActorId sender, const ui64 shredGeneration, ui64 cookie)
+            : Sender(sender)
+            , IsShred(true)
+            , ShredGeneration(shredGeneration)
+            , Cookie(cookie)
+        {}
 
         TInitQueueItem(TOwnerRound ownerRound, TVDiskID vDisk, ui64 pDiskGuid, TActorId sender, TActorId cutLogId,
                 TActorId whiteboardProxyId, ui32 slotId)
@@ -243,7 +252,7 @@ public:
 
             TString path = Sprintf("pdisk%09" PRIu32, (ui32)Cfg->PDiskId);
             TString name = Sprintf("PDisk%09" PRIu32, (ui32)Cfg->PDiskId);
-            mon->RegisterActorPage(pdisksMonPage, path, name, false, ctx.ExecutorThread.ActorSystem,
+            mon->RegisterActorPage(pdisksMonPage, path, name, false, ctx.ActorSystem(),
                 SelfId());
         }
         NodeWhiteboardServiceId = Cfg->MetadataOnly
@@ -292,9 +301,16 @@ public:
     void InitError(const TString &errorReason, bool allowMetadataHandling = false) {
         Become(&TThis::StateError);
         for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
-            Send(it->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, errorReason));
-            if (PDisk) {
-                PDisk->Mon.YardInit.CountResponse();
+            if (it->IsShred) {
+                Send(it->Sender, new NPDisk::TEvShredPDiskResult(NKikimrProto::CORRUPTED, it->ShredGeneration, errorReason), 0, it->Cookie);
+                if (PDisk) {
+                    PDisk->Mon.ShredPDisk.CountResponse();
+                }
+            } else {
+                Send(it->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, errorReason));
+                if (PDisk) {
+                    PDisk->Mon.YardInit.CountResponse();
+                }
             }
         }
         InitQueue.clear();
@@ -601,10 +617,17 @@ public:
     void InitSuccess() {
         Become(&TThis::StateOnline);
         for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
-            NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
-                it->SlotId);
-            auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(evInit, it->Sender);
-            PDisk->InputRequest(request);
+            if (it->IsShred) {
+                NPDisk::TEvShredPDisk evShredPDisk(it->ShredGeneration);
+                auto* request = PDisk->ReqCreator.CreateFromEv<NPDisk::TShredPDisk>(evShredPDisk, it->Sender);
+                request->Cookie = it->Cookie;
+                PDisk->InputRequest(request);
+            } else {
+                NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
+                    it->SlotId);
+                auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(evInit, it->Sender);
+                PDisk->InputRequest(request);
+            }
         }
         InitQueue.clear();
         if (ControledStartResult) {
@@ -645,6 +668,26 @@ public:
                     evSlay.VDiskId, evSlay.SlayOwnerRound, evSlay.PDiskId, evSlay.VSlotId, str.Str()));
         PDisk->Mon.YardSlay.CountResponse();
     }
+    
+    void InitHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
+        const NPDisk::TEvShredPDisk &evShredPDisk = *ev->Get();
+        InitQueue.emplace_back(ev->Sender, evShredPDisk.ShredGeneration, ev->Cookie);
+    }
+
+    void InitHandle(NPDisk::TEvPreShredCompactVDiskResult::TPtr &ev) {
+        // Just ignore the event, can't pre-shred compact in this state.
+        Y_UNUSED(ev);
+    }
+
+    void InitHandle(NPDisk::TEvShredVDiskResult::TPtr &ev) {
+        // Just ignore the event, can't shred in this state.
+        Y_UNUSED(ev);
+    }
+
+    void InitHandle(NPDisk::TEvMarkDirty::TPtr &ev) {
+        // Just ignore the event, can't mark dirty in this state.
+        Y_UNUSED(ev);
+    }
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -675,7 +718,7 @@ public:
             str << "Unknown, something went very wrong in PDisk. Marker# BSY06";
         }
         str << " StateErrorReason# " << StateErrorReason;
-        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str()));
+        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str(), 0));
         result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         PDisk->Mon.WriteLog.CountRequest(0);
         Send(ev->Sender, result.Release());
@@ -695,7 +738,7 @@ public:
             str << "Unknown, something went very wrong in PDisk. Marker# BSY12";
         }
         str << " StateErrorReason# " << StateErrorReason;
-        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str()));
+        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str(), 0));
         for (auto &[log, _] : evMultiLog.Logs) {
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
         }
@@ -799,6 +842,26 @@ public:
 
     void ErrorHandle(NPDisk::TEvAskForCutLog::TPtr &ev) {
         // Just ignore the event, can't send cut log in this state.
+        Y_UNUSED(ev);
+    }
+
+    void ErrorHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
+        // Respond with error, can't shred in this state.
+        Send(ev->Sender, new NPDisk::TEvShredPDiskResult(NKikimrProto::CORRUPTED, 0, StateErrorReason), 0, ev->Cookie);
+    }
+
+    void ErrorHandle(NPDisk::TEvPreShredCompactVDiskResult::TPtr &ev) {
+        // Just ignore the event, can't pre-shred compact in this state.
+        Y_UNUSED(ev);
+    }
+
+    void ErrorHandle(NPDisk::TEvShredVDiskResult::TPtr &ev) {
+        // Just ignore the event, can't shred in this state.
+        Y_UNUSED(ev);
+    }
+
+    void ErrorHandle(NPDisk::TEvMarkDirty::TPtr &ev) {
+        // Just ignore the event, can't mark dirty in this state.
         Y_UNUSED(ev);
     }
 
@@ -999,6 +1062,27 @@ public:
         }
     }
 
+    void Handle(NPDisk::TEvShredPDisk::TPtr &ev) {
+        auto* request = PDisk->ReqCreator.CreateFromEv<TShredPDisk>(*ev->Get(), ev->Sender);
+        request->Cookie = ev->Cookie;
+        PDisk->InputRequest(request);
+    }
+
+    void Handle(NPDisk::TEvPreShredCompactVDiskResult::TPtr &ev) {
+        auto* request = PDisk->ReqCreator.CreateFromEv<TPreShredCompactVDiskResult>(*ev->Get(), ev->Sender);
+        PDisk->InputRequest(request);
+    }
+
+    void Handle(NPDisk::TEvShredVDiskResult::TPtr &ev) {
+        auto* request = PDisk->ReqCreator.CreateFromEv<TShredVDiskResult>(*ev->Get(), ev->Sender);
+        PDisk->InputRequest(request);
+    }
+
+    void Handle(NPDisk::TEvMarkDirty::TPtr &ev) {
+        auto* request = PDisk->ReqCreator.CreateFromEv<TMarkDirty>(*ev->Get(), ev->Sender);
+        PDisk->InputRequest(request);
+    }
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // All states
 
@@ -1141,7 +1225,7 @@ public:
 
             auto& counters = AppData(actorCtx)->Counters;
 
-            TGenericExecutorThread& executorThread = actorCtx.ExecutorThread;
+            TExecutorThread& executorThread = actorCtx.ExecutorThread;
 
             PassAway();
 
@@ -1353,6 +1437,10 @@ public:
             hFunc(NPDisk::TEvDeviceError, Handle);
             hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
             hFunc(NPDisk::TEvFormatReencryptionFinish, InitHandle);
+            hFunc(NPDisk::TEvShredPDisk, InitHandle);
+            hFunc(NPDisk::TEvPreShredCompactVDiskResult, InitHandle);
+            hFunc(NPDisk::TEvShredVDiskResult, InitHandle);
+            hFunc(NPDisk::TEvMarkDirty, InitHandle);
 
             hFunc(TEvReadMetadata, Handle);
             hFunc(TEvWriteMetadata, Handle);
@@ -1380,6 +1468,10 @@ public:
             hFunc(NPDisk::TEvReadLogContinue, Handle);
             hFunc(NPDisk::TEvLogSectorRestore, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(NPDisk::TEvShredPDisk, Handle);
+            hFunc(NPDisk::TEvPreShredCompactVDiskResult, Handle);
+            hFunc(NPDisk::TEvShredVDiskResult, Handle);
+            hFunc(NPDisk::TEvMarkDirty, Handle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);
@@ -1410,6 +1502,10 @@ public:
             hFunc(NPDisk::TEvReadLogContinue, Handle);
             hFunc(NPDisk::TEvLogSectorRestore, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(NPDisk::TEvShredPDisk, ErrorHandle);
+            hFunc(NPDisk::TEvPreShredCompactVDiskResult, ErrorHandle);
+            hFunc(NPDisk::TEvShredVDiskResult, ErrorHandle);
+            hFunc(NPDisk::TEvMarkDirty, ErrorHandle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);

@@ -1,8 +1,8 @@
 diff --git a/include/vector b/include/vector
-index 15e00d9..fb92f68 100644
+index 8d5b846..b989a3c 100644
 --- a/include/vector
 +++ b/include/vector
-@@ -400,9 +400,14 @@ public:
+@@ -401,9 +401,14 @@ public:
    typedef typename __alloc_traits::difference_type difference_type;
    typedef typename __alloc_traits::pointer pointer;
    typedef typename __alloc_traits::const_pointer const_pointer;
@@ -17,7 +17,7 @@ index 15e00d9..fb92f68 100644
    typedef std::reverse_iterator<iterator> reverse_iterator;
    typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
  
-@@ -806,12 +811,8 @@ private:
+@@ -807,12 +812,8 @@ private:
    void __append_uninitialized(size_type __n);
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __append(size_type __n);
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __append(size_type __n, const_reference __x);
@@ -32,14 +32,14 @@ index 15e00d9..fb92f68 100644
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void
    __swap_out_circular_buffer(__split_buffer<value_type, allocator_type&>& __v);
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI pointer
-@@ -1360,6 +1361,28 @@ vector<_Tp, _Allocator>::__assign_with_size(_ForwardIterator __first, _Sentinel
+@@ -1389,6 +1390,28 @@ vector<_Tp, _Allocator>::__assign_with_size(_ForwardIterator __first, _Sentinel
    }
  }
  
 +// We need to save the make_iter function and replace all constructor calls with it
 +// Made to support pointer iterators
 +template <class _Tp, class _Allocator>
-+_LIBCPP_CONSTEXPR_SINCE_CXX20 inline _LIBCPP_INLINE_VISIBILITY typename vector<_Tp, _Allocator>::iterator
++_LIBCPP_CONSTEXPR_SINCE_CXX20 inline _LIBCPP_HIDE_FROM_ABI typename vector<_Tp, _Allocator>::iterator
 +vector<_Tp, _Allocator>::__make_iter(pointer __p) _NOEXCEPT {
 +#if _YNDX_LIBCPP_MAKE_STRING_ITERATOR_POINTERS == 1
 +  return iterator(__p);
@@ -49,7 +49,7 @@ index 15e00d9..fb92f68 100644
 +}
 +
 +template <class _Tp, class _Allocator>
-+_LIBCPP_CONSTEXPR_SINCE_CXX20 inline _LIBCPP_INLINE_VISIBILITY typename vector<_Tp, _Allocator>::const_iterator
++_LIBCPP_CONSTEXPR_SINCE_CXX20 inline _LIBCPP_HIDE_FROM_ABI typename vector<_Tp, _Allocator>::const_iterator
 +vector<_Tp, _Allocator>::__make_iter(const_pointer __p) const _NOEXCEPT {
 +#if _YNDX_LIBCPP_MAKE_STRING_ITERATOR_POINTERS == 1
 +  return const_iterator(__p);

@@ -552,12 +552,12 @@ ui64 HexEncode(const char *src, size_t len, char *dst) {
 }
 
 
-std::unique_ptr<IYtColumnConverter> BuildPgTopLevelColumnReader(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&& builder, const NKikimr::NMiniKQL::TPgType* targetType) {
+std::unique_ptr<IYtColumnConverter> BuildPgTopLevelColumnReader(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&& /* builder */, const NKikimr::NMiniKQL::TPgType* /* targetType */) {
     throw yexception() << "PG types are not supported";
 }
 
 
-std::unique_ptr<IYsonComplexTypeReader> BuildPgYsonColumnReader(const NUdf::TPgTypeDescription& desc) {
+std::unique_ptr<IYsonComplexTypeReader> BuildPgYsonColumnReader(const NUdf::TPgTypeDescription& /* desc */) {
     throw yexception() << "PG types are not supported";
 }
 

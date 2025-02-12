@@ -12,7 +12,7 @@
 #include <ydb/library/grpc/client/grpc_client_low.h>
 
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 // Other callbacks
 using TSimpleCb = std::function<void()>;

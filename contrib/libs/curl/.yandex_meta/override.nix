@@ -29,6 +29,7 @@ in rec {
   ];
 
   configureFlags = [
+    "--build=x86_64-pc-linux-gnu"
     "--disable-manual"
     "--disable-ldap"
     "--disable-ldaps"
@@ -41,6 +42,7 @@ in rec {
     "--with-ngtcp2"
     "--without-gnutls"
     "--without-libidn2"
+    "--without-libpsl"
     "--without-librtmp"
     "--without-wolfssl"
   ];

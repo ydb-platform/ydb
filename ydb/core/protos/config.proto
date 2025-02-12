@@ -259,6 +259,9 @@ message TDomainsConfig {
         repeated TGroup DefaultGroups = 16;
         repeated string DefaultAccess = 17;
         optional string AllUsersGroup = 18;
+        optional bool DisableBuiltinSecurity = 19;
+        optional bool DisableBuiltinGroups = 20;
+        optional bool DisableBuiltinAccess = 21;
     }
 
     repeated TDomain Domain = 1;
@@ -1265,6 +1268,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 86400000,
             DefaultValue: 50 }];
+        optional uint64 MinPlanResolutionMs = 5 [(ControlOptions) = {
+            Description: "Minimum plan resolution override in milliseconds, which includes volatile planning (0 when not overridden)",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 0 }];
     }
 
     message TSchemeShardControls {
@@ -1373,29 +1381,49 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 260 }];
+        optional uint64 MaxChunksToDefragInflight = 21 [(ControlOptions) = {
+            Description: "Max inflight defragmentation chunks per one chunk size per vdisk",
+            MinValue: 1,
+            MaxValue: 50,
+            DefaultValue: 10 }];
 
         optional uint64 ThrottlingDeviceSpeed = 14 [(ControlOptions) = {
             Description: "Maximum allowed speed when throttling is active",
             MinValue: 1048576,
             MaxValue: 10737418240,
             DefaultValue: 52428800 }];
-        optional uint64 ThrottlingMinSstCount = 15 [(ControlOptions) = {
+        optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
+            Description: "0 - working mode, 1 - dry run mode",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
+        optional uint64 ThrottlingMinLevel0SstCount = 15 [(ControlOptions) = {
             Description: "Minimum level 0 SST count - throttling is turned on",
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 100 }];
-        optional uint64 ThrottlingMaxSstCount = 16 [(ControlOptions) = {
+        optional uint64 ThrottlingMaxLevel0SstCount = 16 [(ControlOptions) = {
             Description: "Maximum level 0 SST count - throttling speed is zero",
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 250 }];
-        optional uint64 ThrottlingMinInplacedSize = 17 [(ControlOptions) = {
-            Description: "Minimum size of all inplaced blobs - throttling is turned on",
+        optional uint64 ThrottlingMinInplacedSizeHDD = 17 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs (HDD) - throttling is turned on",
             MinValue: 1048576,
             MaxValue: 536870912000,
             DefaultValue: 21474836480 }];
-        optional uint64 ThrottlingMaxInplacedSize = 18 [(ControlOptions) = {
-            Description: "Maximum size of all inplaced blobs - throttling speed is zero",
+        optional uint64 ThrottlingMaxInplacedSizeHDD = 18 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs (HDD) - throttling speed is zero",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 64424509440 }];
+        optional uint64 ThrottlingMinInplacedSizeSSD = 24 [(ControlOptions) = {
+            Description: "Minimum size of all inplaced blobs (SSD) - throttling is turned on",
+            MinValue: 1048576,
+            MaxValue: 536870912000,
+            DefaultValue: 21474836480 }];
+        optional uint64 ThrottlingMaxInplacedSizeSSD = 25 [(ControlOptions) = {
+            Description: "Maximum size of all inplaced blobs (SSD) - throttling speed is zero",
             MinValue: 1048576,
             MaxValue: 536870912000,
             DefaultValue: 64424509440 }];
@@ -1409,6 +1437,16 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 950 }];
+        optional uint64 ThrottlingMinLogChunkCount = 22 [(ControlOptions) = {
+            Description: "Minimum pdisk log chunk count - throttling is turned on",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 100 }];
+        optional uint64 ThrottlingMaxLogChunkCount = 23 [(ControlOptions) = {
+            Description: "Maximum pdisk log chunk count - throttling speed is zero",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 130 }];
     }
 
     message TTabletControls {
@@ -1790,6 +1828,12 @@ message TColumnShardConfig {
     optional bool UseSlicesFilter = 31 [default = true];
     optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
     optional uint64 WritingBufferVolumeMb = 33 [default = 32];
+    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000];
+    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 128000000];
+    optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
+    optional int32 DefaultCompressionLevel = 37;
+    optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
+    optional bool AlterObjectEnabled = 39 [default = false];
 }
 
 message TSchemeShardConfig {
@@ -2193,6 +2237,8 @@ message TAppConfig {
 
     optional TConfigVersion Version = 102;
     repeated TLabel Labels = 103;
+
+    optional string ConfigStorePath = 104;
 }
 
 message TYdbVersion {

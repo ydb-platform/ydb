@@ -621,10 +621,13 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Unpack(
     }
 }
 
-#define MULTI_8_I(C, i)                                                        \
-    C(i, 0) C(i, 1) C(i, 2) C(i, 3) C(i, 4) C(i, 5) C(i, 6) C(i, 7)
-#define MULTI_8(C, A)                                                          \
-    C(A, 0) C(A, 1) C(A, 2) C(A, 3) C(A, 4) C(A, 5) C(A, 6) C(A, 7)
+#define MULTI_8_I(C, i,...)                                                    \
+    C(i, 0, ## __VA_ARGS__) C(i, 1, ## __VA_ARGS__) C(i, 2, ## __VA_ARGS__) C(i, 3, ## __VA_ARGS__) \
+    C(i, 4, ## __VA_ARGS__) C(i, 5, ## __VA_ARGS__) C(i, 6, ## __VA_ARGS__) C(i, 7, ## __VA_ARGS__)
+#define MULTI_8(C, A,...)                                                          \
+    C(A, 0, ## __VA_ARGS__) C(A, 1, ## __VA_ARGS__) C(A, 2, ## __VA_ARGS__) C(A, 3, ## __VA_ARGS__) \
+    C(A, 4, ## __VA_ARGS__) C(A, 5, ## __VA_ARGS__) C(A, 6, ## __VA_ARGS__) C(A, 7, ## __VA_ARGS__)
+
 
 template <typename TTraits>
 void TTupleLayoutFallback<TTraits>::Pack(
@@ -956,27 +959,85 @@ void TTupleLayoutFallback<TTraits>::Unpack(
     }
 }
 
-template __attribute__((target("avx2"))) void
-TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Pack(
-    const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
-    std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
-    ui32 count) const;
-template __attribute__((target("sse4.2"))) void
-TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Pack(
-    const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
-    std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
-    ui32 count) const;
+#define SMULTI_8(C,...) \
+        /*C(0, ## __VA_ARGS__) */C(1, ## __VA_ARGS__) C(2, ## __VA_ARGS__) C(3, ## __VA_ARGS__) \
+        C(4, ## __VA_ARGS__) C(5, ## __VA_ARGS__) C(6, ## __VA_ARGS__) C(7, ## __VA_ARGS__)
 
-template __attribute__((target("avx2"))) void
-TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Unpack(
-    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
-    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
-    ui32 count) const;
-template __attribute__((target("sse4.2"))) void
-TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Unpack(
-    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
-    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
-    ui32 count) const;
+#define SIMD_BuildTuplePerm_TEMPLATE(TYPE, ARCH) \
+template __attribute__((target(ARCH))) \
+typename SIMDPack<NSimd::TSimd##TYPE##Traits>::TSimd<ui8> \
+SIMDPack<NSimd::TSimd##TYPE##Traits>::BuildTuplePerm(size_t col_size, size_t col_pad, \
+                                     ui8 offset, ui8 ind, bool packing)
+
+#define SIMD_PackTupleOrImpl_MULTI_TEMPLATE(I, J, TYPE, ARCH) \
+template __attribute__((target(ARCH)))  \
+void SIMDPack<NSimd::TSimd##TYPE##Traits>::PackTupleOrImpl<I + 1, J + 1>( \
+                const ui8 *const src_cols[], ui8 *const dst_rows, \
+                const size_t size, const size_t col_sizes[], \
+                const size_t offsets[], const size_t tuple_size, \
+                const typename SIMDPack<NSimd::TSimd##TYPE##Traits>::TSimd<ui8> perms[], \
+                const size_t start);
+
+#define SIMD_PackTupleOrImpl_TEMPLATE(TYPE, ARCH) \
+        MULTI_8(MULTI_8_I, SIMD_PackTupleOrImpl_MULTI_TEMPLATE, TYPE, ARCH)
+
+#define SIMD_UnpackTupleOrImpl_MULTI_TEMPLATE(I, J, TYPE, ARCH) \
+template __attribute__((target(ARCH))) \
+void SIMDPack<NSimd::TSimd##TYPE##Traits>::UnpackTupleOrImpl<I + 1, J + 1>( \
+                const ui8 *const src_rows, ui8 *const dst_cols[], \
+                size_t size, const size_t col_sizes[], \
+                const size_t offsets[], const size_t tuple_size, \
+                const typename SIMDPack<NSimd::TSimd##TYPE##Traits>::TSimd<ui8> perms[], \
+                const size_t start);
+
+#define SIMD_UnpackTupleOrImpl_TEMPLATE(TYPE, ARCH) \
+        MULTI_8(MULTI_8_I, SIMD_UnpackTupleOrImpl_MULTI_TEMPLATE, TYPE, ARCH)
+
+#define SIMD_TupleOrImpl_MULTI_TEMPLATE(I, TYPE, ARCH) \
+template __attribute__((target(ARCH))) \
+typename SIMDPack<NSimd::TSimd##TYPE##Traits>::TSimd<ui8> \
+SIMDPack<NSimd::TSimd##TYPE##Traits>::TupleOrImpl<I + 1>(typename SIMDPack<NSimd::TSimd##TYPE##Traits>::TSimd<ui8> vec[]);
+
+#define SIMD_TupleOrImpl_TEMPLATE(TYPE, NAME) \
+SMULTI_8(SIMD_TupleOrImpl_MULTI_TEMPLATE, TYPE, NAME)
+
+#define SIMD_TupleOr_MULTI_TEMPLATE(I, TYPE, ARCH) \
+template __attribute__((target(ARCH))) \
+typename SIMDPack<NSimd::TSimd##TYPE##Traits>::TSimd<ui8> \
+SIMDPack<NSimd::TSimd##TYPE##Traits>::TupleOr<I + 1>(typename SIMDPack<NSimd::TSimd##TYPE##Traits>::TSimd<ui8> vec[]);
+
+#define SIMD_TupleOr_TEMPLATE(TYPE, NAME) \
+SMULTI_8(SIMD_TupleOr_MULTI_TEMPLATE, TYPE, NAME)
+
+#define SIMD_Pack_TEMPLATE(TYPE, ARCH) \
+template __attribute__((target(ARCH))) void \
+TTupleLayoutFallback<NSimd::TSimd##TYPE##Traits>::Pack( \
+    const ui8 **columns, const ui8 **isValidBitmask, ui8 *res, \
+    std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, \
+    ui32 count) const
+
+#define SIMD_Unpack_TEMPLATE(TYPE, ARCH) \
+template __attribute__((target(ARCH))) void \
+TTupleLayoutFallback<NSimd::TSimd##TYPE##Traits>::Unpack( \
+    ui8 **columns, ui8 **isValidBitmask, const ui8 *res, \
+    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, \
+    ui32 count) const
+
+#define SIMD_INSTANCE_(NAME) \
+        NAME(SSE42, "sse4.2"); \
+        NAME(AVX2, "avx2");
+#define SIMD_INSTANCE(NAME) SIMD_INSTANCE_(SIMD_##NAME##_TEMPLATE)
+
+SIMD_INSTANCE(Pack);
+SIMD_INSTANCE(Unpack);
+SIMD_INSTANCE(BuildTuplePerm);
+SIMD_INSTANCE(PackTupleOrImpl);
+SIMD_INSTANCE(UnpackTupleOrImpl);
+SIMD_INSTANCE(TupleOr);
+SIMD_INSTANCE(TupleOrImpl);
+
+#undef SIMD_INSTANCE
+#undef SIMD_INSTANCE_
 
 } // namespace NPackedTuple
 } // namespace NMiniKQL

@@ -7,7 +7,6 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/providers/generic/proto/range.pb.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
@@ -120,21 +119,21 @@ namespace NYql {
                             for (auto &issue : issues) {
                                 ctx.AddError(issue);
                             }
-                            return 0ULL;
+
+                            return 0;
                         }
-                        
+
+                        partitions.clear();
                         for (auto split: tableMeta->Splits) {
-                            Cout << "SPLIT: " << split << Endl;
+                            partitions.push_back(split);
                         }
                     }
                 }
-                
-                partitions.clear();
-                Generic::TRange range;
-                partitions.emplace_back();
-                TStringOutput out(partitions.back());
-                range.Save(&out);
-                return 0ULL;
+
+                Cout << "Partitions: " << partitions.size() << Endl;
+
+                // FIXME: is it right?
+                return 0;
             }
 
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,

@@ -8,7 +8,6 @@ PEERDIR(
 )
 
 SRCS(
-    range.proto
     source.proto
 )
 

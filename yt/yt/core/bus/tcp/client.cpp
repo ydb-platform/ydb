@@ -160,6 +160,11 @@ public:
         return *EndpointAttributes_;
     }
 
+    void OnDynamicConfigChanged(const NBus::TBusClientDynamicConfigPtr& config) override
+    {
+        DynamicConfig_.Store(config);
+    }
+
     IBusPtr CreateBus(IMessageHandlerPtr handler, const TCreateBusOptions& options) override
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
@@ -181,7 +186,6 @@ public:
             .EndMap());
 
         auto poller = TTcpDispatcher::TImpl::Get()->GetXferPoller();
-
         auto connection = New<TTcpConnection>(
             Config_,
             EConnectionType::Client,
@@ -196,7 +200,8 @@ public:
             std::move(handler),
             std::move(poller),
             PacketTranscoderFactory_,
-            MemoryUsageTracker_);
+            MemoryUsageTracker_,
+            DynamicConfig_.Acquire()->NeedRejectConnectionDueMemoryOvercommit);
         connection->Start();
 
         return New<TTcpClientBusProxy>(std::move(connection));
@@ -204,6 +209,7 @@ public:
 
 private:
     const TBusClientConfigPtr Config_;
+    TAtomicIntrusivePtr<TBusClientDynamicConfig> DynamicConfig_{New<TBusClientDynamicConfig>()};
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
     const std::string EndpointDescription_;

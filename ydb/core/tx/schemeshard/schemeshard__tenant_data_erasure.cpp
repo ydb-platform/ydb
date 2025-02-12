@@ -2,7 +2,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxRunTenantDataErasure(ev), ctx);
 }
 
@@ -34,7 +34,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartTenantDataErasure(const TShardI
     std::unique_ptr<TEvDataShard::TEvForceDataCleanup> request(
         new TEvDataShard::TEvForceDataCleanup(DataErasureGeneration));
 
-    ActiveDataErasureShards[shardIdx] = PipeClientCache->Send(
+    RunningDataErasureShards[shardIdx] = PipeClientCache->Send(
         ctx,
         ui64(datashardId),
         request.release());
@@ -46,7 +46,7 @@ void TSchemeShard::OnTenantDataErasureTimeout(const TShardIdx& shardIdx) {
     UpdateTenantDataErasureQueueMetrics();
     TabletCounters->Cumulative()[COUNTER_TENANT_DATA_ERASURE_TIMEOUT].Increment(1);
 
-    ActiveDataErasureShards.erase(shardIdx);
+    RunningDataErasureShards.erase(shardIdx);
 
     auto ctx = ActorContext();
 
@@ -109,14 +109,14 @@ void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, con
             << " at schemeshard " << TabletID());
     }
 
-    ActiveDataErasureShards.erase(shardIdx);
+    RunningDataErasureShards.erase(shardIdx);
 
     TabletCounters->Cumulative()[COUNTER_TENANT_DATA_ERASURE_OK].Increment(1);
     UpdateTenantDataErasureQueueMetrics();
 
-    if (ActiveDataErasureShards.empty()) {
-        std::unique_ptr<TEvSchemeShard::TEvDataCleanupResult> response(
-            new TEvSchemeShard::TEvDataCleanupResult(ParentDomainId, DataErasureGeneration, true));
+    if (RunningDataErasureShards.empty()) {
+        std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
+            new TEvSchemeShard::TEvTenantDataErasureResponse(ParentDomainId, DataErasureGeneration, TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
 
         const ui64 rootSchemeshard = ParentDomainId.OwnerId;
 
@@ -133,14 +133,14 @@ void TSchemeShard::TenantDataErasureHandleDisconnect(TTabletId tabletId, const T
         return; // just sanity check
     const auto& shardIdx = tabletIt->second;
 
-    auto it = ActiveDataErasureShards.find(shardIdx);
-    if (it == ActiveDataErasureShards.end())
+    auto it = RunningDataErasureShards.find(shardIdx);
+    if (it == RunningDataErasureShards.end())
         return;
 
     if (it->second != clientId)
         return;
 
-    ActiveDataErasureShards.erase(it);
+    RunningDataErasureShards.erase(it);
 
     StartTenantDataErasure(shardIdx);
 }
@@ -164,7 +164,7 @@ void TSchemeShard::RemoveTenantDataErasure(const TShardIdx& shardIdx) {
     if (!TenantDataErasureQueue)
         return;
 
-    ActiveDataErasureShards.erase(shardIdx);
+    RunningDataErasureShards.erase(shardIdx);
     TenantDataErasureQueue->Remove(shardIdx);
     UpdateTenantDataErasureQueueMetrics();
 }
@@ -179,9 +179,9 @@ void TSchemeShard::UpdateTenantDataErasureQueueMetrics() {
 }
 
 struct TSchemeShard::TTxRunTenantDataErasure : public TSchemeShard::TRwTxBase {
-    TEvSchemeShard::TEvDataClenupRequest::TPtr Ev;
+    TEvSchemeShard::TEvTenantDataErasureRequest::TPtr Ev;
 
-    TTxRunTenantDataErasure(TSelf *self, TEvSchemeShard::TEvDataClenupRequest::TPtr& ev)
+    TTxRunTenantDataErasure(TSelf *self, TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev)
         : TRwTxBase(self)
         , Ev(std::move(ev))
     {}
@@ -215,7 +215,7 @@ struct TSchemeShard::TTxRunTenantDataErasure : public TSchemeShard::TRwTxBase {
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxRunTenantDataErasure(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxRunTenantDataErasure(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev) {
     return new TTxRunTenantDataErasure(this, ev);
 }
 

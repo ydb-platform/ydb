@@ -98,8 +98,8 @@ namespace TEvSchemeShard {
         EvListUsers,
         EvListUsersResult,
 
-        EvDataCleanupRequest,
-        EvDataCleanupResult,
+        EvTenantDataErasureRequest,
+        EvTenantDataErasureResponse,
         EvWakeupToRunDataErasure,
         EvRunDataErasure,
         EvCompleteDataErasure,
@@ -702,37 +702,70 @@ namespace TEvSchemeShard {
         {}
     };
 
-    struct TEvDataClenupRequest : TEventPB<TEvDataClenupRequest, NKikimrScheme::TEvDataCleanupRequest, EvDataCleanupRequest> {
-        TEvDataClenupRequest() = default;
+    struct TEvTenantDataErasureRequest : TEventPB<TEvTenantDataErasureRequest, NKikimrScheme::TEvTenantDataErasureRequest, EvTenantDataErasureRequest> {
+        TEvTenantDataErasureRequest() = default;
 
-        TEvDataClenupRequest(ui64 generation) {
+        TEvTenantDataErasureRequest(ui64 generation) {
             Record.SetGeneration(generation);
         }
     };
 
-    struct TEvDataCleanupResult : TEventPB<TEvDataCleanupResult, NKikimrScheme::TEvDataCleanupResult, EvDataCleanupResult> {
-        TEvDataCleanupResult() = default;
+    struct TEvTenantDataErasureResponse : TEventPB<TEvTenantDataErasureResponse, NKikimrScheme::TEvTenantDataErasureResponse, EvTenantDataErasureResponse> {
+        enum class EStatus {
+            UNSPECIFIED,
+            COMPLETED,
+            IN_PROGRESS,
+        };
 
-        TEvDataCleanupResult(const TPathId& pathId, ui64 generation, bool isCompleted) {
+        TEvTenantDataErasureResponse() = default;
+
+        TEvTenantDataErasureResponse(const TPathId& pathId, ui64 generation, const EStatus& status) {
             Record.MutablePathId()->SetOwnerId(pathId.OwnerId);
             Record.MutablePathId()->SetLocalId(pathId.LocalPathId);
-            Record.SetCurrentGeneration(generation);
-            Record.SetCompleted(isCompleted);
+            Record.SetGeneration(generation);
+            Record.SetStatus(ConvertStatus(status));
         }
 
-        TEvDataCleanupResult(ui64 ownerId, ui64 localPathId, ui64 generation, bool isCompleted)
-            : TEvDataCleanupResult(TPathId(ownerId, localPathId), generation, isCompleted)
+        TEvTenantDataErasureResponse(ui64 ownerId, ui64 localPathId, ui64 generation, const EStatus& status)
+            : TEvTenantDataErasureResponse(TPathId(ownerId, localPathId), generation, status)
         {}
+
+        NKikimrScheme::TEvTenantDataErasureResponse::EStatus ConvertStatus(const EStatus& status) {
+            switch (status) {
+            case EStatus::UNSPECIFIED:
+                return NKikimrScheme::TEvTenantDataErasureResponse::UNSPECIFIED;
+            case EStatus::COMPLETED:
+                return NKikimrScheme::TEvTenantDataErasureResponse::COMPLETED;
+            case EStatus::IN_PROGRESS:
+                return NKikimrScheme::TEvTenantDataErasureResponse::IN_PROGRESS;
+            }
+        }
     };
 
     struct TEvDataErasureInfoRequest : TEventPB<TEvDataErasureInfoRequest, NKikimrScheme::TEvDataErasureInfoRequest, EvDataErasureInfoRequest> {};
 
     struct TEvDataErasureInfoResponse : TEventPB<TEvDataErasureInfoResponse, NKikimrScheme::TEvDataErasureInfoResponse, EvDataErasureInfoResponse> {
+        enum class EStatus {
+            UNSPECIFIED,
+            COMPLETED,
+            IN_PROGRESS,
+        };
+
         TEvDataErasureInfoResponse() = default;
-        TEvDataErasureInfoResponse(ui64 generation, bool isComplete) {
+        TEvDataErasureInfoResponse(ui64 generation, const EStatus& status) {
             Record.SetGeneration(generation);
-            NKikimrScheme::TEvDataErasureInfoResponse::EStatus status = (isComplete ? NKikimrScheme::TEvDataErasureInfoResponse::COMPLETE : NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS);
-            Record.SetStatus(status);
+            Record.SetStatus(ConvertStatus(status));
+        }
+
+        NKikimrScheme::TEvDataErasureInfoResponse::EStatus ConvertStatus(const EStatus& status) {
+            switch (status) {
+                case EStatus::UNSPECIFIED:
+                    return NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
+                case EStatus::COMPLETED:
+                    return NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED;
+                case EStatus::IN_PROGRESS:
+                    return NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS;
+            }
         }
     };
 };

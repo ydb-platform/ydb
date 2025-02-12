@@ -447,7 +447,8 @@ void TSchemeShard::Clear() {
         UpdateBorrowedCompactionQueueMetrics();
     }
 
-    RunningDataErasureForTenants.clear();
+    ActiveDataErasureTenants.clear();
+    ActiveDataErasureShards.clear();
 
     ClearTempDirsState();
 
@@ -2250,9 +2251,9 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
             db.Table<Schema::StoragePools>().Key(pathId.LocalPathId, pool.GetName(), pool.GetKind()).Delete();
         }
 
-        if (RunningDataErasureForTenants.contains(pathId)) {
+        if (ActiveDataErasureTenants.contains(pathId)) {
             db.Table<Schema::ActiveDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
-            RunningDataErasureForTenants.erase(pathId);
+            ActiveDataErasureTenants.erase(pathId);
         }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
@@ -4780,9 +4781,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvCompleteDataErasure, DataErasureScheduler->Handle);
 
         HFuncTraced(TEvSchemeShard::TEvRunDataErasure, Handle);
-        HFuncTraced(TEvSchemeShard::TEvDataClenupRequest, Handle);
+        HFuncTraced(TEvSchemeShard::TEvTenantDataErasureRequest, Handle);
         HFuncTraced(TEvDataShard::TEvForceDataCleanupResult, Handle);
-        HFuncTraced(TEvSchemeShard::TEvDataCleanupResult, Handle);
+        HFuncTraced(TEvSchemeShard::TEvTenantDataErasureResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvDataErasureInfoRequest, Handle);
         HFuncTraced(TEvBlobStorage::TEvControllerShredResponse, Handle);
 
@@ -7573,7 +7574,8 @@ void TSchemeShard::StartDataErasure(const TActorContext& ctx) {
             if (DataErasureScheduler->NeedInitialize()) {
                 Execute(CreateTxDataErasureSchedulerInit(), ctx);
             }
-            if (DataErasureScheduler->IsDataErasureInFlight()) {
+            if (DataErasureScheduler->GetStatus() == TDataErasureScheduler::EStatus::IN_PROGRESS_TENANTS ||
+                DataErasureScheduler->GetStatus() == TDataErasureScheduler::EStatus::IN_PROGRESS_BSC) {
                 DataErasureScheduler->ContinueDataErasure(ctx);
             } else {
                 DataErasureScheduler->ScheduleDataErasureWakeup(ctx);
@@ -7703,7 +7705,22 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvListUsers::TPtr &ev, const TActorCo
 void TSchemeShard::Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Handle TEvDataErasureInfoRequest, at schemeshard: " << TabletID());
-    ctx.Send(ev->Sender, new TEvSchemeShard::TEvDataErasureInfoResponse(DataErasureScheduler->GetGeneration(), !DataErasureScheduler->IsDataErasureInFlight()));
+
+    TEvSchemeShard::TEvDataErasureInfoResponse::EStatus status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::UNSPECIFIED;
+
+    switch (DataErasureScheduler->GetStatus()) {
+    case TDataErasureScheduler::EStatus::UNSPECIFIED:
+        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::UNSPECIFIED;
+        break;
+    case TDataErasureScheduler::EStatus::COMPLETED:
+        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::COMPLETED;
+        break;
+    case TDataErasureScheduler::EStatus::IN_PROGRESS_TENANTS:
+    case TDataErasureScheduler::EStatus::IN_PROGRESS_BSC:
+        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::IN_PROGRESS;
+        break;
+    }
+    ctx.Send(ev->Sender, new TEvSchemeShard::TEvDataErasureInfoResponse(DataErasureScheduler->GetGeneration(), status));
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvRunDataErasure::TPtr& ev, const TActorContext& ctx) {

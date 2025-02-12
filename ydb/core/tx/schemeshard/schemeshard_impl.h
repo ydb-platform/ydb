@@ -364,12 +364,19 @@ public:
     TTenantDataErasureStarter TenantDataErasureStarter;
     TTenantDataErasureQueue* TenantDataErasureQueue = nullptr;
 
+        enum class EDataErasureStatus {
+            UNSPECIFIED,
+            COMPLETED,
+            IN_PROGRESS,
+        };
+
     ui64 DataErasureGeneration = 0;
-    bool IsDataErasureCompleted = false;
-    THashMap<TPathId, bool> RunningDataErasureForTenants;
-    THashMap<TPathId, TActorId> ActiveDataErasureTenants;
-    THashMap<TShardIdx, bool> RunningDataErasureShards;
-    THashMap<TShardIdx, TActorId> ActiveDataErasureShards;
+    EDataErasureStatus DataErasureStatus = EDataErasureStatus::UNSPECIFIED;
+
+    THashMap<TPathId, EDataErasureStatus> ActiveDataErasureTenants;
+    THashMap<TPathId, TActorId> RunningDataErasureTenants;
+    THashMap<TShardIdx, EDataErasureStatus> ActiveDataErasureShards;
+    THashMap<TShardIdx, TActorId> RunningDataErasureShards;
 
     TAutoPtr<TDataErasureScheduler> DataErasureScheduler;
 
@@ -1131,13 +1138,13 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxOperationReply(TOperationId id, TEvPtr& ev);
 
     struct TTxRunTenantDataErasure;
-    NTabletFlatExecutor::ITransaction* CreateTxRunTenantDataErasure(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxRunTenantDataErasure(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev);
 
     struct TTxRunDataErasure;
     NTabletFlatExecutor::ITransaction* CreateTxRunDataErasure(ui64 generation, const TInstant& startTime);
 
     struct TTxCompleteDataErasure;
-    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasure(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasure(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev);
 
     struct TTxDataErasureSchedulerInit;
     NTabletFlatExecutor::ITransaction* CreateTxDataErasureSchedulerInit();
@@ -1248,9 +1255,9 @@ public:
     void Handle(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvSchemeShard::TEvDataClenupRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvRunDataErasure::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx);

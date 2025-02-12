@@ -91,6 +91,6 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDataErasureInfoResponse>(handle);
 
         UNIT_ASSERT_EQUAL(response->Record.GetGeneration(), 1);
-        UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETE);
+        UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
     }
 }

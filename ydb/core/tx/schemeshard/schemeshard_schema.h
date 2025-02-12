@@ -1942,13 +1942,13 @@ struct Schema : NIceDb::Schema {
 
     struct DataErasureScheduler : Table<115> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct IsCompleted : Column<2, NScheme::NTypeIds::Bool> {};
+        struct Status : Column<2, NScheme::NTypeIds::Uint32> {};
         struct StartTime : Column<3, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<Generation>;
         using TColumns = TableColumns<
             Generation,
-            IsCompleted,
+            Status,
             StartTime
         >;
     };
@@ -1956,37 +1956,37 @@ struct Schema : NIceDb::Schema {
     struct ActiveDataErasureTenants : Table<116> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct IsCompleted : Column<3, NScheme::NTypeIds::Bool> {};
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
             OwnerPathId,
             LocalPathId,
-            IsCompleted
+            Status
         >;
     };
 
     struct TenantDataErasure : Table<117> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct IsCompleted : Column<2, NScheme::NTypeIds::Bool> {};
+        struct Status : Column<2, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<Generation>;
         using TColumns = TableColumns<
             Generation,
-            IsCompleted
+            Status
         >;
     };
 
     struct ActiveDataErasureShards : Table<118> {
         struct OwnerShardIdx :  Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalShardIdx :  Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
-        struct IsCompleted : Column<3, NScheme::NTypeIds::Bool> {};
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
             OwnerShardIdx,
             LocalShardIdx,
-            IsCompleted
+            Status
         >;
     };
 

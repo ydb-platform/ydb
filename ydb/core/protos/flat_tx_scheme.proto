@@ -442,14 +442,20 @@ message TEvFindTabletSubDomainPathIdResult {
 message TEvOwnerActorAck {
 }
 
-message TEvDataCleanupRequest {
+message TEvTenantDataErasureRequest {
     optional uint64 Generation = 1;
 }
 
-message TEvDataCleanupResult {
+message TEvTenantDataErasureResponse {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        COMPLETED = 1;
+        IN_PROGRESS = 2;
+    }
+
     optional NKikimrProto.TPathID PathId = 1;
-    optional uint64 CurrentGeneration = 2; // current clean up iteration
-    optional bool Completed = 3; // is it completed?
+    optional uint64 Generation = 2;
+    optional EStatus Status = 3;
 }
 
 message TEvDataErasureInfoRequest {
@@ -458,7 +464,7 @@ message TEvDataErasureInfoRequest {
 message TEvDataErasureInfoResponse {
     enum EStatus {
         UNSPECIFIED = 0;
-        COMPLETE = 1;
+        COMPLETED = 1;
         IN_PROGRESS = 2;
     }
 

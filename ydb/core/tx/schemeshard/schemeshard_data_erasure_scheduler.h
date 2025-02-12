@@ -22,10 +22,17 @@ class TSchemeShard;
 
 class TDataErasureScheduler {
 public:
+    enum class EStatus : ui32 {
+        UNSPECIFIED,
+        COMPLETED,
+        IN_PROGRESS_TENANTS,
+        IN_PROGRESS_BSC,
+    };
+
     struct TRestoreValues {
         bool IsInitialized = false;
         ui64 Generation = 0;
-        bool DataErasureInFlight = false;
+        EStatus Status = EStatus::UNSPECIFIED;
         TInstant StartTime;
     };
 
@@ -38,7 +45,7 @@ public:
     void ContinueDataErasure(const NActors::TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvCompleteDataErasurePtr& ev, const NActors::TActorContext& ctx);
 
-    bool IsDataErasureInFlight() const;
+    EStatus GetStatus() const;
     ui64 GetGeneration() const;
     bool NeedInitialize() const;
 
@@ -48,7 +55,7 @@ private:
     const NActors::TActorId SchemeShardId;
     const TDuration DataErasureInterval;
 
-    bool DataErasureInFlight;
+    EStatus Status = EStatus::UNSPECIFIED;
     TInstant StartTime;
     TInstant FinishTime;
     bool DataErasureWakeupScheduled;

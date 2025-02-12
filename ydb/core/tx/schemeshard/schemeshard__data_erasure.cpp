@@ -29,10 +29,10 @@ NOperationQueue::EStartStatus TSchemeShard::StartDataErasure(const TPathId& path
         << ", running# " << DataErasureQueue->RunningSize() << " tenants"
         << " at schemeshard " << TabletID());
 
-    std::unique_ptr<TEvSchemeShard::TEvDataClenupRequest> request(
-        new TEvSchemeShard::TEvDataClenupRequest(DataErasureGeneration));
+    std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureRequest> request(
+        new TEvSchemeShard::TEvTenantDataErasureRequest(DataErasureGeneration));
 
-    ActiveDataErasureTenants[pathId] = PipeClientCache->Send(
+    RunningDataErasureTenants[pathId] = PipeClientCache->Send(
         ctx,
         ui64(tenantSchemeShardId),
         request.release());
@@ -44,7 +44,7 @@ void TSchemeShard::OnDataErasureTimeout(const TPathId& pathId) {
     UpdateDataErasureQueueMetrics();
     TabletCounters->Cumulative()[COUNTER_DATA_ERASURE_TIMEOUT].Increment(1);
 
-    ActiveDataErasureTenants.erase(pathId);
+    RunningDataErasureTenants.erase(pathId);
 
     auto ctx = ActorContext();
 
@@ -94,8 +94,8 @@ void TSchemeShard::DataErasureHandleDisconnect(TTabletId tabletId, const TActorI
         return;
     }
 
-    const auto it = ActiveDataErasureTenants.find(pathId);
-    if (it == ActiveDataErasureTenants.end()) {
+    const auto it = RunningDataErasureTenants.find(pathId);
+    if (it == RunningDataErasureTenants.end()) {
         return;
     }
 
@@ -103,7 +103,7 @@ void TSchemeShard::DataErasureHandleDisconnect(TTabletId tabletId, const TActorI
         return;
     }
 
-    ActiveDataErasureTenants.erase(pathId);
+    RunningDataErasureTenants.erase(pathId);
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[DataErasure] [Disconnect] Data erasure disconnect "
         "to tablet: " << tabletId
@@ -112,10 +112,10 @@ void TSchemeShard::DataErasureHandleDisconnect(TTabletId tabletId, const TActorI
     StartDataErasure(pathId);
 }
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
-    if (record.GetCurrentGeneration() == DataErasureGeneration) {
+    if (record.GetGeneration() == DataErasureGeneration) {
         Execute(CreateTxCompleteDataErasure(ev), ctx);
     }
 
@@ -146,14 +146,14 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev, const 
     }
 
     ActiveDataErasureTenants.erase(pathId);
-    RunningDataErasureForTenants.erase(pathId);
+    RunningDataErasureTenants.erase(pathId);
 
     TabletCounters->Cumulative()[COUNTER_DATA_ERASURE_OK].Increment(1);
     UpdateDataErasureQueueMetrics();
 
     bool isDataErasureCompleted = true;
-    for (const auto& [pathId, isCompleted] : RunningDataErasureForTenants) {
-        if (!isCompleted) {
+    for (const auto& [pathId, status] : ActiveDataErasureTenants) {
+        if (status == EDataErasureStatus::IN_PROGRESS) {
             isDataErasureCompleted = false;
             break;
         }
@@ -223,15 +223,16 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
                     continue;
                 }
                 Self->DataErasureQueue->Enqueue(pathId);
-                Self->RunningDataErasureForTenants[pathId] = false;
-                db.Table<Schema::DataErasureScheduler>().Key(Self->DataErasureGeneration).Update<Schema::DataErasureScheduler::IsCompleted,
-                                                                                                 Schema::DataErasureScheduler::StartTime>(false, StartTime.MicroSeconds());
-                db.Table<Schema::ActiveDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::ActiveDataErasureTenants::IsCompleted>(false);
+                Self->ActiveDataErasureTenants[pathId] = EDataErasureStatus::IN_PROGRESS;
+                db.Table<Schema::DataErasureScheduler>().Key(Self->DataErasureGeneration).Update<Schema::DataErasureScheduler::Status,
+                                                                                                 Schema::DataErasureScheduler::StartTime>(static_cast<ui32>(Self->DataErasureScheduler->GetStatus()),
+                                                                                                                                          StartTime.MicroSeconds());
+                db.Table<Schema::ActiveDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::ActiveDataErasureTenants::Status>(static_cast<ui32>(Self->ActiveDataErasureTenants[pathId]));
             }
         } else if (Self->DataErasureGeneration == RequestedGeneration) {
             Self->DataErasureQueue->Clear();
-            for (const auto& [pathId, isCompleted] : Self->RunningDataErasureForTenants) {
-                if (!isCompleted) {
+            for (const auto& [pathId, status] : Self->ActiveDataErasureTenants) {
+                if (status == EDataErasureStatus::IN_PROGRESS) {
                     Self->DataErasureQueue->Enqueue(pathId);
                 }
             }
@@ -248,9 +249,9 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxRunDataErasure(ui64 gen
 }
 
 struct TSchemeShard::TTxCompleteDataErasure : public TSchemeShard::TRwTxBase {
-    const TEvSchemeShard::TEvDataCleanupResult::TPtr Ev;
+    const TEvSchemeShard::TEvTenantDataErasureResponse::TPtr Ev;
 
-    TTxCompleteDataErasure(TSelf* self, const TEvSchemeShard::TEvDataCleanupResult::TPtr& ev)
+    TTxCompleteDataErasure(TSelf* self, const TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev)
         : TRwTxBase(self)
         , Ev(std::move(ev))
     {}
@@ -266,8 +267,8 @@ struct TSchemeShard::TTxCompleteDataErasure : public TSchemeShard::TRwTxBase {
         auto pathId = TPathId(
             record.GetPathId().GetOwnerId(),
             record.GetPathId().GetLocalId());
-        Self->RunningDataErasureForTenants[pathId] = true;
-        db.Table<Schema::ActiveDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::ActiveDataErasureTenants::IsCompleted>(true);
+        Self->ActiveDataErasureTenants[pathId] = EDataErasureStatus::COMPLETED;
+        db.Table<Schema::ActiveDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::ActiveDataErasureTenants::Status>(static_cast<ui32>(Self->ActiveDataErasureTenants[pathId]));
     }
 
     void DoComplete(const TActorContext& ctx) override {
@@ -276,7 +277,7 @@ struct TSchemeShard::TTxCompleteDataErasure : public TSchemeShard::TRwTxBase {
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasure(TEvSchemeShard::TEvDataCleanupResult::TPtr& ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasure(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev) {
     return new TTxCompleteDataErasure(this, ev);
 }
 
@@ -289,8 +290,8 @@ struct TSchemeShard::TTxDataErasureSchedulerInit : public TSchemeShard::TRwTxBas
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxDataErasureSchedulerInit Execute at schemeshard: " << Self->TabletID());
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::DataErasureScheduler>().Key(0).Update<Schema::DataErasureScheduler::IsCompleted,
-                                                               Schema::DataErasureScheduler::StartTime>(true, AppData(ctx)->TimeProvider->Now().MicroSeconds());
+        db.Table<Schema::DataErasureScheduler>().Key(0).Update<Schema::DataErasureScheduler::Status,
+                                                               Schema::DataErasureScheduler::StartTime>(static_cast<ui32>(TDataErasureScheduler::EStatus::COMPLETED), AppData(ctx)->TimeProvider->Now().MicroSeconds());
     }
 
     void DoComplete(const TActorContext& ctx) override {

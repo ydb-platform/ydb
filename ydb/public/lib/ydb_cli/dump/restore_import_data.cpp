@@ -22,8 +22,7 @@
 #include <util/system/mutex.h>
 #include <util/thread/pool.h>
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 using namespace NImport;
 using namespace NTable;
@@ -1007,5 +1006,4 @@ NPrivate::IDataWriter* CreateImportDataWriter(
     return new TDataWriter(path, desc, partitionCount, settings, importClient, tableClient, accumulators, log);
 }
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

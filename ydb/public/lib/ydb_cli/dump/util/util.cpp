@@ -59,4 +59,4 @@ TGetDatabaseStatusResult GetDatabaseStatus(TCmsClient& cmsClient, const std::str
     });
 }
 
-}
+} // NYdb::NDump

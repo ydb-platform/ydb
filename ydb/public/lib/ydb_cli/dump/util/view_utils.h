@@ -17,4 +17,4 @@ bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool res
     const TString& dbPath, NYql::TIssues& issues
 );
 
-}
+} // NYdb::NDump

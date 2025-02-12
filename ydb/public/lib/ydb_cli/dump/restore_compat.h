@@ -2,8 +2,7 @@
 
 #include "restore_impl.h"
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 NPrivate::IDataAccumulator* CreateCompatAccumulator(
     const TString& path,
@@ -16,5 +15,4 @@ NPrivate::IDataWriter* CreateCompatWriter(
     const NPrivate::IDataAccumulator* accumulator,
     const TRestoreSettings& settings);
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

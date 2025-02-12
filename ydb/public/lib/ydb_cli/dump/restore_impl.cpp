@@ -218,8 +218,8 @@ TStatus CreateCoordinationNode(
 
 TStatus CreateRateLimiter(
     TRateLimiterClient& client,
-    const std::string& coordinationNodePath,
-    const std::string& rateLimiterPath,
+    const TString& coordinationNodePath,
+    const TString& rateLimiterPath,
     const Ydb::RateLimiter::CreateResourceRequest& request)
 {
     const auto settings = TCreateResourceSettings(request);
@@ -540,6 +540,10 @@ TRestoreResult TRestoreClient::RestoreView(
     const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
     LOG_I("Restore view " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
+    if (settings.DryRun_) {
+        return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::View);
+    }
+
     TString query = ReadViewQuery(fsPath, Log.get());
 
     NYql::TIssues issues;
@@ -548,11 +552,6 @@ TRestoreResult TRestoreClient::RestoreView(
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 
-    if (settings.DryRun_) {
-        return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::View);
-    }
-
-    LOG_D("Executing view creation query: " << query.Quote());
     auto result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
         return session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
     });
@@ -592,8 +591,8 @@ TRestoreResult TRestoreClient::RestoreTopic(
         return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::Topic);
     }
 
-    const auto creationRequest = ReadTopicCreationRequest(fsPath, Log.get());
-    auto result = CreateTopic(TopicClient, dbPath, creationRequest);
+    const auto request = ReadTopicCreationRequest(fsPath, Log.get());
+    auto result = CreateTopic(TopicClient, dbPath, request);
     if (result.IsSuccess()) {
         LOG_D("Created " << dbPath.Quote());
         return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
@@ -657,8 +656,8 @@ TRestoreResult TRestoreClient::RestoreRateLimiter(
         return *error;
     }
 
-    const auto creationRequest = ReadRateLimiterCreationRequest(fsPath, Log.get());
-    auto result = CreateRateLimiter(RateLimiterClient, coordinationNodePath, rateLimiterPath, creationRequest);
+    const auto request = ReadRateLimiterCreationRequest(fsPath, Log.get());
+    auto result = CreateRateLimiter(RateLimiterClient, coordinationNodePath, rateLimiterPath, request);
     if (result.IsSuccess()) {
         LOG_D("Created rate limiter: " << rateLimiterPath.Quote()
             << " dependent on the coordination node: " << coordinationNodePath.Quote()
@@ -669,37 +668,36 @@ TRestoreResult TRestoreClient::RestoreRateLimiter(
     LOG_E("Failed to create rate limiter: " << rateLimiterPath.Quote()
         << " dependent on the coordination node: " << coordinationNodePath.Quote()
     );
-    return Result<TRestoreResult>(JoinFsPaths(coordinationNodePath, rateLimiterPath), std::move(result));
+    return Result<TRestoreResult>(Join("/", coordinationNodePath, rateLimiterPath), std::move(result));
 }
 
-TRestoreResult TRestoreClient::RestoreDependentResources(
-    const TFsPath& coordinationNodeFsPath, const TString& coordinationNodeDbPath)
-{
-    LOG_I("Restore coordination node's resources " << coordinationNodeFsPath.GetPath().Quote()
-        << " to " << coordinationNodeDbPath.Quote()
+TRestoreResult TRestoreClient::RestoreDependentResources(const TFsPath& fsPath, const TString& dbPath) {
+    LOG_I("Restore coordination node's resources " << fsPath.GetPath().Quote()
+        << " to " << dbPath.Quote()
     );
 
     TVector<TFsPath> children;
-    coordinationNodeFsPath.List(children);
+    fsPath.List(children);
     TDeque<TFsPath> pathQueue(children.begin(), children.end());
     while (!pathQueue.empty()) {
         const auto path = pathQueue.front();
         pathQueue.pop_front();
+
         if (path.IsDirectory()) {
             if (IsFileExists(path.Child(NFiles::CreateRateLimiter().FileName))) {
-                const auto result = RestoreRateLimiter(
-                    path, coordinationNodeDbPath, path.RelativeTo(coordinationNodeFsPath).GetPath()
-                );
+                const auto result = RestoreRateLimiter(path, dbPath, path.RelativeTo(fsPath).GetPath());
                 if (!result.IsSuccess()) {
                     return result;
                 }
             }
+
             children.clear();
             path.List(children);
             pathQueue.insert(pathQueue.end(), children.begin(), children.end());
         }
 
     }
+
     return Result<TRestoreResult>();
 }
 
@@ -721,16 +719,18 @@ TRestoreResult TRestoreClient::RestoreCoordinationNode(
         return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::CoordinationNode);
     }
 
-    const auto creationRequest = ReadCoordinationNodeCreationRequest(fsPath, Log.get());
-    auto result = CreateCoordinationNode(CoordinationNodeClient, dbPath, creationRequest);
+    const auto request = ReadCoordinationNodeCreationRequest(fsPath, Log.get());
+    auto result = CreateCoordinationNode(CoordinationNodeClient, dbPath, request);
     if (result.IsSuccess()) {
         if (auto result = RestoreDependentResources(fsPath, dbPath); !result.IsSuccess()) {
             LOG_E("Failed to create coordination node's resources " << dbPath.Quote());
             return Result<TRestoreResult>(dbPath, std::move(result));
         }
+
         LOG_D("Created " << dbPath.Quote());
         return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
     }
+
     LOG_E("Failed to create " << dbPath.Quote());
     return Result<TRestoreResult>(dbPath, std::move(result));
 }

@@ -266,16 +266,18 @@ namespace NYql {
                 Y_ENSURE(result->Splits.size() > 0);
 
                 TGenericState::TTableMeta tableMeta;
-
                 tableMeta.Schema = *result->Schema;
                 tableMeta.DataSourceInstance = result->DataSourceInstance;
+                for (auto& split: result->Splits) {
+                    tableMeta.Splits.push_back(split.description());
+                }
 
                 // Parse table schema
                 ParseTableMeta(ctx, ctx.GetPosition(genRead.Pos()), tableAddress, tableMeta);
                 
-                // Fill AST for each requested table
+                // Fill AST for a table
                 if (const auto ins = replaces.emplace(genRead.Raw(), TExprNode::TPtr()); ins.second) {
-                    ins.first->second = MakeTableMetaNode(ctx, genRead, tableName, result->Splits);
+                    ins.first->second = MakeTableMetaNode(ctx, genRead, tableName);
                 }
 
                 // Save table metadata into provider state
@@ -327,8 +329,7 @@ namespace NYql {
         TExprNode::TPtr MakeTableMetaNode(
             TExprContext& ctx,
             const TGenRead& read,
-            const TString& tableName,
-            const std::vector<NConnector::NApi::TSplit>& srcSplits
+            const TString& tableName
         ) {
             // clang-format off
             auto row = Build<TCoArgument>(ctx, read.Pos())
@@ -342,15 +343,8 @@ namespace NYql {
                     .Build()
                 .Done().Ptr();
 
-            TVector<TCoAtom> splitDescriptions;
-            for (auto& split : srcSplits) {
-                splitDescriptions.push_back(Build<TCoAtom>(ctx, read.Pos()).Value(split.description()).Done());
-            }
-            auto dstSplits = Build<TCoAtomList>(ctx, read.Pos()).Add(splitDescriptions).Done();
-
             auto table = Build<TGenTable>(ctx, read.Pos())
                 .Name().Value(tableName).Build()
-                .Splits(std::move(dstSplits))
             .Done();
 
             return Build<TGenReadTable>(ctx, read.Pos())

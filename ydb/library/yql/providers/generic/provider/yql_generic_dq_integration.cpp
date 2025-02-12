@@ -52,13 +52,11 @@ namespace NYql {
             }
 
             bool CanRead(const TExprNode& read, TExprContext&, bool) override {
-                Cout << "CanRead" << Endl;
                 return TGenReadTable::Match(&read);
             }
 
             TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read,
                                           TExprContext&) override {
-                Cout << "EstimateReadSize" << Endl;
                 if (AllOf(read, [](const auto val) { return TGenReadTable::Match(val); })) {
                     return 0ul; // TODO: return real size
                 }
@@ -66,7 +64,6 @@ namespace NYql {
             }
 
             TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
-                Cout << "WrapRead" << Endl;
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
@@ -100,7 +97,6 @@ namespace NYql {
                                 .Build()
                             .Columns(std::move(columns))
                             .FilterPredicate(genReadTable.FilterPredicate())
-                            .Splits(genReadTable.Table().Splits())
                             .Build()
                         .RowType(ExpandType(genReadTable.Pos(), *rowType, ctx))
                         .DataSource(genReadTable.DataSource().Cast<TCoDataSource>())
@@ -110,22 +106,26 @@ namespace NYql {
                 return read;
             }
 
-            ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
+            ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext& ctx, const TPartitionSettings&) override {
                 if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
                     auto srcSettings = maybeDqSource.Cast().Settings();
-                    Cout << "HERE 0" << maybeDqSource.Raw()->Content() << " " << srcSettings.Raw()->Content() << Endl;
                     if (auto maybeGenSourceSettings = TMaybeNode<TGenSourceSettings>(srcSettings.Raw())) {
-                        auto table = maybeGenSourceSettings.Cast().Table().StringValue();
-                        auto cluster = maybeGenSourceSettings.Cast().Cluster().StringValue();
-                        Cout << "HERE 1" << cluster << "." << table << Endl;
+                        const TGenericState::TTableAddress tableAddress{
+                            maybeGenSourceSettings.Cast().Cluster().StringValue(),
+                            maybeGenSourceSettings.Cast().Table().StringValue()
+                        };
 
-                        const auto& splits = maybeGenSourceSettings.Cast().Splits().Cast<TCoAtomList>();
-
-                        for (auto split: splits) {
-                            Cout << "SPLIT: " << split.StringValue() << Endl;
+                        auto [tableMeta, issues] = State_->GetTable(tableAddress);
+                        if (issues) {
+                            for (auto &issue : issues) {
+                                ctx.AddError(issue);
+                            }
+                            return 0ULL;
                         }
-
-
+                        
+                        for (auto split: tableMeta->Splits) {
+                            Cout << "SPLIT: " << split << Endl;
+                        }
                     }
                 }
                 
@@ -139,12 +139,11 @@ namespace NYql {
 
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,
                                     TString& sourceType, size_t, TExprContext&) override {
-                Cout << "FillSourceSettings" << Endl;
                 const TDqSource source(&node);
                 if (const auto maybeSettings = source.Settings().Maybe<TGenSourceSettings>()) {
                     const auto settings = maybeSettings.Cast();
                     const auto& clusterName = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
-                    const auto& table = settings.Table().StringValue();
+                    const auto& tableName = settings.Table().StringValue();
                     const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                     const auto& endpoint = clusterConfig.endpoint();
 
@@ -153,20 +152,20 @@ namespace NYql {
                     YQL_CLOG(INFO, ProviderGeneric)
                         << "Filling source settings"
                         << ": cluster: " << clusterName
-                        << ", table: " << table
+                        << ", table: " << tableName
                         << ", endpoint: " << endpoint.ShortDebugString();
 
                     const auto& columns = settings.Columns();
 
-                    auto [tableMeta, issues] = State_->GetTable(clusterName, table);
+                    auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
                     if (issues) {
                         ythrow yexception() << "Get table metadata: " << issues.ToOneLineString();
                     }
 
                     // prepare select
                     auto select = source.mutable_select();
-                    select->mutable_from()->set_table(TString(table));
-                    select->mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);
+                    select->mutable_from()->set_table(TString(tableName));
+                    select->mutable_data_source_instance()->CopyFrom(tableMeta->DataSourceInstance);
 
                     auto items = select->mutable_what()->mutable_items();
                     for (size_t i = 0; i < columns.Size(); i++) {
@@ -176,7 +175,7 @@ namespace NYql {
                         column->mutable_name()->assign(columnName);
 
                         // assign column type
-                        auto type = NConnector::GetColumnTypeByName(tableMeta.value()->Schema, columnName);
+                        auto type = NConnector::GetColumnTypeByName(tableMeta->Schema, columnName);
                         column->mutable_type()->CopyFrom(type);
                     }
 
@@ -206,7 +205,6 @@ namespace NYql {
             }
 
             bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
-                Cout << "FillSourcePlanProperties" << Endl;
                 if (!node.Maybe<TDqSource>()) {
                     return false;
                 }
@@ -218,11 +216,11 @@ namespace NYql {
 
                 const TGenSourceSettings settings = source.Settings().Cast<TGenSourceSettings>();
                 const TString& clusterName = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
-                const TString& table = settings.Table().StringValue();
-                properties["Table"] = table;
-                auto [tableMeta, issue] = State_->GetTable(clusterName, table);
+                const TString& tableName = settings.Table().StringValue();
+                properties["Table"] = tableName;
+                auto [tableMeta, issue] = State_->GetTable({clusterName, tableName});
                 if (!issue) {
-                    const NYql::TGenericDataSourceInstance& dataSourceInstance = tableMeta.value()->DataSourceInstance;
+                    const NYql::TGenericDataSourceInstance& dataSourceInstance = tableMeta->DataSourceInstance;
                     switch (dataSourceInstance.kind()) {
                         case NYql::EGenericDataSourceKind::CLICKHOUSE:
                             properties["SourceType"] = "ClickHouse";
@@ -285,34 +283,32 @@ namespace NYql {
             }
 
             void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
-                Cout << "RegisterMkqlCompiler" << Endl;
                 RegisterDqGenericMkqlCompilers(compiler, State_);
             }
 
             void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
-                Cout << "FillLookupSourceSettings" << Endl;
                 const TDqLookupSourceWrap wrap(&node);
                 const auto settings = wrap.Input().Cast<TGenSourceSettings>();
 
                 const auto& clusterName = wrap.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
-                const auto& table = settings.Table().StringValue();
+                const auto& tableName = settings.Table().StringValue();
                 const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                 const auto& endpoint = clusterConfig.endpoint();
 
                 YQL_CLOG(INFO, ProviderGeneric)
                     << "Filling lookup source settings"
                     << ": cluster: " << clusterName
-                    << ", table: " << table
+                    << ", table: " << tableName
                     << ", endpoint: " << endpoint.ShortDebugString();
 
-                auto [tableMeta, issues] = State_->GetTable(clusterName, table);
+                auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
                 if (issues) {
                     ythrow yexception() << "Get table metadata: " << issues;
                 }
 
                 Generic::TLookupSource source;
-                source.set_table(table);
-                *source.mutable_data_source_instance() = tableMeta.value()->DataSourceInstance;
+                source.set_table(tableName);
+                *source.mutable_data_source_instance() = tableMeta->DataSourceInstance;
 
                 // Managed YDB supports access via IAM token.
                 // If exist, copy service account creds to obtain tokens during request execution phase.

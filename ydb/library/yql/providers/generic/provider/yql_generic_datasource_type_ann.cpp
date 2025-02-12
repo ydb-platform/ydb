@@ -50,37 +50,12 @@ namespace NYql {
         }
 
         TStatus HandleTable(const TExprNode::TPtr& input, TExprContext& ctx) {
-            if (!EnsureArgsCount(*input, 2, ctx)) {
+            if (!EnsureArgsCount(*input, 1, ctx)) {
                 return TStatus::Error;
             }
 
             if (!EnsureAtom(*input->Child(TGenTable::idx_Name), ctx)) {
                 return TStatus::Error;
-            }
-
-            if (!EnsureTupleOfAtoms(*input->Child(TGenTable::idx_Splits), ctx)) {
-                return TStatus::Error;
-            }
-
-            const auto totalSplits = input->Child(TGenTable::idx_Splits)->ChildrenSize();
-
-            switch (totalSplits) {
-                case 0: {
-                    ctx.AddError(TIssue(ctx.GetPosition(input->Child(TGenTable::idx_Splits)->Pos()),
-                                        "Expected at least 1 split, got 0"));
-                    return TStatus::Error;
-                }
-                case 1:
-                    // For the elder versions of the Connector it's normal to send single empty split
-                    break;
-                default:
-                    // Newer versions of the Connector may send multiple splits, and each of them must be non-empty
-                    for (const auto& split : input->Child(TGenTable::idx_Splits)->Children()) {
-                        if (split->Content().empty()) {
-                            ctx.AddError(TIssue(ctx.GetPosition(split->Pos()), "Split is empty"));
-                            return TStatus::Error;
-                        }
-                    }
             }
 
             input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
@@ -89,7 +64,7 @@ namespace NYql {
         }
 
         TStatus HandleSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-            if (!EnsureArgsCount(*input, 7, ctx)) {
+            if (!EnsureArgsCount(*input, 6, ctx)) {
                 return TStatus::Error;
             }
 
@@ -121,7 +96,7 @@ namespace NYql {
                 columnSet.insert(child->Content());
             }
 
-            auto [tableMeta, issues] = State_->GetTable(clusterName, tableName);
+            auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
             if (issues) {
                 for (const auto& issue : issues) {
                     ctx.AddError(issue);
@@ -132,7 +107,7 @@ namespace NYql {
             // Create type annotation
             TVector<const TItemExprType*> blockRowTypeItems;
 
-            const auto structExprType = tableMeta.value()->ItemType;
+            const auto structExprType = tableMeta->ItemType;
             for (const auto& item : structExprType->GetItems()) {
                 // Filter out columns that are not required in this query
                 if (columnSet.contains(item->GetName())) {
@@ -214,7 +189,7 @@ namespace NYql {
             const auto tableName = table.Name().StringValue();
 
             // Extract table metadata
-            auto [tableMeta, issues] = State_->GetTable(clusterName, tableName);
+            auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
             if (issues) {
                 for (const auto& issue : issues) {
                     ctx.AddError(issue);
@@ -222,8 +197,8 @@ namespace NYql {
                 return TStatus::Error;
             }
 
-            auto itemType = tableMeta.value()->ItemType;
-            auto columnOrder = tableMeta.value()->ColumnOrder;
+            auto itemType = tableMeta->ItemType;
+            auto columnOrder = tableMeta->ColumnOrder;
 
             if (columnSet) {
                 YQL_CLOG(INFO, ProviderGeneric) << "custom column set" << ColumnSetToString(*columnSet.Get());

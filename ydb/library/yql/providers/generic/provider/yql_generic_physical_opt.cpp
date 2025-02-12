@@ -71,8 +71,11 @@ namespace NYql {
 
                             // Get table metadata
                             const auto [tableMeta, issues] = State_->GetTable(
-                                read.DataSource().Cluster().Value(),
-                                read.Table().Name().Value());
+                                TGenericState::TTableAddress(
+                                    TString(read.DataSource().Cluster().Value()),
+                                    TString(read.Table().Name().Value())
+                                )
+                            );
                             if (issues) {
                                 for (const auto& issue : issues) {
                                     ctx.AddError(issue);
@@ -80,7 +83,7 @@ namespace NYql {
                                 return node;
                             }
 
-                            const auto structType = tableMeta.value()->ItemType;
+                            const auto structType = tableMeta->ItemType;
                             YQL_ENSURE(structType->GetSize());
                             auto columns =
                                 ctx.NewList(read.Pos(), {ctx.NewAtom(read.Pos(), GetLightColumn(*structType)->GetName())});

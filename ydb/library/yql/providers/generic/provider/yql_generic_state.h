@@ -40,9 +40,11 @@ namespace NYql {
             NYql::TGenericDataSourceInstance DataSourceInstance; 
             // External table schema
             NYql::NConnector::NApi::TSchema Schema; 
+            // Contains some binary description of table splits (partitions) produced by Connector
+            TVector<TString> Splits; 
         };
 
-        using TGetTableResult = std::pair<std::optional<const TTableMeta*>, TIssues>;
+        using TGetTableResult = std::pair<const TTableMeta*, TIssues>;
 
         TGenericState() = delete;
 
@@ -64,7 +66,7 @@ namespace NYql {
         }
 
         void AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta);
-        TGetTableResult GetTable(const TStringBuf& clusterName, const TStringBuf& tableName) const;
+        TGetTableResult GetTable(const TTableAddress& tableAddress) const;
 
         TTypeAnnotationContext* Types;
         TGenericConfiguration::TPtr Configuration = MakeIntrusive<TGenericConfiguration>();

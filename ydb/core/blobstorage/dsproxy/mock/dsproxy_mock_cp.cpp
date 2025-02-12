@@ -6,17 +6,22 @@ namespace NKikimr::NFake {
     TProxyDSCP::TProxyDSCP()
     {}
 
-    void TProxyDSCP::AddMock(TGroupId groupId, TIntrusivePtr<TProxyDS> model) {
+    void TProxyDSCP::AddMock(TGroupId groupId, TProxyDS* model) {
         TGuard<TMutex> guard(Mutex);
         Models[groupId] = model;
     }
 
-    TIntrusivePtr<TProxyDS> TProxyDSCP::GetMock(TGroupId groupId) {
+    void TProxyDSCP::RemoveMock(TGroupId groupId) {
+        TGuard<TMutex> guard(Mutex);
+        Models.erase(groupId);
+    }
+
+    TProxyDS* TProxyDSCP::GetMock(TGroupId groupId) {
         TGuard<TMutex> guard(Mutex);
         return Models[groupId];
     }
 
-    TMap<TGroupId, TIntrusivePtr<TProxyDS>> TProxyDSCP::GetMocks() {
+    TMap<TGroupId, TProxyDS*> TProxyDSCP::GetMocks() {
         TGuard<TMutex> guard(Mutex);
         return Models;
     }

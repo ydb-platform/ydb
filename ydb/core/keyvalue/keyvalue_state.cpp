@@ -91,7 +91,7 @@ void TKeyValueState::Clear() {
     CompletedCleanupGeneration = 0;
     CompletedCleanupTrashGeneration = 0;
     Trash.clear();
-    Trash.emplace(CompletedCleanupGeneration, TSet<TLogoBlobID>());
+    TrashForCleanup.clear();
     InFlightForStep.clear();
     CollectOperation.Reset(nullptr);
     IsCollectEventSent = false;
@@ -723,7 +723,10 @@ void TKeyValueState::SendCutHistory(const TActorContext &ctx, const TTabletStora
     for (const auto& [id, _] : RefCounts) {
         usedBlob(id);
     }
-    for (const auto& [_, bin] : Trash) {
+    for (const TLogoBlobID& id : Trash) {
+        usedBlob(id);
+    }
+    for (const auto& [_, bin] : TrashForCleanup) {
         for (const TLogoBlobID& id : bin) {
             usedBlob(id);
         }
@@ -1401,11 +1404,13 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
             if (it != RefCounts.end()) {
                 Y_ABORT_UNLESS(it->second != 0);
             } else {
-                bool found = false;
-                for (const auto& [_, bin] : Trash) {
-                    if (bin.count(id)) {
-                        found = true;
-                        break;
+                bool found = Trash.count(id);
+                if (!found) {
+                    for (const auto& [_, bin] : TrashForCleanup) {
+                        if (bin.count(id)) {
+                            found = true;
+                            break;
+                        }
                     }
                 }
                 if (!found) { // we found a candidate for trash
@@ -3632,9 +3637,9 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                         }
                     }
                     TABLEBODY() {
-                        ui64 idx = 1;
                         bool first = true;
-                        for (const auto& [generation, bin] : Trash) {
+                        ui64 idx = 1;
+                        auto printTrashBin = [&](const auto& bin) {
                             if (first) {
                                 first = false;
                             } else {
@@ -3642,7 +3647,6 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                                     TABLED() {out << "---";}
                                     TABLED() {out << "---";}
                                 }
-                                continue;
                             }
 
                             for (auto it = bin.begin(); it != bin.end(); ++it) {
@@ -3652,6 +3656,12 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                                     TABLED() {out << *it;}
                                 }
                             }
+                        };
+                        for (const auto& [generation, bin] : TrashForCleanup) {
+                            printTrashBin(bin);
+                        }
+                        if (!Trash.empty()) {
+                            printTrashBin(Trash);
                         }
                     }
                 }

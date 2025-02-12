@@ -209,8 +209,9 @@ struct TEvKeyValue {
 
         TEvCleanUpDataRequest() = default;
         
-        TEvCleanUpDataRequest(ui64 generation) {
+        TEvCleanUpDataRequest(ui64 generation, bool reset=false) {
             Record.set_generation(generation);
+            Record.set_reset_actual_generation(reset);
         }
     };
 
@@ -220,22 +221,27 @@ struct TEvKeyValue {
 
         TEvCleanUpDataResponse() = default;
 
-        TEvCleanUpDataResponse(ui64 generation, NKikimrKeyValue::CleanUpDataResponse::Status status, const TString& errorReason) {
+        TEvCleanUpDataResponse(ui64 generation, NKikimrKeyValue::CleanUpDataResponse::Status status, const TString& errorReason, ui64 actualGeneration) {
             Record.set_generation(generation);
             Record.set_status(status);
             Record.set_error_reason(errorReason);
+            Record.set_actual_generation(actualGeneration);
         }
 
         static std::unique_ptr<TEvCleanUpDataResponse> MakeSuccess(ui64 generation) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_SUCCESS, "");
+            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_SUCCESS, "", generation);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeError(ui64 generation, const TString& errorReason) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ERROR, errorReason);
+        static std::unique_ptr<TEvCleanUpDataResponse> MakeAborted(ui64 generation, const TString& errorReason, ui64 actualGeneration) {
+            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ABORTED, errorReason, actualGeneration);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeAlreadyCompleted(ui64 generation) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ALREADY_COMPLETED, "");
+        static std::unique_ptr<TEvCleanUpDataResponse> MakeAlreadyCompleted(ui64 generation, ui64 actualGeneration) {
+            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ALREADY_COMPLETED, "", actualGeneration);
+        }
+
+        static std::unique_ptr<TEvCleanUpDataResponse> MakeError(ui64 generation, const TString& errorReason, ui64 actualGeneration) {
+            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ERROR, errorReason, actualGeneration);
         }
     };
 

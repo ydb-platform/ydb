@@ -9,15 +9,16 @@ namespace NKikimr::NFake {
 
     class TProxyDSCP {
         TMutex Mutex;
-        TMap<TGroupId, TIntrusivePtr<TProxyDS>> Models;
+        TMap<TGroupId, TProxyDS*> Models;
     public:
         TProxyDSCP();
 
-        void AddMock(TGroupId groupId, TIntrusivePtr<TProxyDS> model);
+        void AddMock(TGroupId groupId, TProxyDS* model);
+        void RemoveMock(TGroupId groupId);
 
-        TIntrusivePtr<TProxyDS> GetMock(TGroupId groupId);
+        TProxyDS* GetMock(TGroupId groupId);
 
-        TMap<TGroupId, TIntrusivePtr<TProxyDS>> GetMocks();
+        TMap<TGroupId, TProxyDS*> GetMocks();
     };
 
     std::unique_ptr<TProxyDSCP> CreateProxyDSCP();

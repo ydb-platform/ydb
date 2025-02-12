@@ -69,6 +69,10 @@ namespace NFake {
             Cp->AddMock(groupId, this);
         }
 
+        ~TProxyDS() {
+            Cp->RemoveMock(GroupId);
+        }
+
     public: // BS events interface : Handle(event) -> event
         TEvBlobStorage::TEvPutResult* Handle(TEvBlobStorage::TEvPut *msg) {
             // ensure we have full blob id, with PartId set to zero
@@ -380,13 +384,6 @@ namespace NFake {
                         auto it = Blobs.find(id);
                         if (it != Blobs.end()) {
                             it->second.DoNotKeep = true;
-                        }
-                        auto blockIt = Blocks.find(id.TabletID());
-                        if (blockIt == Blocks.end()) {
-                            continue;
-                        }
-                        if (id.Generation() < blockIt->second || id.Generation() == blockIt->second && id.Step() < blockIt->second) {
-                            Blobs.erase(id);
                         }
                     }
                 }

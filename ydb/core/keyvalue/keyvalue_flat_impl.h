@@ -246,6 +246,60 @@ protected:
         }
     };
 
+    struct TTxResetCleanupGeneration : public NTabletFlatExecutor::ITransaction {
+        TKeyValueFlat *Self;
+        ui64 Generation;
+        TActorId Sender;
+        TVector<TLogoBlobID> TrashBeingCommitted;
+
+        TTxResetCleanupGeneration(TKeyValueFlat *keyValueFlat, ui64 generation, TActorId sender)
+            : Self(keyValueFlat)
+            , Generation(generation)
+            , Sender(sender)
+        {}
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext& /*ctx*/) override {
+            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxResetCleanupGeneration Execute");
+            TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
+            Self->State.UpdateCleanupGeneration(db, Generation - 1);
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            Self->State.ResetCleanupGeneration(ctx, Generation - 1);
+            Self->State.StartCleanupData(Generation, Sender);
+        }
+    };
+
+    struct TTxCompleteCleanupData : public NTabletFlatExecutor::ITransaction {
+        TKeyValueFlat *Self;
+        ui64 CleanupResetGeneration;
+        TVector<TLogoBlobID> TrashBeingCommitted;
+
+        TTxCompleteCleanupData(TKeyValueFlat *keyValueFlat, ui64 cleanupResetGeneration)
+            : Self(keyValueFlat)
+            , CleanupResetGeneration(cleanupResetGeneration)
+        {}
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
+            ui64 actualCleanupResetGeneration = Self->State.GetCleanupResetGeneration();
+            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet
+                    << " TTxCompleteCleanupData Execute cleanupResetGeneration# " << CleanupResetGeneration
+                    << " actualCleanupResetGeneration# " << actualCleanupResetGeneration);
+            if (CleanupResetGeneration == actualCleanupResetGeneration) {
+                TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
+                Self->State.CompleteCleanupDataExecute(db, ctx);
+            }
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            if (CleanupResetGeneration == Self->State.GetCleanupResetGeneration()) {
+                Self->State.CompleteCleanupDataComplete(ctx, Self->Info());
+            }
+        }
+    };
+
     using TExecuteMethod = void (TKeyValueState::*)(ISimpleDb &db, const TActorContext &ctx);
     using TCompleteMethod = void (TKeyValueState::*)(const TActorContext &ctx, const TTabletStorageInfo *info);
 
@@ -288,7 +342,6 @@ protected:
 
     KV_SIMPLE_TX(RegisterInitialGCCompletion);
     KV_SIMPLE_TX(CompleteGC);
-    KV_SIMPLE_TX(CompleteCleanupData);
 
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
@@ -490,7 +543,16 @@ protected:
     void Handle(TEvKeyValue::TEvCleanUpDataRequest::TPtr &ev) {
         ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvCleanUpDataRequest " << ev->Get()->ToString());
-        State.StartCleanupData(ev->Get()->Record.generation(), ev->Sender);
+        ui64 generation = ev->Get()->Record.generation();
+        if (generation == 0) {
+            Send(ev->Sender, TEvKeyValue::TEvCleanUpDataResponse::MakeError(generation, "generation can't be 0", generation));
+            return;
+        }
+        if (ev->Get()->Record.reset_actual_generation()) {
+            Execute(new TTxResetCleanupGeneration(this, generation, ev->Sender));
+        } else {
+            State.StartCleanupData(generation, ev->Sender);
+        }
     }
 
     void Handle(TEvKeyValue::TEvForceTabletDataCleanup::TPtr &ev) {
@@ -542,7 +604,7 @@ public:
     void DataCleanupComplete(const TActorContext &ctx) override {
         STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KV271, "DataCleanupComplete",
             (TabletId, TabletID()));
-        Execute(new TTxCompleteCleanupData(this), ctx);
+        Execute(new TTxCompleteCleanupData(this, State.GetCleanupResetGeneration()), ctx);
     }
 
     STFUNC(StateInit) {

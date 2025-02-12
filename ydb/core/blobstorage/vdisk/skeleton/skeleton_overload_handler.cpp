@@ -184,6 +184,8 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskConfig> VCfg;
         TPDiskCtxPtr PDiskCtx;
 
+        ui64 WriteSpeedBps = 100'000'000;
+
         TControlWrapper ThrottlingMinInplacedSize;
         TControlWrapper ThrottlingMaxInplacedSize;
 
@@ -211,35 +213,31 @@ namespace NKikimr {
         }
 
         ui64 CalcSstCountSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
             ui64 minSstCount = (ui64)VCfg->ThrottlingMinLevel0SstCount;
             ui64 maxSstCount = (ui64)VCfg->ThrottlingMaxLevel0SstCount;
 
-            return LinearInterpolation(CurrentSstCount, minSstCount, maxSstCount, deviceSpeed);
+            return LinearInterpolation(CurrentSstCount, minSstCount, maxSstCount, WriteSpeedBps);
         }
 
         ui64 CalcInplacedSizeSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
             ui64 minInplacedSize = (ui64)ThrottlingMinInplacedSize;
             ui64 maxInplacedSize = (ui64)ThrottlingMaxInplacedSize;
 
-            return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, deviceSpeed);
+            return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, WriteSpeedBps);
         }
 
         ui64 CalcOccupancySpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
             ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
             ui64 maxOccupancy = (ui64)VCfg->ThrottlingMaxOccupancyPerMille * 1000;
 
-            return LinearInterpolation(CurrentOccupancy, minOccupancy, maxOccupancy, deviceSpeed);
+            return LinearInterpolation(CurrentOccupancy, minOccupancy, maxOccupancy, WriteSpeedBps);
         }
 
         ui64 CalcLogChunkCountSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
             ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
             ui64 maxLogChunkCount = (ui64)VCfg->ThrottlingMaxLogChunkCount;
 
-            return LinearInterpolation(CurrentLogChunkCount, minLogChunkCount, maxLogChunkCount, deviceSpeed);
+            return LinearInterpolation(CurrentLogChunkCount, minLogChunkCount, maxLogChunkCount, WriteSpeedBps);
         }
 
         ui64 CalcSpeedLimit() const {
@@ -267,6 +265,7 @@ namespace NKikimr {
             NPDisk::EDeviceType mediaType = NPDisk::DEVICE_TYPE_UNKNOWN;
             if (PDiskCtx && PDiskCtx->Dsk) {
                 mediaType = PDiskCtx->Dsk->TrueMediaType;
+                WriteSpeedBps = PDiskCtx->Dsk->WriteSpeedBps;
             }
             if (mediaType == NPDisk::DEVICE_TYPE_UNKNOWN) {
                 mediaType = VCfg->BaseInfo.DeviceType;
@@ -304,8 +303,7 @@ namespace NKikimr {
             if (!IsActive()) {
                 return 1000;
             }
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            double rate = (double)CurrentSpeedLimit / deviceSpeed;
+            double rate = (double)CurrentSpeedLimit / WriteSpeedBps;
             return rate * 1000;
         }
 
@@ -360,7 +358,7 @@ namespace NKikimr {
             if (!IsActive()) {
                 CurrentTime = {};
                 AvailableBytes = 0;
-                CurrentSpeedLimit = (ui64)VCfg->ThrottlingDeviceSpeed;
+                CurrentSpeedLimit = WriteSpeedBps;
             } else {
                 if (!prevActive) {
                     CurrentTime = now;
@@ -378,8 +376,7 @@ namespace NKikimr {
             }
             auto us = (now - CurrentTime).MicroSeconds();
             AvailableBytes += CurrentSpeedLimit * us / 1000000;
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            AvailableBytes = std::min(AvailableBytes, deviceSpeed);
+            AvailableBytes = std::min(AvailableBytes, WriteSpeedBps);
             CurrentTime = now;
         }
     };

@@ -217,6 +217,7 @@ private:
         html << "<h3>Checkpoints</h3>";
         DUMP((*this), ReadyToCheckpoint, ());
         DUMP((*this), CheckpointRequestedFromTaskRunner);
+        html << "HasPendingCheckpoint: " << (Checkpoints && Checkpoints->HasPendingCheckpoint()) << "<br />"; 
 
         auto dumpAsyncStats = [&](auto prefix, auto& asyncStats) {
             html << prefix << "Level: " << static_cast<int>(asyncStats.Level) << "<br />";
@@ -688,7 +689,7 @@ private:
     }
 
     TMaybe<NDqProto::TCheckpoint> GetCheckpointRequest() {
-        if (!CheckpointRequestedFromTaskRunner && Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved()) {
+        if (ReadyToSendCheckpointRequest()) {
             CheckpointRequestedFromTaskRunner = true;
             return Checkpoints->GetPendingCheckpoint();
         }
@@ -1177,7 +1178,7 @@ private:
             return;
         }
 
-        ProcessContinueRun();
+        ContinueExecute();
     }
 
     void CheckRunStatus() override {
@@ -1185,7 +1186,18 @@ private:
             CA_LOG_T("AsyncCheckRunStatus: TakeInputChannelDataRequests: " << TakeInputChannelDataRequests.size());
             return;
         }
+        if (ProcessOutputsState.DataWasSent && ReadyToSendCheckpointRequest()) {
+            // Maybe task runner is ready to checkpoint (switched to PendingInput state).
+            ContinueExecute(EResumeSource::CheckpointInject);
+        }
         TBase::CheckRunStatus();
+    }
+
+    bool ReadyToSendCheckpointRequest() {
+        return !CheckpointRequestedFromTaskRunner
+            && Checkpoints
+            && Checkpoints->HasPendingCheckpoint()
+            && !Checkpoints->ComputeActorStateSaved();
     }
 
 private:

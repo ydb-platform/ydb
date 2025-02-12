@@ -130,9 +130,7 @@ namespace NYql {
                     }
                 }
 
-                Cout << "Partitions: " << partitions.size() << Endl;
-
-                // FIXME: is it right?
+                // TODO: check what's the meaning of this value
                 return 0;
             }
 

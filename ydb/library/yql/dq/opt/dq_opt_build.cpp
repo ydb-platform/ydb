@@ -789,21 +789,6 @@ bool CanRebuildForWideBlockChannelOutput(bool forceBlocks, const TDqOutput& outp
 
 TDqPhyStage RebuildStageOutputAsWideBlock(const TDqPhyStage& stage, TExprContext& ctx)
 {
-    if constexpr (!NYql::NBlockStreamIO::WideToBlocks) {
-        return Build<TDqPhyStage>(ctx, stage.Pos())
-            .InitFrom(stage)
-            .Program()
-                .Args(stage.Program().Args())
-                .Body<TCoFromFlow>()
-                    .Input<TCoWideToBlocks>()
-                        .Input<TCoToFlow>()
-                            .Input(stage.Program().Body())
-                        .Build()
-                    .Build()
-                .Build()
-            .Build()
-            .Done();
-    }
     return Build<TDqPhyStage>(ctx, stage.Pos())
         .InitFrom(stage)
         .Program()

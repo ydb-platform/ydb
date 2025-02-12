@@ -645,14 +645,14 @@ std::vector<std::string> ListRateLimiters(NRateLimiter::TRateLimiterClient& clie
     return status.GetResourcePaths();
 }
 
-NRateLimiter::TDescribeResourceResult::THierarchicalDrrProps DescribeRateLimiter(
+NRateLimiter::TDescribeResourceResult DescribeRateLimiter(
     NRateLimiter::TRateLimiterClient& client, const std::string& coordinationNodePath, const std::string& rateLimiterPath)
 {
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeResource(coordinationNodePath, rateLimiterPath).ExtractValueSync();
     });
     VerifyStatus(status, "describe rate limiter");
-    return status.GetHierarchicalDrrProps();
+    return status;
 }
 
 void BackupDependentResources(TDriver driver, const std::string& coordinationNodePath, const TFsPath& fsBackupFolder) {
@@ -660,13 +660,16 @@ void BackupDependentResources(TDriver driver, const std::string& coordinationNod
     const auto rateLimiters = ListRateLimiters(client, coordinationNodePath);
 
     for (const auto& rateLimiterPath : rateLimiters) {
-        const auto description = DescribeRateLimiter(client, coordinationNodePath, rateLimiterPath);
-        Ydb::RateLimiter::CreateResourceRequest creationRequest;
-        description.SerializeTo(*creationRequest.mutable_resource()->mutable_hierarchical_drr());
+        const auto desc = DescribeRateLimiter(client, coordinationNodePath, rateLimiterPath);
+        Ydb::RateLimiter::CreateResourceRequest request;
+        desc.GetHierarchicalDrrProps().SerializeTo(*request.mutable_resource()->mutable_hierarchical_drr());
+        if (const auto& meteringConfig = desc.GetMeteringConfig()) {
+            meteringConfig->SerializeTo(*request.mutable_resource()->mutable_metering_config());
+        }
 
         TFsPath childFolderPath = fsBackupFolder.Child(TString{rateLimiterPath});
         childFolderPath.MkDirs();
-        WriteProtoToFile(creationRequest, childFolderPath, NDump::NFiles::CreateRateLimiter());
+        WriteProtoToFile(request, childFolderPath, NDump::NFiles::CreateRateLimiter());
     }
 }
 

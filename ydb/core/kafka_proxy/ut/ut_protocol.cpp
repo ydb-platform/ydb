@@ -75,7 +75,7 @@ class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false) {
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = false) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -109,6 +109,10 @@ public:
         if (serverless) {
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetHostname("localhost");
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
+        }
+
+        if (enableNativeKafkaBalancing) {
+           appConfig.MutableKafkaProxyConfig()->SetEnableNativeBalancing(true);
         }
 
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
@@ -2452,7 +2456,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     }
 
     Y_UNIT_TEST(NativeKafkaBalanceScenario) {
-        TInsecureTestServer testServer("1");
+        TInsecureTestServer testServer("1", false, true);
 
         TString topicName = "/Root/topic-0";
         ui64 totalPartitions = 24;

@@ -6,14 +6,6 @@ namespace NKafka {
 using namespace NKikimr;
 using namespace NKikimr::NGRpcProxy::V1;
 
-static EKafkaErrors KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status) {
-    // savnik finish it
-    if (status == Ydb::StatusIds::SUCCESS) {
-        return EKafkaErrors::NONE_ERROR;
-    }
-    return EKafkaErrors::UNKNOWN_SERVER_ERROR;
-}
-
 static constexpr ui8 MASTER_WAIT_JOINS_DELAY_SECONDS = 5;
 static constexpr ui8 WAIT_FOR_MASTER_DELAY_SECONDS = 2;
 static constexpr ui8 WAIT_MASTER_MAX_RETRY_COUNT = 5;
@@ -29,6 +21,20 @@ void TKafkaBalancerActor::Bootstrap(const NActors::TActorContext& ctx) {
     }
 }
 
+static EKafkaErrors KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status) {
+    // savnik finish it
+    if (status == Ydb::StatusIds::SUCCESS) {
+        return EKafkaErrors::NONE_ERROR;
+    }
+    return EKafkaErrors::UNKNOWN_SERVER_ERROR;
+}
+
+TString TKafkaBalancerActor::LogPrefix() {
+    TStringBuilder sb;
+    sb << "TKafkaBalancerActor: ";
+    return sb;
+}
+
 void TKafkaBalancerActor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx) {
     TablesInited++;
     if (TablesInited == TABLES_TO_INIT_COUNT) {
@@ -37,61 +43,20 @@ void TKafkaBalancerActor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&
 }
 
 void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
-    Cookie = 0;
-    const TString createSessionError = "Failed to create KQP session";
+    Cookie = 0; // savnik
+
     if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
-        switch (RequestType) {
-            case JOIN_GROUP:
-                SendJoinGroupResponseFail(ctx, CorrelationId,
-                                          EKafkaErrors::UNKNOWN_SERVER_ERROR,
-                                          createSessionError);
-                break;
-            case SYNC_GROUP:
-                SendSyncGroupResponseFail(ctx, CorrelationId,
-                                          EKafkaErrors::UNKNOWN_SERVER_ERROR,
-                                          createSessionError);
-                break;
-            case LEAVE_GROUP:
-                SendLeaveGroupResponseFail(ctx, CorrelationId,
-                                           EKafkaErrors::UNKNOWN_SERVER_ERROR,
-                                           createSessionError);
-                break;
-            case HEARTBEAT:
-                SendHeartbeatResponseFail(ctx, CorrelationId,
-                                          EKafkaErrors::UNKNOWN_SERVER_ERROR,
-                                          createSessionError);
-                break;
-            default:
-                break;
-        }
+        SendResponseFail(ctx, EKafkaErrors::UNKNOWN_SERVER_ERROR, "Failed to create KQP session");
         PassAway();
         return;
     }
 
-    switch (RequestType) {
-        case JOIN_GROUP:
-            HandleJoinGroupResponse(nullptr, ctx);
-            break;
-        case SYNC_GROUP:
-            HandleSyncGroupResponse(nullptr, ctx);
-            break;
-        case LEAVE_GROUP:
-            HandleLeaveGroupResponse(nullptr, ctx);
-            break;
-        case HEARTBEAT:
-            HandleHeartbeatResponse(nullptr, ctx);
-            break;
-        default:
-            KAFKA_LOG_CRIT("Unknown RequestType in TEvCreateSessionResponse");
-            PassAway();
-            break;
-    }
+    HandleResponse(nullptr, ctx);
 }
 
 void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-    const TString kqpQueryError = "KQP query error";
     if (ev->Cookie != KqpReqCookie) {
-        KAFKA_LOG_CRIT("Unexpected cookie in TEvQueryResponse");
+        KAFKA_LOG_ERROR("Unexpected cookie in TEvQueryResponse");
         return;
     }
 
@@ -99,6 +64,7 @@ void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const
     auto status   = record.GetYdbStatus();
     if (status == ::Ydb::StatusIds_StatusCode::StatusIds_StatusCode_ABORTED && CurrentRetryNumber < TX_ABORT_MAX_RETRY_COUNT) {
         CurrentRetryNumber++;
+        KAFKA_LOG_I(TStringBuilder() << "Retry after tx aborted. Num of retry# " << CurrentRetryNumber);
         switch (RequestType) {
             case JOIN_GROUP:
                 Register(new TKafkaBalancerActor(Context, Cookie, CorrelationId, JoinGroupRequestData, CurrentRetryNumber));
@@ -123,26 +89,21 @@ void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const
     auto kafkaErr = KqpStatusToKafkaError(status);
 
     if (kafkaErr != EKafkaErrors::NONE_ERROR) {
-        switch (RequestType) {
-            case JOIN_GROUP:
-                SendJoinGroupResponseFail(ctx, CorrelationId, kafkaErr, kqpQueryError);
-                break;
-            case SYNC_GROUP:
-                SendSyncGroupResponseFail(ctx, CorrelationId, kafkaErr, kqpQueryError);
-                break;
-            case LEAVE_GROUP:
-                SendLeaveGroupResponseFail(ctx, CorrelationId, kafkaErr, kqpQueryError);
-                break;
-            case HEARTBEAT:
-                SendHeartbeatResponseFail(ctx, CorrelationId, kafkaErr, kqpQueryError);
-                break;
-            default:
-                break;
-        }
-        PassAway();
-        return;
+        auto kqpQueryError = TStringBuilder() <<" Kqp error. ";
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+        NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
+        kqpQueryError << status;
+
+        SendResponseFail(ctx, kafkaErr, kqpQueryError);
     }
 
+    HandleResponse(ev, ctx);
+}
+
+void TKafkaBalancerActor::HandleResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
+    KAFKA_LOG_I(TStringBuilder() << "Handle kqp response. CurrentStep# " << (ui8)CurrentStep);
     switch (RequestType) {
         case JOIN_GROUP:
             HandleJoinGroupResponse(ev, ctx);
@@ -157,8 +118,27 @@ void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const
             HandleHeartbeatResponse(ev, ctx);
             break;
         default:
-            KAFKA_LOG_CRIT("Unknown RequestType in TEvCreateSessionResponse");
+            KAFKA_LOG_ERROR("Unknown RequestType in TEvCreateSessionResponse");
             PassAway();
+            break;
+    }
+}
+
+void TKafkaBalancerActor::SendResponseFail(const TActorContext& ctx, EKafkaErrors error, const TString& message) {
+    switch (RequestType) {
+        case JOIN_GROUP:
+            SendJoinGroupResponseFail(ctx, CorrelationId, error, message);
+            break;
+        case SYNC_GROUP:
+            SendSyncGroupResponseFail(ctx, CorrelationId, error, message);
+            break;
+        case LEAVE_GROUP:
+            SendLeaveGroupResponseFail(ctx, CorrelationId, error, message);
+            break;
+        case HEARTBEAT:
+            SendHeartbeatResponseFail(ctx, CorrelationId, error, message);
+            break;
+        default:
             break;
     }
 }
@@ -302,8 +282,8 @@ bool TKafkaBalancerActor::ParseWorkerStatesAndChooseProtocol(
     }
 
     for (const auto& st : states) {
-        const auto& protos = st.WorkerState.protocols();
-        for (const auto& pr : protos) {
+        const auto& protocols = st.WorkerState.protocols();
+        for (const auto& pr : protocols) {
             if (pr.protocol_name() == chosenProtocol) {
                 workerStates[st.MemberId] = pr.metadata();
                 break;
@@ -342,7 +322,7 @@ bool TKafkaBalancerActor::ParseDeadCount(
 }
 
 void TKafkaBalancerActor::Die(const TActorContext& ctx) {
-    KAFKA_LOG_D("TKafkaBalancerActor pass away");
+    KAFKA_LOG_D("Pass away");
     TBase::Die(ctx);
 }
 
@@ -399,6 +379,8 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildAssignmentsParams() {
     params.AddParam("$LastHeartbeat").Datetime(TInstant::Now()).Build();
 
     auto& assignmentList = params.AddParam("$Assignments").BeginList();
+
+    KAFKA_LOG_D(TStringBuilder() << "Assignments count: " << SyncGroupRequestData->Assignments.size());
 
     for (auto& assignment: SyncGroupRequestData->Assignments) {
         assignmentList.AddListItem()
@@ -1117,7 +1099,7 @@ void TKafkaBalancerActor::SendJoinGroupResponseFail(const TActorContext&,
                                                     EKafkaErrors error,
                                                     TString message) {
 
-    KAFKA_LOG_CRIT("JOIN_GROUP failed. reason# " << message);
+    KAFKA_LOG_ERROR("JOIN_GROUP failed. reason# " << message);
     auto response = std::make_shared<TJoinGroupResponseData>();
     response->ErrorCode = error;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, error));
@@ -1127,7 +1109,7 @@ void TKafkaBalancerActor::SendSyncGroupResponseFail(const TActorContext&,
                                                     ui64 corellationId,
                                                     EKafkaErrors error,
                                                     TString message) {
-    KAFKA_LOG_CRIT("SYNC_GROUP failed. reason# " << message);
+    KAFKA_LOG_ERROR("SYNC_GROUP failed. reason# " << message);
     auto response = std::make_shared<TSyncGroupResponseData>();
     response->ErrorCode = error;
     response->Assignment = "";
@@ -1138,7 +1120,7 @@ void TKafkaBalancerActor::SendLeaveGroupResponseFail(const TActorContext&,
                                                      ui64 corellationId,
                                                      EKafkaErrors error,
                                                      TString message) {
-    KAFKA_LOG_CRIT("LEAVE_GROUP failed. reason# " << message);
+    KAFKA_LOG_ERROR("LEAVE_GROUP failed. reason# " << message);
     auto response = std::make_shared<TLeaveGroupResponseData>();
     response->ErrorCode = error;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, error));
@@ -1148,7 +1130,7 @@ void TKafkaBalancerActor::SendHeartbeatResponseFail(const TActorContext&,
                                                     ui64 corellationId,
                                                     EKafkaErrors error,
                                                     TString message) {
-    KAFKA_LOG_CRIT("HEARTBEAT failed. reason# " << message);
+    KAFKA_LOG_ERROR("HEARTBEAT failed. reason# " << message);
     auto response = std::make_shared<THeartbeatResponseData>();
     response->ErrorCode = error;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, error));

@@ -6,8 +6,6 @@
 
 #include <yt/cpp/mapreduce/io/helpers.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -20,12 +20,16 @@ using namespace NYql::NNodes;
 class TDqsPhysicalOptProposalTransformer : public TOptimizeTransformerBase {
 public:
     TDqsPhysicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config)
-        : TOptimizeTransformerBase(typeCtx, NLog::EComponent::ProviderDq, {})
+        : TOptimizeTransformerBase(/* TODO: typeCtx*/nullptr, NLog::EComponent::ProviderDq, {})
         , Config(config)
     {
         const bool enablePrecompute = Config->_EnablePrecompute.Get().GetOrElse(false);
+        const bool enableDqReplicate = Config->IsDqReplicateEnabled(*typeCtx);
 
 #define HNDL(name) "DqsPhy-"#name, Hndl(&TDqsPhysicalOptProposalTransformer::name)
+        if (!enableDqReplicate) {
+            AddHandler(0, &TDqReplicate::Match, HNDL(FailOnDqReplicate));
+        }
         AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
@@ -104,6 +108,11 @@ public:
     }
 
 protected:
+    TMaybeNode<TExprBase> FailOnDqReplicate(TExprBase node, TExprContext& ctx) {
+        ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::DQ_OPTIMIZE_ERROR, "Reading multiple times from the same source is not supported"));
+        return {};
+    }
+
     TMaybeNode<TExprBase> BuildStageWithSourceWrap(TExprBase node, TExprContext& ctx) {
         return DqBuildStageWithSourceWrap(node, ctx);
     }
@@ -241,6 +250,36 @@ protected:
         return DqRewriteLeftPureJoin(node, ctx, *getParents(), IsGlobal);
     }
 
+    bool ValidateStreamLookupJoinFlags(const TDqJoin& join, TExprContext& ctx) {
+        bool leftAny = false;
+        bool rightAny = false;
+        if (const auto maybeFlags = join.Flags()) {
+            for (auto&& flag: maybeFlags.Cast()) {
+                auto&& name = flag.StringValue();
+                if (name == "LeftAny"sv) {
+                    leftAny = true;
+                    continue;
+                } else if (name == "RightAny"sv) {
+                    rightAny = true;
+                    continue;
+                }
+            }
+            if (leftAny) {
+                ctx.AddError(TIssue(ctx.GetPosition(maybeFlags.Cast().Pos()), "Streamlookup ANY LEFT join is not implemented"));
+                return false;
+            }
+        }
+        if (!rightAny) {
+            if (false) { // Tempoarily change to waring to allow for smooth transition
+                ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
+                return false;
+            } else {
+                ctx.AddWarning(TIssue(ctx.GetPosition(join.Pos()), "(Deprecation) Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
+            }
+        }
+        return true;
+    }
+
     TMaybeNode<TExprBase> RewriteStreamLookupJoin(TExprBase node, TExprContext& ctx) {
         const auto join = node.Cast<TDqJoin>();
         if (join.JoinAlgo().StringValue() != "StreamLookupJoin") {
@@ -252,18 +291,54 @@ protected:
         if (!left) {
             return node;
         }
+
+        if (!ValidateStreamLookupJoinFlags(join, ctx)) {
+            return {};
+        }
+
+        TExprNode::TPtr ttl;
+        TExprNode::TPtr maxCachedRows;
+        TExprNode::TPtr maxDelayedRows;
+        if (const auto maybeOptions = join.JoinAlgoOptions()) {
+            for (auto&& option: maybeOptions.Cast()) {
+                auto&& name = option.Name().Value();
+                if (name == "TTL"sv) {
+                    ttl = option.Value().Cast().Ptr();
+                } else if (name == "MaxCachedRows"sv) {
+                    maxCachedRows = option.Value().Cast().Ptr();
+                } else if (name == "MaxDelayedRows"sv) {
+                    maxDelayedRows = option.Value().Cast().Ptr();
+                }
+            }
+        }
+
+        if (!ttl) {
+            ttl = ctx.NewAtom(pos, 300);
+        }
+        if (!maxCachedRows) {
+            maxCachedRows = ctx.NewAtom(pos, 1'000'000);
+        }
+        if (!maxDelayedRows) {
+            maxDelayedRows = ctx.NewAtom(pos, 1'000'000);
+        }
+        auto rightInput = join.RightInput().Ptr();
+        if (auto maybe = TExprBase(rightInput).Maybe<TCoExtractMembers>()) {
+            rightInput = maybe.Cast().Input().Ptr();
+        }
+        auto leftLabel = join.LeftLabel().Maybe<NNodes::TCoAtom>() ? join.LeftLabel().Cast<NNodes::TCoAtom>().Ptr() : ctx.NewAtom(pos, "");
+        Y_ENSURE(join.RightLabel().Maybe<NNodes::TCoAtom>());
         auto cn = Build<TDqCnStreamLookup>(ctx, pos)
             .Output(left.Output().Cast())
-            .LeftLabel(join.LeftLabel().Cast<NNodes::TCoAtom>())
-            .RightInput(join.RightInput())
+            .LeftLabel(leftLabel)
+            .RightInput(rightInput)
             .RightLabel(join.RightLabel().Cast<NNodes::TCoAtom>())
             .JoinKeys(join.JoinKeys())
             .JoinType(join.JoinType())
             .LeftJoinKeyNames(join.LeftJoinKeyNames())
             .RightJoinKeyNames(join.RightJoinKeyNames())
-            .TTL(ctx.NewAtom(pos, 300)) //TODO configure me
-            .MaxCachedRows(ctx.NewAtom(pos, 1'000'000)) //TODO configure me
-            .MaxDelayedRows(ctx.NewAtom(pos, 1'000'000)) //Configure me
+            .TTL(ttl)
+            .MaxCachedRows(maxCachedRows)
+            .MaxDelayedRows(maxDelayedRows)
         .Done();
 
         auto lambda = Build<TCoLambda>(ctx, pos)

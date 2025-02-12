@@ -130,7 +130,7 @@ void TDynamicNameserver::Bootstrap(const TActorContext &ctx)
     if (mon) {
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
         mon->RegisterActorPage(actorsMonPage, "dnameserver", "Dynamic nameserver",
-                               false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+                               false, ctx.ActorSystem(), ctx.SelfID);
     }
 
     auto dinfo = AppData(ctx)->DomainsInfo;
@@ -146,22 +146,35 @@ void TDynamicNameserver::Bootstrap(const TActorContext &ctx)
 void TDynamicNameserver::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     Y_ABORT_UNLESS(ev->Get()->Config);
     const auto& config = *ev->Get()->Config;
-    if (config.HasSelfManagementConfig() && config.GetSelfManagementConfig().GetEnabled()) {
+    std::unique_ptr<IEventBase> consoleQuery;
+
+    if (ev->Get()->SelfManagementEnabled) {
         // self-management through distconf is enabled and we are operating based on their tables, so apply them now
-        auto newStaticConfig = BuildNameserverTable(config);
-        if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
-            StaticConfig = std::move(newStaticConfig);
-            ListNodesCache->Invalidate();
-            for (const auto& subscriber : StaticNodeChangeSubscribers) {
-                TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
-            }
+        ReplaceNameserverSetup(BuildNameserverTable(config));
+
+        // unsubscribe from console if we were operating without self-management before
+        if (std::exchange(SubscribedToConsole, false)) {
+            consoleQuery = std::make_unique<NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest>(SelfId());
         }
-    } else if (!SubscribedToConsole) {
-        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+    } else if (!std::exchange(SubscribedToConsole, true)) {
+        consoleQuery = std::make_unique<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest>(
             NKikimrConsole::TConfigItem::NameserviceConfigItem,
             SelfId()
-        ));
-        SubscribedToConsole = true;
+        );
+    }
+
+    if (consoleQuery) {
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), consoleQuery.release());
+    }
+}
+
+void TDynamicNameserver::ReplaceNameserverSetup(TIntrusivePtr<TTableNameserverSetup> newStaticConfig) {
+    if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
+        StaticConfig = std::move(newStaticConfig);
+        ListNodesCache->Invalidate();
+        for (const auto& subscriber : StaticNodeChangeSubscribers) {
+            TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
+        }
     }
 }
 
@@ -467,19 +480,13 @@ void TDynamicNameserver::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TAct
 void TDynamicNameserver::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr /*ev*/)
 {}
 
+void TDynamicNameserver::Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse::TPtr /*ev*/)
+{}
+
 void TDynamicNameserver::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev) {
     auto& record = ev->Get()->Record;
-    if (record.HasConfig()) {
-        if (const auto& config = record.GetConfig(); config.HasNameserviceConfig()) {
-            auto newStaticConfig = BuildNameserverTable(config.GetNameserviceConfig());
-            if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
-                StaticConfig = std::move(newStaticConfig);
-                ListNodesCache->Invalidate();
-                for (const auto& subscriber : StaticNodeChangeSubscribers) {
-                    TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
-                }
-            }
-        }
+    if (SubscribedToConsole && record.HasConfig() && record.GetConfig().HasNameserviceConfig()) {
+        ReplaceNameserverSetup(BuildNameserverTable(record.GetConfig().GetNameserviceConfig()));
     }
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }

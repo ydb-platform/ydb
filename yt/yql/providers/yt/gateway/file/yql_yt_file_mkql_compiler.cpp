@@ -357,6 +357,29 @@ TRuntimeNode ApplyPathRangesAndSampling(TRuntimeNode inputList, TType* itemType,
     return inputList;
 }
 
+TRuntimeNode ApplyQLFilter(TRuntimeNode inputList, const TYtTransientOpBase& ytOp, NCommon::TMkqlBuildContext& ctx) {
+    if (!ytOp.Maybe<TYtMap>() && !ytOp.Maybe<TYtMapReduce>() && !ytOp.Maybe<TYtMerge>()) {
+        return inputList;
+    }
+
+    const auto qlFilterSetting = NYql::GetSetting(ytOp.Settings().Ref(), EYtSettingType::QLFilter);
+    if (!qlFilterSetting) {
+        return inputList;
+    }
+
+    const auto qlFilterNode = qlFilterSetting->Child(1);
+    YQL_ENSURE(qlFilterNode && qlFilterNode->IsCallable("YtQLFilter"));
+    const TYtQLFilter qlFilter(qlFilterNode);
+    const auto arg = qlFilter.Predicate().Args().Arg(0).Raw();
+    const auto body = qlFilter.Predicate().Body().Raw();
+    const auto lambdaId = qlFilter.Predicate().Ref().UniqueId();
+
+    return ctx.ProgramBuilder.OrderedFilter(inputList, [&] (TRuntimeNode item) -> TRuntimeNode {
+        NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, item}}, lambdaId);
+        return NCommon::MkqlBuildExpr(*body, innerCtx);
+    });
+}
+
 TRuntimeNode ToList(TRuntimeNode list, NCommon::TMkqlBuildContext& ctx) {
     const auto listType = list.GetStaticType();
     if (listType->IsOptional()) {
@@ -598,6 +621,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 ytOp.DataSink().Cluster().Value(), ytOp.Input().Ref(), ctx, THashSet<TString>{"num", "index"}, forceKeyColumns);
 
             values = ApplyPathRangesAndSampling(values, mkqlInputType, ytOp.Input().Ref(), ctx);
+            values = ApplyQLFilter(values, ytOp, ctx);
 
             if ((ytOp.Maybe<TYtMerge>() && outTableInfo.RowSpec->IsSorted() && ytOp.Input().Item(0).Paths().Size() > 1)
                 || ytOp.Maybe<TYtSort>())
@@ -627,6 +651,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
                 ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
             values = ApplyPathRangesAndSampling(values, itemType, ytMap.Input().Ref(), ctx);
+            values = ApplyQLFilter(values, ytMap, ctx);
 
             auto& lambdaInputType = GetSeqItemType(*ytMap.Mapper().Args().Arg(0).Ref().GetTypeAnn());
             auto& lambdaOutputType = GetSeqItemType(*ytMap.Mapper().Body().Ref().GetTypeAnn());
@@ -636,14 +661,18 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             }
 
             if (IsWideBlockType(lambdaInputType)) {
-                values = ctx.ProgramBuilder.WideToBlocks(values);
+                values = ctx.ProgramBuilder.ToFlow(
+                    ctx.ProgramBuilder.WideToBlocks(
+                        ctx.ProgramBuilder.FromFlow(values)));
             }
 
             NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMap.Mapper().Ref().UniqueId());
             values = NCommon::MkqlBuildExpr(ytMap.Mapper().Body().Ref(), innerCtx);
 
             if (IsWideBlockType(lambdaOutputType)) {
-                values = ctx.ProgramBuilder.WideFromBlocks(values);
+                values = ctx.ProgramBuilder.ToFlow(
+                    ctx.ProgramBuilder.WideFromBlocks(
+                        ctx.ProgramBuilder.FromFlow(values)));
             }
 
             if (ETypeAnnotationKind::Multi == lambdaOutputType.GetKind())
@@ -824,6 +853,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 THashSet<TString>{"num", "index"}, forceKeyColumns);
 
             values = ApplyPathRangesAndSampling(values, itemType, ytMapReduce.Input().Ref(), ctx);
+            values = ApplyQLFilter(values, ytMapReduce, ctx);
 
             const auto outputItemType = BuildOutputType(ytMapReduce.Output(), ctx);
             const size_t outputsCount = ytMapReduce.Output().Ref().ChildrenSize();
@@ -832,54 +862,53 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             TRuntimeNode mapDirectOutputs;
             if (hasMap) {
                 const auto& mapper = ytMapReduce.Mapper().Cast<TCoLambda>();
-                if (const auto arg = mapper.Args().Arg(0).Raw(); arg != mapper.Body().Raw()) {
-                    values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
-                        ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
+                const auto arg = mapper.Args().Arg(0).Raw();
+                values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
+                    ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
 
-                    if (ETypeAnnotationKind::Multi == GetSeqItemType(*ytMapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0).Ref().GetTypeAnn()).GetKind())
-                        values = ExpandFlow(values, ctx);
+                if (ETypeAnnotationKind::Multi == GetSeqItemType(*ytMapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0).Ref().GetTypeAnn()).GetKind())
+                    values = ExpandFlow(values, ctx);
 
-                    NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMapReduce.Mapper().Ref().UniqueId());
+                NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMapReduce.Mapper().Ref().UniqueId());
 
-                    const auto& body = ytMapReduce.Mapper().Cast<TCoLambda>().Body().Ref();
-                    values = NCommon::MkqlBuildExpr(body, innerCtx);
+                const auto& body = ytMapReduce.Mapper().Cast<TCoLambda>().Body().Ref();
+                values = NCommon::MkqlBuildExpr(body, innerCtx);
 
-                    const auto& mapOutItemType = GetSeqItemType(*body.GetTypeAnn());
-                    if (const auto mapOutputTypeSetting = NYql::GetSetting(ytMapReduce.Settings().Ref(), EYtSettingType::MapOutputType)) {
-                        if (ETypeAnnotationKind::Multi == mapOutItemType.GetKind()) {
-                            values = NarrowFlow(values, *AS_TYPE(TStructType, NCommon::BuildType(body, *mapOutputTypeSetting->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder)), ctx);
-                        }
+                const auto& mapOutItemType = GetSeqItemType(*body.GetTypeAnn());
+                if (const auto mapOutputTypeSetting = NYql::GetSetting(ytMapReduce.Settings().Ref(), EYtSettingType::MapOutputType)) {
+                    if (ETypeAnnotationKind::Multi == mapOutItemType.GetKind()) {
+                        values = NarrowFlow(values, *AS_TYPE(TStructType, NCommon::BuildType(body, *mapOutputTypeSetting->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder)), ctx);
                     }
+                }
 
-                    values = ToList(values, ctx);
+                values = ToList(values, ctx);
 
-                    if (mapOutItemType.GetKind() == ETypeAnnotationKind::Variant) {
-                        auto tupleType = mapOutItemType.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
-                        YQL_ENSURE(tupleType->GetSize() > 0);
-                        mapDirectOutputsCount = tupleType->GetSize() - 1;
-                        YQL_ENSURE(mapDirectOutputsCount < outputsCount);
+                if (mapOutItemType.GetKind() == ETypeAnnotationKind::Variant) {
+                    auto tupleType = mapOutItemType.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
+                    YQL_ENSURE(tupleType->GetSize() > 0);
+                    mapDirectOutputsCount = tupleType->GetSize() - 1;
+                    YQL_ENSURE(mapDirectOutputsCount < outputsCount);
 
-                        values = ctx.ProgramBuilder.Collect(values);
+                    values = ctx.ProgramBuilder.Collect(values);
 
-                        mapDirectOutputs = ctx.ProgramBuilder.OrderedFlatMap(values, [&](TRuntimeNode mapOut) {
-                            return ctx.ProgramBuilder.VisitAll(mapOut, [&](ui32 index, TRuntimeNode varitem) {
-                                if (index == 0) {
-                                    return ctx.ProgramBuilder.NewEmptyOptional(ctx.ProgramBuilder.NewOptionalType(outputItemType));
-                                }
-                                return ctx.ProgramBuilder.NewOptional(ctx.ProgramBuilder.NewVariant(varitem, index - 1, outputItemType));
-                            });
+                    mapDirectOutputs = ctx.ProgramBuilder.OrderedFlatMap(values, [&](TRuntimeNode mapOut) {
+                        return ctx.ProgramBuilder.VisitAll(mapOut, [&](ui32 index, TRuntimeNode varitem) {
+                            if (index == 0) {
+                                return ctx.ProgramBuilder.NewEmptyOptional(ctx.ProgramBuilder.NewOptionalType(outputItemType));
+                            }
+                            return ctx.ProgramBuilder.NewOptional(ctx.ProgramBuilder.NewVariant(varitem, index - 1, outputItemType));
                         });
+                    });
 
-                        auto toReduceType = NCommon::BuildType(body, *tupleType->GetItems().front(), ctx.ProgramBuilder);
-                        values = ctx.ProgramBuilder.OrderedFlatMap(values, [&](TRuntimeNode mapOut) {
-                            return ctx.ProgramBuilder.VisitAll(mapOut, [&](ui32 index, TRuntimeNode varitem) {
-                                if (index == 0) {
-                                    return ctx.ProgramBuilder.NewOptional(varitem);
-                                }
-                                return ctx.ProgramBuilder.NewEmptyOptional(ctx.ProgramBuilder.NewOptionalType(toReduceType));
-                            });
+                    auto toReduceType = NCommon::BuildType(body, *tupleType->GetItems().front(), ctx.ProgramBuilder);
+                    values = ctx.ProgramBuilder.OrderedFlatMap(values, [&](TRuntimeNode mapOut) {
+                        return ctx.ProgramBuilder.VisitAll(mapOut, [&](ui32 index, TRuntimeNode varitem) {
+                            if (index == 0) {
+                                return ctx.ProgramBuilder.NewOptional(varitem);
+                            }
+                            return ctx.ProgramBuilder.NewEmptyOptional(ctx.ProgramBuilder.NewOptionalType(toReduceType));
                         });
-                    }
+                    });
                 }
             }
 
@@ -1086,7 +1115,8 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
                 auto values = BuildTableContentCall("YtTableInputFile", outputType, cluster,
                     ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
                 values = ApplyPathRangesAndSampling(values, outputType, ytRead.Input().Ref(), ctx);
-                return ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.WideToBlocks(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
+
+                return ctx.ProgramBuilder.WideToBlocks(ctx.ProgramBuilder.FromFlow(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
             }
 
             return TRuntimeNode();

@@ -10,7 +10,7 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/codegen/codegen.h>
 
 #include <yql/essentials/types/binary_json/read.h>
@@ -18,8 +18,8 @@
 
 #include <library/cpp/resource/resource.h>
 
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Instructions.h>
+#include <llvm/IR/Module.h> // Y_IGNORE
+#include <llvm/IR/Instructions.h> // Y_IGNORE
 
 #endif
 
@@ -85,7 +85,7 @@ public:
         auto& module = Codegen_->GetModule();
         auto& context = Codegen_->GetContext();
         // input - pointer to struct UnboxedValue as int128 and instance of buffer, output - void
-        const auto funcType = Flat || Codegen_->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
+        const auto funcType = Flat ?
             FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(Type::getInt128Ty(context)), PointerType::getUnqual(Type::getInt8Ty(context))}, false):
             FunctionType::get(Type::getVoidTy(context), {Type::getInt128Ty(context), PointerType::getUnqual(Type::getInt8Ty(context))}, false);
         Func_ = cast<Function>(module.getOrInsertFunction((TStringBuilder() << (Flat ? "YtCodecCgWriterFlat." : "YtCodecCgWriter.") << cookie).data(), funcType).getCallee());
@@ -768,7 +768,7 @@ private:
         case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
             CallInst::Create(module.getFunction("ReadTzTimestamp64"), { buf, velemPtr }, "", Block_);
             break;
-        }        
+        }
 
         default:
             YQL_ENSURE(false, "Unknown data type: " << schemeType);

@@ -73,6 +73,7 @@ struct TPDiskMon {
             Booting,
             OK,
             Error,
+            Stopped
         };
 
         enum EDetailedState {
@@ -101,6 +102,7 @@ struct TPDiskMon {
             ErrorDeviceSerialMismatch,
             ErrorFake,
             BootingReencryptingFormat,
+            StoppedByYardControl,
         };
 
         static TString StateToStr(i64 val) {
@@ -112,6 +114,7 @@ struct TPDiskMon {
                 case Booting: return "Booting";
                 case OK: return "OK";
                 case Error: return "Error";
+                case Stopped: return "Stopped";
                 default: return "Unknown";
             }
         }
@@ -143,6 +146,7 @@ struct TPDiskMon {
                 case ErrorDeviceSerialMismatch: return "ErrorDeviceSerialMismatch";
                 case ErrorFake: return "ErrorFake";
                 case BootingReencryptingFormat: return "BootingReencryptingFormat";
+                case StoppedByYardControl: return "StoppedByYardControl";
                 default: return "Unknown";
             }
         }
@@ -465,12 +469,17 @@ struct TPDiskMon {
     TReqCounters YardSlay;
     TReqCounters YardControl;
 
+    TReqCounters ShredPDisk;
+    TReqCounters PreShredCompactVDisk;
+    TReqCounters ShredVDiskResult;
+    TReqCounters MarkDirty;
+
     TIoCounters WriteSyncLog;
     TIoCounters WriteFresh;
     TIoCounters WriteHuge;
     TIoCounters WriteComp;
     TIoCounters Trim;
-
+    TIoCounters ChunkShred;
     TIoCounters ReadSyncLog;
     TIoCounters ReadComp;
     TIoCounters ReadOnlineRt;

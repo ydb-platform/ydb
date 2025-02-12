@@ -103,7 +103,7 @@ struct ngtcp2_ksl_blk {
   };
 };
 
-ngtcp2_objalloc_decl(ksl_blk, ngtcp2_ksl_blk, oplent);
+ngtcp2_objalloc_decl(ksl_blk, ngtcp2_ksl_blk, oplent)
 
 /*
  * ngtcp2_ksl_compar is a function type which returns nonzero if key
@@ -113,6 +113,33 @@ typedef int (*ngtcp2_ksl_compar)(const ngtcp2_ksl_key *lhs,
                                  const ngtcp2_ksl_key *rhs);
 
 typedef struct ngtcp2_ksl ngtcp2_ksl;
+
+/*
+ * ngtcp2_ksl_search is a function to search for the first element in
+ * |blk|->nodes which is not ordered before |key|.  It returns the
+ * index of such element.  It returns |blk|->n if there is no such
+ * element.
+ */
+typedef size_t (*ngtcp2_ksl_search)(const ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk,
+                                    const ngtcp2_ksl_key *key);
+
+/*
+ * ngtcp2_ksl_search_def is a macro to implement ngtcp2_ksl_search
+ * with COMPAR which is supposed to be ngtcp2_ksl_compar.
+ */
+#define ngtcp2_ksl_search_def(NAME, COMPAR)                                    \
+  static size_t ksl_##NAME##_search(                                           \
+    const ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk, const ngtcp2_ksl_key *key) {   \
+    size_t i;                                                                  \
+    ngtcp2_ksl_node *node;                                                     \
+                                                                               \
+    for (i = 0, node = (ngtcp2_ksl_node *)(void *)blk->nodes;                  \
+         i < blk->n && COMPAR((ngtcp2_ksl_key *)node->key, key); ++i,          \
+        node = (ngtcp2_ksl_node *)(void *)((uint8_t *)node + ksl->nodelen))    \
+      ;                                                                        \
+                                                                               \
+    return i;                                                                  \
+  }
 
 typedef struct ngtcp2_ksl_it ngtcp2_ksl_it;
 
@@ -137,6 +164,7 @@ struct ngtcp2_ksl {
   /* back points to the last leaf block. */
   ngtcp2_ksl_blk *back;
   ngtcp2_ksl_compar compar;
+  ngtcp2_ksl_search search;
   /* n is the number of elements stored. */
   size_t n;
   /* keylen is the size of key */
@@ -148,10 +176,12 @@ struct ngtcp2_ksl {
 
 /*
  * ngtcp2_ksl_init initializes |ksl|.  |compar| specifies compare
- * function.  |keylen| is the length of key and must be at least
+ * function.  |search| is a search function which must use |compar|.
+ * |keylen| is the length of key and must be at least
  * sizeof(uint64_t).
  */
-void ngtcp2_ksl_init(ngtcp2_ksl *ksl, ngtcp2_ksl_compar compar, size_t keylen,
+void ngtcp2_ksl_init(ngtcp2_ksl *ksl, ngtcp2_ksl_compar compar,
+                     ngtcp2_ksl_search search, size_t keylen,
                      const ngtcp2_mem *mem);
 
 /*
@@ -217,12 +247,12 @@ ngtcp2_ksl_it ngtcp2_ksl_lower_bound(const ngtcp2_ksl *ksl,
                                      const ngtcp2_ksl_key *key);
 
 /*
- * ngtcp2_ksl_lower_bound_compar works like ngtcp2_ksl_lower_bound,
- * but it takes custom function |compar| to do lower bound search.
+ * ngtcp2_ksl_lower_bound_search works like ngtcp2_ksl_lower_bound,
+ * but it takes custom function |search| to do lower bound search.
  */
-ngtcp2_ksl_it ngtcp2_ksl_lower_bound_compar(const ngtcp2_ksl *ksl,
+ngtcp2_ksl_it ngtcp2_ksl_lower_bound_search(const ngtcp2_ksl *ksl,
                                             const ngtcp2_ksl_key *key,
-                                            ngtcp2_ksl_compar compar);
+                                            ngtcp2_ksl_search search);
 
 /*
  * ngtcp2_ksl_update_key replaces the key of nodes which has |old_key|
@@ -329,21 +359,67 @@ int ngtcp2_ksl_it_begin(const ngtcp2_ksl_it *it);
 
 /*
  * ngtcp2_ksl_range_compar is an implementation of ngtcp2_ksl_compar.
- * lhs->ptr and rhs->ptr must point to ngtcp2_range object and the
- * function returns nonzero if (const ngtcp2_range *)(lhs->ptr)->begin
- * < (const ngtcp2_range *)(rhs->ptr)->begin.
+ * |lhs| and |rhs| must point to ngtcp2_range object, and the function
+ * returns nonzero if ((const ngtcp2_range *)lhs)->begin < ((const
+ * ngtcp2_range *)rhs)->begin.
  */
 int ngtcp2_ksl_range_compar(const ngtcp2_ksl_key *lhs,
                             const ngtcp2_ksl_key *rhs);
 
 /*
+ * ngtcp2_ksl_range_search is an implementation of ngtcp2_ksl_search
+ * that uses ngtcp2_ksl_range_compar.
+ */
+size_t ngtcp2_ksl_range_search(const ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk,
+                               const ngtcp2_ksl_key *key);
+
+/*
  * ngtcp2_ksl_range_exclusive_compar is an implementation of
- * ngtcp2_ksl_compar.  lhs->ptr and rhs->ptr must point to
- * ngtcp2_range object and the function returns nonzero if (const
- * ngtcp2_range *)(lhs->ptr)->begin < (const ngtcp2_range
- * *)(rhs->ptr)->begin and the 2 ranges do not intersect.
+ * ngtcp2_ksl_compar.  |lhs| and |rhs| must point to ngtcp2_range
+ * object, and the function returns nonzero if ((const ngtcp2_range
+ * *)lhs)->begin < ((const ngtcp2_range *)rhs)->begin, and the 2
+ * ranges do not intersect.
  */
 int ngtcp2_ksl_range_exclusive_compar(const ngtcp2_ksl_key *lhs,
                                       const ngtcp2_ksl_key *rhs);
+
+/*
+ * ngtcp2_ksl_range_exclusive_search is an implementation of
+ * ngtcp2_ksl_search that uses ngtcp2_ksl_range_exclusive_compar.
+ */
+size_t ngtcp2_ksl_range_exclusive_search(const ngtcp2_ksl *ksl,
+                                         ngtcp2_ksl_blk *blk,
+                                         const ngtcp2_ksl_key *key);
+
+/*
+ * ngtcp2_ksl_uint64_less is an implementation of ngtcp2_ksl_compar.
+ * |lhs| and |rhs| must point to uint64_t objects, and the function
+ * returns nonzero if *(uint64_t *)|lhs| < *(uint64_t *)|rhs|.
+ */
+int ngtcp2_ksl_uint64_less(const ngtcp2_ksl_key *lhs,
+                           const ngtcp2_ksl_key *rhs);
+
+/*
+ * ngtcp2_ksl_uint64_less_search is an implementation of
+ * ngtcp2_ksl_search that uses ngtcp2_ksl_uint64_less.
+ */
+size_t ngtcp2_ksl_uint64_less_search(const ngtcp2_ksl *ksl, ngtcp2_ksl_blk *blk,
+                                     const ngtcp2_ksl_key *key);
+
+/*
+ * ngtcp2_ksl_int64_greater is an implementation of ngtcp2_ksl_compar.
+ * |lhs| and |rhs| must point to int64_t objects, and the function
+ * returns nonzero if *(int64_t *)|lhs| > *(int64_t *)|rhs|.
+ */
+int ngtcp2_ksl_int64_greater(const ngtcp2_ksl_key *lhs,
+                             const ngtcp2_ksl_key *rhs);
+
+/*
+ * ngtcp2_ksl_int64_greater_search is an implementation of
+ * ngtcp2_ksl_search that uses ngtcp2_ksl_int64_greater.
+ */
+size_t ngtcp2_ksl_int64_greater_search(const ngtcp2_ksl *ksl,
+                                       ngtcp2_ksl_blk *blk,
+                                       const ngtcp2_ksl_key *key);
 
 #endif /* !defined(NGTCP2_KSL_H) */

@@ -171,7 +171,7 @@ void TPortionDataSource::DoAbort() {
 void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) {
     THashMap<ui32, std::vector<TString>> indexBlobs;
     std::set<ui32> indexIds = indexChecker->GetIndexIds();
-    //    NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("records_count", GetRecordsCount())("portion_id", Portion->GetAddress().DebugString());
+    //    NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("records_count", GetRecordsCount())("portion_id", Portion->GetPortionId());
     std::vector<TPortionDataAccessor::TPage> pages = GetStageData().GetPortionAccessor().BuildPages();
     NArrow::TColumnFilter constructor = NArrow::TColumnFilter::BuildAllowFilter();
     for (auto&& p : pages) {
@@ -187,15 +187,18 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
         }
         for (auto&& i : indexIds) {
             if (!indexBlobs.contains(i)) {
+                GetContext()->GetCommonContext()->GetCounters().OnNotIndexBlobs();
                 return;
             }
         }
         if (indexChecker->Check(indexBlobs)) {
             NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(true);
             constructor.Add(true, p.GetRecordsCount());
+            GetContext()->GetCommonContext()->GetCounters().OnAcceptedByIndex(p.GetRecordsCount());
         } else {
             NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(false);
             constructor.Add(false, p.GetRecordsCount());
+            GetContext()->GetCommonContext()->GetCounters().OnDeniedByIndex(p.GetRecordsCount());
         }
     }
     AFL_VERIFY(constructor.GetRecordsCountVerified() == Portion->GetRecordsCount());

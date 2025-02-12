@@ -2,7 +2,7 @@
 
 namespace NYql::NDq {
 
-NYql::NUdf::TCounter TDqTaskCountersProvider::GetCounter(const NUdf::TStringRef& module, const NUdf::TStringRef& name, bool deriv) {
+NYql::NUdf::TCounter TDqTaskCountersProvider::GetCounter(const NUdf::TStringRef& module, const NUdf::TStringRef& name, bool /* deriv */) {
 
     TString op = TString(module);
 
@@ -37,7 +37,7 @@ NYql::NUdf::TCounter TDqTaskCountersProvider::GetCounter(const NUdf::TStringRef&
     return NYql::NUdf::TCounter();
 }
 
-NYql::NUdf::TScopedProbe TDqTaskCountersProvider::GetScopedProbe(const NUdf::TStringRef& module, const NUdf::TStringRef& name) {
+NYql::NUdf::TScopedProbe TDqTaskCountersProvider::GetScopedProbe(const NUdf::TStringRef& /* module */, const NUdf::TStringRef& /* name */) {
     return NYql::NUdf::TScopedProbe();
 }
 

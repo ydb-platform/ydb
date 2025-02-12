@@ -48,8 +48,24 @@
 
 #define _LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES
 
-#define _LIBCPP_HARDENING_MODE_DEFAULT 2
+#define _LIBCPP_ENABLE_CXX20_REMOVED_SHARED_PTR_UNIQUE
 
 #ifdef _musl_
 #   define _LIBCPP_HAS_MUSL_LIBC
+#endif
+
+#if defined(__has_feature) && (__has_feature(address_sanitizer) || \
+                               __has_feature(leak_sanitizer) || \
+                               __has_feature(thread_sanitizer) || \
+                               __has_feature(memory_sanitizer) || \
+                               __has_feature(undefined_behavior_sanitizer))
+#       define _LIBCPP_HARDENING_MODE_DEFAULT _LIBCPP_HARDENING_MODE_FAST
+#elif defined(NDEBUG)
+#       define _LIBCPP_HARDENING_MODE_DEFAULT _LIBCPP_HARDENING_MODE_NONE
+#else
+#   define _LIBCPP_HARDENING_MODE_DEFAULT _LIBCPP_HARDENING_MODE_FAST
+#endif
+
+#if defined(_WIN32) && defined(_MSC_VER)
+#	define _WCHAR_H_CPLUSPLUS_98_CONFORMANCE_ 1
 #endif

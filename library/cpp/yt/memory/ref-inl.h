@@ -4,6 +4,8 @@
 #include "ref.h"
 #endif
 
+#include <library/cpp/yt/misc/concepts.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -49,7 +51,7 @@ template <class T>
 Y_FORCE_INLINE TRef TRef::FromPod(const T& data)
 {
     static_assert(TTypeTraits<T>::IsPod || (std::is_standard_layout_v<T> && std::is_trivial_v<T>), "T must be a pod-type.");
-    return TRef(&data, sizeof (data));
+    return TRef(&data, sizeof(data));
 }
 
 Y_FORCE_INLINE TStringBuf TRef::ToStringBuf() const
@@ -87,7 +89,7 @@ template <class T>
 Y_FORCE_INLINE TMutableRef TMutableRef::FromPod(T& data)
 {
     static_assert(TTypeTraits<T>::IsPod || (std::is_standard_layout_v<T> && std::is_trivial_v<T>), "T must be a pod-type.");
-    return TMutableRef(&data, sizeof (data));
+    return TMutableRef(&data, sizeof(data));
 }
 
 Y_FORCE_INLINE TMutableRef TMutableRef::FromString(TString& str)
@@ -134,6 +136,7 @@ Y_FORCE_INLINE TSharedRef::operator TRef() const
 template <class TTag>
 Y_FORCE_INLINE TSharedRef TSharedRef::FromString(TString str)
 {
+    static_assert(IsEmptyClass<TTag>());
     return FromString(std::move(str), GetRefCountedTypeCookie<TTag>());
 }
 
@@ -145,6 +148,7 @@ Y_FORCE_INLINE TSharedRef TSharedRef::FromString(TString str)
 template <class TTag>
 Y_FORCE_INLINE TSharedRef TSharedRef::FromString(std::string str)
 {
+    static_assert(IsEmptyClass<TTag>());
     return FromString(std::move(str), GetRefCountedTypeCookie<TTag>());
 }
 
@@ -161,6 +165,7 @@ Y_FORCE_INLINE TStringBuf TSharedRef::ToStringBuf() const
 template <class TTag>
 Y_FORCE_INLINE TSharedRef TSharedRef::MakeCopy(TRef ref)
 {
+    static_assert(IsEmptyClass<TTag>());
     return MakeCopy(ref, GetRefCountedTypeCookie<TTag>());
 }
 
@@ -224,6 +229,7 @@ Y_FORCE_INLINE TSharedMutableRef TSharedMutableRef::AllocatePageAligned(size_t s
 template <class TTag>
 Y_FORCE_INLINE TSharedMutableRef TSharedMutableRef::MakeCopy(TRef ref)
 {
+    static_assert(IsEmptyClass<TTag>());
     return MakeCopy(ref, GetRefCountedTypeCookie<TTag>());
 }
 
@@ -243,12 +249,14 @@ Y_FORCE_INLINE TSharedMutableRef TSharedMutableRef::Slice(void* begin, void* end
 template <class TTag>
 Y_FORCE_INLINE TSharedMutableRef TSharedMutableRef::Allocate(size_t size, TSharedMutableRefAllocateOptions options)
 {
+    static_assert(IsEmptyClass<TTag>());
     return Allocate(size, options, GetRefCountedTypeCookie<TTag>());
 }
 
 template <class TTag>
 Y_FORCE_INLINE TSharedMutableRef TSharedMutableRef::AllocatePageAligned(size_t size, TSharedMutableRefAllocateOptions options)
 {
+    static_assert(IsEmptyClass<TTag>());
     return AllocatePageAligned(size, options, GetRefCountedTypeCookie<TTag>());
 }
 
@@ -544,7 +552,7 @@ TSharedRefArrayImplPtr TSharedRefArray::NewImpl(
     TRefCountedTypeCookie tagCookie,
     As&&... args)
 {
-    auto extraSpaceSize = sizeof (TSharedRef) * size + poolCapacity;
+    auto extraSpaceSize = sizeof(TSharedRef) * size + poolCapacity;
     return NewWithExtraSpace<TSharedRefArrayImpl>(
         extraSpaceSize,
         extraSpaceSize,

@@ -83,8 +83,8 @@ public:
     static void Register(TRegistrar registrar);
 
 protected:
-    virtual TFuture<NApi::ITableWriterPtr> CreateTableWriter(
-        const ICommandContextPtr& context) const;
+    virtual NApi::ITableWriterPtr CreateTableWriter(
+        const ICommandContextPtr& context);
 
     void DoExecuteImpl(const ICommandContextPtr& context);
 
@@ -240,6 +240,24 @@ class TUnfreezeTableCommand
 
     static void Register(TRegistrar /*registrar*/)
     { }
+
+public:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TCancelTabletTransitionCommand
+    : public TTypedCommand<NApi::TCancelTabletTransitionOptions>
+{
+    NTabletClient::TTabletId TabletId;
+
+    REGISTER_YSON_STRUCT_LITE(TCancelTabletTransitionCommand);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("tablet_id", &TThis::TabletId);
+    }
 
 public:
     void DoExecute(ICommandContextPtr context) override;

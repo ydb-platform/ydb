@@ -1,0 +1,14 @@
+(
+#comment
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+(let data (FormatType (TupleType
+    (AsOptionalType (DataType 'Int32))
+    (AsOptionalType (NullType))
+    (AsOptionalType (OptionalType (DataType 'String)))
+    (AsOptionalType (PgType 'bytea)))))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)
+

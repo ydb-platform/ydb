@@ -19,7 +19,8 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
     yql/essentials/public/issue
-    ydb/public/sdk/cpp/client/ydb_types/status
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/types/status
 )
 
 END()

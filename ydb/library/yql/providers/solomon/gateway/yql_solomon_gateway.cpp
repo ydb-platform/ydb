@@ -36,6 +36,10 @@ public:
         }
     }
 
+    void AddCluster(const TSolomonClusterConfig& cluster) override {
+        Clusters_[cluster.GetName()] = cluster;
+    }
+
     TMaybe<TSolomonClusterConfig> GetClusterConfig(const TStringBuf cluster) const override {
         if (Clusters_.contains(cluster)) {
             return Clusters_.find(cluster)->second;

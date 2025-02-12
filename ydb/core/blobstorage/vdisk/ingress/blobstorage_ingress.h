@@ -104,6 +104,7 @@ namespace NKikimr {
         static TVDiskIdShort GetMainReplica(const TBlobStorageGroupInfo::TTopology *top, const TLogoBlobID &id);
         // Make a copy of ingress w/o local bits
         TIngress CopyWithoutLocal(TBlobStorageGroupType gtype) const;
+        TIngress ReplaceLocal(TBlobStorageGroupType gtype, NMatrix::TVectorType parts) const;
         void DeleteHandoff(const TBlobStorageGroupInfo::TTopology *top,
                            const TVDiskIdShort &vdisk,
                            const TLogoBlobID &id,

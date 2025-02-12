@@ -13,8 +13,6 @@
 #include <yt/cpp/mapreduce/http/requests.h>
 #include <yt/cpp/mapreduce/http/retry_request.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/poller.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
@@ -228,7 +226,7 @@ public:
         PingableTx_ = &pingableTx;
         Running_ = true;
 
-        PingerThread_ = MakeHolder<TThread>(
+        PingerThread_ = std::make_unique<TThread>(
             TThread::TParams{Pinger, this}.SetName("pingable_tx"));
         PingerThread_->Start();
     }
@@ -284,7 +282,7 @@ private:
     const TPingableTransaction* PingableTx_ = nullptr;
 
     std::atomic<bool> Running_ = false;
-    THolder<TThread> PingerThread_;
+    std::unique_ptr<TThread> PingerThread_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

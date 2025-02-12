@@ -1,0 +1,183 @@
+# YDB configuration options and their values
+# are described in documentaion https://ydb.tech/en/docs/deploy/configuration/config
+
+# Option will be removed further
+use_new_style_kikimr_cfg: true
+yaml_config_enabled: true
+
+log:
+  cluster_name: "default_devslice" # Change cluster name in order to have better experience with logs searching in Monium.
+  sys_log: true
+  uaclient_config:
+    uri: "[fd53::1]:16400"
+    grpc_max_message_size: 4194304
+
+host_configs: # the list of available host configurations in the cluster.
+- drive:
+  - path: &disk_path_1 /dev/disk/by-partlabel/kikimr_nvme_01   # path of the first disk in the host configration.
+    type: SSD                                     # kind of the disk: available kinds are SSD, NVME or HDD
+  - path: &disk_path_2 /dev/disk/by-partlabel/kikimr_nvme_02
+    type: SSD
+    # Add more disks if required.
+  host_config_id: 1 # the unique id of the host config
+hosts:
+- host: &host_1 CHANGE_ME_HOST_1 # storage node DNS name, change if required.
+  host_config_id: 1             # numeric host configuration template identifier.
+  location:               # this parameter describes where host is located.
+    body: 1                     # string representing a host serial number.
+    data_center: 'DCA'       # string representing the datacenter / availability zone where the host is located.
+                                # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed
+                                # across 3 datacenters.
+    rack: '1'                   # string representing a rack identifier where the host is located.
+                                # if cluster is deployed using block-4-2 erasure, all hosts should be distrubited
+                                # across at least 8 racks.
+    # For testing purpose it does not really matter, where all hosts are located.
+    # All hosts can be located in one datacenter and even in one rack.
+    # Just do not change `data_center` and `rack` options.
+    # NOTE(shmel1k@): If you host has label like '_4ssd', that means, that
+    # they will be located at `kikimr_ssd_01-04`
+    # If your host has label like '_2hdd', that means, that
+    # they will be located at `/dev/disk/by-partlabel/kikimr_hdd_03-04` (enumeration starts with 03)
+- host: &host_2 CHANGE_ME_HOST_2
+  host_config_id: 1
+  location:
+    body: 2
+    data_center: 'DCA'
+    rack: '2'
+- host: &host_3 CHANGE_ME_HOST_3
+  host_config_id: 1
+  location:
+    body: 3
+    data_center: 'DCA'
+    rack: '3'
+- host: &host_4 CHANGE_ME_HOST_4
+  host_config_id: 1
+  location:
+    body: 4
+    data_center: 'DCA'
+    rack: '4'
+
+# static erasure is the parameter that
+# describes the fault tolerance mode of the
+# cluster. See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
+static_erasure: block-4-2
+state_storage:
+  allow_incorrect: true
+  node_ids: [1, 2, 3, 4]
+fail_domain_type: disk
+
+# NOTE(shmel1k@): this template domains_config differs from production configuration.
+# It will be fixed soon, stay tuned.
+domains:
+  # There can be only one root domain in a cluster. Domain name prefixes all scheme objects names, e.g. full name of a table table1 in database db1
+  # in a cluster with domains_config.domain.name parameter set to Root would be equal to /Root/db1/table1
+  - domain_name: Root
+    dynamic_slots: 8
+    databases:
+      - name: "testdb"
+        storage_units:
+          - count: 1 # How many groups will be allocated for database
+            kind: ssd # What storage will group use
+        compute_units:
+          - count: 1 # How many dynamic nodes will database have
+            kind: slot
+            zone: any
+    storage_pools:
+      - kind: ssd
+        num_groups: 1
+    storage_pool_kinds:
+    - kind: ssd
+      # fault tolerance mode name - none, block-4-2, or mirror-3-dc.
+      # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
+      erasure: block-4-2
+      fail_domain_type: disk
+      filter_properties:
+        type: SSD # device type to match host_configs.drive.type
+
+table_service_config:
+  sql_version: 1
+
+sys:                      # the configuration of the actor system which descibes how cores of the instance are distributed
+  executors:              # accross different types of workloads in the instance.
+    system:               # system executor of the actor system. in this executor YDB launches system type of workloads, like system tablets
+      threads: 9          # the number of threads allocated to system executor.
+      spin_threshold: 1
+    user:                 # user executor of the actor system. In this executor YDB launches user workloads, like datashard activities,
+      spin_threshold: 1   # the number of threads allocated to user executor.
+      threads: 16         # queries and rpc calls.
+    batch:                # user executor of the actor system. In this executor YDB launches batch operations, like scan queries, table
+      threads: 7          # compactions, background compactions.
+      spin_threshold: 1
+    io:                   # the io executor. In this executor launches sync operations and writes logs.
+      threads: 1
+    ic:                   # the interconnect executor which YDB uses for network communications accross different nodes of the cluster.
+      threads: 3          # the number of threads allocated to the interconnect executor.
+      max_threads: 5
+      max_avg_ping_deviation: 500
+      spin_threshold: 10
+      time_per_mailbox_micro_secs: 100
+      priority: 40
+  scheduler:
+    resolution: 64
+    spin_threshold: 0
+    progress_threshold: 10000
+
+blob_storage_config:    # configuration of static blobstorage group.
+                        # YDB uses this group to store system tablets' data, like SchemeShard
+  service_set:
+    groups:
+    - erasure_species: block-4-2  # fault tolerance mode name for the static group
+      rings:           # in block-4-2 must have exactly 1 ring or availability zone.
+      - fail_domains:
+        - vdisk_locations:    # fail domains of the static group describe where each vdisk of the static group should be located.
+          - node_id: *host_1
+            pdisk_category: &pdisk_category 1 # Set this option to 1, if cluster has SSD/NVME disks
+            # or to 0, if cluster has HDD.
+            path: *disk_path_1
+            pdisk_guid: 1
+        - vdisk_locations:
+          - node_id: *host_1
+            pdisk_category: *pdisk_category
+            path: *disk_path_2
+            pdisk_guid: 2
+        - vdisk_locations:
+          - node_id: *host_2
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
+            pdisk_guid: 3
+        - vdisk_locations:
+          - node_id: *host_2
+            pdisk_category: *pdisk_category
+            path: *disk_path_2
+            pdisk_guid: 4
+        - vdisk_locations:
+          - node_id: *host_3
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
+            pdisk_guid: 5
+        - vdisk_locations:
+          - node_id: *host_3
+            pdisk_category: *pdisk_category
+            path: *disk_path_2
+            pdisk_guid: 6
+        - vdisk_locations:
+          - node_id: *host_4
+            pdisk_category: *pdisk_category
+            path: *disk_path_1
+            pdisk_guid: 7
+        - vdisk_locations:
+          - node_id: *host_4
+            pdisk_category: *pdisk_category
+            path: *disk_path_2
+            pdisk_guid: 8
+# TODO: migrate to channel_profile_config
+profiles:
+  - channels:
+    - storage_pool_kind: ssd
+    - storage_pool_kind: ssd
+    - storage_pool_kind: ssd
+
+interconnect_config:
+    start_tcp: true
+
+grpc_config:

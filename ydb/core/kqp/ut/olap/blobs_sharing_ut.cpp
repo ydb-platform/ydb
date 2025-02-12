@@ -2,6 +2,7 @@
 #include "helpers/typed_local.h"
 #include "helpers/writer.h"
 
+#include <algorithm>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/context/context.h>
@@ -11,8 +12,8 @@
 #include <ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_ss_tasks/task.h>
+#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/src/client/ss_tasks/task.h>
 
 namespace NKikimr::NKqp {
 
@@ -71,6 +72,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     TKikimrSettings GetKikimrSettings() {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAlterShardingInColumnShard(true);
+        featureFlags.SetEnableColumnStore(true);
         return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
     }
 
@@ -272,7 +274,6 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             , TableClient(Kikimr.GetTableClient()) {
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
             CSController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-            CSController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
         }
 
         void WaitResharding(const TString& hint = "") {

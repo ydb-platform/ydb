@@ -3,6 +3,7 @@
 #include "utils.h"
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -51,6 +52,12 @@ public:
     }
 
 protected:
+    void SendThroughPipeCache(IEventBase* ev, ui64 tabletId) {
+        DoPipeCacheUnlink = true;
+        TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev, tabletId, true),
+            IEventHandle::FlagTrackDelivery);
+    }
+
     void SendBatch(THolder<NKqp::TEvKqpCompute::TEvScanData> batch) {
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Sending scan batch, actor: " << TBase::SelfId()
@@ -116,11 +123,11 @@ protected:
             ScanLimiter->Dec();
         }
 
-        TBase::PassAway();
-    }
+        if (std::exchange(DoPipeCacheUnlink, false)) {
+            TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        }
 
-    ui64 GetBSControllerId() {
-        return MakeBSControllerID();
+        TBase::PassAway();
     }
 
     template <typename TResponse, typename TEntry, typename TExtractorsMap, bool BatchSupport = false>
@@ -153,6 +160,55 @@ protected:
         }
 
         SendBatch(std::move(batch));
+    }
+
+    bool StringKeyIsInTableRange(const TVector<TString>& key) const {
+        {
+            bool equalPrefixes = true;
+            for (size_t index : xrange(Min(TableRange.From.GetCells().size(), key.size()))) {
+                if (auto cellFrom = TableRange.From.GetCells()[index]; !cellFrom.IsNull()) {
+                    int cmp = cellFrom.AsBuf().compare(key[index]);
+                    if (cmp < 0) {
+                        equalPrefixes = false;
+                        break;
+                    }
+                    if (cmp > 0) {
+                        return false;
+                    }
+                    // cmp == 0, prefixes are equal, go further
+                } else {
+                    equalPrefixes = false;
+                    break;
+                }
+            }
+            if (equalPrefixes && !TableRange.FromInclusive) {
+                return false;
+            }
+        }
+
+        if (TableRange.To.GetCells().size()) {
+            bool equalPrefixes = true;
+            for (size_t index : xrange(Min(TableRange.To.GetCells().size(), key.size()))) {
+                if (auto cellTo = TableRange.To.GetCells()[index]; !cellTo.IsNull()) {
+                    int cmp = cellTo.AsBuf().compare(key[index]);
+                    if (cmp > 0) {
+                        equalPrefixes = false;
+                        break;
+                    }
+                    if (cmp < 0) {
+                        return false;
+                    }
+                    // cmp == 0, prefixes are equal, go further
+                } else {
+                    break;
+                }
+            }
+            if (equalPrefixes && !TableRange.ToInclusive) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
 private:
@@ -321,6 +377,7 @@ protected:
     bool AckReceived = false;
 
     bool BatchRequestInFlight = false;
+    bool DoPipeCacheUnlink = false;
 
 private:
     enum EFailState {

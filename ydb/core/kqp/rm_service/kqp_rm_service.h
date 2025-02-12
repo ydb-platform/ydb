@@ -118,39 +118,48 @@ public:
     const TString PoolId;
     const double MemoryPoolPercent;
     const TString Database;
+    const bool CollectBacktrace;
 
 private:
     std::atomic<ui64> TxScanQueryMemory = 0;
     std::atomic<ui64> TxExternalDataQueryMemory = 0;
     std::atomic<ui32> TxExecutionUnits = 0;
-    std::atomic<ui64> TxMaxAllocation = 0;
-    std::atomic<ui64> TxFailedAllocation = 0;
+    std::atomic<ui64> TxMaxAllocationSize = 0;
 
     // TODO(ilezhankin): it's better to use std::atomic<std::shared_ptr<>> which is not supported at the moment.
     std::atomic<TBackTrace*> TxMaxAllocationBacktrace = nullptr;
-    std::atomic<TBackTrace*> TxFailedAllocationBacktrace = nullptr;
+
+    // NOTE: it's hard to maintain atomic pointer in case of tracking the last failed allocation backtrace,
+    //       because while we try to print one - the new last may emerge and delete previous.
+    mutable std::mutex BacktraceMutex;
+    std::atomic<ui64> TxFailedAllocationSize = 0; // protected by BacktraceMutex (only if CollectBacktrace == true)
+    TBackTrace TxFailedAllocationBacktrace;       // protected by BacktraceMutex
+    std::atomic<bool> HasFailedAllocationBacktrace = false;
 
 public:
     explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters, const TString& poolId, const double memoryPoolPercent,
-        const TString& database)
+        const TString& database, bool collectBacktrace)
         : TxId(txId)
         , CreatedAt(now)
         , Counters(std::move(counters))
         , PoolId(poolId)
         , MemoryPoolPercent(memoryPoolPercent)
         , Database(database)
+        , CollectBacktrace(collectBacktrace)
     {}
 
     ~TTxState() {
         delete TxMaxAllocationBacktrace.load();
-        delete TxFailedAllocationBacktrace.load();
     }
 
     std::pair<TString, TString> MakePoolId() const {
         return std::make_pair(Database, PoolId);
     }
 
-    TString ToString(bool verbose = false) const {
+    TString ToString() const {
+        // use unique_lock to safely unlock mutex in case of exceptions
+        std::unique_lock backtraceLock(BacktraceMutex, std::defer_lock);
+
         auto res = TStringBuilder() << "TxResourcesInfo { "
             << "TxId: " << TxId
             << ", Database: " << Database;
@@ -160,19 +169,28 @@ public:
                 << ", MemoryPoolPercent: " << Sprintf("%.2f", MemoryPoolPercent > 0 ? MemoryPoolPercent : 100);
         }
 
+        if (CollectBacktrace) {
+            backtraceLock.lock();
+        }
+
         res << ", tx initially granted memory: " << HumanReadableSize(TxExternalDataQueryMemory.load(), SF_BYTES)
             << ", tx total memory allocations: " << HumanReadableSize(TxScanQueryMemory.load(), SF_BYTES)
-            << ", tx largest successful memory allocation: " << HumanReadableSize(TxMaxAllocation.load(), SF_BYTES)
-            << ", tx largest failed memory allocation: " << HumanReadableSize(TxFailedAllocation.load(), SF_BYTES)
+            << ", tx largest successful memory allocation: " << HumanReadableSize(TxMaxAllocationSize.load(), SF_BYTES)
+            << ", tx last failed memory allocation: " << HumanReadableSize(TxFailedAllocationSize.load(), SF_BYTES)
             << ", tx total execution units: " << TxExecutionUnits.load()
             << ", started at: " << CreatedAt
             << " }" << Endl;
 
-        if (verbose && TxMaxAllocationBacktrace.load()) {
-            res << "TxMaxAllocationBacktrace:" << Endl << TxMaxAllocationBacktrace.load()->PrintToString();
+        if (CollectBacktrace && HasFailedAllocationBacktrace.load()) {
+            res << "TxFailedAllocationBacktrace:" << Endl << TxFailedAllocationBacktrace.PrintToString();
         }
-        if (verbose && TxFailedAllocationBacktrace.load()) {
-            res << "TxFailedAllocationBacktrace:" << Endl << TxFailedAllocationBacktrace.load()->PrintToString();
+
+        if (CollectBacktrace) {
+            backtraceLock.unlock();
+        }
+
+        if (CollectBacktrace && TxMaxAllocationBacktrace.load()) {
+            res << "TxMaxAllocationBacktrace:" << Endl << TxMaxAllocationBacktrace.load()->PrintToString();
         }
 
         return res;
@@ -183,22 +201,19 @@ public:
     }
 
     void AckFailedMemoryAlloc(ui64 memory) {
-        auto* oldBacktrace = TxFailedAllocationBacktrace.load();
-        ui64 maxAlloc = TxFailedAllocation.load();
-        bool exchanged = false;
+        // use unique_lock to safely unlock mutex in case of exceptions
+        std::unique_lock backtraceLock(BacktraceMutex, std::defer_lock);
 
-        while(maxAlloc < memory && !exchanged) {
-            exchanged = TxFailedAllocation.compare_exchange_weak(maxAlloc, memory);
+        if (CollectBacktrace) {
+            backtraceLock.lock();
         }
 
-        if (exchanged) {
-            auto* newBacktrace = new TBackTrace();
-            newBacktrace->Capture();
-            if (TxFailedAllocationBacktrace.compare_exchange_strong(oldBacktrace, newBacktrace)) {
-                delete oldBacktrace;
-            } else {
-                delete newBacktrace;
-            }
+        TxFailedAllocationSize = memory;
+
+        if (CollectBacktrace) {
+            TxFailedAllocationBacktrace.Capture();
+            HasFailedAllocationBacktrace = true;
+            backtraceLock.unlock();
         }
     }
 
@@ -239,17 +254,18 @@ public:
         }
 
         auto* oldBacktrace = TxMaxAllocationBacktrace.load();
-        ui64 maxAlloc = TxMaxAllocation.load();
+        ui64 maxAlloc = TxMaxAllocationSize.load();
         bool exchanged = false;
 
         while(maxAlloc < resources.Memory && !exchanged) {
-            exchanged = TxMaxAllocation.compare_exchange_weak(maxAlloc, resources.Memory);
+            exchanged = TxMaxAllocationSize.compare_exchange_weak(maxAlloc, resources.Memory);
         }
 
         if (exchanged) {
             auto* newBacktrace = new TBackTrace();
             newBacktrace->Capture();
             if (TxMaxAllocationBacktrace.compare_exchange_strong(oldBacktrace, newBacktrace)) {
+                // XXX(ilezhankin): technically it's possible to have a race with `ToString()`, but it's very unlikely.
                 delete oldBacktrace;
             } else {
                 delete newBacktrace;

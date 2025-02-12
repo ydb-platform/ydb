@@ -1,4 +1,5 @@
 RECURSE(
+    example
     fq
     functional
     library
@@ -8,7 +9,7 @@ RECURSE(
     postgres_integrations
     sql
     stability
+    stress
     supp
     tools
-    workloads
 )

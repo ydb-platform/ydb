@@ -8,7 +8,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/digest/old_crc/crc.h>
 #include <library/cpp/protobuf/json/proto2json.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <util/random/shuffle.h>
 
@@ -2067,7 +2067,9 @@ public:
 
         storageVDiskStatus.set_id(GetVSlotId(vSlot->GetKey()));
 
-        if (!vSlot->GetInfo().HasStatusV2()) {
+        const auto& vSlotInfo = vSlot->GetInfo();
+
+        if (!vSlotInfo.HasStatusV2()) {
             // this should mean that BSC recently restarted and does not have accurate data yet - we should not report to avoid false positives
             context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             storageVDiskStatus.set_overall(context.GetOverallStatus());
@@ -2087,12 +2089,23 @@ public:
             FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
         }
 
+        if (status->number() == NKikimrBlobStorage::ERROR) {
+            // the disk is not operational at all
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "VDisk is not available", ETags::VDiskState,{ETags::PDiskState});
+            storageVDiskStatus.set_overall(context.GetOverallStatus());
+            return;
+        }
+
+        if (vSlotInfo.HasIsThrottling() && vSlotInfo.GetIsThrottling()) {
+            // throttling is active
+            auto message = TStringBuilder() << "VDisk is being throttled, rate "
+                << vSlotInfo.GetThrottlingRate() << " per mille";
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, message, ETags::VDiskState);
+            storageVDiskStatus.set_overall(context.GetOverallStatus());
+            return;
+        }
+
         switch (status->number()) {
-            case NKikimrBlobStorage::ERROR:  { // the disk is not operational at all
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "VDisk is not available", ETags::VDiskState,{ETags::PDiskState});
-                storageVDiskStatus.set_overall(context.GetOverallStatus());
-                return;
-            }
             case NKikimrBlobStorage::REPLICATING: { // the disk accepts queries, but not all the data was replicated
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, TStringBuilder() << "Replication in progress", ETags::VDiskState);
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
@@ -2102,7 +2115,10 @@ public:
             case NKikimrBlobStorage::READY: { // the disk is fully operational and does not affect group fault tolerance
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
+            default:
+                break;
         }
+
         context.ReportWithMaxChildStatus("VDisk have space issue",
                             ETags::VDiskState,
                             {ETags::PDiskSpace});
@@ -2170,6 +2186,7 @@ public:
         if (pDiskInfo.HasState()) {
             switch (pDiskInfo.GetState()) {
                 case NKikimrBlobStorage::TPDiskState::Normal:
+                case NKikimrBlobStorage::TPDiskState::Stopped:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                     break;
                 case NKikimrBlobStorage::TPDiskState::Initial:
@@ -2197,9 +2214,9 @@ public:
                                          TStringBuilder() << "PDisk state is " << NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo.GetState()),
                                          ETags::PDiskState);
                     break;
-                case NKikimrBlobStorage::TPDiskState::Reserved14:
                 case NKikimrBlobStorage::TPDiskState::Reserved15:
                 case NKikimrBlobStorage::TPDiskState::Reserved16:
+                case NKikimrBlobStorage::TPDiskState::Reserved17:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state");
                     break;
             }
@@ -3123,7 +3140,7 @@ public:
             }
             break;
         }
-        if (!config.Locator) {
+        if (config.Locator.empty()) {
             AddIssue(Ydb::Monitoring::StatusFlag::RED, "Couldn't find local gRPC endpoint");
             ReplyAndPassAway();
         }
@@ -3245,7 +3262,7 @@ public:
         if (mon) {
             mon->RegisterActorPage({
                 .RelPath = "status",
-                .ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem,
+                .ActorSystem = TActivationContext::ActorSystem(),
                 .ActorId = SelfId(),
                 .UseAuth = false,
             });

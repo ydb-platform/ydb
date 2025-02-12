@@ -23,6 +23,7 @@ PEERDIR(
     yql/essentials/providers/common/mkql
     yt/yql/providers/yt/codec
     yt/yql/providers/yt/expr_nodes
+    yt/yql/providers/yt/lib/errors
 )
 
 YQL_LAST_ABI_VERSION()
@@ -36,10 +37,10 @@ COPY(
     AUTO
     FROM ${ORIG_SRC_DIR}
     ${ORIG_SOURCES}
-    OUTPUT_INCLUDES 
-    ${BINDIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
-    ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_codegen.h
-    ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h
+    OUTPUT_INCLUDES
+        ${BINDIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
+        ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_codegen.h
+        ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h
 )
 
 PROVIDES(YT_COMP_NODES)

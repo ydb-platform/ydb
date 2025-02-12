@@ -44,6 +44,12 @@ const T& TPersistentQueueIterator<T, ChunkSize>::operator*() const
 }
 
 template <class T, size_t ChunkSize>
+const T* TPersistentQueueIterator<T, ChunkSize>::operator->() const
+{
+    return &CurrentChunk_->Elements[CurrentIndex_];
+}
+
+template <class T, size_t ChunkSize>
 TPersistentQueueIterator<T, ChunkSize>::TPersistentQueueIterator(
     TChunkPtr chunk,
     size_t index)
@@ -175,6 +181,55 @@ void TPersistentQueue<T, ChunkSize>::Load(C& context)
     for (size_t index = 0; index < size; ++index) {
         Enqueue(Load<T>(context));
     }
+}
+
+template <class T, size_t ChunkSize>
+void TIndexedPersistentQueue<T, ChunkSize>::Enqueue(T value)
+{
+    YT_VERIFY(!Frozen_);
+    return TBase::Enqueue(std::move(value));
+}
+
+template <class T, size_t ChunkSize>
+T TIndexedPersistentQueue<T, ChunkSize>::Dequeue()
+{
+    YT_VERIFY(!Frozen_);
+    return TBase::Dequeue();
+}
+
+template <class T, size_t ChunkSize>
+void TIndexedPersistentQueue<T, ChunkSize>::Clear()
+{
+    if (Frozen_) {
+        Shift_ = 0;
+        Chunks_.clear();
+
+        Frozen_ = false;
+    }
+
+    return TBase::Clear();
+}
+
+template <class T, size_t ChunkSize>
+void TIndexedPersistentQueue<T, ChunkSize>::Freeze()
+{
+    auto& tail = TBase::Tail_;
+    Shift_ = tail.CurrentIndex_;
+    for (auto chunk = tail.CurrentChunk_; chunk != nullptr; chunk = chunk->Next) {
+        Chunks_.push_back(&*chunk);
+    }
+
+    Frozen_ = true;
+}
+
+template <class T, size_t ChunkSize>
+const T& TIndexedPersistentQueue<T, ChunkSize>::operator[](int index) const
+{
+    YT_VERIFY(Frozen_);
+    auto shiftedIndex = index + Shift_;
+    auto chunkIndex = shiftedIndex / ChunkSize;
+    auto indexInChunk = shiftedIndex % ChunkSize;
+    return Chunks_[chunkIndex]->Elements[indexInChunk];
 }
 
 ////////////////////////////////////////////////////////////////////////////////

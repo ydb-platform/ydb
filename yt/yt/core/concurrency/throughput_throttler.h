@@ -67,7 +67,7 @@ struct IThroughputThrottler
      */
     virtual bool IsOverdraft() = 0;
 
-    //! Returns total byte amount of all waiting requests.
+    //! Returns total amount of units of all waiting requests.
     /*!
      *  \note Thread affinity: any
      */

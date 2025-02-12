@@ -144,6 +144,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
                     if (!EnsurePersistableType(list.Pos(), *type, ctx)) {
                         return {};
                     }
+                    if (!EnsurePersistableYsonTypes(list.Pos(), *type, ctx, State_)) {
+                        return {};
+                    }
                     outItemType = type->Cast<TStructExprType>();
                 } else {
                     return {};
@@ -220,6 +223,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
             if (NYql::HasSetting(sectionNode.Settings().Ref(), EYtSettingType::Sample)) {
                 auto scheme = list.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
 
+                if (!NPrivate::EnsurePersistableYsonTypes(sectionNode.Pos(), *scheme, ctx, State_)) {
+                    return {};
+                }
                 auto path = CopyOrTrivialMap(sectionNode.Pos(),
                     TExprBase(world ? world : ctx.NewWorld(sectionNode.Pos())),
                     dataSink.Cast(),
@@ -262,6 +268,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
     const TStructExprType* outItemType = nullptr;
     if (auto type = GetSequenceItemType(node, false, ctx)) {
         if (!EnsurePersistableType(node.Pos(), *type, ctx)) {
+            return {};
+        }
+        if (!EnsurePersistableYsonTypes(node.Pos(), *type, ctx, State_)) {
             return {};
         }
         outItemType = type->Cast<TStructExprType>();

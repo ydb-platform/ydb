@@ -433,7 +433,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     const ui64 importantConsumerMinOffset = ImportantClientsMinOffset();
 
     bool hasDrop = false;
-    while(DataKeysBody.size() > 1) {
+    while (DataKeysBody.size() > 1) {
         auto& nextKey = DataKeysBody[1].Key;
         if (importantConsumerMinOffset < nextKey.GetOffset()) {
             // The first message in the next blob was not read by an important consumer.
@@ -481,14 +481,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         ++StartOffset;
     }
 
-    TKey firstKey(TKeyPrefix::TypeData, Partition, 0, 0, 0, 0); //will drop all that could not be dropped before of case of full disks
-
-    auto del = request->Record.AddCmdDeleteRange();
-    auto range = del->MutableRange();
-    range->SetFrom(firstKey.Data(), firstKey.Size());
-    range->SetIncludeFrom(true);
-    range->SetTo(lastKey.Data(), lastKey.Size());
-    range->SetIncludeTo(StartOffset == EndOffset);
+    Y_UNUSED(request);
 
     return true;
 }
@@ -1009,16 +1002,17 @@ void TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const 
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
-void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx)
+void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& /* ctx */)
 {
     PQ_LOG_D("HandleOnInit TEvPQ::TEvGetWriteInfoRequest");
 
     Y_ABORT_UNLESS(IsSupportive());
 
+    ev->Get()->OriginalPartition = ev->Sender;
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
-void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx)
+void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& /* ctx */)
 {
     PQ_LOG_D("HandleOnInit TEvPQ::TEvGetWriteInfoResponse");
 
@@ -1027,7 +1021,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TA
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
-void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx)
+void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& /* ctx */)
 {
     PQ_LOG_D("HandleOnInit TEvPQ::TEvGetWriteInfoError");
 
@@ -1132,11 +1126,16 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
     PQ_LOG_D("Handle TEvPQ::TEvGetWriteInfoRequest");
+    TActorId originalPartition = ev->Get()->OriginalPartition;
+    if (!originalPartition) {
+        // original message
+        originalPartition = ev->Sender;
+    }
     if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle)) {
         PQ_LOG_D("Send TEvPQ::TEvGetWriteInfoError");
         auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
                                                          "Write info requested while writes are not complete");
-        ctx.Send(ev->Sender, response);
+        ctx.Send(originalPartition, response);
         ClosedInternalPartition = true;
         return;
     }
@@ -1160,7 +1159,7 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     response->InputLags = std::move(SupportivePartitionTimeLag);
 
     PQ_LOG_D("Send TEvPQ::TEvGetWriteInfoResponse");
-    ctx.Send(ev->Sender, response);
+    ctx.Send(originalPartition, response);
 }
 
 void TPartition::WriteInfoResponseHandler(
@@ -1828,7 +1827,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         AddCmdDeleteRangeForAllKeys(*PersistRequest);
 
-        ctx.Send(Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
+        ctx.Send(BlobCache, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
         PersistRequest = nullptr;
         CurrentPersistRequestSpan = std::move(PersistRequestSpan);
         PersistRequestSpan = NWilson::TSpan();
@@ -1993,6 +1992,11 @@ void TPartition::RunPersist() {
         EndHandleRequests(PersistRequest.Get(), ctx);
         //haveChanges = true;
     }
+
+    if (TryAddDeleteHeadKeysToPersistRequest()) {
+        haveChanges = true;
+    }
+
     if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
         WriteCycleStartTime = now;
         WriteStartTime = now;
@@ -2053,6 +2057,66 @@ void TPartition::RunPersist() {
     PersistRequest = nullptr;
 }
 
+bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
+{
+    bool haveChanges = !DeletedKeys.empty();
+
+    while (!DeletedKeys.empty()) {
+        auto& k = DeletedKeys.back();
+
+        auto* cmd = PersistRequest->Record.AddCmdDeleteRange();
+        auto* range = cmd->MutableRange();
+
+        range->SetFrom(k.data(), k.size());
+        range->SetIncludeFrom(true);
+        range->SetTo(k.data(), k.size());
+        range->SetIncludeTo(true);
+
+        DeletedKeys.pop_back();
+    }
+
+    return haveChanges;
+}
+
+void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
+{
+    PQ_LOG_D("=== DumpKeyValueRequest ===");
+    PQ_LOG_D("--- delete ----------------");
+    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
+        const auto& cmd = request.GetCmdDeleteRange(i);
+        const auto& range = cmd.GetRange();
+        PQ_LOG_D((range.GetIncludeFrom() ? '[' : '(') << range.GetFrom() <<
+                 ", " <<
+                 range.GetTo() << (range.GetIncludeTo() ? ']' : ')'));
+    }
+    PQ_LOG_D("--- write -----------------");
+    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
+        const auto& cmd = request.GetCmdWrite(i);
+        PQ_LOG_D(cmd.GetKey());
+    }
+    PQ_LOG_D("--- rename ----------------");
+    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
+        const auto& cmd = request.GetCmdRename(i);
+        PQ_LOG_D(cmd.GetOldKey() << ", " << cmd.GetNewKey());
+    }
+    PQ_LOG_D("===========================");
+}
+
+TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
+{
+    // The number of links counts is `std::shared_ptr'. It is possible to set its own destructor,
+    // which adds the key to the queue for deletion before freeing the memory.
+    auto ptr = std::make_unique<TBlobKeyToken>(key);
+
+    auto deleter = [this](TBlobKeyToken* token) {
+        if (token->NeedDelete) {
+            DeletedKeys.emplace_back(std::move(token->Key));
+        }
+        delete token;
+    };
+
+    return {ptr.release(), std::move(deleter)};
+}
 
 void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
 {
@@ -2283,9 +2347,10 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             if (write && !write->Value.empty()) {
                 AddCmdWrite(write, PersistRequest.Get(), ctx);
                 CompactedKeys.emplace_back(write->Key, write->Value.size());
-                ClearOldHead(write->Key.GetOffset(), write->Key.GetPartNo(), PersistRequest.Get());
             }
             Parameters->CurOffset += k.Key.GetCount();
+            // The key does not need to be deleted, as it will be renamed
+            k.BlobKeyToken->NeedDelete = false;
         }
 
         PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << PartitionedBlob.GetFormedBlobs().size());
@@ -2304,7 +2369,9 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
     if (!t.WriteInfo->BlobsFromHead.empty()) {
         auto& first = t.WriteInfo->BlobsFromHead.front();
-        NewHead.PartNo = first.GetPartNo();
+        // In one operation, a partition can write blocks of several transactions. Some of them can be broken down
+        // into parts. We need to take this division into account.
+        NewHead.PartNo += first.GetPartNo();
 
         Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
 
@@ -3345,12 +3412,10 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
 void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request) {
     for (auto it = HeadKeys.rbegin(); it != HeadKeys.rend(); ++it) {
         if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
-            auto del = request->Record.AddCmdDeleteRange();
-            auto range = del->MutableRange();
-            range->SetFrom(it->Key.Data(), it->Key.Size());
-            range->SetIncludeFrom(true);
-            range->SetTo(it->Key.Data(), it->Key.Size());
-            range->SetIncludeTo(true);
+            // The repackaged blocks will be deleted after writing.
+            DefferedKeysForDeletion.push_back(std::move(it->BlobKeyToken));
+
+            Y_UNUSED(request);
         } else {
             break;
         }

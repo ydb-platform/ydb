@@ -56,7 +56,10 @@ void ToProto(T& proto, const NDq::TDqAsyncStats& stats)
     proto.SetRows(stats.Rows);
     proto.SetChunks(stats.Chunks);
     proto.SetSplits(stats.Splits);
-
+    proto.SetFilteredBytes(stats.FilteredBytes);
+    proto.SetFilteredRows(stats.FilteredRows);
+    proto.SetQueuedBytes(stats.QueuedBytes);
+    proto.SetQueuedRows(stats.QueuedRows);
     proto.SetFirstMessageMs(stats.FirstMessageTs.MilliSeconds());
     proto.SetPauseMessageMs(stats.PauseMessageTs.MilliSeconds());
     proto.SetResumeMessageMs(stats.ResumeMessageTs.MilliSeconds());

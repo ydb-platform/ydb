@@ -834,12 +834,19 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     WriteActorWritesOperationsHistogram =
         KqpGroup->GetHistogram("SinkWrites/WriteActorWritesOperations", NMonitoring::ExponentialHistogram(20, 2, 1));
     WriteActorWritesLatencyHistogram =
-        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+
+    BufferActorPrepareLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorPrepareLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+    BufferActorCommitLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorCommitLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+    BufferActorFlushLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorFlushLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
     
     ForwardActorWritesSizeHistogram =
         KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesSize", NMonitoring::ExponentialHistogram(28, 2, 1));
     ForwardActorWritesLatencyHistogram =
-        KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+        KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
 
     /* sequencers */
 
@@ -866,6 +873,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     SchedulerDelays = KqpGroup->GetHistogram("NodeScheduler/Delay", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     RowsDuplicationsFound = KqpGroup->GetCounter("RowsDuplicationFound", true);
+
+    TotalSingleNodeReqCount = KqpGroup->GetCounter("TotalSingleNodeReqCount", true);
+    NonLocalSingleNodeReqCount = KqpGroup->GetCounter("NonLocalSingleNodeReqCount", true);
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

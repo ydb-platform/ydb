@@ -1548,8 +1548,9 @@ message TEvLocalKMeansRequest {
     optional uint32 NeedsRounds = 14;
 
     // id of parent cluster
-    optional uint32 Parent = 15;
-    // [Child ... Child + K) ids reserved for this kmeans clusters
+    optional uint32 ParentFrom = 15;
+    optional uint32 ParentTo = 21;
+    // [Child ... Child + K * (ParentFrom - ParentTo + 1)) ids reserved for this kmeans clusters
     optional uint32 Child = 16;
 
     optional string LevelName = 17;
@@ -2264,4 +2265,25 @@ message TEvInMemoryStateResponse {
 
     // Will be set for incomplete replies
     optional bytes ContinuationToken = 3;
+}
+
+// Forces cleanup-related operations in datashard tablet:
+// compaction, GC, GC log and other temporary data erasure.
+// Once the operation is done, any deleted data not used initially
+// will be included in garbage collection requests for the blobstorage.
+// Note: deleted data may still be used for a while, e.g. for history for MVCC.
+message TEvForceDataCleanup {
+    optional uint64 DataCleanupGeneration = 1; // increasing sequence
+}
+
+// Returns DataCleanupGeneration of the last successfully completed TEvForceDataCleanup request.
+// Intermediate requests and corresponding TEvForceDataCleanupResult's may be skipped.
+message TEvForceDataCleanupResult {
+    enum EStatus {
+        OK = 0;
+        FAILED = 1;
+    };
+    optional uint64 DataCleanupGeneration = 1; // from corresponding request (or greater)
+    optional uint64 TabletId = 2;
+    optional EStatus Status = 3;
 }

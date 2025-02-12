@@ -1,7 +1,6 @@
 (
 #comment
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 (import id_module '"/lib/yql/id.yql")
 (let id (bind id_module 'id))

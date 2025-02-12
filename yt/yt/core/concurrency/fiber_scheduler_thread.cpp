@@ -445,7 +445,7 @@ private:
 
     void RemoveOverdrawnIdleFibers()
     {
-        // NB: size_t to int conversion.
+        // NB: Size_t to int conversion.
         int size = IdleFibers_.size_approx();
         int maxSize = TFiberManager::GetMaxIdleFibers();
         if (size <= maxSize) {
@@ -804,7 +804,9 @@ protected:
     void OnSwitch()
     {
         FiberId_ = SwapCurrentFiberId(FiberId_);
+        TContextSwitchManager::Get()->OnOut();
         Fls_ = SwapCurrentFls(Fls_);
+        TContextSwitchManager::Get()->OnIn();
         MinLogLevel_ = SwapMinLogLevel(MinLogLevel_);
     }
 
@@ -931,8 +933,6 @@ private:
     // On finish fiber running.
     void OnOut()
     {
-        TContextSwitchManager::Get()->OnOut();
-
         for (auto it = UserHandlers_.begin(); it != UserHandlers_.end(); ++it) {
             if (it->Out) {
                 it->Out();
@@ -955,8 +955,6 @@ private:
                 it->In();
             }
         }
-
-        TContextSwitchManager::Get()->OnIn();
     }
 };
 
@@ -1046,7 +1044,6 @@ TFiberSchedulerThread::TFiberSchedulerThread(
     : TThread(std::move(threadName), std::move(options))
     , ThreadGroupName_(std::move(threadGroupName))
 { }
-
 
 void TFiberSchedulerThread::ThreadMain()
 {
@@ -1172,7 +1169,7 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
                 currentFiber,
                 canceler = std::move(canceler)
             ] (const TError&) mutable {
-                YT_LOG_DEBUG("Waking up fiber (TargetFiberId: %x)",
+                YT_LOG_TRACE("Waking up fiber (TargetFiberId: %x)",
                     canceler->GetFiberId());
 
                 invoker->Invoke(

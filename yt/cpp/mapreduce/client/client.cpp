@@ -41,9 +41,8 @@
 
 #include <yt/cpp/mapreduce/library/table_schema/protobuf.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-#include <yt/cpp/mapreduce/raw_client/rpc_parameters_serialization.h>
+#include <yt/cpp/mapreduce/http_client/raw_client.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -257,26 +256,54 @@ void TClientBase::Concatenate(
     const TRichYPath& destinationPath,
     const TConcatenateOptions& options)
 {
-    RequestWithRetry<void>(
-        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, &sourcePaths, &destinationPath, &options] (TMutationId /*mutationId*/) {
-            auto transaction = StartTransaction(TStartTransactionOptions());
+    Y_ABORT_IF(options.MaxBatchSize_ <= 0);
 
-            if (!options.Append_ && !sourcePaths.empty() && !transaction->Exists(destinationPath.Path_)) {
-                auto typeNode = transaction->Get(CanonizeYPath(sourcePaths.front()).Path_ + "/@type");
-                auto type = FromString<ENodeType>(typeNode.AsString());
-                transaction->Create(destinationPath.Path_, type, TCreateOptions().IgnoreExisting(true));
-            }
+    ITransactionPtr outerTransaction;
+    IClientBase* outerClient;
+    if (std::ssize(sourcePaths) > options.MaxBatchSize_) {
+        outerTransaction = StartTransaction(TStartTransactionOptions());
+        outerClient = outerTransaction.Get();
+    } else {
+        outerClient = this;
+    }
 
-            RawClient_->Concatenate(transaction->GetId(), sourcePaths, destinationPath, options);
+    TVector<TRichYPath> batch;
+    for (ssize_t i = 0; i < std::ssize(sourcePaths); i += options.MaxBatchSize_) {
+        auto begin = sourcePaths.begin() + i;
+        auto end = sourcePaths.begin() + std::min(i + options.MaxBatchSize_, std::ssize(sourcePaths));
+        batch.assign(begin, end);
 
-            transaction->Commit();
-        });
+        bool firstBatch = (i == 0);
+        RequestWithRetry<void>(
+            ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+            [this, &batch, &destinationPath, &options, outerClient, firstBatch] (TMutationId /*mutationId*/) {
+                auto transaction = outerClient->StartTransaction(TStartTransactionOptions());
+
+                if (firstBatch && !options.Append_ && !batch.empty() && !transaction->Exists(destinationPath.Path_)) {
+                    auto typeNode = transaction->Get(transaction->CanonizeYPath(batch.front()).Path_ + "/@type");
+                    auto type = FromString<ENodeType>(typeNode.AsString());
+                    transaction->Create(destinationPath.Path_, type, TCreateOptions().IgnoreExisting(true));
+                }
+
+                TConcatenateOptions currentOptions = options;
+                if (!firstBatch) {
+                    currentOptions.Append_ = true;
+                }
+
+                RawClient_->Concatenate(transaction->GetId(), batch, destinationPath, currentOptions);
+
+                transaction->Commit();
+            });
+    }
+
+    if (outerTransaction) {
+        outerTransaction->Commit();
+    }
 }
 
 TRichYPath TClientBase::CanonizeYPath(const TRichYPath& path)
 {
-    return NRawClient::CanonizeYPath(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, path);
+    return NRawClient::CanonizeYPath(RawClient_, path);
 }
 
 TVector<TTableColumnarStatistics> TClientBase::GetTableColumnarStatistics(
@@ -940,7 +967,7 @@ TTransaction::TTransaction(
     : TClientBase(rawClient, context, parentTransactionId, parentClient->GetRetryPolicy())
     , TransactionPinger_(parentClient->GetTransactionPinger())
     , PingableTx_(
-        MakeHolder<TPingableTransaction>(
+        std::make_unique<TPingableTransaction>(
             rawClient,
             parentClient->GetRetryPolicy(),
             context,
@@ -1233,7 +1260,7 @@ TAuthorizationInfo TClient::WhoAmI()
     return RequestWithRetry<TAuthorizationInfo>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this] (TMutationId /*mutationId*/) {
-            return RawClient_->WhoAmI();
+            return NRawClient::WhoAmI(Context_);
         });
 }
 
@@ -1360,7 +1387,7 @@ TNode::TListType TClient::SkyShareTable(
         response = RequestWithRetry<NHttpClient::IHttpResponsePtr>(
             ClientRetryPolicy_->CreatePolicyForGenericRequest(),
             [this, &tablePaths, &options] (TMutationId /*mutationId*/) {
-                return RawClient_->SkyShareTable(tablePaths, options);
+                return NRawClient::SkyShareTable(Context_, tablePaths, options);
             });
         TWaitProxy::Get()->Sleep(TDuration::Seconds(5));
     } while (response->GetStatusCode() != 200);
@@ -1434,7 +1461,7 @@ TYtPoller& TClient::GetYtPoller()
         // We don't use current client and create new client because YtPoller_ might use
         // this client during current client shutdown.
         // That might lead to incrementing of current client refcount and double delete of current client object.
-        YtPoller_ = MakeHolder<TYtPoller>(Context_, ClientRetryPolicy_);
+        YtPoller_ = std::make_unique<TYtPoller>(RawClient_->Clone(), Context_.Config, ClientRetryPolicy_);
     }
     return *YtPoller_;
 }

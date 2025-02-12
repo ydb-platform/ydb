@@ -22,7 +22,8 @@ namespace NKikimr {
 
         TEvControllerUpdateDiskStatus(const TVDiskID& vDiskId, ui32 nodeId, ui32 pdiskId, ui32 vslotId,
                 std::optional<ui32> satisfactionRankPercent, NKikimrWhiteboard::EVDiskState state, bool replicated,
-                NKikimrWhiteboard::EFlag diskSpace) {
+                NKikimrWhiteboard::EFlag diskSpace,
+                std::optional<bool> isThrottling, std::optional<ui32> throttlingRate) {
             NKikimrBlobStorage::TVDiskMetrics* metric = Record.AddVDisksMetrics();
             VDiskIDFromVDiskID(vDiskId, metric->MutableVDiskId());
             if (satisfactionRankPercent) {
@@ -31,6 +32,12 @@ namespace NKikimr {
             metric->SetState(state);
             metric->SetReplicated(replicated);
             metric->SetDiskSpace(diskSpace);
+            if (isThrottling) {
+                metric->SetIsThrottling(*isThrottling);
+            }
+            if (throttlingRate) {
+                metric->SetThrottlingRate(*throttlingRate);
+            }
             auto *p = metric->MutableVSlotId();
             p->SetNodeId(nodeId);
             p->SetPDiskId(pdiskId);
@@ -380,9 +387,11 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvAskWardenRestartPDisk : TEventLocal<TEvAskWardenRestartPDisk, EvAskWardenRestartPDisk> {
         const ui32 PDiskId;
+        const bool IgnoreChecks;
 
-        TEvAskWardenRestartPDisk(const ui32& pdiskId)
+        TEvAskWardenRestartPDisk(const ui32 pdiskId, const bool ignoreChecks)
             : PDiskId(pdiskId)
+            , IgnoreChecks(ignoreChecks)
         {}
     };
 
@@ -573,9 +582,10 @@ namespace NKikimr {
     {
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> Config;
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> ProposedConfig;
+        bool SelfManagementEnabled;
 
         TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config,
-                const NKikimrBlobStorage::TStorageConfig *proposedConfig);
+                const NKikimrBlobStorage::TStorageConfig *proposedConfig, bool selfManagementEnabled);
         ~TEvNodeWardenStorageConfig();
     };
 

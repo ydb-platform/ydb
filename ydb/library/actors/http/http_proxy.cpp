@@ -9,7 +9,7 @@ public:
     using TBase = NActors::TActorBootstrapped<THttpProxy>;
 
     IActor* AddListeningPort(TEvHttpProxy::TEvAddListeningPort::TPtr& event) {
-        IActor* listeningSocket = CreateHttpAcceptorActor(SelfId(), Poller);
+        IActor* listeningSocket = CreateHttpAcceptorActor(SelfId());
         TActorId acceptorId = Register(listeningSocket);
         Send(event->Forward(acceptorId));
         Acceptors.emplace_back(acceptorId);
@@ -17,7 +17,7 @@ public:
     }
 
     IActor* AddOutgoingConnection(bool secure) {
-        IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), secure, Poller);
+        IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), secure);
         TActorId connectionId = Register(connectionSocket);
         ALOG_DEBUG(HttpLog, "Connection created " << connectionId);
         Connections.emplace(connectionId);
@@ -25,11 +25,10 @@ public:
     }
 
     void Bootstrap() {
-        Poller = Register(NActors::CreatePollerActor());
         Become(&THttpProxy::StateWork);
     }
 
-    THttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> registry)
+    THttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry)
         : Registry(std::move(registry))
     {}
 
@@ -54,7 +53,6 @@ protected:
     }
 
     void PassAway() override {
-        Send(Poller, new NActors::TEvents::TEvPoisonPill());
         for (const NActors::TActorId& connection : Connections) {
             Send(connection, new NActors::TEvents::TEvPoisonPill());
         }
@@ -232,33 +230,33 @@ protected:
         const static TString urlNotFound = "not-found";
         const TString& url = (sensors.Status == "404" ? urlNotFound : sensors.Url);
 
-        std::shared_ptr<NMonitoring::TMetricRegistry> registry = Registry.lock();
+        std::shared_ptr<NMonitoring::IMetricFactory> registry = Registry.lock();
         if (registry) {
-            registry->Rate(
+            registry->Rate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "count"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                })->Inc();
-            registry->HistogramRate(
+                }))->Inc();
+            registry->HistogramRate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "time_us"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                },
+                }),
                 NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MicroSeconds());
-            registry->HistogramRate(
+            registry->HistogramRate(NMonitoring::MakeLabels(
                 {
                     {"sensor", "time_ms"},
                     {"direction", sensors.Direction},
                     {"peer", sensors.Host},
                     {"url", url},
                     {"status", sensors.Status}
-                },
+                }),
                 NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MilliSeconds());
         }
     }
@@ -273,7 +271,6 @@ protected:
         PassAway();
     }
 
-    NActors::TActorId Poller;
     TVector<TActorId> Acceptors;
 
     struct THostEntry {
@@ -287,7 +284,7 @@ protected:
     THashMap<TString, TActorId> Handlers;
     THashSet<TActorId> Connections; // outgoing
     std::unordered_multimap<TString, TActorId> AvailableConnections;
-    std::weak_ptr<NMonitoring::TMetricRegistry> Registry;
+    std::weak_ptr<NMonitoring::IMetricFactory> Registry;
 };
 
 TEvHttpProxy::TEvReportSensors* BuildOutgoingRequestSensors(const THttpOutgoingRequestPtr& request, const THttpIncomingResponsePtr& response) {
@@ -314,7 +311,7 @@ TEvHttpProxy::TEvReportSensors* BuildIncomingRequestSensors(const THttpIncomingR
     );
 }
 
-NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> registry) {
+NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry) {
     return new THttpProxy(std::move(registry));
 }
 
@@ -377,21 +374,24 @@ void CrackAddress(const TString& address, TString& hostname, TIpPort& port) {
     }
 }
 
-void TrimBegin(TStringBuf& target, char delim) {
+TStringBuf TrimBegin(TStringBuf target, char delim) {
     while (!target.empty() && *target.begin() == delim) {
         target.Skip(1);
     }
+    return target;
 }
 
-void TrimEnd(TStringBuf& target, char delim) {
+TStringBuf TrimEnd(TStringBuf target, char delim) {
     while (!target.empty() && target.back() == delim) {
         target.Trunc(target.size() - 1);
     }
+    return target;
 }
 
-void Trim(TStringBuf& target, char delim) {
-    TrimBegin(target, delim);
-    TrimEnd(target, delim);
+TStringBuf Trim(TStringBuf target, char delim) {
+    target = TrimBegin(target, delim);
+    target = TrimEnd(target, delim);
+    return target;
 }
 
 void TrimEnd(TString& target, char delim) {
@@ -437,6 +437,12 @@ TString GetObfuscatedData(TString data, const THeaders& headers) {
         }
     }
     return data;
+}
+
+TString ToHex(size_t value) {
+    std::ostringstream hex;
+    hex << std::hex << value;
+    return hex.str();
 }
 
 }

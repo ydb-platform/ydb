@@ -13,7 +13,6 @@ public:
     using TBase::SelfId;
 
     const TActorId Owner;
-    const TActorId Poller;
     SocketAddressType Address;
     TString Destination;
     TActorId RequestOwner;
@@ -24,10 +23,9 @@ public:
     bool AllowConnectionReuse = false;
     NActors::TPollerToken::TPtr PollerToken;
 
-    TOutgoingConnectionActor(const TActorId& owner, const TActorId& poller)
+    TOutgoingConnectionActor(const TActorId& owner)
         : TBase(&TSelf::StateWaiting)
         , Owner(owner)
-        , Poller(poller)
     {
     }
 
@@ -110,7 +108,8 @@ protected:
                 bool read = false, write = false;
                 ssize_t res = TSocketImpl::Send(Request->Data(), size, read, write);
                 if (res > 0) {
-                   Request->ChopHead(res);
+                    LastActivity = NActors::TActivationContext::Now();
+                    Request->ChopHead(res);
                 } else if (-res == EINTR) {
                     continue;
                 } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
@@ -124,11 +123,7 @@ protected:
                     }
                     break;
                 } else {
-                    if (!res) {
-                        ReplyAndPassAway();
-                    } else {
-                        ReplyErrorAndPassAway(strerror(-res));
-                    }
+                    ReplyErrorAndPassAway(res == 0 ? "ConnectionClosed" : strerror(-res));
                     break;
                 }
             }
@@ -146,6 +141,7 @@ protected:
             bool read = false, write = false;
             ssize_t res = TSocketImpl::Recv(Response->Pos(), Response->Avail(), read, write);
             if (res > 0) {
+                LastActivity = NActors::TActivationContext::Now();
                 Response->Advance(res);
                 if (Response->IsDone() && Response->IsReady()) {
                     return ReplyAndPassAway();
@@ -163,19 +159,19 @@ protected:
                 }
                 return;
             } else {
-                if (!res) {
+                if (res == 0) {
                     Response->ConnectionClosed();
                 }
                 if (Response->IsDone() && Response->IsReady()) {
                     return ReplyAndPassAway();
                 }
-                return ReplyErrorAndPassAway(strerror(-res));
+                return ReplyErrorAndPassAway(res == 0 ? "ConnectionClosed" : strerror(-res));
             }
         }
     }
 
     void RegisterPoller() {
-        Send(Poller, new NActors::TEvPollerRegister(TSocketImpl::Socket, SelfId(), SelfId()));
+        Send(NActors::MakePollerActorId(), new NActors::TEvPollerRegister(TSocketImpl::Socket, SelfId(), SelfId()));
     }
 
     void OnConnect() {
@@ -353,11 +349,11 @@ protected:
     }
 };
 
-NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure, const TActorId& poller) {
+NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure) {
     if (secure) {
-        return new TOutgoingConnectionActor<TSecureSocketImpl>(owner, poller);
+        return new TOutgoingConnectionActor<TSecureSocketImpl>(owner);
     } else {
-        return new TOutgoingConnectionActor<TPlainSocketImpl>(owner, poller);
+        return new TOutgoingConnectionActor<TPlainSocketImpl>(owner);
     }
 }
 

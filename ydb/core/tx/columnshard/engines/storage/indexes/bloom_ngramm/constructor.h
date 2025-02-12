@@ -13,6 +13,7 @@ private:
     ui32 NGrammSize = 3;
     ui32 FilterSizeBytes = 512;
     ui32 HashesCount = 2;
+    ui32 RecordsCount = 10000;
     static inline auto Registrator = TFactory::TRegistrator<TIndexConstructor>(GetClassNameStatic());
 
 protected:

@@ -862,6 +862,16 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
     return ret;
 }
 
+IGraphTransformer::TStatus ExpandApplyNoRepeat(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    output = input;
+    for (;;) {
+        auto status = ExpandApply(output, output, ctx);
+        if (status.Level != IGraphTransformer::TStatus::Repeat) {
+            return status;
+        }
+    }
+}
+
 TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap& syncList, TExprContext& ctx) {
     if (syncList.empty()) {
         return main;

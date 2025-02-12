@@ -20,8 +20,8 @@ public:
     {
         Response = MakeHolder<TEvConsole::TEvGetAllMetadataResponse>();
 
-        if (Self->YamlConfig) {
-            auto doc = NFyaml::TDocument::Parse(Self->YamlConfig);
+        if (Self->MainYamlConfig) {
+            auto doc = NFyaml::TDocument::Parse(Self->MainYamlConfig);
 
             TStringStream metadata;
             metadata << doc.Root().Map().at("metadata");

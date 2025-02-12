@@ -1,5 +1,3 @@
-USE plato;
+$data = [<|x:true|>,<|x:false|>];
 
-SELECT
-    key,subkey,not key
-FROM Input
+select not x from as_table($data);

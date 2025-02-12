@@ -33,7 +33,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
     );
 
-    auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -190,7 +190,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
     );
 
-    auto prepareParams = [=, synchronized = ev->Get()->Synchronized, workloadManagerSynchronized = ev->Get()->WorkloadManagerSynchronized, commonCounters=requestCounters.Common](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=, synchronized = ev->Get()->Synchronized, workloadManagerSynchronized = ev->Get()->WorkloadManagerSynchronized, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }

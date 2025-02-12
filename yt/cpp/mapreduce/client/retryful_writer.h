@@ -5,16 +5,13 @@
 
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 
-#include <yt/cpp/mapreduce/http/http.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/io/helpers.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 #include <library/cpp/threading/blocking_queue/blocking_queue.h>
 

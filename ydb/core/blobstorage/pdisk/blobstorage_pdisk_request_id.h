@@ -89,6 +89,12 @@ struct TReqId {
         WriteMetadataResult = 70,
         PushUnformattedMetadataSector = 71,
         ContinueReadMetadata = 72,
+        ShredPDisk = 73,
+        PreShredCompactVDiskResult = 74,
+        ShredVDiskResult = 75,
+        MarkDirty = 76,
+        ChunkShred = 77,
+        ChunkShredResult = 78,
     };
 
     // 56 bit idx, 8 bit source
@@ -153,6 +159,11 @@ enum class ERequestType {
     RequestWriteMetadataResult,
     RequestPushUnformattedMetadataSector,
     RequestContinueReadMetadata,
+    RequestShredPDisk,
+    RequestPreShredCompactVDiskResult,
+    RequestShredVDiskResult,
+    RequestMarkDirty,
+    RequestChunkShredResult,
 };
 
 inline IOutputStream& operator <<(IOutputStream& out, const TReqId& reqId) {

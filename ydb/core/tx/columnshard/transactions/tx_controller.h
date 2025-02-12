@@ -266,10 +266,13 @@ public:
         }
 
         std::unique_ptr<NTabletFlatExecutor::ITransaction> BuildTxPrepareForProgress(TColumnShard* owner) const {
+            const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tx_id", GetTxId());
             if (!IsInProgress()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "not_in_progress");
                 return nullptr;
             }
             if (PreparationsStarted.Val()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepared_already");
                 return nullptr;
             }
             PreparationsStarted.Inc();
@@ -434,11 +437,14 @@ public:
         return TValidator::CheckNotNull(GetTxOperatorOptional(txId));
     }
     template <class TExpectedTransactionOperator>
-    std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId) const {
+    std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId, const bool optionalExists = false) const {
         auto result = GetTxOperatorOptional(txId);
-        AFL_VERIFY(result);
+        if (optionalExists && !result) {
+            return nullptr;
+        }
+        AFL_VERIFY(result)("tx_id", txId);
         auto resultClass = dynamic_pointer_cast<TExpectedTransactionOperator>(result);
-        AFL_VERIFY(resultClass);
+        AFL_VERIFY(resultClass)("tx_id", txId);
         return resultClass;
     }
 

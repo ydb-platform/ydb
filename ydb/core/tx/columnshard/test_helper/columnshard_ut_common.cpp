@@ -171,7 +171,7 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
 
 void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds,
                   NOlap::TSnapshot snap, ui64 scanId) {
-    auto scan = std::make_unique<TEvColumnShard::TEvScan>();
+    auto scan = std::make_unique<TEvDataShard::TEvKqpScan>();
     auto& record = scan->Record;
 
     record.SetTxId(snap.GetPlanStep());
@@ -207,7 +207,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, scan.release());
 }
 
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& /* writeIds */, const ui64 lockId) {
     auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
     auto* lock = write->Record.MutableLocks()->AddLocks();
     lock->SetLockId(lockId);

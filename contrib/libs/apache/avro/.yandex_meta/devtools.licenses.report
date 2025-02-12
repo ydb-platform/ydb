@@ -31,7 +31,7 @@
 
 KEEP     Apache-2.0           44dc743c95835a9e71d7b3cca63dcc7c
 BELONGS ya.make
-FILE_INCLUDE NOTICE found in files: api/CustomAttributes.hh at line 3, impl/CustomAttributes.cc at line 4
+FILE_INCLUDE NOTICE found in files: impl/CustomAttributes.cc at line 4, include/avro/CustomAttributes.hh at line 3
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -39,8 +39,8 @@ FILE_INCLUDE NOTICE found in files: api/CustomAttributes.hh at line 3, impl/Cust
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        api/CustomAttributes.hh [2:16]
         impl/CustomAttributes.cc [3:17]
+        include/avro/CustomAttributes.hh [2:16]
 
 KEEP     Apache-2.0           4f346bf0c154a20942ca3ab627264c4e
 BELONGS ya.make
@@ -57,7 +57,7 @@ BELONGS ya.make
 
 KEEP     Apache-2.0           807648c73ed5fa476be45e9005a86248
 BELONGS ya.make
-FILE_INCLUDE NOTICE found in files: api/AvroParse.hh at line 3, api/AvroSerialize.hh at line 3, api/AvroTraits.hh at line 3, api/Compiler.hh at line 3, api/Config.hh at line 3, api/DataFile.hh at line 3, api/Decoder.hh at line 3, api/Encoder.hh at line 3, api/Exception.hh at line 3, api/Generic.hh at line 3, api/GenericDatum.hh at line 3, api/Layout.hh at line 3, api/LogicalType.hh at line 3, api/Node.hh at line 3, api/NodeConcepts.hh at line 3, api/NodeImpl.hh at line 3, api/Parser.hh at line 3, api/Reader.hh at line 3, api/Resolver.hh at line 3, api/ResolverSchema.hh at line 3, api/ResolvingReader.hh at line 3, api/Schema.hh at line 3, api/SchemaResolution.hh at line 3, api/Serializer.hh at line 3, api/Specific.hh at line 3, api/Stream.hh at line 3, api/Types.hh at line 3, api/ValidSchema.hh at line 3, api/Validator.hh at line 3, api/Writer.hh at line 3, api/Zigzag.hh at line 3, api/buffer/Buffer.hh at line 3, api/buffer/BufferReader.hh at line 3, api/buffer/detail/BufferDetail.hh at line 3, api/buffer/detail/BufferDetailIterator.hh at line 3, impl/BinaryDecoder.cc at line 3, impl/BinaryEncoder.cc at line 3, impl/Compiler.cc at line 3, impl/DataFile.cc at line 3, impl/FileStream.cc at line 3, impl/Generic.cc at line 3, impl/GenericDatum.cc at line 3, impl/LogicalType.cc at line 3, impl/Node.cc at line 3, impl/NodeImpl.cc at line 3, impl/Resolver.cc at line 4, impl/ResolverSchema.cc at line 4, impl/Schema.cc at line 3, impl/Stream.cc at line 3, impl/Types.cc at line 3, impl/ValidSchema.cc at line 3, impl/Validator.cc at line 3, impl/Zigzag.cc at line 3, impl/json/JsonDom.cc at line 3, impl/json/JsonDom.hh at line 3, impl/json/JsonIO.cc at line 3, impl/json/JsonIO.hh at line 3, impl/parsing/JsonCodec.cc at line 3, impl/parsing/ResolvingDecoder.cc at line 3, impl/parsing/Symbol.cc at line 3, impl/parsing/Symbol.hh at line 3, impl/parsing/ValidatingCodec.cc at line 3, impl/parsing/ValidatingCodec.hh at line 3
+FILE_INCLUDE NOTICE found in files: impl/BinaryDecoder.cc at line 3, impl/BinaryEncoder.cc at line 3, impl/Compiler.cc at line 3, impl/DataFile.cc at line 3, impl/FileStream.cc at line 3, impl/Generic.cc at line 3, impl/GenericDatum.cc at line 3, impl/LogicalType.cc at line 3, impl/Node.cc at line 3, impl/NodeImpl.cc at line 3, impl/Resolver.cc at line 4, impl/ResolverSchema.cc at line 4, impl/Schema.cc at line 3, impl/Stream.cc at line 3, impl/Types.cc at line 3, impl/ValidSchema.cc at line 3, impl/Validator.cc at line 3, impl/Zigzag.cc at line 3, impl/json/JsonDom.cc at line 3, impl/json/JsonDom.hh at line 3, impl/json/JsonIO.cc at line 3, impl/json/JsonIO.hh at line 3, impl/parsing/JsonCodec.cc at line 3, impl/parsing/ResolvingDecoder.cc at line 3, impl/parsing/Symbol.cc at line 3, impl/parsing/Symbol.hh at line 3, impl/parsing/ValidatingCodec.cc at line 3, impl/parsing/ValidatingCodec.hh at line 3, include/avro/AvroTraits.hh at line 3, include/avro/Compiler.hh at line 3, include/avro/Config.hh at line 3, include/avro/DataFile.hh at line 3, include/avro/Decoder.hh at line 3, include/avro/Encoder.hh at line 3, include/avro/Exception.hh at line 3, include/avro/Generic.hh at line 3, include/avro/GenericDatum.hh at line 3, include/avro/Layout.hh at line 3, include/avro/LogicalType.hh at line 3, include/avro/Node.hh at line 3, include/avro/NodeConcepts.hh at line 3, include/avro/NodeImpl.hh at line 3, include/avro/Reader.hh at line 3, include/avro/Resolver.hh at line 3, include/avro/ResolverSchema.hh at line 3, include/avro/Schema.hh at line 3, include/avro/SchemaResolution.hh at line 3, include/avro/Specific.hh at line 3, include/avro/Stream.hh at line 3, include/avro/Types.hh at line 3, include/avro/ValidSchema.hh at line 3, include/avro/Validator.hh at line 3, include/avro/Zigzag.hh at line 3, include/avro/buffer/Buffer.hh at line 3, include/avro/buffer/BufferReader.hh at line 3, include/avro/buffer/detail/BufferDetail.hh at line 3, include/avro/buffer/detail/BufferDetailIterator.hh at line 3
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -65,41 +65,6 @@ FILE_INCLUDE NOTICE found in files: api/AvroParse.hh at line 3, api/AvroSerializ
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        api/AvroParse.hh [2:16]
-        api/AvroSerialize.hh [2:16]
-        api/AvroTraits.hh [2:16]
-        api/Compiler.hh [2:16]
-        api/Config.hh [2:16]
-        api/DataFile.hh [2:16]
-        api/Decoder.hh [2:16]
-        api/Encoder.hh [2:16]
-        api/Exception.hh [2:16]
-        api/Generic.hh [2:16]
-        api/GenericDatum.hh [2:16]
-        api/Layout.hh [2:16]
-        api/LogicalType.hh [2:16]
-        api/Node.hh [2:16]
-        api/NodeConcepts.hh [2:16]
-        api/NodeImpl.hh [2:16]
-        api/Parser.hh [2:16]
-        api/Reader.hh [2:16]
-        api/Resolver.hh [2:16]
-        api/ResolverSchema.hh [2:16]
-        api/ResolvingReader.hh [2:16]
-        api/Schema.hh [2:16]
-        api/SchemaResolution.hh [2:16]
-        api/Serializer.hh [2:16]
-        api/Specific.hh [2:16]
-        api/Stream.hh [2:16]
-        api/Types.hh [2:16]
-        api/ValidSchema.hh [2:16]
-        api/Validator.hh [2:16]
-        api/Writer.hh [2:16]
-        api/Zigzag.hh [2:16]
-        api/buffer/Buffer.hh [2:16]
-        api/buffer/BufferReader.hh [2:16]
-        api/buffer/detail/BufferDetail.hh [2:16]
-        api/buffer/detail/BufferDetailIterator.hh [2:16]
         impl/BinaryDecoder.cc [2:16]
         impl/BinaryEncoder.cc [2:16]
         impl/Compiler.cc [2:16]
@@ -128,6 +93,35 @@ FILE_INCLUDE NOTICE found in files: api/AvroParse.hh at line 3, api/AvroSerializ
         impl/parsing/Symbol.hh [2:16]
         impl/parsing/ValidatingCodec.cc [2:16]
         impl/parsing/ValidatingCodec.hh [2:16]
+        include/avro/AvroTraits.hh [2:16]
+        include/avro/Compiler.hh [2:16]
+        include/avro/Config.hh [2:16]
+        include/avro/DataFile.hh [2:16]
+        include/avro/Decoder.hh [2:16]
+        include/avro/Encoder.hh [2:16]
+        include/avro/Exception.hh [2:16]
+        include/avro/Generic.hh [2:16]
+        include/avro/GenericDatum.hh [2:16]
+        include/avro/Layout.hh [2:16]
+        include/avro/LogicalType.hh [2:16]
+        include/avro/Node.hh [2:16]
+        include/avro/NodeConcepts.hh [2:16]
+        include/avro/NodeImpl.hh [2:16]
+        include/avro/Reader.hh [2:16]
+        include/avro/Resolver.hh [2:16]
+        include/avro/ResolverSchema.hh [2:16]
+        include/avro/Schema.hh [2:16]
+        include/avro/SchemaResolution.hh [2:16]
+        include/avro/Specific.hh [2:16]
+        include/avro/Stream.hh [2:16]
+        include/avro/Types.hh [2:16]
+        include/avro/ValidSchema.hh [2:16]
+        include/avro/Validator.hh [2:16]
+        include/avro/Zigzag.hh [2:16]
+        include/avro/buffer/Buffer.hh [2:16]
+        include/avro/buffer/BufferReader.hh [2:16]
+        include/avro/buffer/detail/BufferDetail.hh [2:16]
+        include/avro/buffer/detail/BufferDetailIterator.hh [2:16]
 
 KEEP     BSL-1.0              b0697f9b33869dfe57770c633aa69b1e
 BELONGS ya.make
@@ -138,7 +132,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        LICENSE [238:260]
+        LICENSE [208:230]
 
 KEEP     Apache-2.0           b9e4e3dbf9b124f5bba77e989c2ff648
 BELONGS ya.make
@@ -163,14 +157,3 @@ FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LI
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
         LICENSE [2:202]
-
-KEEP     FSFAP                d2bd1ace1a9d67611b72b735b3b25e91
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: FSFAP
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP
-    Files with this license:
-        LICENSE [229:232]

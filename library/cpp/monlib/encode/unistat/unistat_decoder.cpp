@@ -15,7 +15,7 @@
 
 using namespace NJson;
 
-const re2::RE2 NAME_RE{R"((?:[a-zA-Z0-9\.\-/@_]+_)+(?:[ad][vehmntx]{3}|summ|hgram|max))"};
+const re2::RE2 NAME_RE{R"((?:[a-zA-Z0-9\.\-/@_]+_)+(?:[advehmntx][vehmntx]{3}|summ|hgram|max))"};
 
 namespace NMonitoring {
     namespace {
@@ -116,9 +116,15 @@ namespace NMonitoring {
         class TDecoderUnistat {
         private:
         public:
-            explicit TDecoderUnistat(IMetricConsumer* consumer, IInputStream* is, TStringBuf metricNameLabel, TInstant ts)
+            explicit TDecoderUnistat(
+                    IMetricConsumer* consumer,
+                    IInputStream* is,
+                    TStringBuf metricNameLabel,
+                    TStringBuf metricNamePrefix,
+                    TInstant ts)
                 : Consumer_{consumer},
-                MetricNameLabel(metricNameLabel),
+                MetricNameLabel_(metricNameLabel),
+                MetricNamePrefix_(metricNamePrefix),
                 Timestamp_{ts} {
                 ReadJsonTree(is, &Json_, /* throw */ true);
             }
@@ -144,7 +150,7 @@ namespace NMonitoring {
                             OnHistogram(value);
                         }
                     } else if (IsNumber(value)) {
-                        if (MetricContext_.Name.EndsWith("_ahhh")) {
+                        if (MetricContext_.Name.EndsWith("hhh") && !MetricContext_.IsDeriv) {
                             OnLogHistogram(value);
                         } else {
                             OnScalar(value);
@@ -169,7 +175,8 @@ namespace NMonitoring {
             }
 
             void OnLogHistogram(const TJsonValue& value) {
-                Y_ENSURE(MetricContext_.Name.EndsWith("_ahhh"), "Values list is supported only for _ahhh metrics");
+                Y_ENSURE(MetricContext_.Name.EndsWith("hhh") && !MetricContext_.IsDeriv,
+                        "Values list is supported only for histogram metrics");
                 MetricContext_.Type = EMetricType::HIST;
 
                 LogHistogramBuilder histogramBuilder;
@@ -251,7 +258,7 @@ namespace NMonitoring {
                 Consumer_->OnMetricBegin(MetricContext_.Type);
 
                 Consumer_->OnLabelsBegin();
-                Consumer_->OnLabel(MetricNameLabel, TString{MetricContext_.Name});
+                Consumer_->OnLabel(MetricNameLabel_, TStringBuilder{} << MetricNamePrefix_ << MetricContext_.Name);
                 for (auto&& l : MetricContext_.Labels) {
                     Consumer_->OnLabel(l.Name(), l.Value());
                 }
@@ -283,7 +290,8 @@ namespace NMonitoring {
         private:
             IMetricConsumer* Consumer_;
             NJson::TJsonValue Json_;
-            TStringBuf MetricNameLabel;
+            TStringBuf MetricNameLabel_;
+            TStringBuf MetricNamePrefix_;
             TInstant Timestamp_;
 
             struct {
@@ -298,15 +306,27 @@ namespace NMonitoring {
 
     }
 
-    void DecodeUnistat(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel, TInstant ts) {
-        c->OnStreamBegin();
-        DecodeUnistatToStream(data, c, metricNameLabel, ts);
-        c->OnStreamEnd();
+    void DecodeUnistat(
+            TStringBuf data,
+            IMetricConsumer* c,
+            TStringBuf metricNameLabel,
+            TStringBuf metricNamePrefix,
+            TInstant ts)
+    {
+      c->OnStreamBegin();
+      DecodeUnistatToStream(data, c, metricNameLabel, metricNamePrefix, ts);
+      c->OnStreamEnd();
     }
 
-    void DecodeUnistatToStream(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel, TInstant ts) {
-        TMemoryInput in{data.data(), data.size()};
-        TDecoderUnistat decoder(c, &in, metricNameLabel, ts);
-        decoder.Decode();
+    void DecodeUnistatToStream(
+            TStringBuf data,
+            IMetricConsumer* c,
+            TStringBuf metricNameLabel,
+            TStringBuf metricNamePrefix,
+            TInstant ts)
+    {
+      TMemoryInput in{data.data(), data.size()};
+      TDecoderUnistat decoder(c, &in, metricNameLabel, metricNamePrefix, ts);
+      decoder.Decode();
     }
 }

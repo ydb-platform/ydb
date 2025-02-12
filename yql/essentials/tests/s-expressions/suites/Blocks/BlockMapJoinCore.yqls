@@ -1,0 +1,28 @@
+(
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+
+(let row1 (AsStruct '('"key" (Int32 '1)) '('"subkey" (Int32 '"1001")) '('"value" (String '"AAA"))))
+(let row2 (AsStruct '('"key" (Int32 '2)) '('"subkey" (Int32 '"1002")) '('"value" (String '"AAB"))))
+(let row3 (AsStruct '('"key" (Int32 '3)) '('"subkey" (Int32 '"1003")) '('"value" (String '"AAC"))))
+(let row4 (AsStruct '('"key" (Int32 '4)) '('"subkey" (Int32 '"1004")) '('"value" (String '"AAD"))))
+(let row5 (AsStruct '('"key" (Int32 '5)) '('"subkey" (Int32 '"1005")) '('"value" (String '"AAE"))))
+(let table (AsList row1 row2 row3 row4 row5))
+
+(let expandLambda (lambda '(item) (Member item '"key") (Member item '"subkey") (Member item '"value")))
+(let narrowLambdaInner (lambda '(item1 item2 item3 item4 item5 item6) (AsStruct '('"akey" item1) '('"asubkey" item2) '('"avalue" item3) '('"bkey" item4) '('"bsubkey" item5) '('"bvalue" item6))))
+(let narrowLambdaLeft (lambda '(item1 item2 item3 item4) (AsStruct '('"asubkey" item1) '('"avalue" item2) '('"bsubkey" item3) '('"bvalue" item4))))
+(let narrowLambdaLeftSemi (lambda '(item1 item2) (AsStruct '('"asubkey" item1) '('"avalue" item2))))
+
+(let doJoin (lambda '(left right narrowMapLambda joinKind leftKeyColumns leftKeyDrops rightKeyColumns rightKeyDrops) (block '(
+    (return (Collect (NarrowMap (ToFlow (WideFromBlocks (BlockMapJoinCore (WideToBlocks (FromFlow (ExpandMap left expandLambda))) (WideToBlocks (FromFlow (ExpandMap right expandLambda))) joinKind leftKeyColumns leftKeyDrops rightKeyColumns rightKeyDrops '()))) narrowMapLambda)))
+))))
+
+(let innerJoin (Apply doJoin (ToFlow table (DependsOn (String '0))) (ToFlow table (DependsOn (String '1))) narrowLambdaInner 'Inner '('0) '() '('0) '()))
+(let leftJoin (Apply doJoin (ToFlow table (DependsOn (String '2))) (ToFlow table (DependsOn (String '3))) narrowLambdaLeft 'Left '('0) '('0) '('0) '('0)))
+(let leftSemiJoin (Apply doJoin (ToFlow table (DependsOn (String '4))) (ToFlow table (DependsOn (String '5))) narrowLambdaLeftSemi 'LeftSemi '('0) '('0) '('0) '()))
+
+(let world (Write! world res_sink (Key) (AsStruct '('"inner" innerJoin) '('"left" leftJoin) '('"leftSemi" leftSemiJoin)) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

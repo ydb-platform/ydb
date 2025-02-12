@@ -1851,7 +1851,7 @@ TStatus AnnotateKqpSinkEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 5, 6, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 6, 7, ctx)) {
         return TStatus::Error;
     }
     input->SetTypeAnn(ctx.MakeType<TVoidExprType>());

@@ -3,6 +3,7 @@ import os
 import datetime
 import logging
 import subprocess
+import argparse
 from typing import Optional
 from github import Github
 from github.PullRequest import PullRequest
@@ -16,7 +17,7 @@ class RightlibSync:
     failed_comment_mark = "<!--RightLibSyncFailed-->"
     rightlib_check_status_name = "rightlib-merge"
 
-    def __init__(self, repo, base_branch, head_branch,  token):
+    def __init__(self, repo, base_branch, head_branch, token):
         self.repo_name = repo
         self.base_branch = base_branch
         self.head_branch = head_branch
@@ -96,8 +97,9 @@ class RightlibSync:
         self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
         self.git_run("checkout", self.base_branch)
 
+        commit_msg = f"Merge pull request #{pr.number} from {pr.head.user.login}/{pr.head.ref}"
         try:
-            self.git_run("merge", "PR", "--no-edit")
+            self.git_run("merge", "PR", "-m", commit_msg)
         except subprocess.CalledProcessError:
             self.add_failed_comment(pr, "Unable to merge PR.")
             self.add_pr_failed_label(pr)
@@ -179,15 +181,23 @@ class RightlibSync:
         else:
             pr_body = f"PR was created by rightlib sync script"
 
-        pr = self.repo.create_pull(self.base_branch, dev_branch_name, title=pr_title, body=pr_body)
+        pr = self.repo.create_pull(
+            self.base_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True
+        )
         pr.add_to_labels(self.pr_label_rightlib)
 
-    def sync(self):
+    def cmd_check_pr(self):
         pr = self.get_latest_open_pr()
 
         if pr:
             self.check_opened_pr(pr)
         else:
+            self.logger.info("No open PR found")
+
+    def cmd_create_pr(self):
+        pr = self.get_latest_open_pr()
+
+        if not pr:
             cur_sha = self.rightlib_latest_repo_sha()
             latest_sha = self.rightlib_latest_sync_commit()
             self.logger.info("cur_sha=%s", cur_sha)
@@ -195,15 +205,29 @@ class RightlibSync:
 
             if cur_sha != latest_sha:
                 self.create_new_pr()
+        else:
+            self.logger.info("Skipping create-pr because an open PR was found")
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", choices=("create-pr", "check-pr"))
+    args = parser.parse_args()
+
     log_fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
     logging.basicConfig(format=log_fmt, level=logging.DEBUG)
     repo = os.environ["REPO"]
     token = os.environ["TOKEN"]
+
     syncer = RightlibSync(repo, "main", "rightlib", token)
-    syncer.sync()
+
+    if args.command == "create-pr":
+        syncer.cmd_create_pr()
+    elif args.command == "check-pr":
+        syncer.cmd_check_pr()
+    else:
+        print(f"Unknown command {args.command!r}")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

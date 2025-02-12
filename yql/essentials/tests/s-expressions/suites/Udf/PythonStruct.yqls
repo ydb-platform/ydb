@@ -1,6 +1,5 @@
 (
 (let config (DataSource 'config))
-(let world (Configure! world config 'PureDataSource 'yt))
 
 # prepare python udf
 (let ui32 (DataType 'Uint32))
@@ -25,7 +24,7 @@ def NewPerson(name, age):
 
 # output result with type
 (let res_sink (DataSink 'result))
-(let world (Write! world res_sink (Key) result '()))
+(let world (Write! world res_sink (Key) result '('('type))))
 
 # finish
 (let world (Commit! world res_sink))

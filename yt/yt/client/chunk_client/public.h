@@ -4,8 +4,8 @@
 
 #include <yt/yt/client/object_client/public.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 namespace NYT::NChunkClient {
 
@@ -131,6 +131,7 @@ using TCompactMediumMap = TCompactFlatMap<int, T, 4>;
  *  Additional +8 enables some flexibility during balancing.
  */
 constexpr int TypicalReplicaCount = 24;
+constexpr int SlimTypicalReplicaCount = 3;
 constexpr int GenericChunkReplicaIndex = 16;  // no specific replica; the default one for non-erasure chunks
 
 //! Valid indexes are in range |[0, ChunkReplicaIndexBound)|.
@@ -146,6 +147,7 @@ constexpr int MediumIndexBound = AllMediaIndex + 1;
 
 class TChunkReplicaWithMedium;
 using TChunkReplicaWithMediumList = TCompactVector<TChunkReplicaWithMedium, TypicalReplicaCount>;
+using TChunkReplicaWithMediumSlimList = TCompactVector<TChunkReplicaWithMedium, SlimTypicalReplicaCount>;
 
 class TChunkReplicaWithLocation;
 using TChunkReplicaWithLocationList = TCompactVector<TChunkReplicaWithLocation, TypicalReplicaCount>;

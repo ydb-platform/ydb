@@ -145,12 +145,12 @@ struct TCompleteNotifications {
         return Notifications.size();
     }
 
-    void Send(const TActorContext& ctx) {
+    void Send(const TActorContext&) {
         for (auto& [notification, duration] : Notifications) {
             if (duration) {
-                ctx.ExecutorThread.Schedule(duration, notification.Release());
+                TActivationContext::Schedule(duration, std::move(notification));
             } else {
-                ctx.ExecutorThread.Send(notification.Release());
+                TActivationContext::Send(std::move(notification));
             }
         }
         Notifications.clear();
@@ -331,6 +331,46 @@ struct TNodeFilter {
 
     bool IsAllowedDataCenter(TDataCenterId dc) const;
 };
+
+struct TFollowerUpdates {
+    enum class EAction {
+        Create,
+        Update,
+        Delete,
+    };
+
+    struct TUpdate {
+        EAction Action;
+        TFullTabletId TabletId;
+        TFollowerGroupId GroupId;
+        TDataCenterId DataCenter;
+    };
+
+    std::deque<TUpdate> Updates;
+
+    bool Empty() const {
+        return Updates.empty();
+    }
+
+    void Create(TFullTabletId leaderTablet, TFollowerGroupId group, TDataCenterId dc) {
+        Updates.emplace_back(EAction::Create, leaderTablet, group, dc);
+    }
+
+    void Update(TFullTabletId tablet, TDataCenterId dc) {
+        Updates.emplace_back(EAction::Update, tablet, 0, dc);
+    }
+
+    void Delete(TFullTabletId tablet, TFollowerGroupId group, TDataCenterId dc) {
+        Updates.emplace_back(EAction::Delete, tablet, group, dc);
+    }
+
+    TUpdate Pop() {
+        TUpdate update = Updates.front();
+        Updates.pop_front();
+        return update;
+    }
+};
+
 
 } // NHive
 } // NKikimr

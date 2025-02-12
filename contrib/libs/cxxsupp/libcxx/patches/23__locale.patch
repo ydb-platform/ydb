@@ -1,5 +1,5 @@
 diff --git a/include/__locale b/include/__locale
-index 3ba7ac1..47ae41b 100644
+index 0c6fe3c..6692046 100644
 --- a/include/__locale
 +++ b/include/__locale
 @@ -16,6 +16,7 @@
@@ -10,7 +10,7 @@ index 3ba7ac1..47ae41b 100644
  #include <cctype>
  #include <clocale>
  #include <cstdint>
-@@ -146,8 +147,7 @@ private:
+@@ -125,8 +126,7 @@ private:
  };
  
  class _LIBCPP_EXPORTED_FROM_ABI locale::id {

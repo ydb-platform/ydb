@@ -1,4 +1,4 @@
-PY2TEST()
+PY3TEST()
 
 TEST_SRCS(
     test.py
@@ -23,12 +23,13 @@ DEPENDS(
 
 DATA(
     arcadia/ydb/library/yql/tests/sql
-    arcadia/yql/essentials/tests/sql/suites
+    arcadia/yt/yql/tests/sql/suites
     arcadia/ydb/tests/fq/yt
     arcadia/ydb/tests/fq/yt/cfg
 )
 
 PEERDIR(
+    ydb/tests/fq/tools
     yql/essentials/tests/common/test_framework
 )
 

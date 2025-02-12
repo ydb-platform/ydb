@@ -3,9 +3,9 @@
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
 
@@ -31,33 +31,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         return pqConfig;
     }
 
-    Y_UNIT_TEST(CreateTableSerialTypeForbidden) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        {
-            auto query = R"(
-                --!syntax_v1
-                CREATE TABLE `/Root/SerialTableDisabled` (
-                    Key Serial,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )";
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
-                                       result.GetIssues().ToString());
-        }
-    }
-
     Y_UNIT_TEST(AddSerialColumnForbidden) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -90,35 +65,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(CreateTableWithDefaultForbidden) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(false);
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        {
-            auto query = R"(
-                --!syntax_v1
-                CREATE TABLE `/Root/CreateAndAlterDefaultsDisabled` (
-                    Key Int32,
-                    Value String Default "empty",
-                    PRIMARY KEY (Key)
-                );
-            )";
-
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
-                                       result.GetIssues().ToString());
-        }
-    }
-
     Y_UNIT_TEST(AddColumnWithDefaultForbidden) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(false);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -153,7 +101,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(SerialTypeNegative1) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -176,7 +123,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(SerialTypeForNonKeyColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -265,7 +211,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     void TestSerialType(TString serialType) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -355,7 +300,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(DropCreateSerial) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -464,8 +408,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(DefaultsAndDeleteAndUpdate) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -557,7 +499,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultValue) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
         appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
@@ -593,8 +534,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(DefaultValuesForTable) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -660,8 +599,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(DefaultValuesForTableNegative2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -684,8 +621,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(DefaultValuesForTableNegative3) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -710,9 +645,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(DefaultValuesForTableNegative4) {
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
-
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -736,9 +668,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(IndexedTableAndNotNullColumn) {
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
-
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -965,8 +894,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(AddNonColumnDoesnotReturnInternalError) {
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
         appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
 
         TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
@@ -1140,8 +1067,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(IndexedTableAndNotNullColumnAddNotNullColumn) {
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
         appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
         appConfig.MutableFeatureFlags()->SetEnableParameterizedDecimal(true);
 
@@ -1368,8 +1293,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(Utf8AndDefault) {
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
         appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
 
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
@@ -1453,9 +1376,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(AlterTableAddNotNullWithDefault) {
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
-
         appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
 
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));

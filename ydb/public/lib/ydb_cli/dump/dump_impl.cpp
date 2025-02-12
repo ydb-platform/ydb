@@ -36,5 +36,29 @@ TDumpResult TDumpClient::Dump(const TString& dbPath, const TString& fsPath, cons
     }
 }
 
+TDumpResult TDumpClient::DumpCluster(const TString& fsPath) {
+    try {
+        NBackup::SetLog(Log);
+        NBackup::BackupCluster(Driver, fsPath);
+        return Result<TDumpResult>();
+    } catch (NBackup::TYdbErrorException& e) {
+        return TDumpResult(std::move(e.Status));
+    } catch (const yexception& e) {
+        return Result<TDumpResult>(EStatus::INTERNAL_ERROR, e.what());
+    }
+}
+
+TDumpResult TDumpClient::DumpDatabase(const TString& database, const TString& fsPath) {
+    try {
+        NBackup::SetLog(Log);
+        NBackup::BackupDatabase(Driver, database, fsPath);
+        return Result<TDumpResult>();
+    } catch (NBackup::TYdbErrorException& e) {
+        return TDumpResult(std::move(e.Status));
+    } catch (const yexception& e) {
+        return Result<TDumpResult>(EStatus::INTERNAL_ERROR, e.what());
+    }
+}
+
 } // NDump
 } // NYdb

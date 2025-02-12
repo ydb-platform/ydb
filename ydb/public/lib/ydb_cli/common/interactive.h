@@ -1,11 +1,13 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 
 namespace NYdb {
 namespace NConsoleClient {
 
 bool AskYesOrNo();
+
+bool AskPrompt(const std::string &query, bool defaultAnswer);
 
 bool IsStdinInteractive();
 

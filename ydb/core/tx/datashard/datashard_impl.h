@@ -233,6 +233,7 @@ class TDataShard
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
+    class TTxCleanupUncommitted;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -1389,6 +1390,8 @@ class TDataShard
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvDataShard::TEvForceDataCleanup::TPtr& ev, const TActorContext& ctx);
+
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
     void DoPeriodicTasks(const TActorContext &ctx);
@@ -1420,6 +1423,9 @@ class TDataShard
     void Cleanup(const TActorContext &ctx);
     void SwitchToWork(const TActorContext &ctx);
     void SyncConfig();
+
+    // Cleanup for bug https://github.com/ydb-platform/ydb/issues/13387
+    void CleanupUncommitted(const TActorContext &ctx);
 
     TMaybe<TInstant> GetTxPlanStartTimeAndCleanup(ui64 step);
 
@@ -2145,6 +2151,8 @@ public:
         return LogThrottlers[type];
     };
 
+    void OnTableCreated(TTransactionContext& txc, const TActorContext& ctx);
+
 private:
     ///
     class TLoanReturnTracker {
@@ -2747,7 +2755,6 @@ private:
 
     struct TCoordinatorSubscription {
         ui64 CoordinatorId;
-        TMediatorTimecastReadStep::TCPtr ReadStep;
     };
 
     TVector<TCoordinatorSubscription> CoordinatorSubscriptions;
@@ -3211,6 +3218,7 @@ protected:
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
+            HFunc(TEvDataShard::TEvForceDataCleanup, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
@@ -3387,7 +3395,7 @@ protected:
             ev->Record.MutableTableStats()->SetLocksWholeShard(TabletCounters->Cumulative()[COUNTER_LOCKS_WHOLE_SHARD].Get());
             ev->Record.MutableTableStats()->SetLocksBroken(TabletCounters->Cumulative()[COUNTER_LOCKS_BROKEN].Get());
 
-            ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+            ev->Record.SetNodeId(ctx.SelfID.NodeId());
             ev->Record.SetStartTime(StartTime().MilliSeconds());
 
             if (DstSplitDescription)

@@ -100,8 +100,8 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
 
 void TCompletionLogWrite::Release(TActorSystem *actorSystem) {
     for (TLogWrite *logWrite : LogWriteQueue) {
-        auto res = MakeHolder<TEvLogResult>(NKikimrProto::CORRUPTED, NKikimrBlobStorage::StatusIsValid,
-                ErrorReason);
+        auto res = MakeHolder<TEvLogResult>(NKikimrProto::CORRUPTED,
+            NKikimrBlobStorage::StatusIsValid, ErrorReason, PDisk->Keeper.GetLogChunkCount());
         logWrite->Replied = true;
         actorSystem->Send(logWrite->Sender, res.Release());
         PDisk->Mon.WriteLog.CountResponse();
@@ -401,6 +401,18 @@ void TChunkTrimCompletion::Exec(TActorSystem *actorSystem) {
     span.Attribute("size", static_cast<i64>(SizeBytes));
     TTryTrimChunk *tryTrim = PDisk->ReqCreator.CreateFromArgs<TTryTrimChunk>(SizeBytes, std::move(span));
     PDisk->InputRequest(tryTrim);
+    delete this;
+}
+
+void TChunkShredCompletion::Exec(TActorSystem *actorSystem) {
+    LOG_TRACE_S(*actorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "PDiskId# " << PDisk->PCtx->PDiskId << " ReqId# " << ReqId
+            << " TChunkShredCompletion Chunk# " << Chunk
+            << " SectorIdx# " << SectorIdx
+            << " SizeBytes# " << SizeBytes);
+    PDisk->Mon.ChunkShred.CountResponse();
+    TChunkShredResult *shredResult = PDisk->ReqCreator.CreateFromArgs<TChunkShredResult>(Chunk, SectorIdx, SizeBytes);
+    PDisk->InputRequest(shredResult);
     delete this;
 }
 

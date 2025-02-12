@@ -900,9 +900,10 @@ bool TYtTableInfo::HasSubstAnonymousLabel(NNodes::TExprBase node) {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TYtOutTableInfo::TYtOutTableInfo(const TStructExprType* type, ui64 nativeYtTypeFlags) {
+TYtOutTableInfo::TYtOutTableInfo(const TStructExprType* type, ui64 nativeYtTypeFlags, const TMaybe<TColumnOrder>& columnOrder) {
     RowSpec = MakeIntrusive<TYqlRowSpecInfo>();
     RowSpec->SetType(type, nativeYtTypeFlags);
+    RowSpec->SetColumnOrder(columnOrder);
 
     Meta = MakeIntrusive<TYtTableMetaInfo>();
     Meta->CanWrite = true;

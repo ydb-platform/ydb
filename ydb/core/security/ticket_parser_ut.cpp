@@ -1,6 +1,6 @@
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/ycloud/api/access_service.h>
@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(result->Token->IsExist("group2"));
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetGroupSIDs().size(), 3);
 
-        provider.RemoveGroup({.Group = "group2"});
+        provider.RemoveGroup("group2");
         provider.CreateGroup({.Group = "group3"});
         provider.AddGroupMembership({.Group = "group3", .Member = "user1"});
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);

@@ -14,6 +14,40 @@ Y_UNIT_TEST_SUITE(Scheme) {
     namespace NTypeIds = NScheme::NTypeIds;
     using TTypeInfo = NScheme::TTypeInfo;
 
+    Y_UNIT_TEST(NullCell) {
+        TCell nullCell;
+        UNIT_ASSERT_VALUES_EQUAL(nullCell.IsNull(), true);
+        UNIT_ASSERT_VALUES_EQUAL(nullCell.IsInline(), true);
+        UNIT_ASSERT_VALUES_EQUAL(nullCell.Data(), nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(nullCell.Size(), 0u);
+        TCell nullPtrCell(nullptr, 0);
+        UNIT_ASSERT_VALUES_EQUAL(nullPtrCell.IsNull(), true);
+        UNIT_ASSERT_VALUES_EQUAL(nullPtrCell.IsInline(), true);
+        UNIT_ASSERT_VALUES_EQUAL(nullPtrCell.Data(), nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(nullPtrCell.Size(), 0u);
+    }
+
+    Y_UNIT_TEST(EmptyCell) {
+        TCell emptyCell("", 0);
+        UNIT_ASSERT_VALUES_EQUAL(emptyCell.IsNull(), false);
+        UNIT_ASSERT_VALUES_EQUAL(emptyCell.IsInline(), true);
+        UNIT_ASSERT_VALUES_EQUAL(emptyCell.Size(), 0u);
+        UNIT_ASSERT(emptyCell.Data() != nullptr);
+    }
+
+    Y_UNIT_TEST(NotEmptyCell) {
+        TCell smallValue("abcdefghijklmn", 14);
+        UNIT_ASSERT_VALUES_EQUAL(smallValue.IsNull(), false);
+        UNIT_ASSERT_VALUES_EQUAL(smallValue.IsInline(), true);
+        UNIT_ASSERT_VALUES_EQUAL(smallValue.Size(), 14u);
+        UNIT_ASSERT_VALUES_EQUAL(smallValue.AsBuf(), "abcdefghijklmn");
+        TCell largeValue("abcdefghijklmnopq", 17);
+        UNIT_ASSERT_VALUES_EQUAL(largeValue.IsNull(), false);
+        UNIT_ASSERT_VALUES_EQUAL(largeValue.IsInline(), false);
+        UNIT_ASSERT_VALUES_EQUAL(largeValue.Size(), 17u);
+        UNIT_ASSERT_VALUES_EQUAL(largeValue.AsBuf(), "abcdefghijklmnopq");
+    }
+
     Y_UNIT_TEST(EmptyOwnedCellVec) {
         TOwnedCellVec empty;
         UNIT_ASSERT_VALUES_EQUAL(empty.size(), 0u);

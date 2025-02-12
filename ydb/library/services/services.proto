@@ -29,6 +29,7 @@ enum EServiceKikimr {
     BS_REPL = 273;
     BS_PDISK = 274;
     BS_PDISK_TEST = 1102;
+    BS_PDISK_SHRED = 1103;
     BS_YARD = 275;
     BS_PROXY = 276;
     BS_NODE = 277;
@@ -53,6 +54,7 @@ enum EServiceKikimr {
     BS_PROXY_ASSIMILATE = 347;
     BS_VDISK_BALANCING = 2600;
     BS_PROXY_GETBLOCK = 2601;
+    BS_SHRED = 2602;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -1072,5 +1074,8 @@ message TActivity {
         FEATURE_FLAGS_CONFIGURATOR = 651;
         DATASHARD_READ_SCAN = 652;
         BS_GROUP_GETBLOCK = 653;
+        HTTP_MON_INDEX_SERVICE = 654;
+        HTTP_MON_AUTHORIZED_ACTOR_REQUEST = 655;
+        IMPORT_SCHEME_QUERY_EXECUTOR = 656;
     };
 };

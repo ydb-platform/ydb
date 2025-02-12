@@ -56,13 +56,13 @@ public:
     TTestRawTableReader(const TRowCollection& rowCollection)
         : RowCollection_(rowCollection)
         , DataToRead_(RowCollection_.GetStreamDataStartFromRow(0))
-        , Input_(MakeHolder<TStringStream>(DataToRead_))
+        , Input_(std::make_unique<TStringStream>(DataToRead_))
     { }
 
     TTestRawTableReader(const TRowCollection& rowCollection, size_t breakPoint)
         : RowCollection_(rowCollection)
         , DataToRead_(RowCollection_.GetStreamDataStartFromRow(0).substr(0, breakPoint))
-        , Input_(MakeHolder<TStringStream>(DataToRead_))
+        , Input_(std::make_unique<TStringStream>(DataToRead_))
         , Broken_(true)
     { }
 
@@ -86,7 +86,7 @@ public:
         }
         ui64 actualRowIndex = rowIndex ? *rowIndex : 0;
         DataToRead_ = RowCollection_.GetStreamDataStartFromRow(actualRowIndex);
-        Input_ = MakeHolder<TStringInput>(DataToRead_);
+        Input_ = std::make_unique<TStringInput>(DataToRead_);
         Broken_ = false;
         return true;
     }
@@ -102,7 +102,7 @@ public:
 private:
     TRowCollection RowCollection_;
     TString DataToRead_;
-    THolder<IInputStream> Input_;
+    std::unique_ptr<IInputStream> Input_;
     bool Broken_ = false;
     i32 Retries = 1;
 };

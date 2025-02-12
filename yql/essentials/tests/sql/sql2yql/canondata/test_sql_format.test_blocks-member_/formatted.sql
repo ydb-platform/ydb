@@ -1,14 +1,7 @@
-USE plato;
+$data = [<|x: <|a: 'foo'|>|>, <|x: <|a: NULL|>|>];
 
 SELECT
-    val.a AS a,
-    <|qq: key, qkrq: 'QKRQ'|> AS q,
-
-    /* XXX: <AddMember> callable always expands to <AsStruct>. */
-    AddMember(val, 'k', key) AS wik,
-
-    /* XXX: <RemoveMember> callable always expands to <AsStruct>. */
-    RemoveMember(val, 'x') AS wox,
+    x.a
 FROM
-    Input
+    as_table($data)
 ;

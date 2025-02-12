@@ -4,6 +4,7 @@ SRCS(
     GLOBAL constructor.cpp
     GLOBAL meta.cpp
     GLOBAL checker.cpp
+    const.cpp
 )
 
 PEERDIR(

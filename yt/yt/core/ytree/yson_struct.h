@@ -116,6 +116,8 @@ public:
     // a member method.
     bool IsEqual(const TYsonStructBase& rhs) const;
 
+    const IYsonStructMeta* GetMeta() const;
+
 private:
     template <class TValue>
     friend class TYsonStructParameter;
@@ -160,13 +162,10 @@ private:
 class TYsonStructFinalClassHolder
 {
 protected:
-    explicit TYsonStructFinalClassHolder(std::type_index typeIndex);
-
-    // This constructor is only declared but not defined as it never is called.
-    // If we delete it default constructor of TYsonStructLite will be implicitly deleted as well and compilation will fail.
-    TYsonStructFinalClassHolder();
-
     std::type_index FinalType_;
+
+    explicit TYsonStructFinalClassHolder(std::type_index typeIndex);
+    TYsonStructFinalClassHolder();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -383,8 +382,8 @@ template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj, bool postprocess = true, bool setDefaults = true);
 template <class T>
 std::vector<TIntrusivePtr<T>> CloneYsonStructs(const std::vector<TIntrusivePtr<T>>& objs);
-template <class T>
-THashMap<TString, TIntrusivePtr<T>> CloneYsonStructs(const THashMap<TString, TIntrusivePtr<T>>& objs);
+template <class TKey, class TValue>
+THashMap<TKey, TIntrusivePtr<TValue>> CloneYsonStructs(const THashMap<TKey, TIntrusivePtr<TValue>>& objs);
 
 void Serialize(const TYsonStructBase& value, NYson::IYsonConsumer* consumer);
 void Deserialize(TYsonStructBase& value, INodePtr node);

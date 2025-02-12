@@ -86,31 +86,20 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
 
 TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo) {
     TColumnEngineStats::TPortionsStats deltaStats;
-    deltaStats.Bytes = 0;
     deltaStats.Rows = portionInfo.GetRecordsCount();
     deltaStats.Bytes = portionInfo.GetTotalBlobBytes();
     deltaStats.RawBytes = portionInfo.GetTotalRawBytes();
     deltaStats.Blobs = portionInfo.GetBlobIdsCount();
-    deltaStats.Portions = 1;
+    deltaStats.Portions = 1u;
+    for (const auto& blob : portionInfo.GetBlobIds()) {
+        deltaStats.BytesByChannel[blob.Channel()].Add(blob.BlobSize());
+    }
     return deltaStats;
 }
 
 void TColumnEngineForLogs::UpdatePortionStats(
     TColumnEngineStats& engineStats, const TPortionInfo& portionInfo, EStatsUpdateType updateType, const TPortionInfo* exPortionInfo) const {
     TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo);
-
-    ui64 totalBlobsSize = 0;
-    ui32 blobCount = portionInfo.GetBlobIdsCount();
-    for (ui32 i = 0; i < blobCount; i++) {
-        const auto& blob = portionInfo.GetBlobId(i);
-        ui32 channel = blob.Channel();
-        if (deltaStats.ByChannel.size() <= channel) {
-            deltaStats.ByChannel.resize(channel + 1);
-        }
-        deltaStats.ByChannel[channel] += blob.BlobSize();
-        totalBlobsSize += blob.BlobSize();
-    }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "update_portion")("blobs_size", totalBlobsSize)("portion_bytes", deltaStats.Bytes)("portion_raw_bytes", deltaStats.RawBytes);
 
     Y_ABORT_UNLESS(!exPortionInfo || exPortionInfo->GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
     Y_ABORT_UNLESS(portionInfo.GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
@@ -446,7 +435,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
     for (auto&& i : context.GetTasks()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("rw", i.first.DebugString())("count", i.second.size());
         for (auto&& t : i.second) {
-            SignalCounters.OnActualizationTask(t.GetTask()->GetPortionsToEvictCount(), t.GetTask()->GetPortionsToRemoveSize());
+            SignalCounters.OnActualizationTask(t.GetTask()->GetPortionsToEvictCount(), t.GetTask()->GetPortionsToRemove().GetSize());
             result.emplace_back(t.GetTask());
         }
     }
@@ -472,11 +461,22 @@ bool TColumnEngineForLogs::ApplyChangesOnExecute(
     return true;
 }
 
-void TColumnEngineForLogs::AppendPortion(const TPortionDataAccessor& portionInfo, const bool addAsAccessor) {
+void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo) {
+    AFL_VERIFY(portionInfo);
+    auto granule = GetGranulePtrVerified(portionInfo->GetPathId());
+    AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
+    UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
+    granule->AppendPortion(portionInfo);
+    if (portionInfo->HasRemoveSnapshot()) {
+        AddCleanupPortion(portionInfo);
+    }
+}
+
+void TColumnEngineForLogs::AppendPortion(const TPortionDataAccessor& portionInfo) {
     auto granule = GetGranulePtrVerified(portionInfo.GetPortionInfo().GetPathId());
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo.GetPortionInfo().GetPortionId()));
     UpdatePortionStats(portionInfo.GetPortionInfo(), EStatsUpdateType::ADD);
-    granule->AppendPortion(portionInfo, addAsAccessor);
+    granule->AppendPortion(portionInfo);
     if (portionInfo.GetPortionInfo().HasRemoveSnapshot()) {
         AddCleanupPortion(portionInfo.GetPortionInfoPtr());
     }

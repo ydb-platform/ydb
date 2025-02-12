@@ -903,7 +903,8 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
             << " Marker# BPD70";
         P_LOG(PRI_ERROR, BPD70, str.Str());
         evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OUT_OF_SPACE,
-                    NotEnoughDiskSpaceStatusFlags(evLog.Owner, evLog.OwnerGroupType), str.Str()));
+            NotEnoughDiskSpaceStatusFlags(evLog.Owner, evLog.OwnerGroupType), str.Str(),
+            Keeper.GetLogChunkCount()));
         Y_ABORT_UNLESS(evLog.Result.Get());
         evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         return;
@@ -967,7 +968,8 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     }
     Y_ABORT_UNLESS(CommonLogger->NextChunks.empty());
 
-    evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK, GetStatusFlags(OwnerSystem, evLog.OwnerGroupType), ""));
+    evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK,
+        GetStatusFlags(OwnerSystem, evLog.OwnerGroupType), "", Keeper.GetLogChunkCount()));
     Y_ABORT_UNLESS(evLog.Result.Get());
     evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
 }
@@ -1036,6 +1038,10 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
     if (logWrite.CommitRecord.DeleteToDecommitted) {
         for (ui32 chunkIdx : logWrite.CommitRecord.DeleteChunks) {
             TChunkState& state = ChunkState[chunkIdx];
+            if (!state.IsDirty) {
+                // TODO(cthulhu): log that chunk got dirty
+                state.IsDirty = true;
+            }
             switch (state.CommitState) {
             case TChunkState::DATA_RESERVED:
                 state.CommitState = TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS;
@@ -1055,6 +1061,10 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
     } else {
         for (ui32 chunkIdx : logWrite.CommitRecord.DeleteChunks) {
             TChunkState& state = ChunkState[chunkIdx];
+            if (!state.IsDirty) {
+                // TODO(cthulhu): log that chunk got dirty
+                state.IsDirty = true;
+            }
             if (state.HasAnyOperationsInProgress()) {
                 switch (state.CommitState) {
                 case TChunkState::DATA_RESERVED:

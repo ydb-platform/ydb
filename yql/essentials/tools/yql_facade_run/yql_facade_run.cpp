@@ -164,19 +164,20 @@ TFacadeRunOptions::~TFacadeRunOptions() {
 }
 
 void TFacadeRunOptions::InitLogger() {
-    if (Verbosity != LOG_DEF_PRIORITY) {
-        NYql::NLog::ELevel level = NYql::NLog::ELevelHelpers::FromInt(Verbosity);
-        NYql::NLog::EComponentHelpers::ForEach([level](NYql::NLog::EComponent c) {
+    if (Verbosity != LOG_DEF_PRIORITY || ShowLog) {
+        NLog::ELevel level = NLog::ELevelHelpers::FromInt(Verbosity);
+        if (ShowLog) {
+            level = Max(level, NLog::ELevel::DEBUG);
+        }
+        NLog::EComponentHelpers::ForEach([level](NLog::EComponent c) {
             NYql::NLog::YqlLogger().SetComponentLevel(c, level);
         });
     }
 
     if (TraceOptStream) {
-        NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::Core, NYql::NLog::ELevel::TRACE);
-        NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::CoreEval, NYql::NLog::ELevel::TRACE);
-        NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::CorePeepHole, NYql::NLog::ELevel::TRACE);
-    } else if (ShowLog) {
-        NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::Core, NYql::NLog::ELevel::DEBUG);
+        NLog::YqlLogger().SetComponentLevel(NLog::EComponent::Core, NLog::ELevel::TRACE);
+        NLog::YqlLogger().SetComponentLevel(NLog::EComponent::CoreEval, NLog::ELevel::TRACE);
+        NLog::YqlLogger().SetComponentLevel(NLog::EComponent::CorePeepHole, NLog::ELevel::TRACE);
     }
 }
 
@@ -280,13 +281,13 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
     opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf-resolver to use static function registry").NoArgument().SetFlag(&ScanUdfs);
 
     opts.AddLongOption("parse-only", "Parse program and exit").NoArgument().StoreValue(&Mode, ERunMode::Parse);
-    opts.AddLongOption("compile-only", "Compiled program and exit").NoArgument().StoreValue(&Mode, ERunMode::Compile);
+    opts.AddLongOption("compile-only", "Compile program and exit").NoArgument().StoreValue(&Mode, ERunMode::Compile);
     opts.AddLongOption("validate", "Validate program and exit").NoArgument().StoreValue(&Mode, ERunMode::Validate);
     opts.AddLongOption("lineage", "Calculate program lineage and exit").NoArgument().StoreValue(&Mode, ERunMode::Lineage);
-    opts.AddLongOption('O',"optimize", "Optimize program and exir").NoArgument().StoreValue(&Mode, ERunMode::Optimize);
+    opts.AddLongOption('O',"optimize", "Optimize program and exit").NoArgument().StoreValue(&Mode, ERunMode::Optimize);
     opts.AddLongOption('D', "discover", "Discover tables in the program and exit").NoArgument().StoreValue(&Mode, ERunMode::Discover);
     opts.AddLongOption("peephole", "Perform peephole program optimization and exit").NoArgument().StoreValue(&Mode, ERunMode::Peephole);
-    opts.AddLongOption('R',"run", "Run progrum (use by default)").NoArgument().StoreValue(&Mode, ERunMode::Run);
+    opts.AddLongOption('R',"run", "Run program (use by default)").NoArgument().StoreValue(&Mode, ERunMode::Run);
 
     opts.AddLongOption('L', "show-log", "Show transformation log").Optional().NoArgument().SetFlag(&ShowLog);
     opts.AddLongOption('v', "verbosity", "Log verbosity level").Optional().RequiredArgument("LEVEL").StoreResult(&Verbosity);
@@ -565,7 +566,7 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
         TModulesTable modules;
         FillUserDataTableFromFileSystem(*RunOptions_.MountConfig, RunOptions_.DataTable);
 
-        if (!CompileLibraries(RunOptions_.DataTable, ctx, modules)) {
+        if (!CompileLibraries(RunOptions_.DataTable, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
             *RunOptions_.ErrStream << "Errors on compile libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;

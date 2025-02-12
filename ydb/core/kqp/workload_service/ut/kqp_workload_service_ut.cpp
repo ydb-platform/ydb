@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=0
             );
-        )", EStatus::GENERIC_ERROR, "Cannot create default pool manually, pool will be created automatically during first request execution");
+        )", EStatus::PRECONDITION_FAILED, "Cannot create default pool manually, pool will be created automatically during first request execution");
 
         // Create default pool
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(poolId)));
@@ -489,7 +489,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             ALTER RESOURCE POOL )" << poolId << R"( SET (
                 CONCURRENT_QUERY_LIMIT=0
             );
-        )", EStatus::GENERIC_ERROR, "Can not change property concurrent_query_limit for default pool");
+        )", EStatus::PRECONDITION_FAILED, "Can not change property concurrent_query_limit for default pool");
     }
 
     Y_UNIT_TEST(TestAlterResourcePool) {

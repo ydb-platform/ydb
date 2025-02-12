@@ -39,13 +39,13 @@ void ProbeTest(bool isServerless) {
     const auto sender = runtime.AllocateEdgeActor();
 
     bool firstStatsToSA = false;
-    auto statsObserver1 = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev){
+    auto statsObserver1 = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& /* ev */){
         firstStatsToSA = true;
     });
     runtime.WaitFor("TEvSchemeShardStats 1", [&]{ return firstStatsToSA; });
 
     bool secondStatsToSA = false;
-    auto statsObserver2 = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev){
+    auto statsObserver2 = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& /* ev */){
         secondStatsToSA = true;
     });
     runtime.WaitFor("TEvSchemeShardStats 2", [&]{ return secondStatsToSA; });

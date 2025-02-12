@@ -437,7 +437,7 @@ protected:
             return ::NYT::NRpc::TServiceBase::TLiteHandler(); \
         } \
         return \
-            BIND([this, typedContext = std::move(typedContext)] ( \
+            BIND_NO_PROPAGATE([this, typedContext = std::move(typedContext)] ( \
                 const ::NYT::NRpc::IServiceContextPtr&, \
                 const ::NYT::NRpc::THandlerInvocationOptions&) \
             { \

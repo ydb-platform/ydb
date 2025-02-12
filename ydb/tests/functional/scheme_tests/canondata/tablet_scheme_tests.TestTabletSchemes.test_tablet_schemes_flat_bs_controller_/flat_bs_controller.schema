@@ -115,6 +115,21 @@
                 "ColumnId": 23,
                 "ColumnName": "TryToRelocateBrokenDisksLocallyFirst",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "YamlConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 26,
+                "ColumnName": "ShredState",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 27,
+                "ColumnName": "StorageYamlConfig",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -142,7 +157,10 @@
                     20,
                     21,
                     22,
-                    23
+                    23,
+                    24,
+                    26,
+                    27
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -243,6 +261,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 19,
+                "ColumnName": "ShredComplete",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 2,
                 "ColumnName": "PDiskID",
                 "ColumnType": "Uint32"
@@ -315,6 +338,7 @@
                     17,
                     18,
                     1,
+                    19,
                     2,
                     3,
                     4,

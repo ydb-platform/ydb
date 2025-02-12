@@ -16,6 +16,7 @@
 #include <yt/yt/client/table_client/row_buffer.h>
 #include <yt/yt/client/table_client/table_consumer.h>
 #include <yt/yt/client/table_client/table_output.h>
+#include <yt/yt/client/table_client/timestamped_schema_helpers.h>
 #include <yt/yt/client/table_client/unversioned_writer.h>
 #include <yt/yt/client/table_client/versioned_writer.h>
 #include <yt/yt/client/table_client/wire_protocol.h>
@@ -267,14 +268,15 @@ void TWriteTableCommand::Register(TRegistrar registrar)
         .Default(1_MB);
 }
 
-TFuture<ITableWriterPtr> TWriteTableCommand::CreateTableWriter(
-    const ICommandContextPtr& context) const
+NApi::ITableWriterPtr TWriteTableCommand::CreateTableWriter(
+    const ICommandContextPtr& context)
 {
     PutMethodInfoInTraceContext("write_table");
 
-    return context->GetClient()->CreateTableWriter(
+    return WaitFor(context->GetClient()->CreateTableWriter(
         Path,
-        Options);
+        Options))
+            .ValueOrThrow();
 }
 
 void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
@@ -289,8 +291,7 @@ void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
     Options.PingAncestors = true;
     Options.Config = config;
 
-    auto apiWriter = WaitFor(CreateTableWriter(context))
-        .ValueOrThrow();
+    auto apiWriter = CreateTableWriter(context);
 
     auto schemalessWriter = CreateSchemalessFromApiWriterAdapter(std::move(apiWriter));
 
@@ -565,6 +566,19 @@ void TUnfreezeTableCommand::DoExecute(ICommandContextPtr context)
 {
     auto asyncResult = context->GetClient()->UnfreezeTable(
         Path.GetPath(),
+        Options);
+    WaitFor(asyncResult)
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TCancelTabletTransitionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto asyncResult = context->GetClient()->CancelTabletTransition(
+        TabletId,
         Options);
     WaitFor(asyncResult)
         .ThrowOnError();
@@ -868,6 +882,12 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
             Options.Timestamp);
     }
 
+    auto format = context->GetOutputFormat();
+    // Allows to display simple types like `timestamp` correctly in UI (YT-16386).
+    if (format.GetType() == EFormatType::WebJson) {
+        Options.UseOriginalTableSchema = true;
+    }
+
     auto result = WaitFor(clientBase->SelectRows(Query, Options))
         .ValueOrThrow();
 
@@ -882,7 +902,6 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
         });
     }
 
-    auto format = context->GetOutputFormat();
     auto output = context->Request().OutputStream;
     auto writer = CreateSchemafulWriterForFormat(format, rowset->GetSchema(), output);
 
@@ -1068,6 +1087,13 @@ void TLookupRowsCommand::Register(TRegistrar registrar)
             return command->Options.ReplicaConsistency;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TVersionedReadOptions>(
+        "versioned_read_options",
+        [] (TThis* command) -> auto& {
+            return command->Options.VersionedReadOptions;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
@@ -1092,6 +1118,11 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
             << TErrorAttribute("rich_ypath", Path);
     }
 
+    if (Versioned && Options.VersionedReadOptions.ReadMode != NTableClient::EVersionedIOMode::Default) {
+        THROW_ERROR_EXCEPTION("Versioned lookup does not support versioned read mode %Qlv",
+            Options.VersionedReadOptions.ReadMode);
+    }
+
     struct TLookupRowsBufferTag
     { };
 
@@ -1112,12 +1143,15 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
     auto nameTable = valueConsumer.GetNameTable();
 
     if (ColumnNames) {
+        auto primarySchema = Options.VersionedReadOptions.ReadMode == NTableClient::EVersionedIOMode::LatestTimestamp
+            ? ToLatestTimestampSchema(tableInfo->Schemas[ETableSchemaKind::Primary])
+            : tableInfo->Schemas[ETableSchemaKind::Primary];
         TColumnFilter::TIndexes columnFilterIndexes;
         columnFilterIndexes.reserve(ColumnNames->size());
         for (const auto& name : *ColumnNames) {
             auto optionalIndex = nameTable->FindId(name);
             if (!optionalIndex) {
-                if (!tableInfo->Schemas[ETableSchemaKind::Primary]->FindColumn(name)) {
+                if (!primarySchema->FindColumn(name)) {
                     THROW_ERROR_EXCEPTION("No such column %Qv",
                         name);
                 }

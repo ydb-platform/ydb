@@ -767,10 +767,9 @@ bool CanRebuildForWideBlockChannelOutput(bool forceBlocks, const TDqPhyStage& st
     }
 
     if (!forceBlocks) {
-        // ensure that stage has blocks on top level (i.e. FromFlow(WideFromBlocks(...)))
-        if (!stage.Program().Body().Maybe<TCoFromFlow>() ||
-            !stage.Program().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
-        {
+        // Ensure that stage has blocks on top level (i.e.
+        // (WideFromBlocks(...))).
+        if (!stage.Program().Body().Maybe<TCoWideFromBlocks>()) {
             return false;
         }
     }
@@ -790,16 +789,27 @@ bool CanRebuildForWideBlockChannelOutput(bool forceBlocks, const TDqOutput& outp
 
 TDqPhyStage RebuildStageOutputAsWideBlock(const TDqPhyStage& stage, TExprContext& ctx)
 {
+    if constexpr (!NYql::NBlockStreamIO::WideToBlocks) {
+        return Build<TDqPhyStage>(ctx, stage.Pos())
+            .InitFrom(stage)
+            .Program()
+                .Args(stage.Program().Args())
+                .Body<TCoFromFlow>()
+                    .Input<TCoWideToBlocks>()
+                        .Input<TCoToFlow>()
+                            .Input(stage.Program().Body())
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+            .Done();
+    }
     return Build<TDqPhyStage>(ctx, stage.Pos())
         .InitFrom(stage)
         .Program()
             .Args(stage.Program().Args())
-            .Body<TCoFromFlow>()
-                .Input<TCoWideToBlocks>()
-                    .Input<TCoToFlow>()
-                        .Input(stage.Program().Body())
-                    .Build()
-                .Build()
+            .Body<TCoWideToBlocks>()
+                .Input(stage.Program().Body())
             .Build()
         .Build()
         .Done();
@@ -827,12 +837,8 @@ TDqPhyStage RebuildStageInputsAsWideBlock(bool forceBlocks, const TDqPhyStage& s
             ++blockInputs;
             // input will actually be wide block stream - convert it to wide stream first
             TExprNode::TPtr newArgNode = ctx.Builder(arg.Pos())
-                .Callable("FromFlow")
-                    .Callable(0, "WideFromBlocks")
-                        .Callable(0, "ToFlow")
-                            .Add(0, newArg.Ptr())
-                        .Seal()
-                    .Seal()
+                .Callable("WideFromBlocks")
+                    .Add(0, newArg.Ptr())
                 .Seal()
                 .Build();
             argsMap.emplace(arg.Raw(), newArgNode);

@@ -20,6 +20,10 @@ namespace NFlatExecutorSetup {
         Y_UNUSED(ctx);
     }
 
+    void ITablet::DataCleanupComplete(const TActorContext& ctx) {
+        Y_UNUSED(ctx);
+    }
+
     void ITablet::CompletedLoansChanged(const TActorContext &ctx) {
         Y_UNUSED(ctx);
     }

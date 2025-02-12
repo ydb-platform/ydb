@@ -15,14 +15,14 @@
 class TLogBackend;
 class TLog;
 
-namespace NYdb {
+namespace NYdb::inline V3 {
 
 class TDriver;
 class TParams;
 
 }
 
-namespace NYdb::NTable {
+namespace NYdb::inline V3::NTable {
 
 class TSession;
 class TTableClient;
@@ -37,7 +37,7 @@ class TTopicOperationsScenario {
 public:
     TTopicOperationsScenario();
 
-    int Run(const TClientCommand::TConfig& config);
+    int Run(TClientCommand::TConfig& config);
 
     void EnsurePercentileIsValid() const;
     void EnsureWarmupSecIsValid() const;
@@ -132,8 +132,8 @@ private:
 
     static THolder<TLogBackend> MakeLogBackend(TClientCommand::TConfig::EVerbosityLevel level);
 
-    void InitLog(const TClientCommand::TConfig& config);
-    void InitDriver(const TClientCommand::TConfig& config);
+    void InitLog(TClientCommand::TConfig& config);
+    void InitDriver(TClientCommand::TConfig& config);
     void InitStatsCollector();
 };
 

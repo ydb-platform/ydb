@@ -1,0 +1,6 @@
+IMPORT agg SYMBOLS $Agg_sum, $Agg_max;
+
+$Square = ($x) -> { RETURN $x * $x; };
+
+EXPORT $Square, $Agg_sum, $Agg_max;
+

@@ -92,13 +92,19 @@ namespace NKikimr {
 
         void OnKickEmergencyPutQueue();
 
+        void SetLogChunkCount(ui32 logChunkCount);
+        bool IsThrottling() const;
+        ui32 GetThrottlingRate() const; // permille
+
     private:
+        TIntrusivePtr<TVDiskContext> VCtx;
         std::shared_ptr<THull> Hull;
         NMonGroup::TSkeletonOverloadGroup Mon;
         std::unique_ptr<TEmergencyQueue> EmergencyQueue;
         std::shared_ptr<TDynamicPDiskWeightsManager> DynamicPDiskWeightsManager;
         std::unique_ptr<TThrottlingController> ThrottlingController;
         bool KickInFlight = false;
+        ui32 LogChunkCount = 0;
     };
 
 } // NKikimr

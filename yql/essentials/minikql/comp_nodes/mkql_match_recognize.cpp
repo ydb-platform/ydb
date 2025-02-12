@@ -4,7 +4,7 @@
 #include "mkql_match_recognize_nfa.h"
 #include "mkql_match_recognize_rows_formatter.h"
 #include "mkql_match_recognize_save_load.h"
-#include "mkql_saveload.h"
+#include "mkql_match_recognize_version.h"
 
 #include <yql/essentials/core/sql_types/match_recognize.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -20,8 +20,6 @@
 namespace NKikimr::NMiniKQL {
 
 namespace NMatchRecognize {
-
-constexpr ui32 StateVersion = 1;
 
 struct TMatchRecognizeProcessorParameters {
     IComputationExternalNode* InputDataArg;
@@ -50,8 +48,8 @@ public:
     {}
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
-        Parameters.InputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TListValue<TSparseList>>(Rows));
-        Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(Rows.Size()));
+        Parameters.InputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TListValue>(Rows));
+        Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(Rows.LastRowIndex()));
         Nfa.ProcessRow(Rows.Append(std::move(row)), ctx);
         return HasMatched();
     }
@@ -70,7 +68,7 @@ public:
         }
         Parameters.MatchedVarsArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TSparseList::TRange>>(ctx.HolderFactory, match->Vars));
         Parameters.MeasureInputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TMeasureInputDataValue>(
-            ctx.HolderFactory.Create<TListValue<TSparseList>>(Rows),
+            ctx.HolderFactory.Create<TListValue>(Rows),
             Parameters.MeasureInputColumnOrder,
             Parameters.MatchedVarsArg->GetValue(ctx),
             Parameters.VarNames,
@@ -90,6 +88,7 @@ public:
         Rows.Save(serializer);
         Nfa.Save(serializer);
         serializer.Write(MatchNumber);
+        RowsFormatter_->Save(serializer);
     }
 
     void Load(TMrInputSerializer& serializer) {
@@ -97,6 +96,9 @@ public:
         Rows.Load(serializer);
         Nfa.Load(serializer);
         MatchNumber = serializer.Read<ui64>();
+        if (serializer.GetStateVersion() >= 2U) {
+            RowsFormatter_->Load(serializer);
+        }
     }
 
 private:
@@ -148,17 +150,11 @@ public:
         if (isValid) {
             out.Write(DelayedRow);
         }
-        RowPatternConfiguration->Save(out);
         return out.MakeState();
     }
 
     bool Load2(const NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
-
-        const auto loadStateVersion = in.GetStateVersion();
-        if (loadStateVersion != StateVersion) {
-            THROW yexception() << "Invalid state version " << loadStateVersion;
-        }
 
         in.Read(CurPartitionPackedKey);
         bool validPartitionHandler = in.Read<bool>();
@@ -176,9 +172,11 @@ public:
         if (validDelayedRow) {
             in(DelayedRow);
         }
-        auto restoredRowPatternConfiguration = std::make_shared<TNfaTransitionGraph>();
-        restoredRowPatternConfiguration->Load(in);
-        MKQL_ENSURE(*restoredRowPatternConfiguration == *RowPatternConfiguration, "Restored and current RowPatternConfiguration is different");
+        if (in.GetStateVersion() < 2U) {
+            auto restoredRowPatternConfiguration = std::make_shared<TNfaTransitionGraph>();
+            restoredRowPatternConfiguration->Load(in);
+            MKQL_ENSURE(*restoredRowPatternConfiguration == *RowPatternConfiguration, "Restored and current RowPatternConfiguration is different");
+        }
         MKQL_ENSURE(in.Empty(), "State is corrupted");
         return true;
     }
@@ -296,17 +294,11 @@ public:
         }
         // HasReadyOutput is not packed because when loading we can recalculate HasReadyOutput from Partitions.
         serializer.Write(Terminating);
-        NfaTransitionGraph->Save(serializer);
         return serializer.MakeState();
     }
 
     bool Load2(const NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
-
-        const auto loadStateVersion = in.GetStateVersion();
-        if (loadStateVersion != StateVersion) {
-            THROW yexception() << "Invalid state version " << loadStateVersion;
-        }
 
         Partitions.clear();
         auto partitionsCount = in.Read<TPartitionMap::size_type>();
@@ -332,10 +324,12 @@ public:
             }
         }
         in.Read(Terminating);
-        auto restoredTransitionGraph = std::make_shared<TNfaTransitionGraph>();
-        restoredTransitionGraph->Load(in);
-        MKQL_ENSURE(NfaTransitionGraph, "Empty NfaTransitionGraph");
-        MKQL_ENSURE(*restoredTransitionGraph == *NfaTransitionGraph, "Restored and current NfaTransitionGraph is different");
+        if (in.GetStateVersion() < 2U) {
+            auto restoredTransitionGraph = std::make_shared<TNfaTransitionGraph>();
+            restoredTransitionGraph->Load(in);
+            MKQL_ENSURE(NfaTransitionGraph, "Empty NfaTransitionGraph");
+            MKQL_ENSURE(*restoredTransitionGraph == *NfaTransitionGraph, "Restored and current NfaTransitionGraph is different");
+        }
         MKQL_ENSURE(in.Empty(), "State is corrupted");
         return true;
     }

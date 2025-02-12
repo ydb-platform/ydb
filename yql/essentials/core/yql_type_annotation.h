@@ -212,6 +212,33 @@ public:
     const TOrderedItem& back() const {
         return Order_.back();
     }
+
+    TVector<TString> GetLogicalNames() const {
+        TVector<TString> res;
+        res.reserve(Order_.size());
+        for (const auto &[name, _]: Order_) {
+            res.emplace_back(name);
+        }
+        return res;
+    }
+
+    TVector<TString> GetPhysicalNames() const {
+        TVector<TString> res;
+        res.reserve(Order_.size());
+        for (const auto &[_, name]: Order_) {
+            res.emplace_back(name);
+        }
+        return res;
+    }
+
+    bool HasDuplicates() const {
+        for (const auto& e: Order_) {
+            if (e.PhysicalName != e.LogicalName) {
+                return true;
+            }
+        }
+        return false;
+    }
 private:
     THashMap<TString, TString> GeneratedToOriginal_;
     THashMap<TString, uint64_t> UseCount_;
@@ -272,6 +299,12 @@ enum class EBlockEngineMode {
     Disable /* "disable" */,
     Auto /* "auto" */,
     Force /* "force" */,
+};
+
+enum class EEngineType {
+    Default /* "default" */,
+    Dq /* "dq" */,
+    Ytflow /* "ytflow" */,
 };
 
 struct TUdfCachedInfo {
@@ -389,6 +422,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool OrderedColumns = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
+    THashSet<TString> PeepholeFlags;
     bool StreamLookupJoin = false;
     ui32 MaxAggPushdownPredicates = 6; // algorithm complexity is O(2^N)
 
@@ -401,6 +435,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
 
     std::optional<bool> InitializeResult;
     EHiddenMode HiddenMode = EHiddenMode::Disable;
+    EEngineType EngineType = EEngineType::Default;
 
     template <typename T>
     T GetRandom() const noexcept;

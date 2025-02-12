@@ -1,6 +1,13 @@
 #include "ydb_cluster.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_bsconfig/ydb_storage_config.h>
+#include "ydb_dynamic_config.h"
+
+#include <ydb-cpp-sdk/client/bsconfig/storage_config.h>
+#include <ydb/public/lib/ydb_cli/dump/dump.h>
+
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
 using namespace NKikimr;
 
@@ -10,6 +17,8 @@ TCommandCluster::TCommandCluster()
     : TClientCommandTree("cluster", {}, "Cluster-wide administration")
 {
     AddCommand(std::make_unique<TCommandClusterBootstrap>());
+    AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(true));
+    AddCommand(std::make_unique<TCommandClusterDump>());
 }
 
 TCommandClusterBootstrap::TCommandClusterBootstrap()
@@ -31,7 +40,37 @@ int TCommandClusterBootstrap::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     NYdb::NStorageConfig::TStorageConfigClient client(*driver);
     auto result = client.BootstrapCluster(SelfAssemblyUUID).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    return EXIT_SUCCESS;
+}
+
+TCommandClusterDump::TCommandClusterDump()
+    : TYdbCommand("dump", {}, "Dump cluster into local directory")
+{}
+
+void TCommandClusterDump::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = true;
+
+    config.Opts->AddLongOption('o', "output", "Path in a local filesystem to a directory to place dump into."
+            " Directory should either not exist or be empty."
+            " If not specified, the dump is placed in the directory backup_YYYYYYMMDDDThhmmss.")
+        .RequiredArgument("PATH")
+        .StoreResult(&FilePath);
+}
+
+void TCommandClusterDump::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+}
+
+int TCommandClusterDump::Run(TConfig& config) {
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+
+    NDump::TClient client(CreateDriver(config), std::move(log));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.DumpCluster(FilePath));
+
     return EXIT_SUCCESS;
 }
 

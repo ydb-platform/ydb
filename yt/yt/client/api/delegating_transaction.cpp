@@ -41,12 +41,12 @@ DELEGATE_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookupR
     (subrequests, options))
 
 DELEGATE_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options),
     (query, options))
 
 DELEGATE_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options),
     (query, options))
 
@@ -312,15 +312,15 @@ DELEGATE_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (
     const TPushQueueProducerOptions& options),
     (producerPath, queuePath, sessionId, epoch, nameTable, serializedRows, options))
 
-DELEGATE_METHOD(TFuture<TDistributedWriteSessionPtr>, StartDistributedWriteSession, (
+DELEGATE_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (
     const NYPath::TRichYPath& path,
     const TDistributedWriteSessionStartOptions& options),
     (path, options))
 
 DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteSession, (
-    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options),
-    (std::move(session), options))
+    (sessionWithResults, options))
 
 #undef DELEGATE_METHOD
 

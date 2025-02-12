@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -411,8 +412,9 @@ void TMkqlIOSpecs::InitInput(NCommon::TCodecContext& codecCtx,
     bool useCommonColumns = true;
     THashMap<TString, ui32> structColumns;
     if (columns.Defined()) {
+        TColumnOrder order(*columns);
         for (size_t i = 0; i < columns->size(); ++i) {
-            structColumns.insert({columns->at(i), (ui32)i});
+            structColumns.insert({order.at(i).PhysicalName, (ui32)i});
         }
     }
     else if (itemType && InputGroups.empty()) {

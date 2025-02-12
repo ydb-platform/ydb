@@ -864,7 +864,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
-            toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            const auto& alter = pbModifyScheme.GetAlterLogin();
+
+            toResolve.RequiredAccess = (!IsChangeCanLoginOperation(alter) && IsSelfChangePasswordOperation(alter) ?
+                        NACLib::EAccessRights::NoAccess : 
+                        NACLib::EAccessRights::AlterSchema | accessToUserAttrs);
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -914,6 +918,20 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return false;
         }
         return true;
+    }
+
+    bool IsChangeCanLoginOperation(const NKikimrSchemeOp::TAlterLogin& alterLogin) {
+        return alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser && alterLogin.GetModifyUser().HasCanLogin();
+    }
+
+    bool IsSelfChangePasswordOperation(const NKikimrSchemeOp::TAlterLogin& alterLogin) {
+        if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser && alterLogin.GetModifyUser().HasPassword()) {
+            if (UserToken) {
+                const auto& modifyUser = alterLogin.GetModifyUser();
+                return UserToken->GetUserSID() == modifyUser.GetUser();
+            }
+        }
+        return false;
     }
 
     THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForACL() {

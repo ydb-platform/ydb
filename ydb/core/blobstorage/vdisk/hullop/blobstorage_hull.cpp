@@ -201,7 +201,9 @@ namespace NKikimr {
             }
         }
 
-        ValidateWriteQuery(ctx, id, writtenBeyondBarrier);
+        if (writtenBeyondBarrier) {
+            ValidateWriteQuery(ctx, id, writtenBeyondBarrier);
+        }
         return {NKikimrProto::OK, "", false};
     }
 

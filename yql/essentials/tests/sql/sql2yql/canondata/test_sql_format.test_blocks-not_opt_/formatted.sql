@@ -1,9 +1,7 @@
-USE plato;
+$data = [<|x: TRUE|>, <|x: FALSE|>, <|x: NULL|>];
 
 SELECT
-    key,
-    subkey,
-    NOT key
+    NOT x
 FROM
-    Input
+    as_table($data)
 ;

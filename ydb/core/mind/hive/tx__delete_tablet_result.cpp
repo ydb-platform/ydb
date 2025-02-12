@@ -8,6 +8,7 @@ class TTxDeleteTabletResult : public TTransactionBase<THive> {
     TEvTabletBase::TEvDeleteTabletResult::TPtr Result;
     TTabletId TabletId;
     TSideEffects SideEffects;
+    bool Success;
 
 public:
     TTxDeleteTabletResult(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev, THive* hive)
@@ -20,6 +21,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
+        Success = true;
         TEvTabletBase::TEvDeleteTabletResult* msg = Result->Get();
         BLOG_D("THive::TTxDeleteTabletResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
@@ -52,11 +54,12 @@ public:
                 TActorId unlockedFromActor = tablet->ClearLockedToActor();
                 if (unlockedFromActor) {
                     // Notify lock owner that lock has been lost
-                    SideEffects.Send(unlockedFromActor, new TEvHive::TEvLockTabletExecutionLost(TabletId));
+                    SideEffects.Send(unlockedFromActor, new TEvHive::TEvLockTabletExecutionLost(TabletId, NKikimrHive::LOCK_LOST_REASON_TABLET_DELETED));
                 }
                 Self->PendingCreateTablets.erase({tablet->Owner.first, tablet->Owner.second});
                 Self->DeleteTablet(tablet->Id);
             } else {
+                Success = false;
                 BLOG_W("THive::TTxDeleteTabletResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
                 Y_ENSURE_LOG(tablet->IsDeleting(), " tablet " << tablet->Id);
                 SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
@@ -67,8 +70,14 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxDeleteTabletResult(" << TabletId << ")::Complete SideEffects " << SideEffects);
+        if (Success) {
+            --Self->DeleteTabletInProgress;
+            while (!Self->DeleteTabletQueue.empty() && Self->DeleteTabletInProgress < THive::MAX_DELETE_TABLET_IN_PROGRESS) {
+                Self->BlockStorageForDelete(Self->DeleteTabletQueue.front(), SideEffects);
+                Self->DeleteTabletQueue.pop();
+            }
+        }
         SideEffects.Complete(ctx);
-
     }
 };
 

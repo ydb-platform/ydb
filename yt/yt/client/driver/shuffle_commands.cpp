@@ -10,7 +10,6 @@
 #include <yt/yt/client/table_client/table_output.h>
 #include <yt/yt/client/table_client/value_consumer.h>
 
-
 namespace NYT::NDriver {
 
 using namespace NConcurrency;
@@ -26,9 +25,9 @@ void TStartShuffleCommand::Register(TRegistrar registrar)
     registrar.Parameter("partition_count", &TThis::PartitionCount);
     registrar.Parameter("parent_transaction_id", &TThis::ParentTransactionId);
     registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
-        "medium_name",
+        "medium",
         [] (TThis* command) -> auto& {
-            return command->Options.MediumName;
+            return command->Options.Medium;
         })
         .Default();
     registrar.ParameterWithUniversalAccessor<std::optional<int>>(

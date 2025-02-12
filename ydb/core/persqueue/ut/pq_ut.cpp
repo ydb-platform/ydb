@@ -2352,7 +2352,9 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             data.emplace_back(i, msg);
         }
 
-        PQTabletPrepare({.maxCountInPartition=100, .deleteTime=TDuration::Days(2).Seconds(), .partitions=1},
+        static ui32 pqConfigVersion = 1'000;
+
+        PQTabletPrepare({.maxCountInPartition=100, .deleteTime=TDuration::Days(2).Seconds(), .partitions=1, .specVersion=pqConfigVersion++},
                         {{"user1", true}, {"user2", true}}, tc);
         CmdWrite(0, "sourceid1", data, tc, false, {}, true);
 
@@ -2383,7 +2385,7 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             consumerDeleteRequest.Reset(new TEvPersQueue::TEvUpdateConfig());
             consumerDeleteRequest->MutableRecord()->SetTxId(42);
             auto& cfg = *consumerDeleteRequest->MutableRecord()->MutableTabletConfig();
-            cfg.SetVersion(42);
+            cfg.SetVersion(pqConfigVersion++);
             cfg.AddPartitionIds(0);
             cfg.AddPartitions()->SetPartitionId(0);
             cfg.SetLocalDC(true);
@@ -2429,6 +2431,174 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
     });
 }
 
+Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
+{
+    const TString firstMessageKey = "d0000000000_00000000000000000000_00000_0000000001_00000|";
+
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+
+    bool needDropCmdDeleteFirstMessage = true;
+    bool foundCmdDeleteFirstMessage = false;
+
+    PQTabletPrepare({.partitions = 1}, {}, tc);
+
+    auto observe = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* event = ev->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            foundCmdDeleteFirstMessage = false;
+            const auto& record = event->Record;
+            for (size_t i = 0; i < record.CmdDeleteRangeSize(); ++i) {
+                const auto& cmd = record.GetCmdDeleteRange(i);
+                const auto& range = cmd.GetRange();
+                if (range.GetFrom() == firstMessageKey) {
+                    foundCmdDeleteFirstMessage = true;
+                    return needDropCmdDeleteFirstMessage ?
+                        TTestActorRuntimeBase::EEventAction::DROP : TTestActorRuntimeBase::EEventAction::PROCESS;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observe);
+
+    Cerr << ">>> write #1" << Endl;
+
+    TVector<std::pair<ui64, TString>> data;
+    data.resize(1);
+
+    data[0].first = 1;
+    data[0].second = TString(1_KB, 'x');
+    CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 0);
+
+    Cerr << ">>> write #2" << Endl;
+
+    ++data[0].first;
+    data[0].second = TString(1_MB, 'x');
+    CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 1);
+
+    Cerr << ">>> wait for CmdDeleteRange" << Endl;
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return foundCmdDeleteFirstMessage; };
+    tc.Runtime->DispatchEvents(options);
+
+    auto keys = GetTabletKeys(tc);
+    UNIT_ASSERT_C(keys.contains(firstMessageKey),
+                  "not found key '" << firstMessageKey << "'");
+
+    needDropCmdDeleteFirstMessage = false;
+
+    Cerr << ">>> restart" << Endl;
+
+    PQTabletRestart(tc);
+
+    Cerr << ">>> write #3" << Endl;
+
+    ++data[0].first;
+    data[0].second = TString(1_KB, 'x');
+    CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 2);
+
+    Cerr << ">>> write #1" << Endl;
+
+    keys = GetTabletKeys(tc);
+    UNIT_ASSERT_C(!keys.contains(firstMessageKey),
+                  "the PQ tablet did not delete the '" << firstMessageKey << "' key during startup");
+}
+
+Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
+{
+    // The test verifies that the block is not deleted until the reading is finished. We write
+    // down several large messages in the topic. We start reading and hold it. While we are reading
+    // the message, we add a few more messages to the topic. The retention is triggered. We make
+    // sure that the blobs are deleted only when the reading is finished
+
+    auto writeMsgs = [](const TString& sourceId, size_t begin, size_t end, size_t size, TTestContext& tc) {
+        for (size_t i = begin; i < end; ++i) {
+            TVector<std::pair<ui64, TString>> data;
+            data.emplace_back(i + 1, TString(size, 'x'));
+            CmdWrite(0, sourceId, data, tc, false, {}, true, "", -1, i);
+        }
+    };
+
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+
+    const TString sessionId = "session1";
+    const TString user = "user1";
+
+    // Creating a topic with the retention settings
+    PQTabletPrepare({.partitions = 1, .storageLimitBytes = 50_MB}, {{user, false}}, tc);
+
+    // We record several messages. If you record another one, the first one will be deleted
+    writeMsgs("sourceid1", 0, 7, 7_MB, tc);
+
+    // Making sure that the blobs have not been deleted yet
+    auto keys = GetTabletKeys(tc);
+
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
+
+    // We are reading from topic 2 messages from offset 2
+    TPQCmdSettings sessionSettings{0, user, sessionId};
+    sessionSettings.PartitionSessionId = 1;
+    sessionSettings.KeepPipe = true;
+
+    TPQCmdReadSettings readSettings{sessionId, 0, 2, 2, 16_MB, 2, false, {2, 3}, 0, 0, user};
+    readSettings.PartitionSessionId = 1;
+    readSettings.User = user;
+    readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+
+    // The messages are large and will be cached. We intercept the response from the
+    // cache and hold it. The reading will not end until the response from the cache arrives
+    TAutoPtr<IEventHandle> blobResponseEvent;
+    auto observe = [&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvBlobResponse>()) {
+            blobResponseEvent = ev;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observe);
+
+    BeginCmdRead(readSettings, tc);
+
+    // Waiting for a response from the cache
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return !!blobResponseEvent; };
+    tc.Runtime->DispatchEvents(options);
+
+    // We're recording a few more big messages. The retention will be triggered and the first messages
+    // will have to be deleted
+    writeMsgs("sourceid1", 7, 14, 7_MB, tc);
+
+    keys = GetTabletKeys(tc);
+
+    // We make sure that the blobs with messages on offsets 2 and 3 have not been deleted
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
+
+    tc.Runtime->Send(blobResponseEvent);
+
+    // The reading ended without error
+    UNIT_ASSERT_C(EndCmdRead(readSettings, tc), "CmdRead failed with an error");
+
+    // We are writing a short message to launch the planned blob removals
+    writeMsgs("sourceid1", 14, 15, 100_KB, tc);
+
+    keys = GetTabletKeys(tc);
+
+    // Making sure that the blobs for messages with offsets 2 and 3 are removed
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+}
 
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

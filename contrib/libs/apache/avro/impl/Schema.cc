@@ -18,8 +18,8 @@
 
 #include <utility>
 
-#include "Schema.hh"
 #include "CustomAttributes.hh"
+#include "Schema.hh"
 
 namespace avro {
 

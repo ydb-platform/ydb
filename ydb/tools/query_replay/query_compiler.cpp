@@ -296,8 +296,8 @@ public:
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
 
         Gateway = CreateKikimrIcGateway(Query->Cluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, Query->Database, Query->DatabaseId, std::move(loader),
-            TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
-        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
+            TActivationContext::ActorSystem(), SelfId().NodeId(), counters);
+        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
             federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 
@@ -330,7 +330,7 @@ private:
 
 private:
     void Continue() {
-        TActorSystem* actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
+        TActorSystem* actorSystem = TActivationContext::ActorSystem();
         TActorId selfId = SelfId();
         auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
             bool finished = future.GetValue();

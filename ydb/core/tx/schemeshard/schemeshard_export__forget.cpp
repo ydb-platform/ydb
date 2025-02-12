@@ -74,6 +74,9 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
             Self->Exports.erase(exportInfo->Id);
             Self->PersistRemoveExport(db, exportInfo);
         } else {
+            LOG_D("TExport::TTxForget, dropping export tables"
+                << ", info: " << exportInfo->ToString()
+            );
             exportInfo->WaitTxId = InvalidTxId;
             exportInfo->State = TExportInfo::EState::Dropping;
             Self->PersistExportState(db, exportInfo);

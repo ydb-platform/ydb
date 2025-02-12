@@ -33,7 +33,7 @@
 
 #include <unordered_map>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NTable {
 
 using namespace NThreading;
@@ -1364,12 +1364,14 @@ TScanQueryPartIterator::TScanQueryPartIterator(
 {}
 
 TAsyncScanQueryPart TScanQueryPartIterator::ReadNext() {
-    if (ReaderImpl_->IsFinished())
+    if (!ReaderImpl_ || ReaderImpl_->IsFinished()) {
+        if (!IsSuccess())
+            RaiseError(TStringBuilder() << "Attempt to perform read on an unsuccessful result "
+                << GetIssues().ToString());
         RaiseError("Attempt to perform read on invalid or finished stream");
+    }
     return ReaderImpl_->ReadNext(ReaderImpl_);
 }
-
-
 
 static bool IsSessionStatusRetriable(const TCreateSessionResult& res) {
     switch (res.GetStatus()) {
@@ -2337,7 +2339,7 @@ const TVector<TString>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
-const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetVectorIndexSettings() const {
+const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetIndexSettings() const {
     return SpecializedIndexSettings_;
 }
 

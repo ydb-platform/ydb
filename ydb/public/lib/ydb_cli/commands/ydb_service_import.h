@@ -2,8 +2,8 @@
 
 #include "ydb_command.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/import/import.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/ydb_cli/common/aws.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
@@ -22,6 +22,7 @@ public:
     TCommandImportFromS3();
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
+    void ExtractParams(TConfig& config) override;
     int Run(TConfig& config) override;
 
 private:
@@ -38,7 +39,8 @@ private:
     TString Description;
     ui32 NumberOfRetries = 10;
     bool UseVirtualAddressing = true;
-    bool NoACL = true;
+    bool NoACL = false;
+    bool SkipChecksumValidation = false;
 };
 
 class TCommandImportFromFile : public TClientCommandTree {
@@ -55,6 +57,7 @@ public:
         Args[0] = "<input files...>";
     }
     void Config(TConfig& config) override;
+    void ExtractParams(TConfig& config) override;
     void Parse(TConfig& config) override;
 
 protected:

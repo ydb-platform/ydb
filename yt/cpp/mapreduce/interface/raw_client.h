@@ -8,13 +8,6 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NHttpClient {
-    class IHttpResponse;
-    using IHttpResponsePtr = std::unique_ptr<IHttpResponse>;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 class IRawClient
     : public virtual TThrRefBase
 {
@@ -139,6 +132,12 @@ public:
 
     // Operations
 
+    virtual TOperationId StartOperation(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        EOperationType type,
+        const TNode& spec) = 0;
+
     virtual TOperationAttributes GetOperation(
         const TOperationId& operationId,
         const TGetOperationOptions& options = {}) = 0;
@@ -189,11 +188,6 @@ public:
         const TJobId& jobId,
         const TGetJobFailContextOptions& options = {}) = 0;
 
-    virtual TString GetJobStderrWithRetries(
-        const TOperationId& operationId,
-        const TJobId& jobId,
-        const TGetJobStderrOptions& options = {}) = 0;
-
     virtual IFileReaderPtr GetJobStderr(
         const TOperationId& operationId,
         const TJobId& jobId,
@@ -202,12 +196,6 @@ public:
     virtual std::vector<TJobTraceEvent> GetJobTrace(
         const TOperationId& operationId,
         const TGetJobTraceOptions& options = {}) = 0;
-
-    // SkyShare
-
-    virtual NHttpClient::IHttpResponsePtr SkyShareTable(
-        const std::vector<TYPath>& tablePaths,
-        const TSkyShareTableOptions& options = {}) = 0;
 
     // Files
     virtual std::unique_ptr<IInputStream> ReadFile(
@@ -340,7 +328,11 @@ public:
 
     virtual ui64 GenerateTimestamp() = 0;
 
-    virtual TAuthorizationInfo WhoAmI() = 0;
+    // Batch
+
+    virtual IRawBatchRequestPtr CreateRawBatchRequest() = 0;
+
+    virtual IRawClientPtr Clone() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

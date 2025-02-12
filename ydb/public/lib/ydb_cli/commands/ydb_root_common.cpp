@@ -18,9 +18,9 @@
 #include "ydb_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/credentials.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/jwt_token_source.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
@@ -36,7 +36,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     , Settings(settings)
 {
     ValidateSettings();
-    AddCommand(std::make_unique<TCommandAdmin>());
+    AddDangerousCommand(std::make_unique<TCommandAdmin>());
     AddCommand(std::make_unique<TCommandAuth>());
     AddCommand(std::make_unique<TCommandDiscovery>());
     AddCommand(std::make_unique<TCommandScheme>());
@@ -54,6 +54,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandTopic>());
     AddCommand(std::make_unique<TCommandWorkload>());
     AddCommand(std::make_unique<TCommandDebug>());
+    PropagateFlags(TCommandFlags{.Dangerous = false, .OnlyExplicitProfile = false});
 }
 
 void TClientCommandRootCommon::ValidateSettings() {
@@ -87,6 +88,7 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     config.UseStaticCredentials = Settings.UseStaticCredentials.GetRef();
     config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
+    config.StorageUrl = Settings.StorageUrl;
     SetCredentialsGetter(config);
 }
 
@@ -98,7 +100,7 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
         }
 
         if (config.UseStaticCredentials) {
-            if (config.StaticCredentials.User) {
+            if (!config.StaticCredentials.User.empty()) {
                 return CreateLoginCredentialsProviderFactory(config.StaticCredentials);
             }
         }
@@ -118,7 +120,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     NLastGetopt::TOpts& opts = *config.Opts;
 
     TStringBuilder endpointHelp;
-    endpointHelp << "[Required] Endpoint to connect. Protocols: grpc, grpcs (Default: "
+    endpointHelp << "Endpoint to connect. Protocols: grpc, grpcs (Default: "
         << (Settings.EnableSsl.GetRef() ? "grpcs" : "grpc" ) << ")." << Endl;
 
     endpointHelp << "  Endpoint search order:" << Endl
@@ -126,7 +128,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         << "    2. Profile specified with --profile option" << Endl
         << "    3. Active configuration profile";
     TStringBuilder databaseHelp;
-    databaseHelp << "[Required] Database to work with." << Endl
+    databaseHelp << "Database to work with." << Endl
         << "  Database search order:" << Endl
         << "    1. This option" << Endl
         << "    2. Profile specified with --profile option" << Endl
@@ -142,6 +144,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         });
     opts.AddLongOption('p', "profile", "Profile name to use configuration parameters from.")
         .RequiredArgument("NAME").StoreResult(&ProfileName);
+    opts.AddLongOption('y', "assume-yes", "Automatic yes to prompts; assume \"yes\" as answer to all prompts and run non-interactively.")
+        .Optional().StoreTrue(&config.AssumeYes);
     TClientCommandRootBase::Config(config);
 
     if (config.UseIamAuth) {
@@ -254,7 +258,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
         if (config.HelpCommandVerbosiltyLevel >= 2) {
             TStringBuilder supportedJwtAlgorithms;
-            for (const TString& alg : GetSupportedOauth2TokenExchangeJwtAlgorithms()) {
+            for (const std::string& alg : GetSupportedOauth2TokenExchangeJwtAlgorithms()) {
                 if (supportedJwtAlgorithms) {
                     supportedJwtAlgorithms << ", ";
                 }
@@ -319,6 +323,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     stream << " [options...] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
     RenderCommandsDescription(stream, colors);
+    stream << Endl << Endl << colors.BoldColor() << "Commands in " << colors.Red() << colors.BoldColor() <<  "admin" << colors.OldColor() << colors.BoldColor() << " subtree may treat global flags and profile differently, see corresponding help" << colors.OldColor() << Endl;
     opts.SetCmdLineDescr(stream.Str());
 
     opts.GetLongOption("time").Hidden();
@@ -328,6 +333,11 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 }
 
 void TClientCommandRootCommon::Parse(TConfig& config) {
+    TClientCommandRootBase::Parse(config);
+    config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
+}
+
+void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (ProfileFile.empty()) {
         config.ProfileFile = TStringBuilder() << HomeDir << '/' << Settings.YdbDir << "/config/config.yaml";
     } else {
@@ -339,12 +349,12 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
     ProfileManager = CreateProfileManager(config.ProfileFile);
     ParseProfile();
 
-    TClientCommandRootBase::Parse(config);
     ParseDatabase(config);
+    ParseAddress(config);
     ParseCaCerts(config);
     ParseIamEndpoint(config);
 
-    config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
+    ParseCredentials(config);
 }
 
 namespace {
@@ -435,7 +445,7 @@ void TClientCommandRootCommon::ParseAddress(TConfig& config) {
         return;
     }
     // Priority 3. Active profile (if --profile option is not specified)
-    if (TryGetParamFromProfile("endpoint", ProfileManager->GetActiveProfile(), false, getAddress)) {
+    if (!config.OnlyExplicitProfile && TryGetParamFromProfile("endpoint", ProfileManager->GetActiveProfile(), false, getAddress)) {
         return;
     }
 }
@@ -510,6 +520,7 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
         config.ConnectionParams["database"].push_back({param, sourceText});
         return false;
     };
+
     // Priority 1. Explicit --database option
     if (Database && getDatabase(Database, "explicit --database option", true)) {
         return;
@@ -519,7 +530,7 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
         return;
     }
     // Priority 3. Active profile (if --profile option is not specified)
-    if (TryGetParamFromProfile("database", ProfileManager->GetActiveProfile(), false, getDatabase)) {
+    if (!config.OnlyExplicitProfile && TryGetParamFromProfile("database", ProfileManager->GetActiveProfile(), false, getDatabase)) {
         return;
     }
 }
@@ -574,19 +585,23 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
             throw TMisuseException() << errors;
         }
     }
+
+    // TODO: Maybe NeedToConnect doesn't always mean that we don't need to check endpoint and database
+    // TODO: Now we supplying only one error while it is possible to return all errors at once,
+    //       maybe even errors from nested command's validate
     if (!config.NeedToConnect) {
         return;
     }
 
-    if (config.Address.empty()) {
-        throw TMisuseException() << "Missing required option 'endpoint'.";
+    if (config.Address.empty() && !config.AllowEmptyAddress) {
+        throw TMisuseException() << "Missing required option 'endpoint'." << (config.OnlyExplicitProfile ? " Profile ignored due to admin command use." : "");
     }
 
     if (config.Database.empty() && config.AllowEmptyDatabase) {
         // just skip the Database check
     } else if (config.Database.empty()) {
         throw TMisuseException()
-            << "Missing required option 'database'.";
+            << "Missing required option 'database'." << (config.OnlyExplicitProfile ? " Profile ignored due to admin command use." : "");
     } else if (!config.Database.StartsWith('/')) {
         throw TMisuseException() << "Path to a database \"" << config.Database
             << "\" is incorrect. It must be absolute and thus must begin with '/'.";
@@ -802,7 +817,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         if (authData["password"]) {
             if (!IsAuthSet && (explicitOption || !Profile)) {
                 config.StaticCredentials.Password = authData["password"].as<TString>();
-                if (!config.StaticCredentials.Password) {
+                if (config.StaticCredentials.Password.empty()) {
                     DoNotAskForPassword = true;
                 }
             }
@@ -820,7 +835,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             }
             if (!IsAuthSet && (explicitOption || !Profile)) {
                 config.StaticCredentials.Password = fileContent;
-                if (!config.StaticCredentials.Password) {
+                if (config.StaticCredentials.Password.empty()) {
                     DoNotAskForPassword = true;
                 }
             }
@@ -898,12 +913,12 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             }
             if (PasswordFile) {
                 config.StaticCredentials.Password = ReadFromFile(PasswordFile, "password", true);
-                if (!config.StaticCredentials.Password) {
+                if (config.StaticCredentials.Password.empty()) {
                     DoNotAskForPassword = true;
                 }
                 if (IsVerbose()) {
                     Cerr << "Using user password from file provided with --password-file option" << Endl;
-                    config.ConnectionParams["password"].push_back({config.StaticCredentials.Password, "file provided with explicit --password-file option"});
+                    config.ConnectionParams["password"].push_back({TString{config.StaticCredentials.Password}, "file provided with explicit --password-file option"});
                 }
             }
             config.ChosenAuthMethod = "static-credentials";
@@ -1107,16 +1122,16 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
     }
 
     if (config.UseStaticCredentials) {
-        if (config.StaticCredentials.User) {
-            if (!config.StaticCredentials.Password && !DoNotAskForPassword) {
+        if (!config.StaticCredentials.User.empty()) {
+            if (config.StaticCredentials.Password.empty() && !DoNotAskForPassword) {
                 Cerr << "Enter password for user " << config.StaticCredentials.User << ": ";
                 config.StaticCredentials.Password = InputPassword();
                 if (IsVerbose()) {
-                    config.ConnectionParams["password"].push_back({config.StaticCredentials.Password, "standard input"});
+                    config.ConnectionParams["password"].push_back({TString{config.StaticCredentials.Password}, "standard input"});
                 }
             }
         } else {
-            if (config.StaticCredentials.Password) {
+            if (!config.StaticCredentials.Password.empty()) {
                 MisuseErrors.push_back("User password was provided without user name");
                 return;
             }

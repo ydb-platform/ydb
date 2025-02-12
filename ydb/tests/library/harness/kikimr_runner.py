@@ -5,8 +5,11 @@ import shutil
 import tempfile
 import time
 import itertools
+import threading
 from importlib_resources import read_binary
 from google.protobuf import text_format
+
+from six.moves.queue import Queue
 
 import yatest
 
@@ -129,6 +132,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.__configurator.suppress_version_check:
             command.append("--suppress-version-check")
 
+        if self.__configurator.use_config_store:
+            command.append("--config-store=%s" % self.__config_path)
+        else:
+            command.append("--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"))
+
         if self.__node_broker_port is not None:
             command.append("--node-broker=%s%s:%d" % (
                 "grpcs://" if self.__configurator.grpc_ssl_enable else "",
@@ -166,7 +174,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         command.extend(
             [
-                "--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"),
                 "--grpc-port=%s" % self.grpc_port,
                 "--mon-port=%d" % self.mon_port,
                 "--ic-port=%d" % self.ic_port,
@@ -430,17 +437,23 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         return ret
 
     def stop(self, kill=False):
-        saved_exceptions = []
+        saved_exceptions_queue = Queue()
 
-        for slot in self.slots.values():
-            exception = self.__stop_node(slot, kill)
-            if exception is not None:
-                saved_exceptions.append(exception)
-
-        for node in self.nodes.values():
+        def stop_node(node, kill):
             exception = self.__stop_node(node, kill)
             if exception is not None:
-                saved_exceptions.append(exception)
+                saved_exceptions_queue.put(exception)
+
+        # do in parallel to faster stopping (important for tests)
+        threads = []
+        for node in list(self.slots.values()) + list(self.nodes.values()):
+            thread = threading.Thread(target=stop_node, args=(node, kill))
+            thread.start()
+            threads.append(thread)
+        for thread in threads:
+            thread.join()
+
+        saved_exceptions = list(saved_exceptions_queue.queue)
 
         self.__port_allocator.release_ports()
 

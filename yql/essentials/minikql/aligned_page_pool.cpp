@@ -343,7 +343,11 @@ TAlignedPagePoolImpl<T>::~TAlignedPagePoolImpl() {
                    "Expected %ld, actual %ld (%ld page(s))", TotalAllocated,
                    AllPages.size() * POOL_PAGE_SIZE + OffloadedActiveBytes, AllPages.size());
 
-    for (auto &ptr : AllPages) {
+#if defined(_asan_enabled_)
+    ReleaseFreePages();
+#endif
+
+    for (auto* ptr : AllPages) {
         TGlobalPools<T, false>::Instance().PushPage(0, ptr);
     }
 
@@ -358,6 +362,10 @@ TAlignedPagePoolImpl<T>::~TAlignedPagePoolImpl() {
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::ReleaseFreePages() {
+#if defined(_asan_enabled_)
+    Y_ABORT_UNLESS(FreePages.empty(), "Shouldn't be any free pages under address sanitizer!");
+#endif
+
     TotalAllocated -= FreePages.size() * POOL_PAGE_SIZE;
     if (Counters.TotalBytesAllocatedCntr) {
         (*Counters.TotalBytesAllocatedCntr) -= FreePages.size() * POOL_PAGE_SIZE;

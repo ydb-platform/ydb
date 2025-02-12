@@ -1,8 +1,7 @@
 #include "etcd_shared.h"
 
 namespace NEtcd {
-
-TString DecrementKey(TString key) {
+std::string DecrementKey(std::string key) {
     for (auto i = key.size(); i > 0u;) {
         if (const auto k = key[--i]) {
             key[i] = k - '\x01';
@@ -11,7 +10,17 @@ TString DecrementKey(TString key) {
             key[i] = '\xFF';
         }
     }
-    return TString();
+    return std::string();
+}
+
+std::ostream& DumpKeyRange(std::ostream& out, std::string_view key, std::string_view end) {
+    if (end.empty())
+        out << '=' << key;
+    else if (end == key)
+        out << '^' << key;
+    else
+        out << '[' << key << ',' << end << ']';
+    return out;
 }
 
 }

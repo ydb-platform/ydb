@@ -55,7 +55,7 @@ private:
     }
 
     void Handle(NEtcd::TEvQueryError::TPtr &ev) {
-        Cerr << __func__ << ' ' << ev->Get()->Issues.ToString() << Endl;
+        std::cerr << "Keep error received: " << ev->Get()->Issues.ToString() << std::endl;
     }
 
     void Handle(IStreamCtx::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
@@ -87,7 +87,7 @@ private:
     }
 
     void Handle(IStreamCtx::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
-        Cerr << (ev->Get()->Success ? "Finished." : "Failed!") << Endl;
+        std::cerr << "Keep " << (ev->Get()->Success ? "finished." : "failed!") << std::endl;
         return Die(ctx);
     }
 
@@ -150,6 +150,7 @@ private:
         sub->WatchId = req.watch_id();
         sub->MakeFragmets = req.fragment();
         sub->SendProgress = req.progress_notify();
+
         bool ignoreUpdate = false, ignoreDelete = false;
         for (const auto f : req.filters()) {
             switch (f) {
@@ -158,6 +159,24 @@ private:
                 default: break;
             }
         }
+
+        std::cout << "Watch(";
+        DumpKeyRange(std::cout, key, rangeEnd);
+        if (sub->FromRevision)
+            std::cout << ",rev=" << sub->FromRevision;
+        if (sub->WithPrevious)
+            std::cout << ",previous";
+        if (sub->WatchId)
+            std::cout << ",id=" << sub->WatchId;
+        if (ignoreUpdate)
+            std::cout << ",w/o updates";
+        if (ignoreDelete)
+            std::cout << ",w/o deletes";
+        if (sub->MakeFragmets)
+            std::cout << ",fragment";
+        if (sub->SendProgress)
+            std::cout << ",progress";
+        std::cout << ')';
 
         if (!(ignoreUpdate && ignoreDelete)) {
             if (ignoreDelete && !ignoreUpdate)
@@ -286,7 +305,7 @@ private:
     }
 
     void Handle(IStreamCtx::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
-        Cerr << (ev->Get()->Success ? "Finished." : "Failed!") << Endl;
+        std::cerr << "Watch " << (ev->Get()->Success ? "finished." : "failed!") << std::endl;
         return UnsubscribeAndDie(ctx);
     }
 
@@ -439,7 +458,7 @@ private:
     }
 
     void Handle(NEtcd::TEvQueryError::TPtr &ev, const TActorContext& ctx) {
-        Cerr << __func__ << ' ' << ev->Get()->Issues.ToString() << Endl;
+        std::cerr << "Watch error received " << ev->Get()->Issues.ToString() << std::endl;
         ctx.Schedule(TDuration::Seconds(7), new TEvents::TEvWakeup);
     }
 

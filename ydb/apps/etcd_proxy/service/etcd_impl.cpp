@@ -85,6 +85,31 @@ struct TRange : public TOperation {
     std::optional<bool> SortOrder;
     size_t SortTarget;
 
+    std::ostream& Dump(std::ostream& out) const {
+        out << "Range(";
+        DumpKeyRange(out, Key, RangeEnd);
+        if (KeyRevision)
+            out << ",revision=" << KeyRevision;
+        if (MinCreateRevision)
+            out << ",min_create_revision=" << MinCreateRevision;
+        if (MaxCreateRevision)
+            out << ",max_create_revision=" << MaxCreateRevision;
+        if (MinModificateRevision)
+            out << ",min_mod_revision=" << MinModificateRevision;
+        if (MaxModificateRevision)
+            out << ",max_mod_revision=" << MaxModificateRevision;
+        if (const auto sort = SortOrder)
+            out << (*sort ? "asc" : "desc");
+        if (CountOnly)
+            out << ",count";
+        if (KeysOnly)
+            out << ",keys";
+        if (Limit)
+            out << ",limit=" << Limit;
+        out << ')';
+        return out;
+    }
+
     bool Parse(const etcdserverpb::RangeRequest& rec) {
         Key = rec.key();
         RangeEnd = NEtcd::DecrementKey(rec.range_end());
@@ -194,6 +219,22 @@ struct TPut : public TOperation {
     bool IgnoreValue = false;
     bool IgnoreLease = false;
 
+    std::ostream& Dump(std::ostream& out) const {
+        out << "Put(" << Key;
+        if (IgnoreValue)
+            out << ",ignore value";
+        else
+            out << ",size=" << Value.size();
+        if (IgnoreLease)
+            out << ",ignore lease";
+        else if (Lease)
+            out << ",lease=" << Lease;
+        if (GetPrevious)
+            out << ",previous";
+        out << ')';
+        return out;
+    }
+
     bool Parse(const etcdserverpb::PutRequest& rec) {
         Key = rec.key();
         Value = rec.value();
@@ -290,6 +331,15 @@ struct TPut : public TOperation {
 struct TDeleteRange : public TOperation {
     std::string Key, RangeEnd;
     bool GetPrevious = false;
+
+    std::ostream& Dump(std::ostream& out) const {
+        out << "Delete(";
+        DumpKeyRange(out, Key, RangeEnd);
+        if (GetPrevious)
+            out << ",previous";
+        out << ')';
+        return out;
+    }
 
     bool Parse(const etcdserverpb::DeleteRangeRequest& rec) {
         Key = rec.key();
@@ -395,10 +445,23 @@ struct TCompare {
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
+    static constexpr std::string_view Fields[] = {"version"sv, "created"sv, "modified"sv, "value"sv, "lease"sv};
+    static constexpr std::string_view Comparator[] = {"="sv, ">"sv, "<"sv, "!="sv};
+
+    std::ostream& Dump(std::ostream& out) const {
+        out << Fields[Target] << '(';
+        DumpKeyRange(out, Key, RangeEnd);
+        out << ')' << Comparator[Result];
+        if (const auto val = std::get_if<std::string>(&Value))
+            out << *val;
+        else if (const auto val = std::get_if<i64>(&Value))
+            out << *val;
+        out << ')';
+        return out;
+    }
+
     // return default value if key is absent.
     bool MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) const {
-        static constexpr std::string_view Fields[] = {"version"sv, "created"sv, "modified"sv, "value"sv, "lease"sv};
-        static constexpr std::string_view Comparator[] = {"="sv, ">"sv, "<"sv, "!="sv};
         sql << '`' << Fields[Target] << '`' << ' ' << Comparator[Result] << ' ';
         if (const auto val = std::get_if<std::string>(&Value))
             sql << AddParam("Value", params, *val, paramsCounter);
@@ -417,6 +480,36 @@ struct TTxn : public TOperation {
     std::vector<TRequestOp> Success, Failure;
 
     using TKeysSet = std::unordered_set<std::pair<std::string, std::string>>;
+
+    std::ostream& Dump(std::ostream& out) const {
+        const auto dump = [](const std::vector<TRequestOp>& operations, std::ostream& out) {
+            for (const auto& operation : operations) {
+                if (const auto oper = std::get_if<TRange>(&operation))
+                   oper->Dump(out);
+                else if (const auto oper = std::get_if<TPut>(&operation))
+                   oper->Dump(out);
+                else if (const auto oper = std::get_if<TDeleteRange>(&operation))
+                   oper->Dump(out);
+                else if (const auto oper = std::get_if<TTxn>(&operation))
+                   oper->Dump(out);
+            }
+        };
+
+        out << "Txn(";
+
+        for (const auto& cmp : Compares)
+            cmp.Dump(out);
+        if (!Success.empty()) {
+            out << " then ";
+            dump(Success, out);
+        }
+        if (!Failure.empty()) {
+            out << " else ";
+            dump(Failure, out);
+        }
+        out << ')';
+        return out;
+    }
 
     void GetKeys(TKeysSet& keys) const {
         for (const auto& compare : Compares)
@@ -607,7 +700,7 @@ private:
         sql << "-- " << TRequest::TRequest::descriptor()->name() << " >>>>" << Endl;
         this->MakeQueryWithParams(sql, params);
         sql << "-- " << TRequest::TRequest::descriptor()->name() << " <<<<" << Endl;
-        Cerr << Endl << sql << Endl;
+        std::cout << std::endl << sql << std::endl;
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
         Stuff->Client->ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
@@ -630,7 +723,7 @@ private:
     }
 
     void Handle(NEtcd::TEvQueryError::TPtr &ev) {
-        Cerr << __func__ << ' ' << ev->Get()->Issues.ToString() << Endl;
+        std::cerr << __func__ << ' ' << ev->Get()->Issues.ToString() << std::endl;
     }
 protected:
     const typename TRequest::TRequest* GetProtoRequest() const {
@@ -658,6 +751,7 @@ private:
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        Range.Dump(std::cout) << std::endl;
         return Range.MakeQueryWithParams(sql, params);
     }
 
@@ -681,6 +775,7 @@ private:
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        Put.Dump(std::cout) << std::endl;
         AddParam("Revision", params, Revision);
         return Put.MakeQueryWithParams(sql, params);
     }
@@ -710,6 +805,7 @@ private:
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        DeleteRange.Dump(std::cout) << std::endl;
         AddParam("Revision", params, Revision);
         return DeleteRange.MakeQueryWithParams(sql, params);
     }
@@ -739,11 +835,12 @@ private:
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        Txn.Dump(std::cout) << std::endl;
         AddParam("Revision", params, Revision);
 
         TTxn::TKeysSet keys;
         Txn.GetKeys(keys);
-        Cerr << __func__ << " keys: " << keys.size() << Endl;
+//        std::cerr << __func__ << " keys: " << keys.size() << Endl;
      //   const bool singleKey = keys.size() < 2U;
 
         size_t resultsCounter = 0U, paramsCounter = 0U;
@@ -778,6 +875,7 @@ private:
     }
 
     void MakeQueryWithParams(TStringBuilder& sql, NYdb::TParamsBuilder& params) final {
+        Cout << "Compact(" << KeyRevision << ')' << Endl;
         sql << "delete from `verhaal` where `modified` < " << AddParam("Revision", params, KeyRevision) << ';' << Endl;
     }
 

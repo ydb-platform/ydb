@@ -49,7 +49,7 @@ int TProxy::Discovery() {
         Stuff->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
         return 0;
     } else {
-        Cerr << res.GetIssues().ToString() << Endl;
+        std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }
 }
@@ -59,22 +59,22 @@ int TProxy::StartServer() {
     if (res.IsSuccess()) {
         if (auto result = res.GetResultSetParser(0); result.TryNextRow()) {
             const auto revision = NYdb::TValueParser(result.GetValue(0)).GetInt64();
-            Cout << "The current revision is " << revision << '.' << Endl;
+            std::cout << "The current revision is " << revision << '.' << std::endl;
             Stuff->Revision.store(revision);
         } else {
-            Cout << "Unexpected result of get max revision." << Endl;
+            std::cout << "Unexpected result of get max revision." << std::endl;
             return 1;
         }
         if (auto result = res.GetResultSetParser(1); result.TryNextRow()) {
             const auto lease = NYdb::TValueParser(result.GetValue(0)).GetInt64();
-            Cout << "The current lease is " << lease << '.' << Endl;
+            std::cout << "The current lease is " << lease << '.' << std::endl;
             Stuff->Lease.store(lease);
         } else {
-            Cout << "Unexpected result of get max lease." << Endl;
+            std::cout << "Unexpected result of get max lease." << std::endl;
             return 1;
         }
     } else {
-        Cout << res.GetIssues().ToString() << Endl;
+        std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }
 
@@ -98,7 +98,7 @@ int TProxy::StartServer() {
     GRpcServer->AddService(new NEtcd::TEtcdWatchService(ActorSystem.get(), Counters, watchtower, Stuff));
     GRpcServer->AddService(new NEtcd::TEtcdLeaseService(ActorSystem.get(), Counters, watchtower, Stuff));
     GRpcServer->Start();
-    Cout << "Etcd service over " << Database << " on " << Endpoint << " was started." << Endl;
+    std::cout << "Etcd service over " << Database << " on " << Endpoint << " was started." << std::endl;
     return 0;
 }
 
@@ -123,10 +123,10 @@ int TProxy::Run() {
 
 int TProxy::InitDatabase() {
     if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
-        Cout << "Database " << Database << " on " << Endpoint << " was initialized." << Endl;
+        std::cout << "Database " << Database << " on " << Endpoint << " was initialized." << std::endl;
         return 0;
     } else {
-        Cout << res.GetIssues().ToString() << Endl;
+        std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }
 }

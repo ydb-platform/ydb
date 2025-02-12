@@ -7,6 +7,8 @@
 
 namespace NEtcd {
 
+constexpr bool NotifyWatchtower = true;
+
 struct TSharedStuff {
     using TPtr = std::shared_ptr<TSharedStuff>;
 
@@ -15,8 +17,8 @@ struct TSharedStuff {
     NActors::TActorId Watchtower;
 };
 
-TString DecrementKey(TString key);
+std::string DecrementKey(std::string key);
 
-constexpr bool NotifyWatchtower = true;
+std::ostream& DumpKeyRange(std::ostream& out, std::string_view key, std::string_view end = {});
 
 }

@@ -442,7 +442,11 @@ void TNodeWarden::Bootstrap() {
     const bool success = DeriveStorageConfig(appConfig, &StorageConfig, &errorReason);
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
 
-    LoadConfigVersion();
+    //LoadConfigVersion();
+    if (Cfg->YamlConfig) {
+        YamlConfig.emplace(NKikimrBlobStorage::TYamlConfig());
+        YamlConfig->CopyFrom(*Cfg->YamlConfig);
+    }
 
     // Start a statically configured set
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
@@ -809,6 +813,9 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         if (request.GetYAML()) {
             TString yaml = NYamlConfig::DecompressYamlString(request.GetYAML());
             if (PersistConfig(yaml)) {
+                if (!YamlConfig) {
+                    YamlConfig.emplace(NKikimrBlobStorage::TYamlConfig());
+                }
                 YamlConfig->SetYAML(request.GetYAML());
                 YamlConfig->SetConfigVersion(request.GetConfigVersion());
                 ConfigSaveTimer.Reset();

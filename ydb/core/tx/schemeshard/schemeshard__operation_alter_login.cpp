@@ -88,7 +88,8 @@ public:
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                            Schema::LoginSids::SidHash,
-                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, sid.IsEnabled);
+                                                                           Schema::LoginSids::IsEnabled,
+                                                                           Schema::LoginSids::FailedAttemptCount>(sid.Type, sid.PasswordHash, sid.IsEnabled, sid.FailedLoginAttemptCount);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);

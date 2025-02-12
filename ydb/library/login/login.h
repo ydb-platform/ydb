@@ -221,17 +221,16 @@ private:
     bool CheckSubjectExists(const TString& name, const ESidType::SidType& type);
     static bool CheckAllowedName(const TString& name);
 
+    bool CheckLockoutByAttemptCount(const TSidRecord& sid) const;
     bool CheckLockout(const TSidRecord& sid) const;
-    void ResetFailedLoginAttemptCount(TSidRecord* sid);
-    void UnlockAccount(TSidRecord* sid);
+    static void ResetFailedLoginAttemptCount(TSidRecord* sid);
+    static void UnlockAccount(TSidRecord* sid);
     bool ShouldResetFailedAttemptCount(const TSidRecord& sid) const;
     bool ShouldUnlockAccount(const TSidRecord& sid) const;
     bool CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
 
     struct TImpl;
     THolder<TImpl> Impl;
-
-    std::unordered_set<TString> SidsShouldResetByUnbanning;
 
     TPasswordChecker PasswordChecker;
     THashChecker HashChecker;

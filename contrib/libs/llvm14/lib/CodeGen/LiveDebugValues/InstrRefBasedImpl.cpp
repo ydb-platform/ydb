@@ -3114,6 +3114,7 @@ bool InstrRefBasedLDV::ExtendRanges(MachineFunction &MF,
   MFI = &MF.getFrameInfo();
   LS.initialize(MF);
 
+  initialSetup(MF);
   const auto &STI = MF.getSubtarget();
   AdjustsStackInCalls = MFI->adjustsStack() &&
                         STI.getFrameLowering()->stackProbeFunctionModifiesSP();
@@ -3139,7 +3140,6 @@ bool InstrRefBasedLDV::ExtendRanges(MachineFunction &MF,
   vlocs.resize(MaxNumBlocks, VLocTracker(OverlapFragments, EmptyExpr));
   SavedLiveIns.resize(MaxNumBlocks);
 
-  initialSetup(MF);
 
   produceMLocTransferFunction(MF, MLocTransfer, MaxNumBlocks);
 

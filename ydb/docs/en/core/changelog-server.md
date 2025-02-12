@@ -8,7 +8,7 @@ Release date: February 6, 2025
 
 #### Functionality
 
-* Added the ability to register a [dynamic node](./concepts/glossary.md#dynamic) using a certificate. In the [Node Broker](./concepts/glossary.md#node-broker) the flag `AuthorizeByCertificate` has been added to enable certificate-based registration.
+* Added the ability to register a [database node](./concepts/glossary.md#database-node) using a certificate. In the [Node Broker](./concepts/glossary.md#node-broker) the flag `AuthorizeByCertificate` has been added to enable certificate-based registration.
 * [Added](https://github.com/ydb-platform/ydb/pull/11775) priorities for authentication ticket through a [third-party IAM provider](./security/authentication#iam), with the highest priority given to requests from new users. Tickets in the cache update their information with a lower priority.
 
 #### Performance

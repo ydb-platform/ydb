@@ -153,7 +153,7 @@ def get_codeowners_for_tests(codeowners_file_path, tests_data):
         for test in tests_data:
             target_path = f'{test["suite_folder"]}'
             owners = owners_odj.of(target_path)
-            test["owners"] = joined_owners = ";;".join(
+            test["owners"] = ";;".join(
                 [(":".join(x)) for x in owners])
             tests_data_with_owners.append(test)
         return tests_data_with_owners

@@ -6,7 +6,7 @@ LICENSE(
     APSL-2.0 AND
     BSD-3-Clause AND
     BSD-4-Clause-UC AND
-    ClArtistic AND
+    Custom-clarified-artistic-proofread AND
     FSFAP AND
     MIT AND
     Unicode-Mappings

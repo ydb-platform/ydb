@@ -142,7 +142,12 @@ void TCommandStorageConfigReplace::Parse(TConfig& config) {
 int TCommandStorageConfigReplace::Run(TConfig& config) {
     std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NStorageConfig::TStorageConfigClient(*driver);
-    auto status = client.ReplaceStorageConfig(ClusterYaml, StorageYaml, SwitchDedicatedStorageSection, DedicatedConfigMode).GetValueSync();
+    NYdb::NStorageConfig::TReplaceStorageConfigSettings settings;
+    settings
+        .SwitchDedicatedStorageSection(SwitchDedicatedStorageSection)
+        .DedicatedConfigMode(DedicatedConfigMode);
+
+    auto status = client.ReplaceStorageConfig(ClusterYaml, StorageYaml, settings).GetValueSync();
     NStatusHelpers::ThrowOnError(status);
 
     if (!status.GetIssues()) {

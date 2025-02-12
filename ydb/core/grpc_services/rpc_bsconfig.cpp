@@ -25,7 +25,7 @@ using namespace NActors;
 using namespace Ydb;
 
 bool CopyToConfigRequest(const Ydb::BSConfig::ReplaceStorageConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to) {
-    to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(from.yaml_config()));
+    to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(from.main_config()));
     return true;
 }
 
@@ -77,7 +77,7 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
         }
     }
     storageConfig.set_item_config_generation(itemConfigGeneration);
-    to->set_yaml_config(NYaml::ParseProtoToYaml(storageConfig));
+    to->set_main_config(NYaml::ParseProtoToYaml(storageConfig));
 }
 
 class TReplaceStorageConfigRequest : public TBSConfigRequestGrpc<TReplaceStorageConfigRequest, TEvReplaceStorageConfigRequest,
@@ -95,7 +95,7 @@ public:
 
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) {
         auto *cmd = ev.Record.MutableReplaceStorageConfig();
-        cmd->SetYAML(GetProtoRequest()->yaml_config());
+        cmd->SetYAML(GetProtoRequest()->main_config());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -105,7 +105,7 @@ public:
     bool IsDistconfEnableQuery() const {
         NKikimrConfig::TAppConfig newConfig;
         try {
-            newConfig = NYaml::Parse(GetProtoRequest()->yaml_config());
+            newConfig = NYaml::Parse(GetProtoRequest()->main_config());
         } catch (const std::exception&) {
             return false; // assuming no distconf enabled in this config
         }
@@ -119,8 +119,8 @@ public:
         };
         using T = std::decay_t<decltype(*request)>;
         return std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigRequest>(
-            opt(&T::has_yaml_config, &T::yaml_config),
-            opt(&T::has_storage_yaml_config, &T::storage_yaml_config),
+            opt(&T::has_main_config, &T::main_config),
+            opt(&T::has_storage_config, &T::storage_config),
             opt(&T::has_switch_dedicated_storage_section, &T::switch_dedicated_storage_section),
             request->dedicated_config_mode());
     }
@@ -145,7 +145,7 @@ public:
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record,
             Ydb::BSConfig::FetchStorageConfigResult& result) {
-        result.set_yaml_config(record.GetFetchStorageConfig().GetYAML());
+        result.set_main_config(record.GetFetchStorageConfig().GetYAML());
     }
 
     bool IsDistconfEnableQuery() const {

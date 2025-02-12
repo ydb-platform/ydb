@@ -36,8 +36,18 @@ private:
 
 using TAsyncFetchStorageConfigResult = NThreading::TFuture<TFetchStorageConfigResult>;
 
-struct TReplaceStorageConfigSettings : public NYdb::TOperationRequestSettings<TReplaceStorageConfigSettings> {};
+struct TReplaceStorageConfigSettings : public NYdb::TOperationRequestSettings<TReplaceStorageConfigSettings> {
+    FLUENT_SETTING_OPTIONAL(bool, SwitchDedicatedStorageSection);
+    FLUENT_SETTING_FLAG(DedicatedConfigMode);
+    FLUENT_SETTING_FLAG(DryRun);
+    FLUENT_SETTING_FLAG(AllowUnknownFields);
+    FLUENT_SETTING_FLAG(AllowAbsentDatabase);
+    FLUENT_SETTING_FLAG(AllowIncorrectVersion);
+    FLUENT_SETTING_FLAG(AllowIncorrectCluster);
+};
+
 struct TFetchStorageConfigSettings : public NYdb::TOperationRequestSettings<TFetchStorageConfigSettings> {};
+
 struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {};
 
 class TStorageConfigClient {
@@ -47,10 +57,9 @@ public:
     ~TStorageConfigClient();
 
     // Replace config
-    TAsyncStatus ReplaceStorageConfig(const std::optional<std::string>& yaml_config,
+    TAsyncStatus ReplaceStorageConfig(
+        const std::optional<std::string>& yaml_config,
         const std::optional<std::string>& storage_yaml_config,
-        std::optional<bool> switch_dedicated_storage_section,
-        bool dedicated_config_mode,
         const TReplaceStorageConfigSettings& settings = {});
 
     // Fetch current cluster storage config

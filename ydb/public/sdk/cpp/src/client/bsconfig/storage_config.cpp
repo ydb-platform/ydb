@@ -14,23 +14,31 @@ public:
     {
     }
 
-    TAsyncStatus ReplaceStorageConfig(const std::optional<std::string>& yaml_config,
+    TAsyncStatus ReplaceStorageConfig(
+            const std::optional<std::string>& yaml_config,
             const std::optional<std::string>& storage_yaml_config,
-            std::optional<bool> switch_dedicated_storage_section,
-            bool dedicated_config_mode,
-            const TReplaceStorageConfigSettings& settings) {
+            const TReplaceStorageConfigSettings& settings)
+    {
         auto request = MakeRequest<Ydb::BSConfig::ReplaceStorageConfigRequest>();
 
         if (yaml_config) {
-            request.set_yaml_config(*yaml_config);
+            request.set_main_config(*yaml_config);
         }
+
         if (storage_yaml_config) {
-            request.set_storage_yaml_config(*storage_yaml_config);
+            request.set_storage_config(*storage_yaml_config);
         }
-        if (switch_dedicated_storage_section) {
-            request.set_switch_dedicated_storage_section(*switch_dedicated_storage_section);
+
+        if (settings.SwitchDedicatedStorageSection_) {
+            request.set_switch_dedicated_storage_section(*settings.SwitchDedicatedStorageSection_);
         }
-        request.set_dedicated_config_mode(dedicated_config_mode);
+
+        request.set_dedicated_config_mode(settings.DedicatedConfigMode_);
+        request.set_dry_run(settings.DryRun_);
+        request.set_allow_unknown_fields(settings.AllowUnknownFields_);
+        request.set_allow_absent_database(settings.AllowAbsentDatabase_);
+        request.set_allow_incorrect_version(settings.AllowIncorrectVersion_);
+        request.set_allow_incorrect_cluster(settings.AllowIncorrectCluster_);
 
         return RunSimple<Ydb::BSConfig::V1::BSConfigService, Ydb::BSConfig::ReplaceStorageConfigRequest, Ydb::BSConfig::ReplaceStorageConfigResponse>(
             std::move(request),
@@ -39,7 +47,8 @@ public:
     }
 
     TAsyncFetchStorageConfigResult FetchStorageConfig(bool dedicated_storage_section, bool dedicated_cluster_section,
-			const TFetchStorageConfigSettings& settings) {
+            const TFetchStorageConfigSettings& settings)
+    {
         auto request = MakeOperationRequest<Ydb::BSConfig::FetchStorageConfigRequest>(settings);
         if (dedicated_storage_section) {
             request.set_dedicated_storage_section(true);
@@ -53,8 +62,8 @@ public:
             NYdb::TStringType config;
             NYdb::TStringType storage_config;
             if (Ydb::BSConfig::FetchStorageConfigResult result; any && any->UnpackTo(&result)) {
-                config = result.yaml_config();
-                storage_config = result.storage_yaml_config();
+                config = result.main_config();
+                storage_config = result.storage_config();
             }
 
             TFetchStorageConfigResult val(TStatus(std::move(status)), std::string{std::move(config)},
@@ -88,15 +97,17 @@ TStorageConfigClient::TStorageConfigClient(const TDriver& driver, const TCommonC
 
 TStorageConfigClient::~TStorageConfigClient() = default;
 
-TAsyncStatus TStorageConfigClient::ReplaceStorageConfig(const std::optional<std::string>& yaml_config,
-        const std::optional<std::string>& storage_yaml_config, std::optional<bool> switch_dedicated_storage_section,
-        bool dedicated_config_mode, const TReplaceStorageConfigSettings& settings) {
-    return Impl_->ReplaceStorageConfig(yaml_config, storage_yaml_config, switch_dedicated_storage_section,
-        dedicated_config_mode, settings);
+TAsyncStatus TStorageConfigClient::ReplaceStorageConfig(
+        const std::optional<std::string>& yaml_config,
+        const std::optional<std::string>& storage_yaml_config,
+        const TReplaceStorageConfigSettings& settings)
+{
+    return Impl_->ReplaceStorageConfig(yaml_config, storage_yaml_config, settings);
 }
 
 TAsyncFetchStorageConfigResult TStorageConfigClient::FetchStorageConfig(bool dedicated_storage_section,
-        bool dedicated_cluster_section, const TFetchStorageConfigSettings& settings) {
+        bool dedicated_cluster_section, const TFetchStorageConfigSettings& settings)
+{
     return Impl_->FetchStorageConfig(dedicated_storage_section, dedicated_cluster_section, settings);
 }
 

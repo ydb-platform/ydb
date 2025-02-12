@@ -6,7 +6,6 @@ RECURSE(
     public
     services
     tools
-    yql_docs
 )
 
 IF(NOT EXPORT_CMAKE)
@@ -20,5 +19,6 @@ IF(NOT OPENSOURCE)
   # for OSS ya make yet
   RECURSE(
     docs
+    yql_docs
   )
 ENDIF()

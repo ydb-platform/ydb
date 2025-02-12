@@ -69,7 +69,7 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
         if (!prefixSize) {
             return true;
         }
-    } 
+    }
     else {
         readMatch = MatchRead<TKqlReadTableRangesBase>(expr);
         if (readMatch) {
@@ -106,8 +106,8 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
     return true;
 }
 
-bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left, 
-    std::shared_ptr<IBaseOptimizerNode> right, 
+bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
+    std::shared_ptr<IBaseOptimizerNode> right,
     const TVector<TJoinColumn>& leftJoinKeys,
     const TVector<TJoinColumn>& rightJoinKeys,
     TKqpProviderContext& ctx
@@ -123,7 +123,7 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     if (!rightStats.KeyColumns) {
         return false;
     }
-    
+
     if (rightStats.Type != EStatisticsType::BaseTable) {
         return false;
     }
@@ -133,14 +133,14 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
             return false;
         }
     }
-    
+
     return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), rightJoinKeys, ctx);
 }
 
 }
 
-bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
-    const std::shared_ptr<IBaseOptimizerNode>& right, 
+bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
+    const std::shared_ptr<IBaseOptimizerNode>& right,
     const TVector<TJoinColumn>& leftJoinKeys,
     const TVector<TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
@@ -163,7 +163,7 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
             return IsLookupJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, *this);
 
         case EJoinAlgoType::MapJoin:
-            return joinKind != EJoinKind::OuterJoin && joinKind != EJoinKind::Exclusion && right->Stats.ByteSize < 1e6;
+            return joinKind != EJoinKind::OuterJoin && joinKind != EJoinKind::Exclusion && right->Stats.ByteSize < 1e4;
         case EJoinAlgoType::GraceJoin:
             return true;
         default:
@@ -173,7 +173,7 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
 
 double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const  {
     Y_UNUSED(outputByteSize);
-    
+
     switch(joinAlgo) {
         case EJoinAlgoType::LookupJoin:
             if (OptLevel == 3) {
@@ -186,7 +186,7 @@ double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStat
                 return -1;
             }
             return rightStats.Nrows + outputRows;
-            
+
         case EJoinAlgoType::MapJoin:
             return 1.5 * (leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows);
         case EJoinAlgoType::GraceJoin:

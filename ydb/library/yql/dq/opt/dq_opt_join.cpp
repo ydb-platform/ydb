@@ -118,8 +118,8 @@ TExprBase BuildDqJoinInput(TExprContext& ctx, TPositionHandle pos, const TExprBa
 
 TMaybe<TJoinInputDesc> BuildDqJoin(
     const TCoEquiJoinTuple& joinTuple,
-    const THashMap<TStringBuf, TJoinInputDesc>& inputs, 
-    EHashJoinMode mode, 
+    const THashMap<TStringBuf, TJoinInputDesc>& inputs,
+    EHashJoinMode mode,
     TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx,
     TVector<TString>& subtreeLabels,
@@ -163,7 +163,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
             std::unordered_set<std::string>(subtreeLabels.begin(), subtreeLabels.end())
         ) {
             linkSettings.JoinAlgo = hint.Algo;
-            hint.Applied = true;   
+            hint.Applied = true;
         }
     }
     YQL_ENSURE(linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
@@ -432,10 +432,10 @@ bool CheckJoinColumns(const TExprBase& node) {
 }
 
 TExprBase DqRewriteEquiJoin(
-    const TExprBase& node, 
-    EHashJoinMode mode, 
-    bool useCBO, 
-    TExprContext& ctx, 
+    const TExprBase& node,
+    EHashJoinMode mode,
+    bool useCBO,
+    TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx,
     const TOptimizerHints& hints
 ) {
@@ -449,12 +449,12 @@ TExprBase DqRewriteEquiJoin(
  * Potentially this optimizer can also perform joins reorder given cardinality information.
  */
 TExprBase DqRewriteEquiJoin(
-    const TExprBase& node, 
-    EHashJoinMode mode, 
-    bool /* useCBO */, 
-    TExprContext& ctx, 
-    const TTypeAnnotationContext& typeCtx, 
-    int& joinCounter, 
+    const TExprBase& node,
+    EHashJoinMode mode,
+    bool /* useCBO */,
+    TExprContext& ctx,
+    const TTypeAnnotationContext& typeCtx,
+    int& joinCounter,
     const TOptimizerHints& hints
 ) {
     if (!node.Maybe<TCoEquiJoin>()) {
@@ -1377,8 +1377,16 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             .Done();
     };
 
+    const auto buildMap = [&ctx, &join](const TDqOutput& input) {
+       return Build<TDqCnMap>(ctx, join.Pos())
+            .Output(input)
+            .Done();
+    };
+
     const auto rightShuffle = buildShuffle(rightIn, rightJoinKeys);
     const auto leftShuffle = buildShuffle(leftIn, leftJoinKeys);
+    const auto rightMap = buildMap(rightIn);
+    const auto leftMap = buildMap(leftIn);
 
     TString callableName = "GraceJoinCore";
     int shift = 2;
@@ -1684,12 +1692,139 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         .Seal()
         .Build();
 
-    TVector<TExprBase> stageInputs; stageInputs.reserve(2);
-    stageInputs.emplace_back(leftShuffle);
-    if (selfJoin == false) {
-        stageInputs.emplace_back(rightShuffle);
+    TVector<TExprBase> stageInputs;
+    TVector<TCoArgument> inputArgs;
+
+    if (rightTableName == "threshold_fuse") {
+
+        const auto& leftProgram = leftIn.Stage().Program();
+        YQL_ENSURE(leftProgram.Args().Size() == leftIn.Stage().Inputs().Size());
+        const auto& rightProgram = rightIn.Stage().Program();
+        YQL_ENSURE(rightProgram.Args().Size() == rightIn.Stage().Inputs().Size());
+
+        int inputCountDelta = 0;
+
+        for (const auto input : leftIn.Stage().Inputs()) {
+            if (const auto map = input.Maybe<TDqCnMap>()) {
+                inputCountDelta += map.Cast().Output().Stage().Inputs().Size();
+                inputCountDelta -= 1;
+            }
+        }
+
+        for (const auto input : rightIn.Stage().Inputs()) {
+            if (const auto map = input.Maybe<TDqCnMap>()) {
+                inputCountDelta += map.Cast().Output().Stage().Inputs().Size();
+                inputCountDelta -= 1;
+            }
+        }
+
+        stageInputs.reserve(leftIn.Stage().Inputs().Size() + rightIn.Stage().Inputs().Size() + inputCountDelta);
+
+        size_t argIndex = 0;
+
+        TNodeOnNodeOwnedMap leftReplaces(leftProgram.Args().Size());
+        for (size_t i = 0; i < leftIn.Stage().Inputs().Size(); i++) {
+            const auto input = leftIn.Stage().Inputs().Item(i);
+            if (const auto map = input.Maybe<TDqCnMap>()) {
+                const auto mapStage = map.Cast().Output().Stage();
+                const auto& mapProgram = mapStage.Program();
+                YQL_ENSURE(mapProgram.Args().Size() == mapStage.Inputs().Size());
+
+                TNodeOnNodeOwnedMap mapReplaces(mapProgram.Args().Size());
+                for (const auto& arg : mapProgram.Args()) {
+                    TCoArgument newArg{ctx.NewArgument(join.Pos(), TStringBuilder() << "_dq_join_fuse_" << argIndex++ << "_left")};
+                    YQL_ENSURE(mapReplaces.emplace(arg.Raw(), newArg.Ptr()).second);
+                    inputArgs.emplace_back(std::move(newArg));
+                }
+                stageInputs.insert(stageInputs.end(), mapStage.Inputs().begin(), mapStage.Inputs().end());
+                auto mapBody = ctx.ReplaceNodes(mapProgram.Body().Ptr(), mapReplaces);
+                if (TCoFromFlow::Match(mapBody.Get())) {
+                    mapBody = TExprNode::TPtr(&mapBody->Head());
+                }
+
+                leftReplaces.emplace(leftProgram.Args().Arg(i).Raw(), mapBody);
+            } else {
+                TCoArgument newArg{ctx.NewArgument(join.Pos(), TStringBuilder() << "_dq_join_fuse_" << argIndex++ << "_left")};
+                YQL_ENSURE(leftReplaces.emplace(leftProgram.Args().Arg(i).Raw(), newArg.Ptr()).second);
+                inputArgs.emplace_back(newArg);
+                stageInputs.push_back(input);
+            }
+        }
+        auto leftBody = ctx.ReplaceNodes(leftProgram.Body().Ptr(), leftReplaces);
+        if (TCoFromFlow::Match(leftBody.Get())) {
+            leftBody = TExprNode::TPtr(&leftBody->Head());
+        }
+
+        TNodeOnNodeOwnedMap rightReplaces(rightProgram.Args().Size());
+        for (size_t i = 0; i < rightIn.Stage().Inputs().Size(); i++) {
+            const auto input = rightIn.Stage().Inputs().Item(i);
+            if (const auto map = input.Maybe<TDqCnMap>()) {
+                const auto mapStage = map.Cast().Output().Stage();
+                const auto& mapProgram = mapStage.Program();
+                YQL_ENSURE(mapProgram.Args().Size() == mapStage.Inputs().Size());
+
+                TNodeOnNodeOwnedMap mapReplaces(mapProgram.Args().Size());
+                for (const auto& arg : mapProgram.Args()) {
+                    TCoArgument newArg{ctx.NewArgument(join.Pos(), TStringBuilder() << "_dq_join_fuse_" << argIndex++ << "_left")};
+                    YQL_ENSURE(mapReplaces.emplace(arg.Raw(), newArg.Ptr()).second);
+                    inputArgs.emplace_back(std::move(newArg));
+                }
+                stageInputs.insert(stageInputs.end(), mapStage.Inputs().begin(), mapStage.Inputs().end());
+                auto mapBody = ctx.ReplaceNodes(mapProgram.Body().Ptr(), mapReplaces);
+                if (TCoFromFlow::Match(mapBody.Get())) {
+                    mapBody = TExprNode::TPtr(&mapBody->Head());
+                }
+
+                rightReplaces.emplace(rightProgram.Args().Arg(i).Raw(), mapBody);
+            } else {
+                TCoArgument newArg{ctx.NewArgument(join.Pos(), TStringBuilder() << "_dq_join_fuse_" << argIndex++ << "_right")};
+                YQL_ENSURE(rightReplaces.emplace(rightProgram.Args().Arg(i).Raw(), newArg.Ptr()).second);
+                inputArgs.emplace_back(std::move(newArg));
+                stageInputs.push_back(input);
+            }
+        }
+        auto rightBody = ctx.ReplaceNodes(rightProgram.Body().Ptr(), rightReplaces);
+        if (TCoFromFlow::Match(rightBody.Get())) {
+            rightBody = TExprNode::TPtr(&rightBody->Head());
+        }
+
+        TNodeOnNodeOwnedMap joinReplaces(2);
+        joinReplaces.emplace(leftInputArg.Raw(), leftBody);
+        joinReplaces.emplace(rightInputArg.Raw(), rightBody);
+
+        auto newBody = ctx.ReplaceNodes(std::move(hashJoin), joinReplaces);
+
+        return Build<TDqCnUnionAll>(ctx, join.Pos())
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                        .Add(stageInputs)
+                        .Build()
+                    .Program()
+                        .Args(inputArgs)
+                        .Body(std::move(newBody))
+                        .Build()
+                    .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
+                    .Build()
+                .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
+                .Build()
+            .Done();
     }
-    TVector<TCoArgument> inputArgs; inputArgs.reserve(2);
+
+    stageInputs.reserve(2);
+    if (rightTableName == "threshold_map") {
+        stageInputs.emplace_back(leftMap);
+        if (selfJoin == false) {
+            stageInputs.emplace_back(rightMap);
+        }
+    } else {
+        stageInputs.emplace_back(leftShuffle);
+        if (selfJoin == false) {
+            stageInputs.emplace_back(rightShuffle);
+        }
+    }
+
+    inputArgs.reserve(2);
     inputArgs.emplace_back(leftInputArg);
     if (selfJoin == false) {
         inputArgs.emplace_back(rightInputArg);

@@ -155,9 +155,9 @@ bool TS3Mock::TRequest::HttpServeRead(const TReplyParams& params, EMethod method
 
 TString BuildContentXML(const TString& path) {
     return Sprintf(R"(
-             <Contents>
-                <Key>%s</Key>
-            </Contents>
+                <Contents>
+                    <Key>%s</Key>
+                </Contents>
         )", path.c_str());
 }
 
@@ -181,13 +181,13 @@ TString BuildListObjectsXML(const TVector<TString>& paths, const TStringBuf buck
         )", bucketName.data(), BuildContentListXML(paths).c_str());
 }
 
-bool ServeList(const TRequestReplier::TReplyParams& params, const TString& prefix, const TStringBuf bucketName, const THashMap<TString, TString> data) {
+bool TS3Mock::TRequest::HttpServeList(const TReplyParams& params, TStringBuf bucketName, const TString& prefix) {
     Cerr << "S3_MOCK::ServeList: " << prefix << Endl;
     params.Output << "HTTP/1.1 200 Ok\r\n";
     TVector<TString> paths;
     THttpHeaders headers;
 
-    for (const auto& [key, value] : data) {
+    for (const auto& [key, value] : Parent->Data) {
         TFsPath path = key;
         if (path.IsSubpathOf(TStringBuilder() << bucketName << "/" << prefix)) {
             paths.push_back(path);
@@ -203,9 +203,6 @@ bool ServeList(const TRequestReplier::TReplyParams& params, const TString& prefi
     params.Output << xml;
     params.Output << "\r\n";
     params.Output.Flush();
-    
-    Cerr << xml.length() << Endl;
-    Cerr << xml << Endl;
 
     return true;
 }
@@ -415,10 +412,6 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     const EMethod method = ParseMethod(methodStr.data());
     TStringBuf pathStr = uriStr.NextTok('?');
 
-    Cerr << "requestString: " << requestString << Endl;
-    Cerr << "uriStr: " << uriStr << Endl;
-    Cerr << "pathStr: " << pathStr << Endl;
-
     TCgiParameters queryParams;
     queryParams.ScanAddAll(uriStr);
 
@@ -429,8 +422,8 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     case EMethod::Head:
     case EMethod::Get:
         if (queryParams.Has("prefix")) {
-            return ServeList(params, queryParams.Get("prefix"), pathStr, Parent->GetData());
-        }else if (Parent->Data.contains(pathStr)) {
+            return HttpServeList(params, pathStr, queryParams.Get("prefix"));
+        } else if (Parent->Data.contains(pathStr)) {
             return HttpServeRead(params, method, pathStr);
         } else {
             return HttpNotFound(params, "NoSuchKey");

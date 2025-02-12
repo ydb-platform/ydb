@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 set -e
-
 TMP_FOLDER='/tmp/ydb-build-dump'
 
 rm -rf $TMP_FOLDER

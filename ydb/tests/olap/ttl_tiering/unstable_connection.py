@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class TestUnstableConnection(TllTieringTestBase):
-    test_name = "data_correctness"
+    test_name = "unstable_connection"
     cold_bucket = "cold"
     num_writers = 10
     num_readers = 4

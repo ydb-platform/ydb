@@ -4,9 +4,10 @@
 #include <util/generic/string.h>
 #include <vector>
 
-namespace NYql {
+namespace NYql::NFmr {
 
 enum class EOperationStatus {
+    Unknown,
     Accepted,
     InProgress,
     Failed,
@@ -16,6 +17,7 @@ enum class EOperationStatus {
 };
 
 enum class ETaskStatus {
+    Unknown,
     Accepted,
     InProgress,
     Failed,
@@ -24,12 +26,14 @@ enum class ETaskStatus {
 };
 
 enum class ETaskType {
+    Unknown,
     Download,
     Upload,
     Merge
 };
 
 enum class EFmrComponent {
+    Unknown,
     Coordinator,
     Worker,
     Job
@@ -78,6 +82,8 @@ struct TMergeTaskParams {
 using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams>;
 
 struct TTask: public TThrRefBase {
+    TTask() = default;
+
     TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, ui32 numRetries = 1)
         : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), NumRetries(numRetries)
     {
@@ -85,7 +91,7 @@ struct TTask: public TThrRefBase {
 
     ETaskType TaskType;
     TString TaskId;
-    TTaskParams TaskParams;
+    TTaskParams TaskParams = {};
     TString SessionId;
     ui32 NumRetries; // Not supported yet
 
@@ -93,6 +99,8 @@ struct TTask: public TThrRefBase {
 };
 
 struct TTaskState: public TThrRefBase {
+    TTaskState() = default;
+
     TTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& errorMessage = Nothing())
         : TaskStatus(taskStatus), TaskId(taskId), TaskErrorMessage(errorMessage)
     {
@@ -123,4 +131,4 @@ TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, co
 
 TTaskResult::TPtr MakeTaskResult(ETaskStatus taskStatus, const TMaybe<TFmrError>& taskErrorMessage = Nothing());
 
-} // namespace NYql
+} // namespace NYql::NFmr

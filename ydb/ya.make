@@ -10,15 +10,15 @@ RECURSE(
 )
 
 IF(NOT EXPORT_CMAKE)
-RECURSE(
-  tests
-)
+  RECURSE(
+    tests
+  )
 ENDIF()
 
 IF(NOT OPENSOURCE)
-# YFM tool is not supported 
-# for OSS ya make yet
-RECURSE(
-  docs
-)
+  # YFM tool is not supported 
+  # for OSS ya make yet
+  RECURSE(
+    docs
+  )
 ENDIF()

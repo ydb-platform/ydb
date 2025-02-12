@@ -1325,7 +1325,7 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
     }
 
     // Always keep parts generated from memtables in cache
-    params->KeepInCache = generation != 255 && (generation == 0 || Policy->Generations[generation - 1].KeepInCache);
+    params->KeepInCache = true;
 
     if (Policy->KeepEraseMarkers) {
         // Keep erase markers when asked by compaction policy

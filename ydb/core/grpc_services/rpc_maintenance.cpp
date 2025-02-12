@@ -3,6 +3,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/cms.h>
+#include <ydb/core/base/hive.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/grpc_services/rpc_request_base.h>
 #include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
@@ -21,6 +22,7 @@ using TEvGetMaintenanceTask = TGrpcRequestOperationCall<Maintenance::GetMaintena
 using TEvListMaintenanceTasks = TGrpcRequestOperationCall<Maintenance::ListMaintenanceTasksRequest, Maintenance::ListMaintenanceTasksResponse>;
 using TEvDropMaintenanceTask = TGrpcRequestOperationCall<Maintenance::DropMaintenanceTaskRequest, Maintenance::ManageMaintenanceTaskResponse>;
 using TEvCompleteAction = TGrpcRequestOperationCall<Maintenance::CompleteActionRequest, Maintenance::ManageActionResponse>;
+using TEvDrainNode = TGrpcRequestOperationCall<Maintenance::DrainNodeRequest, Maintenance::DrainNodeResponse>;
 
 template <typename TEvRequest, typename TEvCmsRequest, typename TEvCmsResponse>
 class TMaintenanceRPC: public TRpcRequestActor<TMaintenanceRPC<TEvRequest, TEvCmsRequest, TEvCmsResponse>, TEvRequest, true> {
@@ -103,6 +105,83 @@ private:
     TActorId CmsPipe;
 };
 
+class TDrainNodeRPC: public TRpcRequestActor<TDrainNodeRPC, TEvDrainNode, true> {
+    using TBase = TRpcRequestActor<TDrainNodeRPC, TEvDrainNode, true>;
+
+    void SendRequest() {
+        const auto* request = TBase::GetProtoRequest();
+        auto ev = std::make_unique<TEvHive::TEvDrainNode>(request->node_id());
+
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
+        auto hiveId = AppData()->DomainsInfo->GetHive();
+        HivePipe = this->RegisterWithSameMailbox(NTabletPipe::CreateClient(this->SelfId(), hiveId, pipeConfig));
+
+        NTabletPipe::SendData(this->SelfId(), HivePipe, ev.release());
+    }
+
+    void Handle(TEvHive::TEvDrainNodeResult::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        switch(record.GetStatus()) {
+            case NKikimrProto::OK:
+                TBase::Reply(Ydb::StatusIds::SUCCESS);
+                break;
+            default:
+            case NKikimrProto::ERROR:
+                TBase::Reply(Ydb::StatusIds::GENERIC_ERROR);
+                break;
+            case NKikimrProto::TIMEOUT:
+                TBase::Reply(Ydb::StatusIds::TIMEOUT);
+                break;
+            case NKikimrProto::ALREADY:
+                TBase::Reply(Ydb::StatusIds::ALREADY_EXISTS);
+                break;
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            Unavailable();
+        }
+    }
+
+    void Unavailable() {
+        TBase::Reply(Ydb::StatusIds::UNAVAILABLE, "Hive is unavailable");
+    }
+
+    void PassAway() override {
+        NTabletPipe::CloseAndForgetClient(SelfId(), HivePipe);
+        TBase::PassAway();
+    }
+
+public:
+    using TBase::TBase;
+
+    void Bootstrap() {
+        if (!IsAdministrator(AppData(), TBase::UserToken.Get())) {
+            auto error = TStringBuilder() << "Access denied";
+            if (TBase::UserToken) {
+                error << ": '" << TBase::UserToken->GetUserSID() << "' is not an admin";
+            }
+
+            TBase::Reply(Ydb::StatusIds::UNAUTHORIZED, NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
+        } else {
+            SendRequest();
+            this->Become(&TThis::StateWork);
+        }
+    }
+
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvHive::TEvDrainNodeResult, Handle)
+        hFunc(TEvTabletPipe::TEvClientConnected, Handle)
+        sFunc(TEvTabletPipe::TEvClientDestroyed, Unavailable)
+    )
+
+private:
+    TActorId HivePipe;
+};
+
 void DoListClusterNodes(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TMaintenanceRPC<TEvListClusterNodes,
                                         NCms::TEvCms::TEvListClusterNodesRequest,
@@ -143,6 +222,10 @@ void DoCompleteAction(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&
     f.RegisterActor(new TMaintenanceRPC<TEvCompleteAction,
                                         NCms::TEvCms::TEvCompleteActionRequest,
                                         NCms::TEvCms::TEvManageActionResponse>(p.release()));
+}
+
+void DoDrainNode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDrainNodeRPC(p.release()));
 }
 
 }

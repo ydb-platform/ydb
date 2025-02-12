@@ -248,3 +248,12 @@ message ManageActionResponse {
     // operation.result = ManageActionResult
     Ydb.Operations.Operation operation = 1;
 }
+
+message DrainNodeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    uint32 node_id = 2;
+}
+
+message DrainNodeResponse {
+    Ydb.Operations.Operation operation = 1;
+}

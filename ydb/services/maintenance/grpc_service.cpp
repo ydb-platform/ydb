@@ -36,6 +36,7 @@ void TGRpcMaintenanceService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
     ADD_REQUEST(ListMaintenanceTasks, ListMaintenanceTasksRequest, ListMaintenanceTasksResponse, DoListMaintenanceTasks);
     ADD_REQUEST(DropMaintenanceTask, DropMaintenanceTaskRequest, ManageMaintenanceTaskResponse, DoDropMaintenanceTask);
     ADD_REQUEST(CompleteAction, CompleteActionRequest, ManageActionResponse, DoCompleteAction);
+    ADD_REQUEST(DrainNode, DrainNodeRequest, DrainNodeResponse, DoDrainNode);
 
 #undef ADD_REQUEST
 }

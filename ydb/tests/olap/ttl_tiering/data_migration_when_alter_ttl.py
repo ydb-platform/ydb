@@ -193,6 +193,13 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         ):
             raise Exception("Data eviction has not been started")
 
+        # Wait until bucket1 is empty
+        if not self.wait_for(
+            lambda: not bucket_is_not_empty(self.bucket1),
+            plain_or_under_sanitizer(120, 240),  # TODO: change wait time use config "PeriodicWakeupActivationPeriod"
+        ):
+            raise Exception("Bucket1 is not empty")
+
         # Step 8
         t0 = time.time()
         stmt = f"""
@@ -215,6 +222,6 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         # Wait until buckets are empty
         if not self.wait_for(
             lambda: not bucket_is_not_empty(self.bucket1) and not bucket_is_not_empty(self.bucket2),
-            plain_or_under_sanitizer(600, 1200),
+            plain_or_under_sanitizer(120, 240),  # TODO: change wait time use config "PeriodicWakeupActivationPeriod"
         ):
             raise Exception("Buckets are not empty")

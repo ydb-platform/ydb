@@ -170,9 +170,9 @@ class TestWorkloadManager(TpchTestBaseH1):
     @pytest.mark.parametrize("run_count,use_classifiers", [(1, False), (1, True)])
     def test_resource_pool_queue_resource_weight(self, run_count, use_classifiers):
         """
-        Tests resource pool performance based on different resource weights and priorities.
-        Creates two pools with different resource weights and CPU limits for high and low priority users.
-        If resource pool classifiers are set, verifies that high priority pool executes queries significantly faster than low priority pool.
+            Tests resource pool performance based on different resource weights and priorities.
+            Creates two pools with different resource weights and CPU limits for high and low priority users.
+            If resource pool classifiers are set, verifies that high priority pool executes queries significantly faster than low priority pool.
         """
 
         table_name = f"{self.tpch_default_path()}/lineitem"

@@ -20,12 +20,16 @@ using namespace NYql::NNodes;
 class TDqsPhysicalOptProposalTransformer : public TOptimizeTransformerBase {
 public:
     TDqsPhysicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config)
-        : TOptimizeTransformerBase(typeCtx, NLog::EComponent::ProviderDq, {})
+        : TOptimizeTransformerBase(/* TODO: typeCtx*/nullptr, NLog::EComponent::ProviderDq, {})
         , Config(config)
     {
         const bool enablePrecompute = Config->_EnablePrecompute.Get().GetOrElse(false);
+        const bool enableDqReplicate = Config->IsDqReplicateEnabled(*typeCtx);
 
 #define HNDL(name) "DqsPhy-"#name, Hndl(&TDqsPhysicalOptProposalTransformer::name)
+        if (!enableDqReplicate) {
+            AddHandler(0, &TDqReplicate::Match, HNDL(FailOnDqReplicate));
+        }
         AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
@@ -104,6 +108,11 @@ public:
     }
 
 protected:
+    TMaybeNode<TExprBase> FailOnDqReplicate(TExprBase node, TExprContext& ctx) {
+        ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::DQ_OPTIMIZE_ERROR, "Reading multiple times from the same source is not supported"));
+        return {};
+    }
+
     TMaybeNode<TExprBase> BuildStageWithSourceWrap(TExprBase node, TExprContext& ctx) {
         return DqBuildStageWithSourceWrap(node, ctx);
     }

@@ -446,12 +446,12 @@ void TClientCommandTree::RenderCommandsDescription(
 }
 
 void TCommandWithPath::ParsePath(const TClientCommand::TConfig& config, const size_t argPos, bool isPathOptional) {
-    if (config.ParseResult->GetFreeArgCount() < argPos + 1 && isPathOptional) {
+    if (config.ParseResult->GetFreeArgCount() <= argPos) {
         if (isPathOptional) {
             Path = ".";
         }
     } else {
-        Path = config.ParseResult->GetFreeArgs()[argPos];
+        Path = config.ParseResult->GetFreeArgs().at(argPos);
     }
 
     AdjustPath(config);

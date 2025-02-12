@@ -192,7 +192,6 @@ private:
                 if (!google::protobuf::TextFormat::ParseFromString(TFileInput(StorageMetaPath_.GetPath()).ReadAll(), &StorageMeta_)) {
                     ythrow yexception() << "Storage meta is corrupted, please use --format-storage";
                 }
-                StorageMeta_.SetStorageGeneration(StorageMeta_.GetStorageGeneration() + 1);
                 formatDisk = false;
             }
 
@@ -289,11 +288,17 @@ private:
     void CreateTenant(Ydb::Cms::CreateDatabaseRequest&& request, const TString& relativePath, const TString& type, TStorageMeta::TTenant tenantInfo) {
         const auto absolutePath = request.path();
         const auto [it, inserted] = StorageMeta_.MutableTenants()->emplace(relativePath, tenantInfo);
-        if (inserted) {
+        if (inserted || it->second.GetCreationInProgress()) {
             if (Settings_.VerboseLevel >= EVerbose::Info) {
                 Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating " << type << " tenant " << absolutePath << "..." << CoutColors_.Default() << Endl;
             }
-            Tenants_->CreateTenant(std::move(request), tenantInfo.GetNodesCount());
+
+            it->second.SetCreationInProgress(true);
+            UpdateStorageMeta();
+
+            Tenants_->CreateTenant(std::move(request), tenantInfo.GetNodesCount(), TENANT_CREATION_TIMEOUT, true);
+
+            it->second.SetCreationInProgress(false);
             UpdateStorageMeta();
         } else {
             if (it->second.GetType() != tenantInfo.GetType()) {
@@ -378,6 +383,10 @@ private:
         NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(grpcPort);
 
         Server_ = MakeIntrusive<NKikimr::Tests::TServer>(serverSettings);
+
+        StorageMeta_.SetStorageGeneration(StorageMeta_.GetStorageGeneration() + 1);
+        UpdateStorageMeta();
+
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
 
         if (Settings_.GrpcEnabled) {

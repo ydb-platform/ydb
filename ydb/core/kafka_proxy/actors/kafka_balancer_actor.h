@@ -48,7 +48,7 @@ class TKafkaBalancerActor : public NActors::TActorBootstrapped<TKafkaBalancerAct
 public:
     using TBase = NActors::TActorBootstrapped<TKafkaBalancerActor>;
 
-    enum EBalancerStep : ui32 {
+    enum EBalancerStep : ui8 {
         STEP_NONE = 0,
 
         JOIN_TX0_0_BEGIN_TX,
@@ -212,6 +212,8 @@ private:
         }
     }
 
+    void HandleResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+
     void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
@@ -236,6 +238,9 @@ private:
     void SendLeaveGroupResponseOk(const TActorContext& ctx, ui64 corellationId);
     void SendLeaveGroupResponseFail(const TActorContext&, ui64 corellationId,
                                     EKafkaErrors error, TString message = "");
+
+    TString LogPrefix();
+    void SendResponseFail(const TActorContext& ctx, EKafkaErrors error, const TString& message);
 
     std::optional<TGroupStatus> ParseCheckStateAndGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
     bool ParseAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, TString& assignments);

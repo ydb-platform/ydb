@@ -209,6 +209,7 @@ if __name__ == "__main__":
     index = 1
     while branch_exists(branch_name):
         branch_name = f"{base_branch_name}-{index}"
+        index += 1
     run_command(f"git checkout -b {branch_name}")
     run_command(f"git add {changelog_path}")
     run_command(f"git commit -m \"Update CHANGELOG.md for {suffix}\"")

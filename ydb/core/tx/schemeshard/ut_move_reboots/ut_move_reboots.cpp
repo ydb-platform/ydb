@@ -500,5 +500,53 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             }
         });
     }
+
+    Y_UNIT_TEST(ReplaceSequence) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableDescription {
+                        Name: "Table"
+                        Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "myseq" }
+                        Columns { Name: "value" Type: "Utf8" }
+                        KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                        Name: "ValueIndex"
+                        KeyColumnNames: ["value"]
+                    }
+                    SequenceDescription {
+                        Name: "myseq"
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                i64 value = DoNextVal(runtime, "/MyRoot/Table/myseq");
+                UNIT_ASSERT_VALUES_EQUAL(value, 1);
+            }
+
+            t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId,  "/MyRoot/Table", "/MyRoot/TableMove", TTestTxConfig::SchemeShard),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists,
+                NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestLs(runtime, "/MyRoot/Table", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
+                TestLs(runtime, "/MyRoot/Table/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
+
+                TestLs(runtime, "/MyRoot/TableMove", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+                TestLs(runtime, "/MyRoot/TableMove/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+
+                DoNextVal(runtime, "/MyRoot/Table/myseq", Ydb::StatusIds::SCHEME_ERROR);
+
+                i64 value = DoNextVal(runtime, "/MyRoot/TableMove/myseq");
+                UNIT_ASSERT_VALUES_EQUAL(value, 2);
+            }
+        });
+    }
 }
 

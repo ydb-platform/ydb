@@ -1129,6 +1129,8 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropSequence(NextPartId(), txState);
     case TTxState::ETxType::TxCopySequence:
         return CreateCopySequence(NextPartId(), txState);
+    case TTxState::ETxType::TxMoveSequence:
+        return CreateMoveSequence(NextPartId(), txState);
 
     case TTxState::ETxType::TxFillIndex:
         Y_ABORT("deprecated");
@@ -1381,6 +1383,8 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return {CreateMoveTableIndex(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
         return CreateConsistentMoveIndex(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
+        return {CreateMoveSequence(NextPartId(), tx)};
 
     // Replication
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:

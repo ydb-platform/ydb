@@ -595,6 +595,8 @@ ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx
 ISubOperation::TPtr CreateCopySequence(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateAlterSequence(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterSequence(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateMoveSequence(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateMoveSequence(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state);

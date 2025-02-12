@@ -98,10 +98,13 @@ public:
             for (const auto& child: srcPath->GetChildren()) {
                 auto name = child.first;
 
-                TPath srcIndexPath = srcPath.Child(name);
-                Y_ABORT_UNLESS(srcIndexPath.IsResolved());
+                TPath srcChildPath = srcPath.Child(name);
+                Y_ABORT_UNLESS(srcChildPath.IsResolved());
 
-                if (srcIndexPath.IsDeleted()) {
+                if (srcChildPath.IsDeleted()) {
+                    continue;
+                }
+                if (srcChildPath.IsSequence()) {
                     continue;
                 }
 
@@ -109,7 +112,7 @@ public:
                 Y_ABORT_UNLESS(dstIndexPath.IsResolved());
 
                 auto remap = move->AddReMapIndexes();
-                PathIdFromPathId(srcIndexPath->PathId, remap->MutableSrcPathId());
+                PathIdFromPathId(srcChildPath->PathId, remap->MutableSrcPathId());
                 PathIdFromPathId(dstIndexPath->PathId, remap->MutableDstPathId());
             }
 

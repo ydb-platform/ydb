@@ -725,18 +725,7 @@ inline TString Interval(const TDuration& value) {
     return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
 }
 
-TString BuildCreateReplicationQuery(
-        const TString& name,
-        const TString& dbPath,
-        const NReplication::TReplicationDescription& desc,
-        const TString& backupRoot,
-        NYql::TIssues& issues)
-{
-    // TODO(ilnaz)
-    Y_UNUSED(dbPath);
-    Y_UNUSED(backupRoot);
-    Y_UNUSED(issues);
-
+TString BuildCreateReplicationQuery(const TString& name, const NReplication::TReplicationDescription& desc) {
     TVector<TString> targets(::Reserve(desc.GetItems().size()));
     for (const auto& item : desc.GetItems()) {
         if (!item.DstPath.ends_with("/indexImplTable")) { // TODO(ilnaz): get rid of this hack
@@ -769,22 +758,12 @@ TString BuildCreateReplicationQuery(
 
 }
 
-void BackupReplication(
-        TDriver driver,
-        const TString& dbBackupRoot,
-        const TString& dbPathRelativeToBackupRoot,
-        const TFsPath& fsBackupFolder,
-        NYql::TIssues& issues)
-{
-    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
-    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
-
+void BackupReplication(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
     LOG_I("Backup async replication " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    const auto name = TFsPath(dbPathRelativeToBackupRoot).GetName();
     const auto desc = DescribeReplication(driver, dbPath);
-    const auto creationQuery = BuildCreateReplicationQuery(name, dbPath, desc, dbBackupRoot, issues);
-    Y_ENSURE(creationQuery, issues.ToString());
+    const auto creationQuery = BuildCreateReplicationQuery(fsBackupFolder.GetName(), desc);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateAsyncReplication());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -884,7 +863,7 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                 BackupCoordinationNode(driver, dbIt.GetFullPath(), childFolderPath);
             }
             if (dbIt.IsReplication()) {
-                BackupReplication(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
+                BackupReplication(driver, dbIt.GetFullPath(), childFolderPath);
             }
             dbIt.Next();
         }

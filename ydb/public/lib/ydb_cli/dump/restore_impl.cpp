@@ -9,10 +9,11 @@
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/log.h>
-#include <ydb/public/lib/ydb_cli/dump/util/rewrite_query.h>
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/threading/future/core/future.h>
 

@@ -72,6 +72,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             Cerr << "Waiting empty... " << Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() << Endl;
             Sleep(TDuration::Seconds(2));
         }
+
         AFL_VERIFY(!Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
     }
 

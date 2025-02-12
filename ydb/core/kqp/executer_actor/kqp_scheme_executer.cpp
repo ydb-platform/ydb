@@ -169,7 +169,7 @@ public:
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
         RegisterWithSameMailbox(requestHandler);
 
-        auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+        auto actorSystem = TlsActivationContext->ActorSystem();
         auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
             auto ev = MakeHolder<TEvPrivate::TEvMakeSessionDirResult>();

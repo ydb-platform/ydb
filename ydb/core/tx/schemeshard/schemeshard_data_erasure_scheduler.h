@@ -29,11 +29,8 @@ public:
         TInstant StartTime;
     };
 
-private:
-    static constexpr TDuration DATA_ERASURE_INTERVAL = TDuration::Seconds(2); //TDuration::Days(7);
-
 public:
-    TDataErasureScheduler(const NActors::TActorId& schemeShardId);
+    TDataErasureScheduler(const NActors::TActorId& schemeShardId, const TDuration& dataErasureInterval);
 
     void Handle(TEvSchemeShard::TEvWakeupToRunDataErasurePtr& ev, const NActors::TActorContext& ctx);
     void ScheduleDataErasureWakeup(const NActors::TActorContext& ctx);
@@ -49,6 +46,7 @@ public:
 
 private:
     const NActors::TActorId SchemeShardId;
+    const TDuration DataErasureInterval;
 
     bool DataErasureInFlight;
     TInstant StartTime;

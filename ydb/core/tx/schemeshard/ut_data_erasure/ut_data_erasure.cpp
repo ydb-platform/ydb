@@ -71,6 +71,9 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
                      &CreateFlatBsController);
 
         runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
+        auto& dataErasureConfig = runtime.GetAppData().DataErasureConfig;
+        dataErasureConfig.SetDataErasureIntervalSeconds(2);
+
         auto sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 

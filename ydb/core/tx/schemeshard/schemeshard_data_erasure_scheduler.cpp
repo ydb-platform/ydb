@@ -3,11 +3,12 @@
 
 namespace NKikimr::NSchemeShard {
 
-TDataErasureScheduler::TDataErasureScheduler(const NActors::TActorId& schemeShardId)
+TDataErasureScheduler::TDataErasureScheduler(const NActors::TActorId& schemeShardId, const TDuration& dataErasureInterval)
     : SchemeShardId(schemeShardId)
+    , DataErasureInterval(dataErasureInterval)
     , DataErasureInFlight(false)
     , DataErasureWakeupScheduled(false)
-    , CurrentWakeupInterval(DATA_ERASURE_INTERVAL)
+    , CurrentWakeupInterval(DataErasureInterval)
 {}
 
 void TDataErasureScheduler::Handle(TEvSchemeShard::TEvCompleteDataErasurePtr& ev, const NActors::TActorContext& ctx) {
@@ -15,10 +16,10 @@ void TDataErasureScheduler::Handle(TEvSchemeShard::TEvCompleteDataErasurePtr& ev
     DataErasureInFlight = false;
     FinishTime = AppData(ctx)->TimeProvider->Now();
     TDuration dataErasureDuration = FinishTime - StartTime;
-    if (dataErasureDuration > DATA_ERASURE_INTERVAL) {
+    if (dataErasureDuration > DataErasureInterval) {
         StartDataErasure(ctx);
     } else {
-        CurrentWakeupInterval = DATA_ERASURE_INTERVAL - dataErasureDuration;
+        CurrentWakeupInterval = DataErasureInterval - dataErasureDuration;
         ScheduleDataErasureWakeup(ctx);
     }
 }
@@ -72,10 +73,10 @@ void TDataErasureScheduler::Restore(const TRestoreValues& restoreValues, const N
     StartTime = restoreValues.StartTime;
     if (!DataErasureInFlight) {
         TDuration interval = AppData(ctx)->TimeProvider->Now() - StartTime;
-        if (interval > DATA_ERASURE_INTERVAL) {
+        if (interval > DataErasureInterval) {
             CurrentWakeupInterval = TDuration::Zero();
         } else {
-            CurrentWakeupInterval = DATA_ERASURE_INTERVAL - interval;
+            CurrentWakeupInterval = DataErasureInterval - interval;
         }
     }
 }

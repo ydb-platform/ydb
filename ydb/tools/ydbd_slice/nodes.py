@@ -150,7 +150,7 @@ class Nodes(object):
             cmd = self._get_ssh_command_prefix() + [dst]
             rsh = " ".join(self._get_ssh_command_prefix(remote=True))
             cmd.extend([
-                "sudo", "SSH_AUTH_SOCK=$SSH_AUTH_SOCK", "rsync", "-avqW", "--del", "--no-o", "--no-g",
+                "sudo", "rsync", "-avqW", "--del", "--no-o", "--no-g",
                 "--rsh='{}'".format(rsh),
                 src, remote_path
             ])

@@ -52,5 +52,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     const TImportInfo::TItem& item
 );
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo::TItem& item
+);
+
 } // NSchemeShard
 } // NKikimr

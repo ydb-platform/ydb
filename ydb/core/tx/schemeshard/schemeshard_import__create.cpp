@@ -541,6 +541,21 @@ private:
         Send(Self->SelfId(), CreateChangefeedPropose(Self, txId, item));
     }
 
+    void CreateConsumers(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+        item.SubState = ESubState::Proposed;
+
+        LOG_I("TImport::TTxProgress: CreateConsumers propose"
+            << ": info# " << importInfo->ToString()
+            << ", item# " << item.ToString(itemIdx)
+            << ", txId# " << txId);
+
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
+
+        Send(Self->SelfId(), CreateConsumersPropose(Self, txId, item));
+    }
+
     void AllocateTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
@@ -1048,6 +1063,11 @@ private:
                 CreateChangefeed(importInfo, i, txId);
                 itemIdx = i;
                 break;
+            
+            case EState::CreateConsumers:
+                CreateConsumers(importInfo, i, txId);
+                itemIdx = i;
+                break;
 
             default:
                 break;
@@ -1292,10 +1312,19 @@ private:
         case EState::CreateChangefeed:
             if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
                 AllocateTxId(importInfo, itemIdx);
+                item.State = EState::CreateConsumers;
             } else {
                 item.State = EState::Done;
             }
             break;
+        
+        case EState::CreateConsumers:
+            if (item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
+                AllocateTxId(importInfo, itemIdx);
+                item.State = EState::CreateChangefeed;
+            } else {
+                item.State = EState::Done;
+            }
 
         default:
             return SendNotificationsIfFinished(importInfo);

@@ -2829,6 +2829,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         Transferring,
         BuildIndexes,
         CreateChangefeed,
+        CreateConsumers,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,

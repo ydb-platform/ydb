@@ -1,4 +1,7 @@
 /* syntax version 1 */
+
+pragma UseBlocks;
+
 SELECT 
     value,
     Unicode::ReplaceAll(value, Utf8("аф"), Utf8("zzz")) AS all,

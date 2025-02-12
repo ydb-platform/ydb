@@ -1,4 +1,7 @@
 /* syntax version 1 */
+
+pragma UseBlocks;
+
 SELECT 
     value as value,
     Unicode::RemoveAll(value, "фа"u) AS all,

@@ -1,4 +1,7 @@
 /* syntax version 1 */
+
+pragma UseBlocks;
+
 SELECT
     value AS value,
     Unicode::IsUtf(value) AS is,

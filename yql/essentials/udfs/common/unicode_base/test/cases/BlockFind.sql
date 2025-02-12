@@ -1,3 +1,6 @@
+
+pragma UseBlocks;
+
 SELECT
     value as value,
     Unicode::Substring(value, Unicode::Find(value, "ä"u), Unicode::RFind(value, "ä"u) - Unicode::Find(value, "ä"u)),

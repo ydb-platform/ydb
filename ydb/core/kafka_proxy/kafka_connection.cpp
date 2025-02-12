@@ -239,53 +239,57 @@ protected:
         Send(ProduceActorId, new TEvKafka::TEvProduceRequest(header->CorrelationId, message));
     }
 
-
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TJoinGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (ReadSessionActorId) {
-            Send(ReadSessionActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
-            return;
-        }
-
-        if (message->ProtocolType.has_value() && !message->ProtocolType.value().empty() && message->ProtocolType.value() != SUPPORTED_JOIN_GROUP_PROTOCOL) {
+        if (Context->Config.GetEnableNativeBalancing()) {
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
-            return;
-        }
-
-        for (auto protocol: message->Protocols) {
-            if (protocol.Name == SUPPORTED_ASSIGN_STRATEGY) {
+        } else {
+            if (ReadSessionActorId) {
+                Send(ReadSessionActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
+            } else {
                 ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
                 Send(ReadSessionActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
-                return;
             }
         }
-
-        Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSyncGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (ReadSessionActorId) {
-            Send(ReadSessionActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
-        } else {
+        if (Context->Config.GetEnableNativeBalancing()) {
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
+        } else {
+            if (ReadSessionActorId) {
+                Send(ReadSessionActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
+            } else {
+                ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+                Send(ReadSessionActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
+            }
         }
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<THeartbeatRequestData>& message, const TActorContext& /*ctx*/) {
-        if (ReadSessionActorId) {
-            Send(ReadSessionActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
-        } else {
+        if (Context->Config.GetEnableNativeBalancing()) {
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
+        } else {
+            if (ReadSessionActorId) {
+                Send(ReadSessionActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
+            } else {
+                ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+                Send(ReadSessionActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
+            }
         }
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TLeaveGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (ReadSessionActorId) {
-            Send(ReadSessionActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
-        } else {
+        if (Context->Config.GetEnableNativeBalancing()) {
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
+        } else {
+            if (ReadSessionActorId) {
+                Send(ReadSessionActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
+            } else {
+                ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+                Send(ReadSessionActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
+            }
         }
     }
-
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TInitProducerIdRequestData>& message) {
         Register(CreateKafkaInitProducerIdActor(Context, header->CorrelationId, message));

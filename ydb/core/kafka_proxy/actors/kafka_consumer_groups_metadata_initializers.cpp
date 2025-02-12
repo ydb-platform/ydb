@@ -45,6 +45,11 @@ void TKafkaConsumerGroupsMetaInitializer::DoPrepare(NInitializer::IInitializerIn
         }
         {
             auto& column = *request.add_columns();
+            column.set_name("protocol_type");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+        }
+        {
+            auto& column = *request.add_columns();
             column.set_name("protocol");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }

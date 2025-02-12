@@ -10,6 +10,7 @@ const TString INSERT_NEW_GROUP = R"sql(
     DECLARE $Database AS Utf8;
     DECLARE $Master AS Utf8;
     DECLARE $LastHeartbeat AS Datetime;
+    DECLARE $ProtocolType AS Utf8;
 
     INSERT INTO `%s`
     (
@@ -18,7 +19,8 @@ const TString INSERT_NEW_GROUP = R"sql(
         state,
         database,
         last_heartbeat_time,
-        master
+        master,
+        protocol_type
     )
     VALUES
     (
@@ -27,7 +29,8 @@ const TString INSERT_NEW_GROUP = R"sql(
         $State,
         $Database,
         $LastHeartbeat,
-        $Master
+        $Master,
+        $ProtocolType
     );
 )sql";
 
@@ -148,7 +151,7 @@ const TString CHECK_GROUP_STATE = R"sql(
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Database AS Utf8;
 
-    SELECT state, generation, master, last_heartbeat_time, consumer_group, database
+    SELECT state, generation, master, last_heartbeat_time, consumer_group, database, protocol
     FROM `%s`
     WHERE consumer_group = $ConsumerGroup
     AND database = $Database;
@@ -184,7 +187,7 @@ const TString CHECK_DEAD_MEMBERS = R"sql(
       AND last_heartbeat_time < $Deadline;
 )sql";
 
-const TString UPDATE_TTLS = R"sql(
+const TString UPDATE_LASTHEARTBEATS = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Generation AS Uint64;
@@ -208,7 +211,7 @@ const TString UPDATE_TTLS = R"sql(
 )sql";
 
 
-const TString UPDATE_TTL_LEAVE_GROUP = R"sql(
+const TString UPDATE_LASTHEARTBEAT_TO_LEAVE_GROUP = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $MemberId AS Utf8;

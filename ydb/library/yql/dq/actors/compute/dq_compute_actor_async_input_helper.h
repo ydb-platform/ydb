@@ -98,7 +98,7 @@ public:
 
         } else {
             CA_LOG_T("Skip polling async input[" << Index << "]: no free space: " << freeSpace);
-            return EResumeSource::CAPollAsyncNoSpace; // If there is no free space in buffer, => we have something to process
+            // If there is no free space in buffer, => we have something to process
         }
         return {};
     }

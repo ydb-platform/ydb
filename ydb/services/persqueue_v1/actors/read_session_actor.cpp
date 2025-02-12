@@ -2333,8 +2333,13 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
         return;
     }
 
+    auto [_, maxLag, readTimestampMs] = GetReadFrom(it->second.FullConverter, ctx);
+    if (!readTimestampMs && maxLag) {
+        readTimestampMs = (TInstant::Now() - TDuration::MilliSeconds(maxLag)).MilliSeconds();
+    }
+
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
+    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage, readTimestampMs));
 
     if constexpr (!UseMigrationProtocol) {
         if (AutoPartitioningSupport) {

@@ -833,6 +833,8 @@ message TStatusResponse {
         optional uint64 Cookie = 34;
 
         optional EScaleStatus ScaleStatus = 35;
+        optional ETopicPartitionStatus PartitionStatus = 36;
+        optional uint64 EndWriteTimestampMs = 37;
     }
 
     message TConsumerResult {
@@ -1072,6 +1074,7 @@ message TEvReadingPartitionFinishedRequest {
     optional uint32 PartitionId = 2;
     optional bool ScaleAwareSDK = 3;
     optional bool StartedReadingFromEndOffset = 4;
+    optional uint64 ReadTimestampMs = 5; //optional, default = 0
 };
 
 // The consumer's reading of the partition is started (from ReadSession)

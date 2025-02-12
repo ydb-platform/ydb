@@ -8,11 +8,16 @@ namespace NYql {
 
 TTableLimiter::TTableLimiter(const TRecordsRange& range)
     : Start(range.Offset.GetOrElse(0ULL))
-    , End(range.Limit.Defined() ? Start + *range.Limit : Max())
     , Current(0ULL)
     , TableStart(0ULL)
     , TableEnd(Max())
 {
+    const auto limit = range.Limit.GetOrElse(Max());
+    if (limit > Max<ui64>() - Start) {
+        End = Max();
+    } else {
+        End = Start + limit;
+    }
 }
 
 bool TTableLimiter::NextTable(ui64 recordCount) {

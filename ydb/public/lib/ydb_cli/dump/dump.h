@@ -13,7 +13,7 @@ class TLog;
 namespace NYdb {
 
 inline namespace V3 {
-class TDriver;
+    class TDriver;
 }
 
 namespace NDump {

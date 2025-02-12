@@ -16,8 +16,7 @@
 #include <util/stream/fwd.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 extern const char DOC_API_TABLE_VERSION_ATTR[23];
 extern const char DOC_API_REQUEST_TYPE[22];
@@ -179,5 +178,4 @@ private:
 
 }; // TRestoreClient
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

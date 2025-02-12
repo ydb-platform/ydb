@@ -54,7 +54,7 @@ struct TAbsolutePathRewriter {
 
     static TString BuildDatabaseToken(TStringBuf database) {
         if (database) {
-            return TStringBuilder() << "`" << database;
+            return TStringBuilder() << "`" << database << "/";
         } else {
             return "";
         }

@@ -258,8 +258,10 @@ namespace NKikimr {
             FreeSpace.clear();
             ui32 slotsInChunk = 0;
             ::Load(s, slotsInChunk);
-            Y_VERIFY_S(slotsInChunk == SlotsInChunk, VDiskLogPrefix
-                    << "slotsInChunk# " << slotsInChunk << " SlotsInChunk# " << SlotsInChunk);
+
+            SlotsInChunk = slotsInChunk;
+            ConstMask = BuildConstMask(VDiskLogPrefix, SlotsInChunk);
+
             ::Load(s, AllocatedSlots);
             ::Load(s, FreeSpace);
             FreeSlotsInFreeSpace = 0;
@@ -472,27 +474,29 @@ namespace NKikimr {
             }
         }
 
-        void TAllChains::Save(IOutputStream *s) const {
-            if (StartMode == EStartMode::Loaded) {
-                ui32 size = ChainDelegators.size();
-                ::Save(s, size);
-                for (auto& d : ChainDelegators) {
-                    ::Save(s, d);
+        bool TAllChains::IsOldMinHugeBlobSizeCompatible() const {
+            for (const auto &x : ChainDelegators) {
+                if (x.SlotSize < OldMinHugeBlobSizeInBytes && x.HaveBeenUsed()) {
+                    return false;
                 }
-            } else { 
-                std::vector<const TChainDelegator*> delegators;
-                for (auto &x : ChainDelegators) {
-                    if (!x.HaveBeenUsed() && x.SlotSize < FirstLoadedSlotSize) { 
-                        continue; // preserving backward compatibility until no allocations
-                    }
-                    delegators.emplace_back(&x);
-                }
+            }
+            return true;
+        }
 
-                ui32 size = delegators.size();
-                ::Save(s, size);
-                for (auto x : delegators) {
-                    ::Save(s, *x);
+        void TAllChains::Save(IOutputStream *s) const {
+            bool oldCompatible = IsOldMinHugeBlobSizeCompatible();
+
+            std::vector<const TChainDelegator*> delegatorsToSave;
+            for (auto& d: ChainDelegators) {
+                if (!oldCompatible || d.SlotSize >= OldMinHugeBlobSizeInBytes) {
+                    delegatorsToSave.push_back(&d);
                 }
+            }
+
+            ui32 size = delegatorsToSave.size();
+            ::Save(s, size);
+            for (auto d : delegatorsToSave) {
+                ::Save(s, *d);
             }
         }
 
@@ -508,29 +512,25 @@ namespace NKikimr {
                 }
             } else if (size < ChainDelegators.size()) {
                 // map size has been changed, run migration
-                StartMode = EStartMode::Migrated;
-                TAllChainDelegators chainDelegators = BuildChains(OldMinHugeBlobSizeInBytes);
-                Y_VERIFY_S(size > 0 && size == chainDelegators.size(), "size# " << size
-                        << " chainDelegators.size()# " << chainDelegators.size());
-
-                // load into temporary delegators
-                for (auto &x : chainDelegators) {
-                    ::Load(s, x);
-                }
-
-                // migrate
+                StartMode = EStartMode::Loaded;
                 using TIt = TAllChainDelegators::iterator;
-                TIt loadedIt = chainDelegators.begin();
-                TIt loadedEnd = chainDelegators.end();
-                FirstLoadedSlotSize = loadedIt->SlotSize;
-                for (TIt it = ChainDelegators.begin(); it != ChainDelegators.end(); ++it) {
-                    Y_ABORT_UNLESS(loadedIt != loadedEnd);
-                    if (loadedIt->SlotSize == it->SlotSize) {
-                        *it = std::move(*loadedIt);
-                        ++loadedIt;
+                TIt loadedIt = ChainDelegators.begin();
+                TIt loadedEnd = ChainDelegators.end();
+
+                for (ui32 i = 0; i < size; ++i) {
+                    TChainDelegator c(VDiskLogPrefix, 1, 1, ChunkSize, AppendBlockSize);
+                    ::Load(s, c);
+
+                    bool inserted = false;
+                    for (; loadedIt != loadedEnd; ++loadedIt) {
+                        if (loadedIt->SlotsInChunk == c.ChainPtr->SlotsInChunk) {
+                            loadedIt->ChainPtr = std::move(c.ChainPtr);
+                            inserted = true;
+                            break;
+                        }
                     }
+                    Y_VERIFY_S(inserted, "unable to insert loaded chain with SlotsInChunk#" << c.ChainPtr->SlotsInChunk);
                 }
-                Y_ABORT_UNLESS(loadedIt == loadedEnd);
             } else {
                 // entry point size rollback case
                 Y_ABORT_UNLESS(size > ChainDelegators.size());

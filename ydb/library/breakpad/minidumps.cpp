@@ -14,7 +14,7 @@ public:
     }
 
 private:
-    static bool DumpCallback(const google_breakpad::MinidumpDescriptor& descriptor, void* context, bool succeeded) {
+    static bool DumpCallback(const google_breakpad::MinidumpDescriptor& descriptor, void* /*context*/, bool succeeded) {
         if (char* script = getenv("BREAKPAD_MINIDUMPS_SCRIPT")) {
             if (auto pid = fork()) {
                 waitpid(pid, 0, 0);

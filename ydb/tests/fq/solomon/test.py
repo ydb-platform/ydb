@@ -10,8 +10,7 @@ from yql_utils import (
     get_supported_providers,
     is_xfail,
     log,
-    normalize_source_code_path,
-    yql_binary_path)
+    normalize_source_code_path)
 
 from test_utils import (
     get_config,

@@ -136,6 +136,7 @@ void FillQueryMeta(TQueryMeta& meta, const NKikimrKqp::TQueryResponse& response)
 
 class TYdbSetup::TImpl {
     using EVerbose = TYdbSetupSettings::EVerbose;
+    using EHealthCheck = TYdbSetupSettings::EHealthCheck;
 
 private:
     TAutoPtr<TLogBackend> CreateLogBackend() const {
@@ -399,19 +400,36 @@ private:
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
-    void WaitResourcesPublishing() const {
-        auto promise = NThreading::NewPromise();
+    NThreading::TFuture<void> RunHealthCheck(const TString& database) const {
+        EHealthCheck level = Settings_.HealthCheckLevel;
+        i32 nodesCount = Settings_.NodeCount;
+        if (database != Settings_.DomainName) {
+            nodesCount = Tenants_->Size(database);
+        } else if (StorageMeta_.TenantsSize() > 0) {
+            level = std::min(level, EHealthCheck::NodesCount);
+        }
+
         const TWaitResourcesSettings settings = {
-            .ExpectedNodeCount = static_cast<i32>(Settings_.NodeCount),
-            .HealthCheckLevel = Settings_.HealthCheckLevel,
+            .ExpectedNodeCount = nodesCount,
+            .HealthCheckLevel = level,
             .HealthCheckTimeout = Settings_.HealthCheckTimeout,
             .VerboseLevel = Settings_.VerboseLevel,
-            .Database = NKikimr::CanonizePath(Settings_.DomainName)
+            .Database = NKikimr::CanonizePath(database)
         };
-        GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), 0, GetRuntime()->GetAppData().SystemPoolId);
+        const auto promise = NThreading::NewPromise();
+        GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), GetNodeIndexForDatabase(database), GetRuntime()->GetAppData().SystemPoolId);
+
+        return promise.GetFuture();
+    }
+
+    void WaitResourcesPublishing() const {
+        std::vector<NThreading::TFuture<void>> futures(1, RunHealthCheck(Settings_.DomainName));
+        for (const auto& [tenantName, _] : StorageMeta_.GetTenants()) {
+            futures.emplace_back(RunHealthCheck(GetTenantPath(tenantName)));
+        }
 
         try {
-            promise.GetFuture().GetValue(2 * Settings_.HealthCheckTimeout);
+            NThreading::WaitAll(futures).GetValue(2 * Settings_.HealthCheckTimeout);
         } catch (...) {
             ythrow yexception() << "Failed to initialize all resources: " << CurrentExceptionMessage();
         }
@@ -628,7 +646,11 @@ private:
     }
 
     TString GetDatabasePath(const TString& database) const {
-        return NKikimr::CanonizePath(database ? database : GetDefaultDatabase());
+        const TString& result = NKikimr::CanonizePath(database ? database : GetDefaultDatabase());
+        if (StorageMeta_.TenantsSize() > 0 && result == NKikimr::CanonizePath(Settings_.DomainName)) {
+            ythrow yexception() << "Cannot use root domain '" << result << "' as request database then created additional tenants";
+        }
+        return result;
     }
 
     ui32 GetNodeIndexForDatabase(const TString& path) const {
@@ -653,7 +675,7 @@ private:
             ythrow yexception() << "Can not choose default database, there is more than one tenants, please use `-D <database name>`";
         }
         if (StorageMeta_.TenantsSize() == 1) {
-            return StorageMeta_.GetTenants().begin()->first;
+            return GetTenantPath(StorageMeta_.GetTenants().begin()->first);
         }
         return Settings_.DomainName;
     }

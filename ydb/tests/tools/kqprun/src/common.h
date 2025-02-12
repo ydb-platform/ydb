@@ -43,6 +43,7 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
     enum class EHealthCheck {
         None,
         NodesCount,
+        FetchDatabase,
         ScriptRequest,
         Max
     };

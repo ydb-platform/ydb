@@ -56,6 +56,15 @@ void TKafkaConsumerMembersMetaInitializer::DoPrepare(NInitializer::IInitializerI
             columnTtl->set_column_name("last_heartbeat_time");
             columnTtl->set_expire_after_seconds(60);
         }
+        {
+            auto& index = *request.add_indexes();
+            index.set_name("idx_group_generation_db_lht");
+            *index.mutable_global_index() = Ydb::Table::GlobalIndex();
+            index.add_index_columns("consumer_group");
+            index.add_index_columns("generation");
+            index.add_index_columns("database");
+            index.add_index_columns("last_heartbeat_time");
+        }
         result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogCreateTable>(request, "create"));
     }
 

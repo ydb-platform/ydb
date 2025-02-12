@@ -3,6 +3,7 @@
 namespace NKafka {
 static constexpr TDuration WAKEUP_INTERVAL = TDuration::Seconds(1);
 static constexpr TDuration LOCK_PARTITION_DELAY = TDuration::Seconds(3);
+static constexpr TKafkaUint16 ASSIGNMENT_VERSION = 3;
 
 NActors::IActor* CreateKafkaReadSessionActor(const TContext::TPtr context, ui64 cookie) {
     return new TKafkaReadSessionActor(context, cookie);
@@ -253,7 +254,15 @@ void TKafkaReadSessionActor::SendSyncGroupResponseOk(const TActorContext& ctx, u
     response->ProtocolType = SUPPORTED_JOIN_GROUP_PROTOCOL;
     response->ProtocolName = SUPPORTED_ASSIGN_STRATEGY;
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
-    response->Assignment = BuildAssignmentAndInformBalancerIfRelease(ctx);
+
+    auto assignment = BuildAssignmentAndInformBalancerIfRelease(ctx);
+
+    TWritableBuf buf(nullptr, assignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
+    TKafkaWritable writable(buf);
+    writable << ASSIGNMENT_VERSION;
+    assignment.Write(writable, ASSIGNMENT_VERSION);
+    response->AssignmentStr = TString(buf.GetBuffer().data(), buf.GetBuffer().size());
+    response->Assignment = response->AssignmentStr;
 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, EKafkaErrors::NONE_ERROR));
 }
@@ -263,6 +272,7 @@ void TKafkaReadSessionActor::SendSyncGroupResponseFail(const TActorContext&, ui6
     TSyncGroupResponseData::TPtr response = std::make_shared<TSyncGroupResponseData>();
 
     response->ErrorCode = error;
+    response->Assignment = "";
 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, error));
 }

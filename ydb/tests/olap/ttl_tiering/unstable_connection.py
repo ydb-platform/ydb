@@ -67,7 +67,7 @@ class TestUnstableConnection(TllTieringTestBase):
             subprocess.run(["kill", "-CONT", str(pid)])
             time.sleep(2)
         subprocess.run(["kill", "-CONT", str(pid)])
-        logger.info(f"Adversary stopped")
+        logger.info("Adversary stopped")
 
     def stopwatch(self, seconds: int, stop_event):
         time.sleep(seconds)

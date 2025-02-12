@@ -1306,61 +1306,12 @@ message DescribeExternalDataSourceResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-message ExternalAuthorization {
-
-    // Access without authorization.
-    message None {
-    }
-
-    message Basic {
-        optional string login = 1;
-        optional string password_secret_name = 2;
-    }
-
-    message Token {
-        optional string token_secret_name = 1;
-    }
-
-    message Aws {
-        optional string access_key_secret_name = 1;
-        optional string secret_key_secret_name = 2;
-        optional string aws_region = 3;
-    }
-
-    message ServiceAccount {
-        optional string id = 1;
-        optional string secret_name = 2;
-    }
-
-    message MdbBasic {
-        optional string service_account_id = 1;
-        optional string service_account_secret_name = 2;
-        optional string login = 3;
-        optional string password_secret_name = 4;
-    }
-
-    oneof identity {
-        None none = 1;
-        Basic basic = 2;
-        Token token = 3;
-        Aws aws = 4;
-        ServiceAccount service_account = 5;
-        MdbBasic mdb_basic = 6;
-    }
-}
-
-message ExternalDataSourceProperties {
-    map<string, string> properties = 1;
-}
-
 message DescribeExternalDataSourceResult {
     // Description of a generic scheme object.
     Ydb.Scheme.Entry self = 1;
     optional string source_type = 2;
     optional string location = 3;
-    optional string installation = 4;
-    optional ExternalAuthorization authorization = 5;
-    optional ExternalDataSourceProperties properties = 6;
+    map<string, string> properties = 4;
 }
 
 // Returns information about an external table with a given path.
@@ -1381,5 +1332,5 @@ message DescribeExternalTableResult {
     optional string data_source_path = 3;
     optional string location = 4;
     repeated ColumnMeta columns = 5;
-    optional bytes content = 6;
+    map<string, string> content = 6;
 }

@@ -97,15 +97,17 @@ void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQuery
     }
 }
 
-void FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const TKqpPhyTxHolder::TConstPtr& tx) {
+bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const TKqpPhyTxHolder::TConstPtr& tx) {
     for (const auto& stage : tx->GetStages()) {
         if (stage.SinksSize() != 1) {
             continue;
         }
         for (auto& sink : stage.GetSinks()) {
-            YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+            return sink.GetInternalSink().GetSettings().UnpackTo(&settings);
         }
     }
+
+    return false;
 }
 
 class TRequestFail : public yexception {
@@ -1410,9 +1412,9 @@ public:
 
         if (!request.Transactions.empty()) {
             NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-            FillTableSinkSettings(sinkSettings, request.Transactions.front().Body);
+            auto isFilledSettings = FillTableSinkSettings(sinkSettings, request.Transactions.front().Body);
 
-            if (Settings.TableService.GetEnableOltpSink() && sinkSettings.GetIsBatch()) {
+            if (Settings.TableService.GetEnableOltpSink() && isFilledSettings && sinkSettings.GetIsBatch()) {
                 SendToPartitionedExecuter(txCtx, std::move(request));
                 return;
             }

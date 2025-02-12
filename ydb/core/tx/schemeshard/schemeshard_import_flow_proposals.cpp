@@ -294,5 +294,35 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     return propose;
 }
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo::TItem& item
+) {
+    Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
+
+    const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];
+    const auto& topic = importChangefeedTopic.GetTopic();
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto& record = propose->Record;
+    auto& modifyScheme = *record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
+    auto& pqGroup = *modifyScheme.MutableAlterPersQueueGroup();
+
+    const TPath dstPath = TPath::Init(item.DstPathId, ss);
+    Cerr << "pqGroup working dir: " << dstPath.Parent().PathString() << Endl;
+    Cerr << "pqGroup name: " << dstPath.LeafName() << Endl;
+    modifyScheme.SetWorkingDir(dstPath.Parent().PathString());
+    pqGroup.SetName(dstPath.LeafName());
+
+    for (const auto& consumer : topic.consumers()) {
+        auto pqConsumer = *pqGroup.MutablePQTabletConfig()->AddConsumers();
+        *pqConsumer.MutableName() = consumer.name();
+    }
+    
+    return propose;
+}
+
 } // NSchemeShard
 } // NKikimr

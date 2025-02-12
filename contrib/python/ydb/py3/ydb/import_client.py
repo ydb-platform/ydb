@@ -28,6 +28,7 @@ class ImportProgress(enum.IntEnum):
     DONE = 4
     CANCELLATION = 5
     CANCELLED = 6
+    CREATE_CHANGEFEEDS = 7
 
 
 def _initialize_progresses():

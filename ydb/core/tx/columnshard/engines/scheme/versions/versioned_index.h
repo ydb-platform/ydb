@@ -129,5 +129,7 @@ public:
     const TIndexInfo* AddIndex(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo);
 
     bool LoadShardingInfo(IDbWrapper& db);
+
+    THashMap<ui64, ui64> GetCompatibleSchemaVersions() const;
 };
 }   // namespace NKikimr::NOlap

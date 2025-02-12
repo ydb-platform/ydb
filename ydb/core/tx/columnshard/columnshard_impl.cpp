@@ -21,6 +21,7 @@
 #include "blobs_action/transaction/tx_remove_blobs.h"
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
+#include "blobs_action/transaction/tx_set_compatible_versions.h"
 #include "blobs_reader/actor.h"
 #include "bg_tasks/events/events.h"
 
@@ -522,6 +523,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
 
+    SetupLightSchemaActualization();
     SetupIndexation();
     SetupCompaction({});
     SetupCleanupPortions();
@@ -843,6 +845,10 @@ void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
             NPrioritiesQueue::TCompServiceOperator::Ask(PrioritizationClientId, priority, std::make_shared<TCompactionAllocated>(SelfId()));
         }
     }
+}
+
+void TColumnShard::SetupLightSchemaActualization() {
+    Execute(new TTxSetCompatibleSchemaVersions(this));
 }
 
 class TAccessorsMemorySubscriber: public NOlap::NResourceBroker::NSubscribe::ITask {

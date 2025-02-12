@@ -50,6 +50,19 @@ public:
         Operator = storagesManager->GetOperatorVerified(columnInfo.GetStorageId() ? columnInfo.GetStorageId() : IStoragesManager::DefaultStorageId);
         return TConclusionStatus::Success();
     }
+
+    bool operator==(const TColumnFeatures& other) const {
+        return GetColumnId() == other.GetColumnId()
+            && GetPKColumnIndex() == other.GetPKColumnIndex()
+            && GetColumnName() == other.GetColumnName()
+            && GetDataAccessorConstructor().IsEqualTo(other.GetDataAccessorConstructor())
+            && GetSerializer().IsEqualTo(other.GetSerializer())
+            && GetNeedMinMax() == other.GetNeedMinMax()
+            && GetIsSorted() == other.GetIsSorted()
+            && GetIsNullable() == other.GetIsNullable()
+            && GetDefaultValue() == other.GetDefaultValue()
+            && *GetDictionaryEncoding() == *other.GetDictionaryEncoding();
+    }
 };
 
 } // namespace NKikimr::NOlap

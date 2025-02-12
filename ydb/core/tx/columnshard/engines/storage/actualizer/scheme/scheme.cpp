@@ -62,6 +62,7 @@ void TSchemeActualizer::DoRemovePortion(const ui64 portionId) {
 }
 
 void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization_extract_tasks");
     THashSet<ui64> portionsToRemove;
     TSchemeGlobalCounters::OnExtract();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("rw_count", PortionsToActualizeScheme.size());
@@ -80,7 +81,10 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
                 }
             }
             auto info = BuildActualizationInfo(*portion);
-            AFL_VERIFY(info);
+            if (!info) {
+                portionsToRemove.emplace(portion->GetPortionId());
+                continue;
+            }
             auto portionScheme = portion->GetSchema(VersionedIndex);
             TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));

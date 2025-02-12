@@ -1,5 +1,6 @@
 #pragma once
 #include "counters.h"
+#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>

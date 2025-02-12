@@ -360,6 +360,52 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     return TWritePortionInfoWithBlobsResult(std::move(constructor));
 }
 
+// Checks that no columns changed and deleted in the next version,
+// so that current schema version can be safely changed to the next
+bool ISnapshotSchema::IsReplaceableByNext(const ISnapshotSchema& nextSchema) const {
+    const auto& nextFields = nextSchema.GetSchema()->fields();
+    const auto& curFields = GetSchema()->fields();
+    const ui32 curFieldCount = curFields.size();
+    if (nextFields.size() < curFieldCount) {
+        return false;
+    }
+    const TIndexInfo& nextIndexInfo = nextSchema.GetIndexInfo();
+    const TIndexInfo& indexInfo = GetIndexInfo();
+    for (ui32 fld = 0; fld < curFieldCount; fld++) {
+        const std::shared_ptr<TColumnFeatures>& features = indexInfo.GetColumnFeaturesByIndex(fld);
+        auto fieldId = features->GetColumnId();
+        if (indexInfo.IsSpecialColumn(fieldId)) {
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("special_field", curFields[fld]->name())("id", fieldId);
+            break;
+        }
+        if (!curFields[fld]->Equals(nextFields[fld], true)) {
+            return false;
+        }
+        const std::shared_ptr<TColumnFeatures>& nextFeatures = nextIndexInfo.GetColumnFeaturesByIndex(fld);
+        if (!features != !nextFeatures) {
+            return false;
+        }
+        if (features && (*features != *nextFeatures)) {
+            return false;
+        }
+    }
+    const THashMap<ui32, NIndexes::TIndexMetaContainer>& indexes = indexInfo.GetIndexes();
+    const THashMap<ui32, NIndexes::TIndexMetaContainer>& nextIndexes = nextIndexInfo.GetIndexes();
+    if (indexes.size() != nextIndexes.size()) {
+        return false;
+    }
+    for (auto& [key, meta]: indexes) {
+        THashMap<ui32, NIndexes::TIndexMetaContainer>::const_iterator it = nextIndexes.find(key);
+        if (it == nextIndexes.end()) {
+            return false;
+        }
+        if ((*meta.GetObjectPtr() != *it->second.GetObjectPtr()) || (meta.GetObjectPtr()->SerializeToProto().SerializeAsString() != it->second.GetObjectPtr()->SerializeToProto().SerializeAsString())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 ui32 ISnapshotSchema::GetIndexesCount() const {
     return GetIndexInfo().GetIndexes().size();
 }

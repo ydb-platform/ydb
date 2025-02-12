@@ -58,6 +58,12 @@ public:
 
     }
 
+    NKikimrSchemeOp::TOlapIndexDescription SerializeToProto() const {
+        NKikimrSchemeOp::TOlapIndexDescription result;
+        DoSerializeToProto(result);
+        return result;
+    }
+
     NJson::TJsonValue SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const;
 
     TConclusionStatus CheckModificationCompatibility(const std::shared_ptr<IIndexMeta>& newMeta) const {
@@ -84,6 +90,8 @@ public:
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const;
 
     virtual TString GetClassName() const = 0;
+
+    auto operator<=>(const IIndexMeta&) const = default;
 };
 
 class TIndexMetaContainer: public NBackgroundTasks::TInterfaceProtoContainer<IIndexMeta> {

@@ -16,6 +16,11 @@ namespace NKikimr::NOlap {
 struct TIndexInfo;
 class TSaverContext;
 class TWritePortionInfoWithBlobsResult;
+class TSnapshotSchema;
+
+inline bool IsSnapshotField(const std::string& name) {
+    return memcmp(name.c_str(), "_yql_", 5) == 0;
+}
 
 class ISnapshotSchema {
 protected:
@@ -91,6 +96,8 @@ public:
     void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const;
     std::set<ui32> GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const;
     std::vector<ui32> ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const;
+
+    bool IsReplaceableByNext(const ISnapshotSchema& nextSchema) const;
 };
 
 }   // namespace NKikimr::NOlap

@@ -237,6 +237,8 @@ public:
     void AppendPortion(const TPortionDataAccessor& portionInfo);
     void AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo);
 
+    void ChangeSchemaVersionsToLastCompatible(NOlap::TDbWrapper& db, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) override;
+
 private:
     ui64 TabletId;
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats;   // per path_id stats sorted by path_id

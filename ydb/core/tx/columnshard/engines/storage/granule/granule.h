@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/manager.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/index/index.h>
@@ -246,6 +247,22 @@ public:
     void RefreshScheme() {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         ActualizationIndex->RefreshScheme(context);
+    }
+
+    void ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, NOlap::TDbWrapper& db, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization")("portion_count", Portions.size());
+        for (auto& [portionId, portion]: Portions) {
+            if (dataLocksManager->IsLocked(*portion)) {
+                continue;
+            }
+            THashMap<ui64, ui64>::const_iterator it = versionMap.find(portion->GetSchemaVersionVerified());
+            if (it != versionMap.end()) {
+                //TO DO call VersionAddRef and VersionRemoveRef
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization")("portion_id", portionId)("from", portion->GetSchemaVersionOptional())("to", it->second);
+                portion->SetSchemaVersion(it->second);
+                db.WritePortion(*portion);
+            }
+        }
     }
 
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {

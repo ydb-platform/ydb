@@ -221,6 +221,7 @@ private:
     bool CheckSubjectExists(const TString& name, const ESidType::SidType& type);
     static bool CheckAllowedName(const TString& name);
 
+    bool CheckLockoutByAttemptCount(const TSidRecord& sid) const;
     bool CheckLockout(const TSidRecord& sid) const;
     static void ResetFailedLoginAttemptCount(TSidRecord* sid);
     static void UnlockAccount(TSidRecord* sid);

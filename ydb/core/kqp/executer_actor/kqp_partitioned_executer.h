@@ -12,13 +12,6 @@
 
 namespace NKikimr::NKqp {
 
-namespace TKqpPartitionedNames {
-    static inline const TString IsFirstQuery = "_kqp_batch_is_first_query";
-    static inline const TString IsInclusive = "_kqp_batch_is_inclusive";
-    static inline const TString Begin = "_kqp_batch_begin_"; // _kqp_batch_begin_N
-    static inline const TString End = "_kqp_batch_end_";     // _kqp_batch_end_N
-}
-
 NActors::IActor* CreateKqpPartitionedExecuter(
     NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& request, const TActorId sessionActorId, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TIntrusivePtr<NKikimr::NKqp::TKqpCounters>& counters,

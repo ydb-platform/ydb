@@ -1,10 +1,11 @@
 #include "kqp_partitioned_executer.h"
+#include "kqp_executer_impl.h"
 
+#include <ydb/core/kqp/common/batch/params.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
-#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
@@ -16,6 +17,12 @@ namespace NKqp {
 namespace {
 
 class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecuter> {
+    enum class EExecuterResponse {
+        NONE,
+        SUCCESS,
+        ERROR
+    };
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR;
@@ -51,6 +58,9 @@ public:
     {
         YQL_ENSURE(Request.LocksOp != ELocksOp::Rollback);
         YQL_ENSURE(Request.Transactions.size() == 1);
+
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc,
+            TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
         for (const auto& tx : Request.Transactions) {
             YQL_ENSURE(tx.Body->StagesSize() > 0);
@@ -92,21 +102,26 @@ public:
     static constexpr char ActorName[] = "KQP_PARTITIONED_EXECUTER";
 
     STFUNC(PrepareState) {
+        // todo ditimizhev
+        RuntimeError(
+                Ydb::StatusIds::INTERNAL_ERROR,
+                NYql::TIssues({NYql::TIssue("Not implemented.")}));
+
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
+                hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandlePrepare);
+                hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
             default:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
             }
         } catch (...) {
-            // RuntimeError(
-            //     NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-            //     NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-            //     CurrentExceptionMessage());
+            RuntimeError(
+                Ydb::StatusIds::INTERNAL_ERROR,
+                NYql::TIssues({NYql::TIssue("RuntimeError: PrepareState.")}));
         }
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+    void HandlePrepare(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         auto* request = ev->Get()->Request.Get();
 
         if (request->ErrorCount > 0) {
@@ -121,17 +136,27 @@ public:
         SendToExecuters();
     }
 
+    void HandlePrepare(TEvKqp::TEvAbortExecution::TPtr& ev) {
+        auto& msg = ev->Get()->Record;
+        NYql::TIssues issues = ev->Get()->GetIssues();
+        LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
+            << ", message: " << issues.ToOneLineString());
+        RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
+    }
+
     void SendToExecuters() {
         Executers.reserve(Partitioning->size());
         BufferActors.reserve(Partitioning->size());
+        ExecutersResponses.resize(Partitioning->size(), EExecuterResponse::NONE);
 
         for (size_t i = 0; i < Partitioning->size(); ++i) {
-            IKqpGateway::TExecPhysicalRequest newRequest = MakeRequestWithParams(i);
+            IKqpGateway::TExecPhysicalRequest newRequest(Request.TxAlloc);
+            FillRequestWithParams(newRequest, i);
 
             auto txManager = CreateKqpTransactionManager();
 
             TKqpBufferWriterSettings settings {
-                .SessionActorId = SessionActorId,
+                .SessionActorId = SelfId(),
                 .TxManager = txManager,
                 .TraceId = Request.TraceId.GetTraceId(),
                 .Counters = Counters,
@@ -148,7 +173,8 @@ public:
             auto exId = RegisterWithSameMailbox(executerActor);
             Executers.push_back(exId);
 
-            // LOG_D("Created new KQP executer from Partitioned: " << exId);
+            LOG_D("Created new KQP executer from Partitioned: " << exId);
+
             auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
             Send(MakeTxProxyID(), ev.release());
         }
@@ -159,19 +185,62 @@ public:
     STFUNC(ExecuteState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                // hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
+                hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
+                hFunc(TEvKqp::TEvAbortExecution, HandleExecute); // from session
+                // hFunc(TEvKqpBuffer::TEvError, Handle);
             default:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
             }
         } catch (...) {
-            // RuntimeError(
-            //     NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-            //     NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-            //     CurrentExceptionMessage());
+            RuntimeError(
+                Ydb::StatusIds::INTERNAL_ERROR,
+                NYql::TIssues({NYql::TIssue("RuntimeError: ExecuteState.")}));
         }
         return;
     }
 
+    void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+        auto exIt = std::find(Executers.cbegin(), Executers.cend(), ev->Sender);
+        if (exIt == Executers.cend()) {
+            return;
+        }
+
+        auto exIdx = exIt - Executers.cbegin();
+        auto* response = ev->Get()->Record.MutableResponse();
+
+        if (response->GetStatus() == Ydb::StatusIds::SUCCESS) {
+            ExecutersResponses[exIdx] = EExecuterResponse::SUCCESS;
+            if (CheckExecutersAreSuccess()) {
+                SendSuccessToSessionActor();
+            }
+            return;
+        }
+
+        ExecutersResponses[exIdx] = EExecuterResponse::ERROR;
+        if (CheckExecutersAreFailed()) {
+            SendFailedToSessionActor();
+        }
+    }
+
+    void HandleExecute(TEvKqp::TEvAbortExecution::TPtr& ev) {
+        auto& msg = ev->Get()->Record;
+        NYql::TIssues issues = ev->Get()->GetIssues();
+        LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
+            << ", message: " << issues.ToOneLineString());
+
+        for (auto exId : Executers) {
+            auto abortEv = TEvKqp::TEvAbortExecution::Aborted(issues.ToOneLineString());
+            Send(exId, abortEv.Release());
+        }
+
+        RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
+    }
+
+    const TIntrusivePtr<TUserRequestContext>& GetUserRequestContext() const {
+        return UserRequestContext;
+    }
+
+private:
     void FillTableMetaInfo(const NKqpProto::TKqpSink& sink) {
         NKikimrKqp::TKqpTableSinkSettings settings;
         YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
@@ -187,51 +256,60 @@ public:
         TablePath = settings.GetTable().GetPath();
     }
 
-    IKqpGateway::TExecPhysicalRequest MakeRequestWithParams(size_t partitionIdx) {
+    void FillRequestWithParams(IKqpGateway::TExecPhysicalRequest& newRequest, size_t partitionIdx) {
         YQL_ENSURE(Partitioning);
+        FillNewRequest(newRequest);
 
-        IKqpGateway::TExecPhysicalRequest newRequest = MakeFilledRequest();
         auto& queryData = newRequest.Transactions.front().Params;
 
-        auto firstParamType = queryData->GetParameterType(TKqpPartitionedNames::IsFirstQuery);
-        queryData->AddUVParam(TKqpPartitionedNames::IsFirstQuery, firstParamType, NUdf::TUnboxedValuePod(partitionIdx == 0));
+        auto firstParamType = queryData->GetParameterType(NBatchParams::IsFirstQuery);
+        queryData->AddUVParam(NBatchParams::IsFirstQuery, firstParamType, NUdf::TUnboxedValuePod(partitionIdx == 0));
 
         auto partition = Partitioning->at(partitionIdx).Range;
         if (!partition) {
-            return std::move(newRequest);
+            auto lastParamType = queryData->GetParameterType(NBatchParams::IsLastQuery);
+            queryData->AddUVParam(NBatchParams::IsLastQuery, lastParamType, NUdf::TUnboxedValuePod(true));
+            return;
         }
 
-        auto inclusiveParamType = queryData->GetParameterType(TKqpPartitionedNames::IsInclusive);
-        queryData->AddUVParam(TKqpPartitionedNames::IsInclusive, inclusiveParamType, NUdf::TUnboxedValuePod(partition->IsInclusive));
-
         auto cells = partition->EndKeyPrefix.GetCells();
+        auto lastParamType = queryData->GetParameterType(NBatchParams::IsLastQuery);
+        queryData->AddUVParam(NBatchParams::IsLastQuery, lastParamType, NUdf::TUnboxedValuePod(cells.empty()));
+
+        auto inclusiveParamType = queryData->GetParameterType(NBatchParams::IsInclusive);
+        queryData->AddUVParam(NBatchParams::IsInclusive, inclusiveParamType, NUdf::TUnboxedValuePod(partition->IsInclusive));
+
         for (size_t i = 0; i < cells.size(); ++i) {
             auto cellValue = NMiniKQL::GetCellValue(cells[i], KeyColumnTypes[i]);
 
-            auto endParam = TKqpPartitionedNames::End + ToString(i + 1);
+            auto endParam = NBatchParams::End + ToString(i + 1);
             auto endParamType = queryData->GetParameterType(endParam);
             queryData->AddUVParam(endParam, endParamType, NUdf::TUnboxedValuePod(cellValue));
-
-            if (partitionIdx > 0) {
-                auto prevPartition = Partitioning->at(partitionIdx - 1).Range;
-                if (!prevPartition) {
-                    continue;
-                }
-
-                auto prevCellValue = NMiniKQL::GetCellValue(prevPartition->EndKeyPrefix.GetCells()[i], KeyColumnTypes[i]);
-
-                auto beginParam = TKqpPartitionedNames::Begin + ToString(i + 1);
-                auto beginParamType = queryData->GetParameterType(beginParam);
-                queryData->AddUVParam(beginParam, beginParamType, NUdf::TUnboxedValuePod(prevCellValue));
-            }
         }
 
-        return std::move(newRequest);
+        if (partitionIdx == 0) {
+            return;
+        }
+
+        auto prevPartition = Partitioning->at(partitionIdx - 1).Range;
+        if (!prevPartition) {
+            YQL_ENSURE(false);
+            return;
+        }
+
+        auto prevCells = prevPartition->EndKeyPrefix.GetCells();
+        YQL_ENSURE(!prevCells.empty());
+
+        for (size_t i = 0; i < prevCells.size(); ++i) {
+            auto prevCellValue = NMiniKQL::GetCellValue(prevCells[i], KeyColumnTypes[i]);
+
+            auto beginParam = NBatchParams::Begin + ToString(i + 1);
+            auto beginParamType = queryData->GetParameterType(beginParam);
+            queryData->AddUVParam(beginParam, beginParamType, NUdf::TUnboxedValuePod(prevCellValue));
+        }
     }
 
-    IKqpGateway::TExecPhysicalRequest MakeFilledRequest() {
-        IKqpGateway::TExecPhysicalRequest newRequest(Request.TxAlloc);
-
+    void FillNewRequest(IKqpGateway::TExecPhysicalRequest& newRequest) {
         newRequest.AllowTrailingResults = Request.AllowTrailingResults;
         newRequest.QueryType = Request.QueryType;
         newRequest.PerRequestDataSizeLimit = Request.PerRequestDataSizeLimit;
@@ -260,27 +338,78 @@ public:
         newRequest.UserTraceId = Request.UserTraceId;
         newRequest.OutputChunkMaxSize = Request.OutputChunkMaxSize;
 
-        newRequest.Transactions.emplace_back(Request.Transactions.front().Body, MakeParams());
+        newRequest.Transactions.emplace_back(Request.Transactions.front().Body, std::make_shared<TQueryData>(Request.TxAlloc));
 
-        return std::move(newRequest);
+        auto newParams = newRequest.Transactions.front().Params;
+        auto oldParams = Request.Transactions.front().Params;
+        for (auto& [name, _] : oldParams->GetParams()) {
+            TTypedUnboxedValue& typedValue = oldParams->GetParameterUnboxedValue(name);
+            newParams->AddUVParam(name, typedValue.first, typedValue.second);
+        }
     }
 
-    TQueryData::TPtr MakeParams() {
-        auto queryData = std::make_shared<TQueryData>(Request.TxAlloc);
-        auto txParams = Request.Transactions.front().Params;
+    bool CheckExecutersAreSuccess() const {
+        return std::all_of(ExecutersResponses.cbegin(), ExecutersResponses.cend(),
+            [](const auto& resp) { return resp == EExecuterResponse::SUCCESS; });
+    }
 
-        for (auto& [_, params] : txParams->GetParams()) {
-            queryData->ParseParameters(params);
-        }
+    bool CheckExecutersAreFailed() const {
+        return std::all_of(ExecutersResponses.cbegin(), ExecutersResponses.cend(),
+            [](const auto& resp) { return resp == EExecuterResponse::ERROR; });
+    }
 
-        return queryData;
+    void SendSuccessToSessionActor() {
+        Send(SessionActorId, ResponseEv.release());
+    }
+
+    void SendFailedToSessionActor() {
+        // todo
+    }
+
+    void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
+        LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << issues.ToOneLineString());
+        ReplyErrorAndDie(code, issues);
+    }
+
+    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
+        google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> protoIssues;
+        IssuesToMessage(issues, &protoIssues);
+        ReplyErrorAndDie(status, &protoIssues);
+    }
+
+    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) {
+        google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
+        IssueToMessage(issue, issues.Add());
+        ReplyErrorAndDie(status, &issues);
+    }
+
+    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
+        google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
+    {
+        auto& response = *ResponseEv->Record.MutableResponse();
+
+        response.SetStatus(status);
+        response.MutableIssues()->Swap(issues);
+
+        Send(SessionActorId, ResponseEv.release());
+        PassAway();
     }
 
 private:
+    std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     IKqpGateway::TExecPhysicalRequest Request;
     const TActorId SessionActorId;
+    TVector<const TActorId> Executers;
+    TVector<const TActorId> BufferActors;
+    TVector<EExecuterResponse> ExecutersResponses;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    TTableId TableId;
+    TString TablePath;
     TString LogPrefix;
+    ui64 TxId = 0;
 
+    // Args for child executers and buffer write actors
     TString Database;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TIntrusivePtr<TKqpCounters> Counters;
@@ -293,14 +422,6 @@ private:
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
-
-    TTableId TableId;
-    TString TablePath;
-    TVector<NScheme::TTypeInfo> KeyColumnTypes;
-
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
-    TVector<const TActorId> Executers;
-    TVector<const TActorId> BufferActors;
 };
 
 } // namespace

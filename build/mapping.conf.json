@@ -1,6 +1,7 @@
 {
     "bottles": {},
     "resources": {
+        "8018811524": "https://devtools-registry.s3.yandex.net/8018811524",
         "6277415836": "https://devtools-registry.s3.yandex.net/6277415836",
         "2214720943": "https://devtools-registry.s3.yandex.net/2214720943",
         "2214542408": "https://devtools-registry.s3.yandex.net/2214542408",
@@ -1590,6 +1591,7 @@
         "5545691160": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "5559524010": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "5572005924": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
+        "8018811524": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "5675381622": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "5683487438": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "5707396874": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",

@@ -26,9 +26,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(6.5.9)
+VERSION(6.6.7)
 
-ORIGINAL_SOURCE(mirror://kernel/linux/kernel/v6.x/linux-6.5.9.tar.xz)
+ORIGINAL_SOURCE(mirror://kernel/linux/kernel/v6.x/linux-6.6.7.tar.xz)
 
 IF (OPENSOURCE_REPLACE_LINUX_HEADERS AND EXPORT_CMAKE)
     OPENSOURCE_EXPORT_REPLACEMENT_BY_OS(

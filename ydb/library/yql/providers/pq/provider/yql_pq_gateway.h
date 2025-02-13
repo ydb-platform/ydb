@@ -36,6 +36,8 @@ struct IPqGateway : public TThrRefBase {
         const TString& endpoint,
         const TString& database,
         bool secure) = 0;
+
+    virtual NYdb::NTopic::TTopicClientSettings GetCommonTopicClientSettings() = 0;
 };
 
 } // namespace NYql

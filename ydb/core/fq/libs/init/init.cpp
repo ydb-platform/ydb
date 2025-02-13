@@ -56,6 +56,17 @@ namespace NFq {
 
 using namespace NKikimr;
 
+NYdb::NTopic::TTopicClientSettings GetCommonTopicClientSettings(const NFq::NConfig& config) {
+    NYdb::NTopic::TTopicClientSettings settings;
+    if (config.GetTopicClientHandlersExecutorThreadsNum()) {
+        settings.DefaultHandlersExecutor(NYdb::NTopic::CreateThreadPoolExecutor(config.GetTopicClientHandlersExecutorThreadsNum()));
+    }
+    if (config.GetTopicClientCompressionExecutorThreadsNum()) {
+        settings.DefaultCompressionExecutor(NYdb::NTopic::CreateThreadPoolExecutor(config.GetTopicClientCompressionExecutorThreadsNum()));
+    }
+    return settings;
+}
+
 void Init(
     const NFq::NConfig::TConfig& protoConfig,
     ui32 nodeId,
@@ -195,7 +206,9 @@ void Init(
             nullptr,
             nullptr,
             std::make_shared<NYql::TPqGatewayConfig>(),
-            nullptr);
+            nullptr,
+            nullptr,
+            GetCommonTopicClientSettings(protoConfig.GetCommon()));
 
         auto rowDispatcher = NFq::NewRowDispatcherService(
             protoConfig.GetRowDispatcher(),
@@ -223,7 +236,9 @@ void Init(
             pqCmConnections,
             credentialsFactory,
             std::make_shared<NYql::TPqGatewayConfig>(protoConfig.GetGateways().GetPq()),
-            appData->FunctionRegistry
+            appData->FunctionRegistry,
+            nullptr,
+            GetCommonTopicClientSettings(protoConfig.GetCommon())
         );
         auto pqGateway = NYql::CreatePqNativeGateway(std::move(pqServices));
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, 

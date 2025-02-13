@@ -41,6 +41,7 @@ public:
         bool secure) override;
 
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
+    NYdb::NTopic::TTopicClientSettings GetCommonTopicClientSettings() override;
 
 private:
     void InitClusterConfigs();
@@ -56,6 +57,7 @@ private:
     NYdb::TDriver YdbDriver;
     TPqClusterConfigsMapPtr ClusterConfigs;
     THashMap<TString, TPqSession::TPtr> Sessions;
+    NYdb::NTopic::TTopicClientSettings CommonTopicClientSettings;
 };
 
 TPqNativeGateway::TPqNativeGateway(const TPqGatewayServices& services)
@@ -65,6 +67,7 @@ TPqNativeGateway::TPqNativeGateway(const TPqGatewayServices& services)
     , CredentialsFactory(services.CredentialsFactory)
     , CmConnections(services.CmConnections)
     , YdbDriver(services.YdbDriver)
+    , CommonTopicClientSettings(services.CommonTopicClientSettings)
 {
     Y_UNUSED(FunctionRegistry);
     InitClusterConfigs();
@@ -142,6 +145,10 @@ IPqGateway::TPtr CreatePqNativeGateway(const TPqGatewayServices& services) {
 
 ITopicClient::TPtr TPqNativeGateway::GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings = NYdb::NTopic::TTopicClientSettings()) {
     return MakeIntrusive<TNativeTopicClient>(driver, settings);
+}
+
+NYdb::NTopic::TTopicClientSettings TPqNativeGateway::GetCommonTopicClientSettings() {
+    return CommonTopicClientSettings;
 }
 
 TPqNativeGateway::~TPqNativeGateway() {

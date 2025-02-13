@@ -58,6 +58,7 @@ public:
         bool secure) override;
     
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
+    NYdb::NTopic::TTopicClientSettings GetCommonTopicClientSettings() override;
 
     using TClusterNPath = std::pair<TString, TString>;
 private:

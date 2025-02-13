@@ -411,7 +411,7 @@ void TTopicSession::SubscribeOnNextEvent() {
 }
 
 NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const {
-    NYdb::NTopic::TTopicClientSettings opts;
+    NYdb::NTopic::TTopicClientSettings opts = PqGateway->GetCommonTopicClientSettings();
     opts.Database(Database)
         .DiscoveryEndpoint(Endpoint)
         .SslCredentials(NYdb::TSslCredentials(sourceParams.GetUseSsl()))

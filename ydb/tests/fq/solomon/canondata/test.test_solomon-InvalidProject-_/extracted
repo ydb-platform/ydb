@@ -4,4 +4,4 @@ Issues:
 <main>: Error: Error while sending request to monitoring api: 404 Not Found, response: Project invalid does not exist
 
 
-(yexception) ydb/tests/tools/kqprun/kqprun.cpp:xxx: ISOTIME Query execution failed
+

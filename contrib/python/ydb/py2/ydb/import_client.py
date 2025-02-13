@@ -27,12 +27,14 @@ class ImportProgress(enum.IntEnum):
     DONE = 4
     CANCELLATION = 5
     CANCELLED = 6
-    CREATE_CHANGEFEEDS = 7
 
 
 def _initialize_progresses():
     for key, value in ydb_import_pb2.ImportProgress.Progress.items():
-        _progresses[value] = getattr(ImportProgress, key[len("PROGRESS_") :])
+        try:
+            _progresses[value] = getattr(ImportProgress, key[len("PROGRESS_") :])
+        except AttributeError:
+            pass
 
 
 _initialize_progresses()

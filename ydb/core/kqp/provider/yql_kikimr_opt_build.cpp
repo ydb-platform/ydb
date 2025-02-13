@@ -136,7 +136,7 @@ struct TKiExploreTxResults {
             });
             YQL_ENSURE(indexIt != tableMeta->Indexes.end(), "Index not found");
 
-            const auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, indexIt->Type, indexName);
+            const auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, *indexIt);
 
             THashSet<TString> indexColumns;
             indexColumns.reserve(indexIt->KeyColumns.size() + indexIt->DataColumns.size());
@@ -187,7 +187,7 @@ struct TKiExploreTxResults {
                 continue;
             }
 
-            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index.Type, index.Name);
+            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index);
             YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
             const auto indexTable = indexTables[0];
 
@@ -211,7 +211,7 @@ struct TKiExploreTxResults {
                 continue;
             }
 
-            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index.Type, index.Name);
+            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index);
             YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
             const auto indexTable = indexTables[0];
 

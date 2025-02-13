@@ -56,6 +56,11 @@ constexpr std::string_view GlobalKMeansTreeImplTables[] = {
 };
 static_assert(std::is_sorted(std::begin(GlobalKMeansTreeImplTables), std::end(GlobalKMeansTreeImplTables)));
 
+constexpr std::string_view PrefixedGlobalKMeansTreeImplTables[] = {
+    NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable, NTableVectorKmeansTreeIndex::PrefixTable,
+};
+static_assert(std::is_sorted(std::begin(PrefixedGlobalKMeansTreeImplTables), std::end(PrefixedGlobalKMeansTreeImplTables)));
+
 }
 
 TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index) {
@@ -158,9 +163,13 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     return true;
 }
 
-std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType) {
+std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys) {
     if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        return GlobalKMeansTreeImplTables;
+        if (indexKeys.size() == 1) {
+            return GlobalKMeansTreeImplTables;
+        } else {
+            return PrefixedGlobalKMeansTreeImplTables;
+        }
     } else {
         return GlobalSecondaryImplTables;
     }

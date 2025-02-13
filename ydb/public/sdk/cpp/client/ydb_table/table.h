@@ -1168,14 +1168,10 @@ struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQue
     FLUENT_SETTING_DEFAULT_DEPRECATED(bool, Explain, false);
 
     // Collect runtime statistics with a given detalization mode
-<<<<<<< HEAD
     FLUENT_SETTING_DEFAULT_DEPRECATED(ECollectQueryStatsMode, CollectQueryStats, ECollectQueryStatsMode::None);
 
     // Collect full query compilation diagnostics
     FLUENT_SETTING_DEFAULT_DEPRECATED(bool, CollectFullDiagnostics, false);
-=======
-    FLUENT_SETTING_DEFAULT(ECollectQueryStatsMode, CollectQueryStats, ECollectQueryStatsMode::None);
->>>>>>> Fixes
 };
 
 class TSession;

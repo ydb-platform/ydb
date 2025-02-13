@@ -34,17 +34,39 @@ public:
     {}
 
     void Bootstrap(const TActorId& consoleId) {
-        auto request = std::make_unique<TEvConsole::TEvReplaceYamlConfigRequest>();
-        request->Record.MutableRequest()->set_config(MainYamlConfig);
-        request->Record.MutableRequest()->set_allow_unknown_fields(AllowUnknownFields);
-        // FIXME: handle force
-        Y_UNUSED(AllowIncorrectVersion, AllowIncorrectCluster);
-        Send(consoleId, request.release());
+        if (AllowIncorrectVersion xor AllowIncorrectCluster) {
+            auto response = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
+            response->Record.SetStatus(NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted);
+            response->Record.SetErrorReason("Options AllowIncorrectVersion and AllowIncorrectCluster currently can be used only together");
+            SendInReply(std::move(response));
+            PassAway();
+        }
+
+        auto executeRequest = [&](auto& request) {
+            request->Record.MutableRequest()->set_config(MainYamlConfig);
+            request->Record.MutableRequest()->set_allow_unknown_fields(AllowUnknownFields);
+            Send(consoleId, request.release());
+        };
+
+        if (AllowIncorrectVersion && AllowIncorrectCluster) {
+            auto request = std::make_unique<TEvConsole::TEvSetYamlConfigRequest>();
+            executeRequest(request);
+        } else {
+            auto request = std::make_unique<TEvConsole::TEvReplaceYamlConfigRequest>();
+            executeRequest(request);
+        }
 
         Become(&TThis::StateWork);
     }
 
     void Handle(TEvConsole::TEvReplaceYamlConfigResponse::TPtr& /*ev*/) {
+        auto response = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
+        response->Record.SetStatus(NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed);
+        SendInReply(std::move(response));
+        PassAway();
+    }
+
+    void Handle(TEvConsole::TEvSetYamlConfigResponse::TPtr& /*ev*/) {
         auto response = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
         response->Record.SetStatus(NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed);
         SendInReply(std::move(response));
@@ -61,6 +83,7 @@ public:
 
     STRICT_STFUNC(StateWork,
         hFunc(TEvConsole::TEvReplaceYamlConfigResponse, Handle)
+        hFunc(TEvConsole::TEvSetYamlConfigResponse, Handle)
         hFunc(TEvConsole::TEvGenericError, Handle)
         sFunc(TEvents::TEvPoisonPill, PassAway)
     )

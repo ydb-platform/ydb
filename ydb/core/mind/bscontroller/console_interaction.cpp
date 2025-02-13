@@ -93,7 +93,10 @@ namespace NKikimr::NBsController {
                             Self.SelfId(),
                             ConsolePipe,
                             new TEvBlobStorage::TEvControllerConsoleCommitRequest(
-                                yaml, AllowUnknownFields)); // FIXME
+                                yaml,
+                                AllowUnknownFields,
+                                AllowIncorrectVersion,
+                                AllowIncorrectCluster));
                     }
                 }
                 break;
@@ -153,7 +156,10 @@ namespace NKikimr::NBsController {
                     Self.SelfId(),
                     ConsolePipe,
                     new TEvBlobStorage::TEvControllerConsoleCommitRequest(
-                        yaml, AllowUnknownFields)); // FIXME
+                        yaml,
+                        AllowUnknownFields,
+                        AllowIncorrectVersion,
+                        AllowIncorrectCluster));
             }
         } else {
             Y_ABORT_UNLESS(!ClientId);
@@ -265,7 +271,11 @@ namespace NKikimr::NBsController {
 
         if (record.HasClusterYaml()) {
             PendingYamlConfig.emplace(record.GetClusterYaml());
+            // don't need to reset them explicitly
+            // every time we get new request we just replace them
             AllowUnknownFields = record.GetAllowUnknownFields();
+            AllowIncorrectVersion = record.GetAllowIncorrectVersion();
+            AllowIncorrectCluster = record.GetAllowIncorrectCluster();
         } else {
             PendingYamlConfig.reset();
         }

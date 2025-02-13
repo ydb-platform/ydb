@@ -39,6 +39,7 @@ std::optional<TPredicate> TTxScan::GetTtlPredicate(const TTierInfo& tier, const 
     std::shared_ptr<arrow::Schema> predicateSchema = schema->GetIndexInfo().GetColumnSchema(*ttlColumnId);
     std::shared_ptr<arrow::Scalar> evictionBound =
         tier.GetLargestExpiredScalar(tier.GetEvictInstant(TInstant::Now()), predicateSchema->field(0)->type()->id());
+    AFL_VERIFY(evictionBound)("schema", predicateSchema->ToString());
     std::shared_ptr<arrow::RecordBatch> batch =
         arrow::RecordBatch::Make(predicateSchema, 1, { NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*evictionBound, 1)) });
     return TPredicate(NArrow::EOperation::Greater, batch);

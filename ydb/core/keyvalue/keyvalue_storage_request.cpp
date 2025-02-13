@@ -320,7 +320,7 @@ public:
             str << " Unexpected EvGet ResponseSz# " << (ui32)ev->Get()->ResponseSz;
             str << " InFlightQueries# " << (ui32)InFlightQueries;
             str << " ReadQueue.size# " << request.ReadQueue.size();
-            str << " Marker# KV27";
+            str << " Marker# KV270";
             resetReadItems(NKikimrProto::ERROR);
             ReplyErrorAndDie(ctx, str.Str());
             return;

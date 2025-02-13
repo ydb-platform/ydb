@@ -217,6 +217,21 @@ public:
         return StoredState.UserGeneration;
     }
 
+    TSet<TLogoBlobID>& GetCurrentTrashBin() {
+        return Trash;
+    }
+
+    TSet<TLogoBlobID>& GetCollectingTrashBin() {
+        if (TrashForCleanup.empty()) {
+            return Trash;
+        }
+        return TrashForCleanup.begin()->second;
+    }
+
+    ui64 GetCleanupResetGeneration() const {
+        return CleanupResetGeneration;
+    }
+
 protected:
     TKeyValueStoredStateData StoredState;
     ui32 NextLogoBlobStep;
@@ -226,7 +241,14 @@ protected:
 
     TIndex Index;
     THashMap<TLogoBlobID, ui32> RefCounts;
+
+    TMap<ui64, TSet<TLogoBlobID>> TrashForCleanup; // clean up generation -> set of blobs
     TSet<TLogoBlobID> Trash;
+    ui64 CompletedCleanupGeneration = 0;
+    ui64 CompletedCleanupTrashGeneration = 0;
+    TMap<ui64, THashSet<TActorId>> CleanupGenerationToSender;
+    ui64 CleanupResetGeneration = 0; // needs to distinguish between cleanups of different resets
+
     TMap<ui64, ui64> InFlightForStep;
     TMap<std::tuple<ui64, ui32>, ui32> RequestUidStepToCount;
     THashSet<ui64> CmdTrimLeakedBlobsUids;
@@ -323,16 +345,21 @@ public:
     // garbage collection methods
     void PrepareCollectIfNeeded(const TActorContext &ctx);
     bool RemoveCollectedTrash(ISimpleDb &db);
+    bool StartCleanupData(ui64 generation, TActorId sender);
+    void CleanupEmptyTrashBins(const TActorContext &ctx);
+    void ResetCleanupGeneration(const TActorContext &ctx, ui64 generation);
+    void UpdateCleanupGeneration(ISimpleDb &db, ui64 generation);
     void UpdateStoredState(ISimpleDb &db, const NKeyValue::THelpers::TGenerationStep &genStep);
     void CompleteGCExecute(ISimpleDb &db, const TActorContext &ctx);
     void CompleteGCComplete(const TActorContext &ctx, const TTabletStorageInfo *info);
+    void CompleteCleanupDataExecute(ISimpleDb &db, const TActorContext &ctx, ui64 cleanupGeneration);
+    void CompleteCleanupDataComplete(const TActorContext &ctx, const TTabletStorageInfo *info, ui64 cleanupGeneration);
     void StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep,
         TVector<TLogoBlobID>& trashGoingToCollect);
     void StartCollectingIfPossible(const TActorContext &ctx);
     bool OnEvCollect(const TActorContext &ctx);
     void OnEvCollectDone(const TActorContext &ctx);
     void OnEvCompleteGC(bool repeat);
-
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,
@@ -712,7 +739,9 @@ public:
     }
 
     ui32 GetTrashCount() const {
-        return Trash.size();
+        return std::accumulate(TrashForCleanup.begin(), TrashForCleanup.end(), Trash.size(), [](ui64 acc, const auto& pair) {
+            return acc + pair.second.size();
+        });
     }
 
 public: // For testing

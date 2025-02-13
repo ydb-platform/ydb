@@ -42,6 +42,7 @@ struct TGroupStatus {
     TString MasterId;
     TInstant LastHeartbeat;
     TString ProtocolName;
+    TString ProtocolType;
 };
 
 class TKafkaBalancerActor : public NActors::TActorBootstrapped<TKafkaBalancerActor> {
@@ -111,8 +112,8 @@ public:
         RequestType   = JOIN_GROUP;
         CurrentStep   = STEP_NONE;
 
-        GroupId  = JoinGroupRequestData->GroupId.value();
-        ProtocolType = JoinGroupRequestData->ProtocolType.value();
+        GroupId  = JoinGroupRequestData->GroupId.value_or("");
+        ProtocolType = JoinGroupRequestData->ProtocolType.value_or("");
     }
 
     TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TSyncGroupRequestData> message, ui8 retryNum = 0)
@@ -136,10 +137,9 @@ public:
         RequestType   = SYNC_GROUP;
         CurrentStep   = STEP_NONE;
 
-        GroupId  = SyncGroupRequestData->GroupId.value();
-        MemberId = SyncGroupRequestData->MemberId.value();
+        GroupId  = SyncGroupRequestData->GroupId.value_or("");
+        MemberId = SyncGroupRequestData->MemberId.value_or("");
         GenerationId = SyncGroupRequestData->GenerationId;
-        ProtocolType = SyncGroupRequestData->ProtocolType.value();
     }
 
     TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<THeartbeatRequestData> message, ui8 retryNum = 0)
@@ -163,8 +163,8 @@ public:
         RequestType   = HEARTBEAT;
         CurrentStep   = STEP_NONE;
 
-        GroupId  = HeartbeatGroupRequestData->GroupId.value();
-        MemberId = HeartbeatGroupRequestData->MemberId.value();
+        GroupId  = HeartbeatGroupRequestData->GroupId.value_or("");
+        MemberId = HeartbeatGroupRequestData->MemberId.value_or("");
         GenerationId = HeartbeatGroupRequestData->GenerationId;
     }
 
@@ -188,8 +188,8 @@ public:
         RequestType   = LEAVE_GROUP;
         CurrentStep   = STEP_NONE;
 
-        GroupId  = LeaveGroupRequestData->GroupId.value();
-        MemberId = LeaveGroupRequestData->MemberId.value();
+        GroupId  = LeaveGroupRequestData->GroupId.value_or("");
+        MemberId = LeaveGroupRequestData->MemberId.value_or("");
     }
 
     void Bootstrap(const NActors::TActorContext& ctx);

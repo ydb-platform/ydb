@@ -1026,6 +1026,7 @@ private:
     }
 
     void OnNotifyResult(TTransactionContext& txc, const TActorContext& ctx) {
+        AppData()->FeatureFlags.SetEnableChangefeedsImport(true);
         Y_ABORT_UNLESS(CompletedTxId);
         LOG_D("TExport::TTxProgress: OnNotifyResult"
             << ": txId# " << CompletedTxId);

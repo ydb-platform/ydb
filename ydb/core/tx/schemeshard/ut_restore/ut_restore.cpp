@@ -140,9 +140,9 @@ namespace {
     };
 
     struct TImportChangefeed {
-        const TString ChangefeedName;
-        const TString Changefeed;
-        const TString Topic;
+        TString ChangefeedName;
+        TString Changefeed;
+        TString Topic;
     };
 
     struct TTestDataWithScheme {
@@ -259,13 +259,13 @@ namespace {
         const TVector<std::pair<TString, ui64>>& shardsConfig = {{"a", 1}},
         const TString& permissions = "",
         const TString& metadata = "",
-        const TVector<TImportChangefeed> changefeeds = {}
+        TVector<TImportChangefeed>&& changefeeds = {}
     ) {
         TTestDataWithScheme result;
         result.Type = typedScheme.Type;
         result.Permissions = permissions;
         result.Metadata = metadata;
-        result.Changefeeds = changefeeds;
+        result.Changefeeds = std::move(changefeeds);
 
         switch (typedScheme.Type) {
         case EPathTypeTable:

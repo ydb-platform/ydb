@@ -66,6 +66,8 @@ namespace {
         } else if (std::holds_alternative<NCms::TServerlessResources>(resourcesKind)) {
             const auto& resources = std::get<NCms::TServerlessResources>(resourcesKind);
             out.mutable_serverless_resources()->set_shared_database_path(resources.SharedDatabasePath);
+        } else if (std::holds_alternative<std::monostate>(resourcesKind)) {
+            out.clear_resources_kind();
         }
         
         for (const auto& quota : schemaQuotas.LeakyBucketQuotas) {
@@ -95,7 +97,11 @@ namespace {
                 if (std::holds_alternative<NCms::TTargetTrackingPolicy::TAverageCpuUtilizationPercent>(targetTracking.Target)) {
                     const auto& target = std::get<NCms::TTargetTrackingPolicy::TAverageCpuUtilizationPercent>(targetTracking.Target);
                     protoTargetTracking->set_average_cpu_utilization_percent(target);
+                } else if (std::holds_alternative<std::monostate>(targetTracking.Target)) {
+                    protoTargetTracking->clear_target();
                 }
+            } else if (std::holds_alternative<std::monostate>(policy.Policy)) {
+                protoPolicy->clear_policy();
             }
         }
     }
@@ -167,6 +173,7 @@ TTargetTrackingPolicy::TTargetTrackingPolicy(const Ydb::Cms::ScaleRecommenderPol
             Target = proto.average_cpu_utilization_percent();
             break;
         case Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy::TARGET_NOT_SET:
+            Target = std::monostate();
             break;
     }
 }
@@ -178,6 +185,7 @@ TScaleRecommenderPolicy::TScaleRecommenderPolicy(const Ydb::Cms::ScaleRecommende
             Policy = proto.target_tracking_policy();
             break;
         case Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy::POLICY_NOT_SET:
+            Policy = std::monostate();
             break;
     }
 }
@@ -208,6 +216,7 @@ TGetDatabaseStatusResult::TGetDatabaseStatusResult(TStatus&& status, const Ydb::
             ResourcesKind_ = proto.serverless_resources();
             break;
         case Ydb::Cms::GetDatabaseStatusResult::RESOURCES_KIND_NOT_SET:
+            ResourcesKind_ = std::monostate();
             break;
     }
 }
@@ -269,6 +278,7 @@ TCreateDatabaseSettings::TCreateDatabaseSettings(const Ydb::Cms::CreateDatabaseR
           ResourcesKind_ = request.serverless_resources();
           break;
       case Ydb::Cms::CreateDatabaseRequest::RESOURCES_KIND_NOT_SET:
+          ResourcesKind_ = std::monostate();
           break;
   }
 }
@@ -341,22 +351,10 @@ public:
         request.set_path(path);
         settings.SerializeTo(request);
 
-        auto promise = NThreading::NewPromise<TStatus>();
-
-        auto extractor = [promise]
-            (google::protobuf::Any*, TPlainStatus status) mutable {
-                promise.SetValue(TStatus(std::move(status)));
-            };
-
-        Connections_->RunDeferred<Ydb::Cms::V1::CmsService, Ydb::Cms::CreateDatabaseRequest, Ydb::Cms::CreateDatabaseResponse>(
+        return RunSimple<Ydb::Cms::V1::CmsService, Ydb::Cms::CreateDatabaseRequest, Ydb::Cms::CreateDatabaseResponse>(
             std::move(request),
-            extractor,
             &Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase,
-            DbDriverState_,
-            INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
-
-        return promise.GetFuture();
     }
 };
 

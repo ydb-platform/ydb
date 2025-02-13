@@ -133,14 +133,14 @@ struct TTargetTrackingPolicy {
     TTargetTrackingPolicy() = default;
     TTargetTrackingPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy& proto);
 
-    std::variant<TAverageCpuUtilizationPercent> Target;
+    std::variant<std::monostate, TAverageCpuUtilizationPercent> Target;
 };
 
 struct TScaleRecommenderPolicy {
     TScaleRecommenderPolicy() = default;
     TScaleRecommenderPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy& proto);
 
-    std::variant<TTargetTrackingPolicy> Policy;
+    std::variant<std::monostate, TTargetTrackingPolicy> Policy;
 };
 
 struct TScaleRecommenderPolicies {
@@ -150,7 +150,7 @@ struct TScaleRecommenderPolicies {
     std::vector<TScaleRecommenderPolicy> Policies;
 };
 
-using TResourcesKind = std::variant<TResources, TSharedResources, TServerlessResources>;
+using TResourcesKind = std::variant<std::monostate, TResources, TSharedResources, TServerlessResources>;
 
 class TGetDatabaseStatusResult : public TStatus {
 public:

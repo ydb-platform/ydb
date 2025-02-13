@@ -1,7 +1,6 @@
 import os
 import subprocess
 import sys
-import time
 
 import ydb
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -100,7 +99,6 @@ class TestYdbWorkload(object):
         ]
         command = subprocess.run(args, capture_output=True)
         assert command.returncode == 0, command.stderr.decode("utf-8")
-
 
     def alter_database_quotas(self, node, database_path, database_quotas):
         alter_proto = """ModifyScheme {

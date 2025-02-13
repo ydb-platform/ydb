@@ -69,10 +69,26 @@ bool operator==(
     return left == right;
 }
 
+bool operator==(
+    const Ydb::RateLimiter::MeteringConfig& lhs,
+    const Ydb::RateLimiter::MeteringConfig& rhs
+) {
+    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
+}
+
+bool operator==(const TMeteringConfig& lhs, const TMeteringConfig& rhs) {
+    Ydb::RateLimiter::MeteringConfig left;
+    lhs.SerializeTo(left);
+    Ydb::RateLimiter::MeteringConfig right;
+    rhs.SerializeTo(right);
+    return left == right;
+}
+
 bool operator==(const TDescribeResourceResult& lhs, const TDescribeResourceResult& rhs) {
     UNIT_ASSERT_C(lhs.IsSuccess(), lhs.GetIssues().ToString());
     UNIT_ASSERT_C(rhs.IsSuccess(), rhs.GetIssues().ToString());
-    return lhs.GetHierarchicalDrrProps() == rhs.GetHierarchicalDrrProps();
+    return lhs.GetHierarchicalDrrProps() == rhs.GetHierarchicalDrrProps()
+        && lhs.GetMeteringConfig() == rhs.GetMeteringConfig();
 }
 
 }
@@ -847,49 +863,72 @@ TDescribeResourceResult DescribeRateLimiter(
     return result;
 }
 
-void DropRateLimiter(
-    TRateLimiterClient& client,
-    const std::string& coordinationNodePath,
-    const std::string& rateLimiterPath
-) {
-    const auto result = client.DropResource(coordinationNodePath, rateLimiterPath).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-}
-
 void TestCoordinationNodeResourcesArePreserved(
-    const std::string& coordinationNodePath,
+    const std::string& path,
     NCoordination::TClient& nodeClient,
     TRateLimiterClient& rateLimiterClient,
     TBackupFunction&& backup,
     TRestoreFunction&& restore
 ) {
-    constexpr std::array rateLimiters = { "root", "root/firstChild", "root/secondChild" };
-    CreateCoordinationNode(nodeClient, coordinationNodePath, {});
-    // required settings
-    const auto settings = TCreateResourceSettings().MaxUnitsPerSecond(5);
-    for (const auto& rateLimiter : rateLimiters) {
-        CreateRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiter, settings);
+    const std::vector<std::pair<std::string, TCreateResourceSettings>> rateLimiters = {
+        {
+            "root",
+            TCreateResourceSettings()
+                .MaxUnitsPerSecond(5)
+                .MaxBurstSizeCoefficient(2)
+                .PrefetchCoefficient(0.5)
+                .PrefetchWatermark(0.8)
+                .ImmediatelyFillUpTo(-10)
+        },
+        {
+            "root/firstChild",
+            TCreateResourceSettings()
+                .MaxUnitsPerSecond(10)
+                .LeafBehavior(
+                    TReplicatedBucketSettings()
+                        .ReportInterval(std::chrono::milliseconds(10000))
+                )
+        },
+        {
+            "root/secondChild",
+            TCreateResourceSettings()
+                .MaxUnitsPerSecond(20)
+                .MeteringConfig(
+                    TMeteringConfig()
+                        .Enabled(true)
+                        .ReportPeriod(std::chrono::milliseconds(10000))
+                        .MeterPeriod(std::chrono::milliseconds(5000))
+                        .CollectPeriod(std::chrono::seconds(20))
+                        .ProvisionedUnitsPerSecond(100)
+                        .ProvisionedCoefficient(50)
+                        .OvershootCoefficient(1.2)
+                        .Provisioned(
+                            TMetric()
+                                .Enabled(true)
+                                .BillingPeriod(std::chrono::seconds(30))
+                                .Labels({{"k", "v"}})
+                        )
+                )
+        },
+    };
+
+    CreateCoordinationNode(nodeClient, path, {});
+    for (const auto& [resource, settings] : rateLimiters) {
+        CreateRateLimiter(rateLimiterClient, path, resource, settings);
     }
 
-    std::vector<TDescribeResourceResult> originalDescriptions;
-    for (const auto& rateLimiter : rateLimiters) {
-        originalDescriptions.emplace_back(DescribeRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiter));
+    std::vector<TDescribeResourceResult> original;
+    for (const auto& [resource, _] : rateLimiters) {
+        original.emplace_back(DescribeRateLimiter(rateLimiterClient, path, resource));
     }
 
     backup();
 
-    for (int i = 2; i >= 0; --i) {
-        DropRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiters[i]);
-    }
-    DropCoordinationNode(nodeClient, coordinationNodePath);
+    DropCoordinationNode(nodeClient, path);
 
     restore();
-    for (int i = 0; i < 3; ++i) {
-        UNIT_ASSERT_EQUAL_C(
-            DescribeRateLimiter(rateLimiterClient, coordinationNodePath, rateLimiters[i]),
-            originalDescriptions[i],
-            "i: " << i
-        );
+    for (size_t i = 0; i < rateLimiters.size(); ++i) {
+        UNIT_ASSERT_EQUAL(DescribeRateLimiter(rateLimiterClient, path, rateLimiters[i].first), original[i]);
     }
 }
 

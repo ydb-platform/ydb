@@ -863,15 +863,6 @@ TDescribeResourceResult DescribeRateLimiter(
     return result;
 }
 
-void DropRateLimiter(
-    TRateLimiterClient& client,
-    const std::string& coordinationNodePath,
-    const std::string& rateLimiterPath
-) {
-    const auto result = client.DropResource(coordinationNodePath, rateLimiterPath).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-}
-
 void TestCoordinationNodeResourcesArePreserved(
     const std::string& path,
     NCoordination::TClient& nodeClient,
@@ -933,9 +924,6 @@ void TestCoordinationNodeResourcesArePreserved(
 
     backup();
 
-    for (size_t i = rateLimiters.size() - 1; i >= 0; --i) {
-        DropRateLimiter(rateLimiterClient, path, rateLimiters[i].first);
-    }
     DropCoordinationNode(nodeClient, path);
 
     restore();

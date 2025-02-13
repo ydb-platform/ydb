@@ -275,10 +275,12 @@ protected:
         TKeyValueFlat *Self;
         ui64 CleanupResetGeneration;
         TVector<TLogoBlobID> TrashBeingCommitted;
+        ui64 CleanupGeneration;
 
-        TTxCompleteCleanupData(TKeyValueFlat *keyValueFlat, ui64 cleanupResetGeneration)
+        TTxCompleteCleanupData(TKeyValueFlat *keyValueFlat, ui64 cleanupResetGeneration, ui64 cleanupGeneration)
             : Self(keyValueFlat)
             , CleanupResetGeneration(cleanupResetGeneration)
+            , CleanupGeneration(cleanupGeneration)
         {}
 
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
@@ -294,7 +296,11 @@ protected:
         }
 
         void Complete(const TActorContext &ctx) override {
-            if (CleanupResetGeneration == Self->State.GetCleanupResetGeneration()) {
+            ui64 actualCleanupResetGeneration = Self->State.GetCleanupResetGeneration();
+            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
+                    << " TTxCompleteCleanupData Complete cleanupResetGeneration# " << CleanupResetGeneration
+                    << " actualCleanupResetGeneration# " << actualCleanupResetGeneration);
+            if (CleanupResetGeneration == actualCleanupResetGeneration) {
                 Self->State.CompleteCleanupDataComplete(ctx, Self->Info());
             }
         }
@@ -558,7 +564,7 @@ protected:
     void Handle(TEvKeyValue::TEvForceTabletDataCleanup::TPtr &ev) {
         ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvForceTabletDataCleanup generation# " << ev->Get()->Generation);
-        Executor()->CleanupData();
+        Executor()->CleanupData(ev->Get()->Generation);
     }
 
 public:
@@ -601,10 +607,10 @@ public:
         return false;
     }
 
-    void DataCleanupComplete(const TActorContext &ctx) override {
+    void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext &ctx) override {
         STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KV271, "DataCleanupComplete",
             (TabletId, TabletID()));
-        Execute(new TTxCompleteCleanupData(this, State.GetCleanupResetGeneration()), ctx);
+        Execute(new TTxCompleteCleanupData(this, State.GetCleanupResetGeneration(), dataCleanupGeneration), ctx);
     }
 
     STFUNC(StateInit) {

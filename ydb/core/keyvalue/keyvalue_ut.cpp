@@ -10,8 +10,8 @@
 #include <util/random/fast.h>
 #include <ydb/core/base/blobstorage.h>
 
-const bool ENABLE_DETAILED_KV_LOG = true;
-const bool ENABLE_TESTLOG_OUTPUT = true;
+const bool ENABLE_DETAILED_KV_LOG = false;
+const bool ENABLE_TESTLOG_OUTPUT = false;
 
 namespace NKikimr {
 namespace {
@@ -81,6 +81,7 @@ struct TTestContext {
     TVector<ui64> TabletIds;
     THolder<TTestActorRuntime> Runtime;
     TActorId Edge;
+    TVector<TIntrusivePtr<NFake::TProxyDS>> DsProxies;
 
     TTestContext() {
         TabletType = TTabletTypes::KeyValue;
@@ -88,14 +89,27 @@ struct TTestContext {
         TabletIds.push_back(TabletId);
     }
 
-    void Prepare(const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &outActiveZone, bool mockDisk = false) {
+    void Prepare(const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &outActiveZone, bool mockGroup = false) {
         Y_UNUSED(dispatchName);
         outActiveZone = false;
         Runtime.Reset(new TTestBasicRuntime);
         Runtime->SetScheduledLimit(200);
         Runtime->SetDispatchedEventsLimit(25'000'000);
         SetupLogging(*Runtime);
-        SetupTabletServices(*Runtime, nullptr, mockDisk);
+        DsProxies.clear();
+        if (mockGroup) {
+            DsProxies.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(0)));
+            DsProxies.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(2181038080)));
+            DsProxies.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(4294967295)));
+        }
+        SetupTabletServices(
+            *Runtime,
+            /*app*/ nullptr,
+            /*mockDisk*/ true,
+            /*storage*/ {},
+            /*sharedCacheConfig*/ {},
+            /*forceFollowers*/ false,
+            DsProxies);
         setup(*Runtime);
         CreateTestBootstrapper(*Runtime,
             CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
@@ -2637,7 +2651,7 @@ Y_UNIT_TEST(TestCleanUpDataWithMockDisk) {
         }
 
         bool found = false;
-        for (auto &[_, model] : NFake::TProxyDS::Cp->GetMocks()) {
+        for (auto &model : tc.DsProxies) {
             for (auto &[id, blob] : model->AllMyBlobs()) {
                 TString buffer = blob.Buffer.ConvertToString();
                 TestLog(id, " blob size# ", buffer.size());
@@ -2651,7 +2665,7 @@ Y_UNIT_TEST(TestCleanUpDataWithMockDisk) {
         UNIT_ASSERT_EQUAL(response.status(), decltype(response)::STATUS_SUCCESS);
         UNIT_ASSERT_EQUAL(response.generation(), 1);
 
-        for (auto &[_, model] : NFake::TProxyDS::Cp->GetMocks()) {
+        for (auto &model : tc.DsProxies) {
             for (auto &[id, blob] : model->AllMyBlobs()) {
                 if (blob.DoNotKeep) {
                     continue;

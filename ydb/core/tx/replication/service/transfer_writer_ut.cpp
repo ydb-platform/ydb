@@ -28,8 +28,8 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {
-                {.Name = "key", .Type = "Uint32"},
                 {.Name = "value", .Type = "Utf8"},
+                {.Name = "key", .Type = "Uint32"},
             },
         }));
 

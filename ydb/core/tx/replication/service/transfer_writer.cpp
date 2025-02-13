@@ -231,18 +231,32 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     result.ColumnsMetadata.reserve(entry.Columns.size());
     result.WriteIndex.reserve(entry.Columns.size());
 
-    for (const auto& [_, column] : entry.Columns) {
-        result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn);
-        result.WriteIndex.push_back(result.ColumnsMetadata.size()); // TODO ???
-        result.ColumnsMetadata.emplace_back();
+    size_t keyColumns = CountIf(entry.Columns, [](auto& c) {
+        return c.second.KeyOrder >= 0;
+    });
 
-        auto& c = result.ColumnsMetadata.back();
-        c.SetName(column.Name);
-        c.SetId(column.Id);
-        c.SetTypeId(column.PType.GetTypeId());
+    result.TableColumns.resize(keyColumns);
+    result.ColumnsMetadata.resize(keyColumns);
+
+    for (const auto& [_, column] : entry.Columns) {
+        NKikimrKqp::TKqpColumnMetadataProto* c;
+        if (column.KeyOrder >= 0) {
+            result.TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn};
+            c = &result.ColumnsMetadata[column.KeyOrder];
+        } else {
+            result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn);
+            result.ColumnsMetadata.emplace_back();
+            c = &result.ColumnsMetadata.back();
+        }
+
+        result.WriteIndex.push_back(result.WriteIndex.size());
+
+        c->SetName(column.Name);
+        c->SetId(column.Id);
+        c->SetTypeId(column.PType.GetTypeId());
 
         if (NScheme::NTypeIds::IsParametrizedType(column.PType.GetTypeId())) {
-            NScheme::ProtoFromTypeInfo(column.PType, "", *c.MutableTypeInfo());
+            NScheme::ProtoFromTypeInfo(column.PType, "", *c->MutableTypeInfo());
         }
     }
 

@@ -1631,7 +1631,6 @@ public:
                     writeInfo.WriteTableActor->Close(message.Token.Cookie);
                 }
 
-                YQL_ENSURE(false);
                 AckQueue.push(TAckMessage{
                     .ForwardActorId = message.From,
                     .Token = message.Token,

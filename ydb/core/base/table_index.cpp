@@ -37,8 +37,13 @@ bool ContainsSystemColumn(const auto& columns) {
     return false;
 }
 
-constexpr std::string_view ImplTables[] = {
-    ImplTable, NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable,
+const TString ImplTables[] = {
+    ImplTable,
+    NTableVectorKmeansTreeIndex::LevelTable,
+    NTableVectorKmeansTreeIndex::PostingTable,
+    NTableVectorKmeansTreeIndex::PrefixTable,
+    TString{NTableVectorKmeansTreeIndex::PostingTable} + NTableVectorKmeansTreeIndex::BuildSuffix0,
+    TString{NTableVectorKmeansTreeIndex::PostingTable} + NTableVectorKmeansTreeIndex::BuildSuffix1,
 };
 
 constexpr std::string_view GlobalSecondaryImplTables[] = {
@@ -167,7 +172,8 @@ bool IsImplTable(std::string_view tableName) {
 
 bool IsBuildImplTable(std::string_view tableName) {
     // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
-    return tableName.ends_with("build");
+    return tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix0)
+        || tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix1);
 }
 
 }

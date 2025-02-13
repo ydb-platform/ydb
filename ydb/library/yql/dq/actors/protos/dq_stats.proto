@@ -37,10 +37,46 @@ message TDqAsyncBufferStats {
     uint64 QueuedRows = 15;
 }
 
+message TDqStatsAggr {
+    uint64 Min = 1;
+    uint64 Max = 2;
+    uint64 Sum = 3;
+    uint64 Cnt = 4;
+    repeated TDqHistoryItem History = 5;
+}
+
+message TDqExternalAggrStats {
+    TDqStatsAggr ExternalRows = 1;
+    TDqStatsAggr ExternalBytes = 2;
+    TDqStatsAggr StorageRows = 3;
+    TDqStatsAggr StorageBytes = 4;
+    TDqStatsAggr CpuTimeUs = 5;
+    TDqStatsAggr WaitInputTimeUs = 6;
+    TDqStatsAggr WaitOutputTimeUs = 7;
+    TDqStatsAggr FirstMessageMs = 8;
+    TDqStatsAggr LastMessageMs = 9;
+    uint32 PartitionCount = 10;
+}
+
+message TDqExternalStats {
+    uint64 ExternalRows = 1;
+    uint64 ExternalBytes = 2;
+    uint64 StorageRows = 3;
+    uint64 StorageBytes = 4;
+    uint64 CpuTimeUs = 5;
+    uint64 WaitInputTimeUs = 6;
+    uint64 WaitOutputTimeUs = 7;
+    uint64 FirstMessageMs = 8;
+    uint64 LastMessageMs = 9;
+    string PartitionId = 10;
+}
+
 message TDqAsyncInputBufferStats {
     uint64 InputIndex = 1;
     string IngressName = 9;
 
+    TDqExternalAggrStats External = 13;
+    repeated TDqExternalStats ExternalPartitions = 14;
     TDqAsyncBufferStats Ingress = 10;
     TDqAsyncBufferStats Push = 11;
     TDqAsyncBufferStats Pop = 12;
@@ -282,14 +318,6 @@ message TDqHistoryItem {
     uint64 Value = 2;
 }
 
-message TDqStatsAggr {
-    uint64 Min = 1;
-    uint64 Max = 2;
-    uint64 Sum = 3;
-    uint64 Cnt = 4;
-    repeated TDqHistoryItem History = 5;
-}
-
 message TExtraStats {
     map<string, TDqStatsAggr> Stats = 1;
 }
@@ -322,6 +350,7 @@ message TDqAsyncStatsAggr {
 }
 
 message TDqAsyncBufferStatsAggr {
+    TDqExternalAggrStats External = 5;
     TDqAsyncStatsAggr Ingress = 1; // for Ingress only
     TDqAsyncStatsAggr Push    = 2;
     TDqAsyncStatsAggr Pop     = 3;

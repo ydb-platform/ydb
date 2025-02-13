@@ -588,17 +588,32 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
     return TBytesStatistics();
 }
 
+void TKqpScanComputeContext::TScanData::UpdateStats(size_t rows, size_t bytes, TMaybe<ui64> shardId) {
+    if (BasicStats) {
+        ui64 nowMs = Now().MilliSeconds();
+        if (shardId) {
+            const auto& [it, inserted] = BasicStats->ExternalStats.emplace(*shardId, TExternalStats(rows, bytes, nowMs, nowMs));
+            if (!inserted) {
+                it->second.ExternalRows += rows;
+                it->second.ExternalBytes += bytes;
+                it->second.LastMessageMs = nowMs;
+            }
+        }
+        BasicStats->Rows += rows;
+        BasicStats->Bytes += bytes;
+        if (!BasicStats->FirstMessageMs) {
+            BasicStats->FirstMessageMs = nowMs;
+        }
+        BasicStats->LastMessageMs = nowMs;
+    }
+}
+
 ui64 TKqpScanComputeContext::TScanData::AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) {
     if (Finished || batch.empty()) {
         return 0;
     }
-
     TBytesStatistics stats = BatchReader->AddData(batch, shardId, holderFactory);
-    if (BasicStats) {
-        BasicStats->Rows += batch.size();
-        BasicStats->Bytes += stats.DataBytes;
-    }
-
+    UpdateStats(batch.size(), stats.DataBytes, shardId);
     return stats.AllocatedBytes;
 }
 
@@ -705,11 +720,7 @@ ui64 TKqpScanComputeContext::TScanData::AddData(const TBatchDataAccessor& batch,
     }
 
     TBytesStatistics stats = BatchReader->AddData(batch, shardId, holderFactory);
-    if (BasicStats) {
-        BasicStats->Rows += batch.GetRecordsCount();
-        BasicStats->Bytes += stats.DataBytes;
-    }
-
+    UpdateStats(batch.GetRecordsCount(), stats.DataBytes, shardId);
     return stats.AllocatedBytes;
 }
 

@@ -63,16 +63,30 @@ const TColumnEngineStats& TColumnEngineForLogs::GetTotalStats() {
     return Counters;
 }
 
-void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType, const TPortionInfo* exPortionInfo) {
+void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, const EStatsUpdateType updateType) {
+    const TColumnEngineStats::TPortionsStats delta = TColumnEngineStats::TPortionsStats::DeltaStats(portionInfo);
+    const NPortion::EProduced statsClass = portionInfo.GetProduced();
+
+    const auto& updateStats = [&delta, updateType](TColumnEngineStats::TPortionsStats& container) {
+        switch (updateType) {
+            case EStatsUpdateType::ADD:
+                container += delta;
+                break;
+            case EStatsUpdateType::SUB:
+                container -= delta;
+                break;
+        }
+    };
+
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD)) {
         auto before = Counters.Active();
-        UpdatePortionStats(Counters, portionInfo, updateType, exPortionInfo);
+        updateStats(Counters.StatsByType[statsClass]);
         auto after = Counters.Active();
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_stats_updated")("type", updateType)("path_id", portionInfo.GetPathId())(
             "portion", portionInfo.GetPortionId())("before_size", before.Bytes)("after_size", after.Bytes)("before_rows", before.Rows)(
             "after_rows", after.Rows);
     } else {
-        UpdatePortionStats(Counters, portionInfo, updateType, exPortionInfo);
+        updateStats(Counters.StatsByType[statsClass]);
     }
     const ui64 pathId = portionInfo.GetPathId();
     Y_ABORT_UNLESS(pathId);
@@ -81,52 +95,7 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
         stats = std::make_shared<TColumnEngineStats>();
         stats->Tables = 1;
     }
-    UpdatePortionStats(*PathStats[pathId], portionInfo, updateType, exPortionInfo);
-}
-
-TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo) {
-    TColumnEngineStats::TPortionsStats deltaStats;
-    deltaStats.Rows = portionInfo.GetRecordsCount();
-    deltaStats.Bytes = portionInfo.GetTotalBlobBytes();
-    deltaStats.RawBytes = portionInfo.GetTotalRawBytes();
-    deltaStats.Blobs = portionInfo.GetBlobIdsCount();
-    deltaStats.Portions = 1u;
-    for (const auto& blob : portionInfo.GetBlobIds()) {
-        deltaStats.BytesByChannel[blob.Channel()].Add(blob.BlobSize());
-    }
-    return deltaStats;
-}
-
-void TColumnEngineForLogs::UpdatePortionStats(
-    TColumnEngineStats& engineStats, const TPortionInfo& portionInfo, EStatsUpdateType updateType, const TPortionInfo* exPortionInfo) const {
-    TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo);
-
-    Y_ABORT_UNLESS(!exPortionInfo || exPortionInfo->GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
-    Y_ABORT_UNLESS(portionInfo.GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
-
-    TColumnEngineStats::TPortionsStats& srcStats =
-        exPortionInfo ? (exPortionInfo->HasRemoveSnapshot() ? engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE]
-                                                            : engineStats.StatsByType[exPortionInfo->GetMeta().Produced])
-                      : engineStats.StatsByType[portionInfo.GetMeta().Produced];
-    TColumnEngineStats::TPortionsStats& stats = portionInfo.HasRemoveSnapshot() ? engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE]
-                                                                                : engineStats.StatsByType[portionInfo.GetMeta().Produced];
-
-    const bool isErase = updateType == EStatsUpdateType::ERASE;
-    const bool isAdd = updateType == EStatsUpdateType::ADD;
-
-    if (isErase) {   // PortionsToDrop
-        stats -= deltaStats;
-    } else if (isAdd) {   // Load || AppendedPortions
-        stats += deltaStats;
-    } else if (&srcStats != &stats || exPortionInfo) {   // SwitchedPortions || PortionsToEvict
-        stats += deltaStats;
-
-        if (exPortionInfo) {
-            srcStats -= DeltaStats(*exPortionInfo);
-        } else {
-            srcStats -= deltaStats;
-        }
-    }
+    updateStats(PathStats[pathId]->StatsByType[statsClass]);
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& indexInfo) {
@@ -492,7 +461,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
         return false;
     } else {
         if (updateStats) {
-            UpdatePortionStats(*p, EStatsUpdateType::ERASE);
+            UpdatePortionStats(*p, EStatsUpdateType::SUB);
         }
         Y_ABORT_UNLESS(spg.ErasePortion(portion));
         return true;

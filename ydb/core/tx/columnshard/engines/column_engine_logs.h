@@ -95,8 +95,7 @@ public:
     };
 
     enum class EStatsUpdateType {
-        DEFAULT = 0,
-        ERASE,
+        SUB = 0,
         ADD,
     };
 
@@ -231,7 +230,8 @@ public:
         AFL_VERIFY(portion);
         auto granule = GetGranulePtrVerified(portion->GetPathId());
         granule->ModifyPortionOnComplete(portion, modifier);
-        UpdatePortionStats(*portion, EStatsUpdateType::DEFAULT, &exPortion);
+        UpdatePortionStats(*portion, EStatsUpdateType::ADD);
+        UpdatePortionStats(exPortion, EStatsUpdateType::SUB);
     }
 
     void AppendPortion(const TPortionDataAccessor& portionInfo);
@@ -249,10 +249,7 @@ private:
 
 private:
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
-    void UpdatePortionStats(
-        const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT, const TPortionInfo* exPortionInfo = nullptr);
-    void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo, EStatsUpdateType updateType,
-        const TPortionInfo* exPortionInfo = nullptr) const;
+    void UpdatePortionStats(const TPortionInfo& portionInfo, const EStatsUpdateType updateType);
 };
 
 }   // namespace NKikimr::NOlap

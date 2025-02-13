@@ -116,6 +116,19 @@ public:
             }
             return *this;
         }
+
+        static TPortionsStats DeltaStats(const TPortionInfo& portionInfo) {
+            TColumnEngineStats::TPortionsStats deltaStats;
+            deltaStats.Rows = portionInfo.GetRecordsCount();
+            deltaStats.Bytes = portionInfo.GetTotalBlobBytes();
+            deltaStats.RawBytes = portionInfo.GetTotalRawBytes();
+            deltaStats.Blobs = portionInfo.GetBlobIdsCount();
+            deltaStats.Portions = 1u;
+            for (const auto& blob : portionInfo.GetBlobIds()) {
+                deltaStats.BytesByChannel[blob.Channel()].Add(blob.BlobSize());
+            }
+            return deltaStats;
+        }
     };
 
     i64 Tables{};

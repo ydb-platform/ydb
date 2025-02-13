@@ -8,25 +8,25 @@
 
 namespace NKikimr::NGRpcService {
 
-TBSConfigGRpcService::TBSConfigGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId) \
+TConfigGRpcService::TConfigGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId) \
     : ActorSystem(actorSystem) \
     , Counters(std::move(counters))
     , GRpcRequestProxyId(grpcRequestProxyId)
 {
 }
 
-TBSConfigGRpcService::~TBSConfigGRpcService() = default;
+TConfigGRpcService::~TConfigGRpcService() = default;
 
-void TBSConfigGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
+void TConfigGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
     CQ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
-void TBSConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
     #define SETUP_BS_METHOD(methodName, method, rlMode, requestType) \
-        SETUP_METHOD(methodName, method, rlMode, requestType, BSConfig, bsconfig)
+        SETUP_METHOD(methodName, method, rlMode, requestType, Config, bsconfig)
 
     SETUP_BS_METHOD(ReplaceConfig, DoReplaceBSConfig, Rps, BSCONFIG_REPLACESTORAGECONFIG);
     SETUP_BS_METHOD(FetchConfig, DoFetchBSConfig, Rps, BSCONFIG_FETCHSTORAGECONFIG);

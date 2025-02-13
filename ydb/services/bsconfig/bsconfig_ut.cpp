@@ -167,10 +167,10 @@ Y_UNIT_TEST_SUITE(BSConfigGRPCService) {
 
     void ReplaceStorageConfig(auto &channel, std::optional<TString> yamlConfig, std::optional<TString> storageYamlConfig,
             std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode) {
-        std::unique_ptr<Ydb::BSConfig::V1::BSConfigService::Stub> stub;
-        stub = Ydb::BSConfig::V1::BSConfigService::NewStub(channel);
+        std::unique_ptr<Ydb::Config::V1::BSConfigService::Stub> stub;
+        stub = Ydb::Config::V1::BSConfigService::NewStub(channel);
 
-        Ydb::BSConfig::ReplaceStorageConfigRequest request;
+        Ydb::Config::ReplaceStorageConfigRequest request;
         if (yamlConfig) {
             request.set_yaml_config(*yamlConfig);
         }
@@ -182,8 +182,8 @@ Y_UNIT_TEST_SUITE(BSConfigGRPCService) {
         }
         request.set_dedicated_config_mode(dedicatedConfigMode);
 
-        Ydb::BSConfig::ReplaceStorageConfigResponse response;
-        Ydb::BSConfig::ReplaceStorageConfigResult result;
+        Ydb::Config::ReplaceStorageConfigResponse response;
+        Ydb::Config::ReplaceStorageConfigResult result;
 
         grpc::ClientContext replaceStorageConfigCtx;
         AdjustCtxForDB(replaceStorageConfigCtx);
@@ -195,15 +195,15 @@ Y_UNIT_TEST_SUITE(BSConfigGRPCService) {
 
     void FetchStorageConfig(auto& channel, bool dedicatedStorageSection, bool dedicatedClusterSection,
             std::optional<TString>& yamlConfig, std::optional<TString>& storageYamlConfig) {
-        std::unique_ptr<Ydb::BSConfig::V1::BSConfigService::Stub> stub;
-        stub = Ydb::BSConfig::V1::BSConfigService::NewStub(channel);
+        std::unique_ptr<Ydb::Config::V1::BSConfigService::Stub> stub;
+        stub = Ydb::Config::V1::BSConfigService::NewStub(channel);
 
-        Ydb::BSConfig::FetchStorageConfigRequest request;
+        Ydb::Config::FetchStorageConfigRequest request;
         request.set_dedicated_storage_section(dedicatedStorageSection);
         request.set_dedicated_cluster_section(dedicatedClusterSection);
 
-        Ydb::BSConfig::FetchStorageConfigResponse response;
-        Ydb::BSConfig::FetchStorageConfigResult result;
+        Ydb::Config::FetchStorageConfigResponse response;
+        Ydb::Config::FetchStorageConfigResult result;
 
         grpc::ClientContext fetchStorageConfigCtx;
         AdjustCtxForDB(fetchStorageConfigCtx);

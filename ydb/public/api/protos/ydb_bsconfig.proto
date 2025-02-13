@@ -1,10 +1,10 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-package Ydb.BSConfig;
+package Ydb.Config;
 
 option java_package = "com.yandex.ydb.bsconfig.proto";
-option java_outer_classname = "BSConfigProtos";
+option java_outer_classname = "ConfigProtos";
 option java_multiple_files = true;
 
 import "ydb/public/api/protos/ydb_operation.proto";

@@ -8,13 +8,13 @@
 
 namespace NKikimr::NGRpcService {
 
-class TBSConfigGRpcService
-        : public NYdbGrpc::TGrpcServiceBase<Ydb::BSConfig::V1::BSConfigService>
+class TConfigGRpcService
+        : public NYdbGrpc::TGrpcServiceBase<Ydb::Config::V1::ConfigService>
 {
 public:
-    TBSConfigGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+    TConfigGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
             NActors::TActorId grpcRequestProxyId);
-    ~TBSConfigGRpcService();
+    ~TConfigGRpcService();
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
 

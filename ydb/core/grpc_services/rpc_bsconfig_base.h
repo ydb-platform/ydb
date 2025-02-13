@@ -103,10 +103,10 @@ private:
 };
 
 
-bool CopyToConfigRequest(const Ydb::BSConfig::ReplaceConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
-bool CopyToConfigRequest(const Ydb::BSConfig::FetchConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
-void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &/*from*/, Ydb::BSConfig::ReplaceConfigResult* /*to*/);
-void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb::BSConfig::FetchConfigResult *to);
+bool CopyToConfigRequest(const Ydb::Config::ReplaceConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
+bool CopyToConfigRequest(const Ydb::Config::FetchConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
+void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &/*from*/, Ydb::Config::ReplaceConfigResult* /*to*/);
+void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb::Config::FetchConfigResult *to);
 
 template <typename TDerived>
 class TBaseBSConfigRequest {
@@ -281,7 +281,7 @@ protected:
 
     void Handle(TEvBlobStorage::TEvControllerFetchConfigResponse::TPtr ev) {
         auto *self = Self();
-        if constexpr (std::is_same_v<TResultRecord, Ydb::BSConfig::FetchConfigResult>) {
+        if constexpr (std::is_same_v<TResultRecord, Ydb::Config::FetchConfigResult>) {
             TResultRecord result;
             const auto& record = ev->Get()->Record;
             if (record.HasClusterYaml()) {
@@ -299,7 +299,7 @@ protected:
 
     void Handle(TEvBlobStorage::TEvControllerReplaceConfigResponse::TPtr ev) {
         auto *self = Self();
-        if constexpr (std::is_same_v<TResultRecord, Ydb::BSConfig::ReplaceConfigResult>) {
+        if constexpr (std::is_same_v<TResultRecord, Ydb::Config::ReplaceConfigResult>) {
             const auto& record = ev->Get()->Record;
             if (record.GetStatus() == NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success) {
                 TResultRecord result;

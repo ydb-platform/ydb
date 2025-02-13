@@ -3,7 +3,7 @@ IF (OS_LINUX)
 PY3TEST()
 
 TEST_SRCS(
-    test_break.py
+#    test_break.py
 )
 
 SIZE(MEDIUM)

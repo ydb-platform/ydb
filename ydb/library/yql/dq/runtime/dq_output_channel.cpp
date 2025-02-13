@@ -230,7 +230,7 @@ public:
 
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += data.Size();
-            PopStats.Rows += data.RowCount(); 
+            PopStats.Rows += data.RowCount();
             PopStats.Chunks++; // pop chunks do not match push chunks
             if (!IsFull() || FirstStoredId == NextStoredId) {
                 PopStats.Resume();
@@ -301,12 +301,16 @@ public:
         }
 
         NKikimr::NMiniKQL::TUnboxedValueBatch rows(OutputType);
+        size_t repackedRowCount = 0;
+        size_t repackedChunkCount = 0;
         for (;;) {
-            TDqSerializedBatch chunk;
-            if (!this->Pop(chunk)) {
+            TDqSerializedBatch batch;
+            if (!this->Pop(batch)) {
                 break;
             }
-            Packer.UnpackBatch(chunk.PullPayload(), HolderFactory, rows);
+            repackedRowCount += batch.RowCount();
+            repackedChunkCount += batch.ChunkCount();
+            Packer.UnpackBatch(batch.PullPayload(), HolderFactory, rows);
         }
 
         if (OutputType->IsMulti()) {
@@ -319,7 +323,8 @@ public:
             });
         }
 
-        data.Proto.SetRows(rows.RowCount());
+        data.Proto.SetRows(repackedRowCount);
+        data.Proto.SetChunks(repackedChunkCount);
         data.SetPayload(FinishPackAndCheckSize());
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += data.Size();
@@ -400,7 +405,7 @@ private:
     size_t PackedDataSize = 0;
     size_t PackedRowCount = 0;
     size_t PackedChunkCount = 0;
-    
+
     size_t PackerCurrentRowCount = 0;
     size_t PackerCurrentChunkCount = 0;
 

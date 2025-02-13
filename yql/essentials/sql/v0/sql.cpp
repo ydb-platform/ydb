@@ -1,5 +1,6 @@
 #include "sql.h"
 
+#include <yql/essentials/sql/v0/lexer/lexer.h>
 #include "context.h"
 #include "node.h"
 
@@ -5313,6 +5314,45 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
     }
     res.ActualSyntaxType = NYql::ESyntaxType::YQLv0;
     return res;
+}
+
+class TTranslator : public NSQLTranslation::ITranslator {
+public:
+    NSQLTranslation::ILexer::TPtr MakeLexer(const NSQLTranslation::TTranslationSettings& settings) final {
+        Y_UNUSED(settings);
+        return NSQLTranslationV0::MakeLexer();
+    }
+
+    NYql::TAstParseResult TextToAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
+        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo) final {
+        Y_UNUSED(stmtParseInfo);
+        return SqlToYql(query, settings, warningRules);
+    }
+
+    google::protobuf::Message* TextToMessage(const TString& query, const TString& queryName,
+        NYql::TIssues& issues, size_t maxErrors, const NSQLTranslation::TTranslationSettings& settings) final {
+        return SqlAST(query, queryName, issues, maxErrors, settings.Arena);
+    }
+
+    NYql::TAstParseResult TextAndMessageToAst(const TString& query, const google::protobuf::Message& protoAst,
+        const NSQLTranslation::TSQLHints& hints, const NSQLTranslation::TTranslationSettings& settings) final {
+        Y_UNUSED(query);
+        Y_UNUSED(hints);
+        return SqlASTToYql(protoAst, settings);
+    }
+
+    TVector<NYql::TAstParseResult> TextToManyAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
+        NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo) final {
+        Y_UNUSED(query);
+        Y_UNUSED(settings);
+        Y_UNUSED(warningRules);
+        Y_UNUSED(stmtParseInfo);
+        return {};
+    }
+};
+
+NSQLTranslation::TTranslatorPtr MakeTranslator() {
+    return MakeIntrusive<TTranslator>();
 }
 
 } // namespace NSQLTranslationV0

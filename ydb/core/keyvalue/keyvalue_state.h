@@ -352,8 +352,8 @@ public:
     void UpdateStoredState(ISimpleDb &db, const NKeyValue::THelpers::TGenerationStep &genStep);
     void CompleteGCExecute(ISimpleDb &db, const TActorContext &ctx);
     void CompleteGCComplete(const TActorContext &ctx, const TTabletStorageInfo *info);
-    void CompleteCleanupDataExecute(ISimpleDb &db, const TActorContext &ctx);
-    void CompleteCleanupDataComplete(const TActorContext &ctx, const TTabletStorageInfo *info);
+    void CompleteCleanupDataExecute(ISimpleDb &db, const TActorContext &ctx, ui64 cleanupGeneration);
+    void CompleteCleanupDataComplete(const TActorContext &ctx, const TTabletStorageInfo *info, ui64 cleanupGeneration);
     void StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep,
         TVector<TLogoBlobID>& trashGoingToCollect);
     void StartCollectingIfPossible(const TActorContext &ctx);

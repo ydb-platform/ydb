@@ -188,41 +188,47 @@ void TKeyValueState::UpdateCleanupGeneration(ISimpleDb &db, ui64 generation) {
     THelpers::DbUpdateCleanUpGeneration(generation, db);
 }
 
-void TKeyValueState::CompleteCleanupDataExecute(ISimpleDb &db, const TActorContext& /*ctx*/) {
-    if (CompletedCleanupGeneration < CompletedCleanupTrashGeneration) {
-        UpdateCleanupGeneration(db, CompletedCleanupTrashGeneration);
+void TKeyValueState::CompleteCleanupDataExecute(ISimpleDb &db, const TActorContext& /*ctx*/, ui64 cleanupGeneration) {
+    if (CompletedCleanupGeneration < cleanupGeneration) {
+        UpdateCleanupGeneration(db, cleanupGeneration);
     }
 }
 
-void TKeyValueState::CompleteCleanupDataComplete(const TActorContext& /*ctx*/, const TTabletStorageInfo* /*info*/) {
-    if (CompletedCleanupGeneration == CompletedCleanupTrashGeneration) {
+void TKeyValueState::CompleteCleanupDataComplete(const TActorContext& /*ctx*/, const TTabletStorageInfo* /*info*/, ui64 cleanupGeneration) {
+    if (CompletedCleanupGeneration >= cleanupGeneration) {
         STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC247, "CompleteCleanupDataComplete nothing to do",
-            (CompletedCleanupGeneration, CompletedCleanupGeneration), (CompletedCleanupTrashGeneration, CompletedCleanupTrashGeneration));
+            (CompletedCleanupGeneration, CompletedCleanupGeneration),
+            (CompletedCleanupTrashGeneration, CompletedCleanupTrashGeneration),
+            (cleanupGeneration, cleanupGeneration));
         return;
     }
-    CompletedCleanupGeneration = CompletedCleanupTrashGeneration;
+    CompletedCleanupGeneration = cleanupGeneration;
 
-    auto maxCleanedGenerationIt = CleanupGenerationToSender.upper_bound(CompletedCleanupGeneration);
+    auto maxCleanedGenerationIt = CleanupGenerationToSender.upper_bound(cleanupGeneration);
     if (maxCleanedGenerationIt == CleanupGenerationToSender.begin()) {
         return;
-    } else {
-        maxCleanedGenerationIt--;
     }
-    // send responses only for max cleaned generation
-    // because we have only one recipient (SchemeShard)
-    // we shouldn't send useless responses about lower generations
-    for (const auto& sender : maxCleanedGenerationIt->second) {
-        TActivationContext::AsActorContext().Send(sender, TEvKeyValue::TEvCleanUpDataResponse::MakeSuccess(maxCleanedGenerationIt->first));
-    }
-
-    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC249, "CompleteCleanupDataComplete",
-        (SentResponses, maxCleanedGenerationIt->second.size()),
-        (CompletedCleanupGeneration, CompletedCleanupGeneration),
-        (CompletedCleanupTrashGeneration, CompletedCleanupTrashGeneration));
+    maxCleanedGenerationIt--;
 
     while (CleanupGenerationToSender.size() && CleanupGenerationToSender.begin()->first <= CompletedCleanupGeneration) {
+        bool last = (maxCleanedGenerationIt == CleanupGenerationToSender.begin());
+        auto &[generation, recipients] = *CleanupGenerationToSender.begin();
+        for (const auto& sender : recipients) {
+            std::unique_ptr<TEvKeyValue::TEvCleanUpDataResponse> response;
+            if (last) {
+                response = TEvKeyValue::TEvCleanUpDataResponse::MakeSuccess(generation);
+            } else {
+                response = TEvKeyValue::TEvCleanUpDataResponse::MakeAlreadyCompleted(generation, CompletedCleanupGeneration);
+            }
+            TActivationContext::AsActorContext().Send(sender, response.release());
+        }
         CleanupGenerationToSender.erase(CleanupGenerationToSender.begin());
     }
+        
+    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC249, "CompleteCleanupDataComplete",
+        (CompletedCleanupGeneration, CompletedCleanupGeneration),
+        (CompletedCleanupTrashGeneration, CompletedCleanupTrashGeneration),
+        (cleanupGeneration, cleanupGeneration));
 }
 
 void TKeyValueState::StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep,

@@ -287,10 +287,11 @@ protected:
             ui64 actualCleanupResetGeneration = Self->State.GetCleanupResetGeneration();
             ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet
                     << " TTxCompleteCleanupData Execute cleanupResetGeneration# " << CleanupResetGeneration
-                    << " actualCleanupResetGeneration# " << actualCleanupResetGeneration);
+                    << " actualCleanupResetGeneration# " << actualCleanupResetGeneration
+                    << " CleanupGeneration# " << CleanupGeneration);
             if (CleanupResetGeneration == actualCleanupResetGeneration) {
                 TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
-                Self->State.CompleteCleanupDataExecute(db, ctx);
+                Self->State.CompleteCleanupDataExecute(db, ctx, CleanupGeneration);
             }
             return true;
         }
@@ -299,9 +300,10 @@ protected:
             ui64 actualCleanupResetGeneration = Self->State.GetCleanupResetGeneration();
             ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
                     << " TTxCompleteCleanupData Complete cleanupResetGeneration# " << CleanupResetGeneration
-                    << " actualCleanupResetGeneration# " << actualCleanupResetGeneration);
+                    << " actualCleanupResetGeneration# " << actualCleanupResetGeneration
+                    << " CleanupGeneration# " << CleanupGeneration);
             if (CleanupResetGeneration == actualCleanupResetGeneration) {
-                Self->State.CompleteCleanupDataComplete(ctx, Self->Info());
+                Self->State.CompleteCleanupDataComplete(ctx, Self->Info(), CleanupGeneration);
             }
         }
     };

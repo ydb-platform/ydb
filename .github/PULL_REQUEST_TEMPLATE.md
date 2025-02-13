@@ -14,6 +14,6 @@
 * Documentation (changelog entry is not required)
 * Not for changelog (changelog entry is not required)
 
-### Description <!-- (optional) description for those who read this PR -->
+### Description for reviewers <!-- (optional) description for those who read this PR -->
 
 ...

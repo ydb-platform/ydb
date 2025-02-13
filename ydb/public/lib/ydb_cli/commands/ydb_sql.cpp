@@ -12,6 +12,7 @@
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <util/generic/queue.h>
+#include <util/string/escape.h>
 #include <google/protobuf/text_format.h>
 
 namespace NYdb {
@@ -205,11 +206,12 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
                 const auto& queryStats = *streamPart.GetStats();
                 stats = queryStats.ToString();
                 ast = queryStats.GetAst();
+                meta = queryStats.GetMeta();
 
                 if (queryStats.GetPlan()) {
                     plan = queryStats.GetPlan();
                 }
-                diagnostics = queryStats.GetDiagnostics();
+                meta = queryStats.GetMeta();
             }
         }
     } // TResultSetPrinter destructor should be called before printing stats
@@ -228,8 +230,8 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
         Cout << Endl << "Statistics:" << Endl << *stats;
     }
 
-    if (diagnostics) {
-        Cout << Endl << "Diagnostics:" << Endl << NJson::PrettifyJson(*diagnostics, true) << Endl;;
+    if (meta) {
+        Cout << Endl << "Meta:" << Endl << NJson::PrettifyJson(*meta, true) << Endl;;
     }
 
     if (plan) {
@@ -246,7 +248,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     }
 
     if (!DiagnosticsFile.empty()) {
-        TFileOutput file(DiagnosticsFile);
+        TFileOutput file(TStringBuilder() << DiagnosticsFile << ".json");
 
         NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
 
@@ -261,9 +263,10 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             NJson::ReadJsonTree(*plan, &planJson, true);
             diagnosticsJson.InsertValue("plan", planJson);
         }
-        if (diagnostics) {
+        if (meta) {
             NJson::TJsonValue metaJson;
-            NJson::ReadJsonTree(*diagnostics, &metaJson, true);
+            NJson::ReadJsonTree(*meta, &metaJson, true);
+            metaJson.InsertValue("query_text", EscapeC(Query));
             diagnosticsJson.InsertValue("meta", metaJson);
         }
         file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);

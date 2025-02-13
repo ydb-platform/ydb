@@ -2049,7 +2049,7 @@ public:
 
     const TString GetQueryPlan() const;
 
-    const TString GetDiagnostics() const;
+    const TString GetMeta() const;
 
 private:
     TMaybe<TTransaction> Transaction_;

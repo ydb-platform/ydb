@@ -156,7 +156,7 @@ public:
             req->collect_stats(),
             req->has_query_cache_policy() ? &req->query_cache_policy() : nullptr,
             req->has_operation_params() ? &req->operation_params() : nullptr);
-        
+
         ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req));
 
         ReportCostInfo_ = req->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
@@ -178,7 +178,9 @@ public:
         if (from.HasQueryStats()) {
             FillQueryStats(*to->mutable_query_stats(), from);
             to->mutable_query_stats()->set_query_ast(from.GetQueryAst());
-            to->mutable_query_stats()->set_query_diagnostics(from.GetQueryDiagnostics());
+            if (from.HasQueryDiagnostics()) {
+                to->mutable_query_stats()->set_query_meta(from.GetQueryDiagnostics());
+            }
             return;
         }
     }

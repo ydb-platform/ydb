@@ -331,7 +331,7 @@ private:
                 }
 
                 if (collectDiagnostics) {
-                    response.mutable_result()->mutable_query_stats()->set_query_diagnostics(kqpResponse.GetQueryDiagnostics());
+                    response.mutable_result()->mutable_query_stats()->set_query_meta(kqpResponse.GetQueryDiagnostics());
                 }
 
                 Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);

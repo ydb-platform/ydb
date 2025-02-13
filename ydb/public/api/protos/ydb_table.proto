@@ -1272,7 +1272,9 @@ message ExecuteScanQueryRequest {
     Mode mode = 6;
     reserved 7; // report_progress
     QueryStatsCollection.Mode collect_stats = 8;
-    reserved 9; // collect_full_diagnostics
+    // works only in mode: MODE_EXPLAIN,
+    // collects additional diagnostics about query compilation, including query plan and scheme
+    bool collect_full_diagnostics = 9 [deprecated=true];
 }
 
 message ExecuteScanQueryPartialResponse {
@@ -1288,7 +1290,9 @@ message ExecuteScanQueryPartialResult {
     reserved 4; // query_progress
     reserved 5; // query_plan
     Ydb.TableStats.QueryStats query_stats = 6;
-    reserved 7; // query_full_diagnostics
+    // works only in mode: MODE_EXPLAIN,
+    // collects additional diagnostics about query compilation, including query plan and scheme
+    string query_full_diagnostics = 7 [deprecated = true];
 }
 
 // Returns information about an external data source with a given path.

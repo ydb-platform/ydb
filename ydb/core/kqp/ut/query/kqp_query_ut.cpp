@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(counters.RecompileRequestGet()->Val(), 1);
     }
 
-    Y_UNIT_TEST(ExecuteDataQueryCollectFullDiagnostics) {
+    Y_UNIT_TEST(ExecuteDataQueryCollectMeta) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
@@ -211,26 +211,25 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(!result.GetDiagnostics().empty(), "Query result diagnostics is empty");
+                UNIT_ASSERT_C(!result.GetMeta().empty(), "Query result meta is empty");
 
                 TStringStream in;
-                in << result.GetDiagnostics();
+                in << result.GetMeta();
                 NJson::TJsonValue value;
                 ReadJsonTree(&in, &value);
 
-                UNIT_ASSERT_C(value.IsMap(), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("version"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_text"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Diagnostics: table_metadata type should be an array");
-                UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_plan"), "Incorrect Diagnostics");
-                UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Diagnostics");
+                UNIT_ASSERT_C(value.IsMap(), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("version"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Meta");
+                UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Meta: table_metadata type should be an array");
+                UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Meta");
+                UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Meta");
+                UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Meta");
             }
 
             {
@@ -240,7 +239,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(result.GetDiagnostics().empty(), "Query result diagnostics should be empty, but it's not");
+                UNIT_ASSERT_C(result.GetMeta().empty(), "Query result meta should be empty, but it's not");
             }
         }
     }

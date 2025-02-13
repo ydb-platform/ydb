@@ -29,7 +29,7 @@ TString TExecStats::ToString(bool withPlan) const {
     if (!withPlan) {
         proto.clear_query_plan();
         proto.clear_query_ast();
-        proto.clear_query_diagnostics();
+        proto.clear_query_meta();
     }
 
     TString res;
@@ -57,14 +57,14 @@ TMaybe<TString> TExecStats::GetAst() const {
     return proto.query_ast();
 }
 
-TMaybe<TString> TExecStats::GetDiagnostics() const {
+TMaybe<TString> TExecStats::GetMeta() const {
     auto proto = Impl_->Proto;
 
-    if (proto.query_diagnostics().empty()) {
+    if (proto.query_meta().empty()) {
         return {};
     }
 
-    return proto.query_diagnostics();
+    return proto.query_meta();
 }
 
 TDuration TExecStats::GetTotalDuration() const {

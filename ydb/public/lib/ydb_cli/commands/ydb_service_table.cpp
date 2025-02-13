@@ -9,8 +9,11 @@
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/json_prettifier.h>
+#include <library/cpp/json/json_writer.h>
+
 #include <google/protobuf/util/json_util.h>
 
+#include <util/string/escape.h>
 #include <util/string/split.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
@@ -365,6 +368,8 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption('q', "query", "Text of query to execute").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
+    config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
+        .RequiredArgument("[String]").StoreResult(&DiagnosticsFile);
 
     AddOutputFormats(config, {
         EDataFormat::Pretty,
@@ -507,13 +512,49 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
+    TMaybe<TString> statsStr;
+    TMaybe<TString> plan;
+    TMaybe<TString> ast;
+    TMaybe<TString> meta;
+
     const std::optional<NTable::TQueryStats>& stats = result.GetStats();
     if (stats.has_value()) {
-        Cout << Endl << "Statistics:" << Endl << stats->ToString();
-        PrintFlameGraph(stats->GetPlan());
+        meta = stats->GetMeta();
+        plan = stats->GetPlan();
+        ast = stats->GetAst();
+        statsStr = stats->ToString();
+        Cout << Endl << "Statistics:" << Endl << statsStr;
+        if (meta) {
+            Cout << Endl << "Meta:" << Endl << NJson::PrettifyJson(*meta, true) << Endl;
+        }
+        PrintFlameGraph(plan);
     }
-    if (FlameGraphPath && !stats.has_value())
-    {
+
+    if (!DiagnosticsFile.empty()) {
+        TFileOutput file(DiagnosticsFile + ".json");
+
+        NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
+
+        if (statsStr) {
+            diagnosticsJson.InsertValue("stats", *statsStr);
+        }
+        if (ast) {
+            diagnosticsJson.InsertValue("ast", *ast);
+        }
+        if (plan) {
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            diagnosticsJson.InsertValue("plan", planJson);
+        }
+        if (meta) {
+            NJson::TJsonValue metaJson;
+            NJson::ReadJsonTree(*meta, &metaJson, true);
+            diagnosticsJson.InsertValue("meta", metaJson);
+        }
+        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
+    }
+
+    if (FlameGraphPath && !stats.has_value()) {
         Cout << Endl << "Flame graph is available for full or profile stats only" << Endl;
     }
 }
@@ -732,7 +773,8 @@ template <typename TIterator>
 bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
     TMaybe<TString> stats;
     std::optional<std::string> fullStats;
-    TString diagnostics;
+    TMaybe<TString> meta;
+    TMaybe<TString> ast;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -749,10 +791,12 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
             if (HasStats(streamPart)) {
                 const auto& queryStats = GetStats(streamPart);
                 stats = queryStats.ToString();
+                ast = queryStats.GetAst();
 
                 if (queryStats.GetPlan()) {
                     fullStats = queryStats.GetPlan();
                 }
+                meta = queryStats.GetMeta();
             }
         }
     } // TResultSetPrinter destructor should be called before printing stats
@@ -766,6 +810,35 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
 
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
         queryPlanPrinter.Print(TString{*fullStats});
+    }
+
+    if (meta) {
+        Cout << Endl << "Meta:" << Endl << NJson::PrettifyJson(*meta, true) << Endl;;
+    }
+
+    if (!DiagnosticsFile.empty()) {
+        TFileOutput file(TStringBuilder() << DiagnosticsFile << ".json");
+
+        NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
+
+        if (stats) {
+            diagnosticsJson.InsertValue("stats", *stats);
+        }
+        if (ast) {
+            diagnosticsJson.InsertValue("ast", *ast);
+        }
+        if (fullStats) {
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*fullStats, &planJson, true);
+            diagnosticsJson.InsertValue("plan", planJson);
+        }
+        if (meta) {
+            NJson::TJsonValue metaJson;
+            NJson::ReadJsonTree(*meta, &metaJson, true);
+            metaJson.InsertValue("query_text", EscapeC(Query));
+            diagnosticsJson.InsertValue("meta", metaJson);
+        }
+        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
     }
 
     PrintFlameGraph(fullStats);

@@ -354,7 +354,6 @@ private:
 
         replayMessage.InsertValue("query_id", Uid);
         replayMessage.InsertValue("version", "1.0");
-        replayMessage.InsertValue("query_text", EscapeC(QueryId.Text));
         NJson::TJsonValue queryParameterTypes(NJson::JSON_MAP);
         if (QueryId.QueryParameterTypes) {
             for (const auto& [paramName, paramType] : *QueryId.QueryParameterTypes) {
@@ -383,6 +382,7 @@ private:
             ReplayMessageUserView = NJson::WriteJson(replayMessage, /*formatOutput*/ false);
         }
 
+        replayMessage.InsertValue("query_text", EscapeC(QueryId.Text));
         replayMessage.InsertValue("table_metadata", TString(NJson::WriteJson(tablesMeta, false)));
         replayMessage.InsertValue("table_meta_serialization_type", EMetaSerializationType::EncodedProto);
 

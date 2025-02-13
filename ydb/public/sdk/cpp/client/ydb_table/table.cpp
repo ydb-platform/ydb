@@ -2211,9 +2211,9 @@ const TString TDataQueryResult::GetQueryPlan() const {
     }
 }
 
-const TString TDataQueryResult::GetDiagnostics() const {
+const TString TDataQueryResult::GetMeta() const {
     if (QueryStats_.Defined()) {
-        return NYdb::TProtoAccessor::GetProto(*QueryStats_.Get()).query_diagnostics();
+        return NYdb::TProtoAccessor::GetProto(*QueryStats_.Get()).query_meta();
     } else {
         return "";
     }

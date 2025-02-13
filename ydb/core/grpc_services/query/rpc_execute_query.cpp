@@ -424,7 +424,7 @@ private:
                 response.mutable_exec_stats()->set_query_ast(kqpResponse.GetQueryAst());
             }
             if (NeedCollectDiagnostics(*Request_->GetProtoRequest())) {
-                response.mutable_exec_stats()->set_query_diagnostics(kqpResponse.GetQueryDiagnostics());
+                response.mutable_exec_stats()->set_query_meta(kqpResponse.GetQueryDiagnostics());
             }
         }
 

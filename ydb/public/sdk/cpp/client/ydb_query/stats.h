@@ -33,7 +33,7 @@ public:
 
     TMaybe<TString> GetPlan() const;
     TMaybe<TString> GetAst() const;
-    TMaybe<TString> GetDiagnostics() const;
+    TMaybe<TString> GetMeta() const;
 
     TDuration GetTotalDuration() const;
     TDuration GetTotalCpuTime() const;

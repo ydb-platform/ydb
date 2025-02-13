@@ -148,7 +148,6 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     TVector<Ydb::ResultSet> ResultSets_;
     TMaybe<TExecStats> Stats_;
     TMaybe<TTransaction> Tx_;
-    TString Diagnostics_;
 
     void Next() {
         TPtr self(this);

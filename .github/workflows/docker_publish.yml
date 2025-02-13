@@ -79,8 +79,8 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          load: true
           file: main/.github/docker/Dockerfile
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
@@ -91,7 +91,7 @@ jobs:
       - name: Test docker image
         continue-on-error: false
         run: |
-          docker run -d --rm --name local-ydb-test ghcr.io/${{ github.repository_owner }}/local-ydb:nightly
+          docker run -d --rm --name local-ydb-test ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag || 'trunk' }}
           sleep 61  # Wait for the health check to run (--start-period=60s --interval=1s)
           if [ "$(docker inspect --format='{{json .State.Health.Status}}' local-ydb-test)" != "\"healthy\"" ]; then
             echo "Container is not healthy"
@@ -105,5 +105,11 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
+          file: main/.github/docker/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          provenance: false
+          cache-from: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }}
+          cache-to: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }},mode=max

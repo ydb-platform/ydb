@@ -7,4 +7,4 @@ Issues:
     <main>:1:15: Error: downsampling.grid_interval must be positive number, but has ABC
 
 
-(yexception) ydb/tests/tools/kqprun/kqprun.cpp:xxx: ISOTIME Query execution failed
+

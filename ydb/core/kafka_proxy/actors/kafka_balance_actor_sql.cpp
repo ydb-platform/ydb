@@ -151,7 +151,7 @@ const TString CHECK_GROUP_STATE = R"sql(
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Database AS Utf8;
 
-    SELECT state, generation, master, last_heartbeat_time, consumer_group, database, protocol
+    SELECT state, generation, master, last_heartbeat_time, consumer_group, database, protocol, protocol_type
     FROM `%s`
     WHERE consumer_group = $ConsumerGroup
     AND database = $Database;

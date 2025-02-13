@@ -245,6 +245,11 @@ namespace NKikimr {
         TEvHugeShredNotify(std::vector<TChunkIdx> chunksToShred) : ChunksToShred(std::move(chunksToShred)) {}
     };
 
+    struct TEvHugeForbiddenChunks : TEventLocal<TEvHugeForbiddenChunks, TEvBlobStorage::EvHugeForbiddenChunks> {
+        THashSet<TChunkIdx> ForbiddenChunks;
+        TEvHugeForbiddenChunks(THashSet<TChunkIdx> forbiddenChunks) : ForbiddenChunks(std::move(forbiddenChunks)) {}
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // THugeKeeperCtx
     ////////////////////////////////////////////////////////////////////////////

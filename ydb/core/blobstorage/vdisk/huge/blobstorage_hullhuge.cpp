@@ -311,6 +311,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             Y_ABORT_UNLESS(ev->Get()->ChunkIds.size() == 1);
             ChunkId = ev->Get()->ChunkIds.front();
             Lsn = HugeKeeperCtx->LsnMngr->AllocLsnForLocalUse().Point();
+            ctx.Send(HugeKeeperCtx->SkeletonId, new TEvNotifyChunksDeleted(Lsn, ev->Get()->ChunkIds));
 
             LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "ChunkAllocator: reserved:"
                 " chunkId# %" PRIu32 " Lsn# %" PRIu64, ChunkId, Lsn));
@@ -1054,6 +1055,16 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             }
         }
 
+        void Handle(TEvListChunks::TPtr ev, const TActorContext& ctx) {
+            auto response = std::make_unique<TEvListChunksResult>();
+            State.Pers->Heap->ListChunks(ev->Get()->ChunksOfInterest, response->ChunksHuge);
+            ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        }
+
+        void HandleQueryForbiddenChunks(TAutoPtr<IEventHandle> ev, const TActorContext& ctx) {
+            ctx.Send(ev->Sender, new TEvHugeForbiddenChunks(State.Pers->Heap->GetForbiddenChunks()), 0, ev->Cookie);
+        }
+
         void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG(ctx, BS_LOGCUTTER,
                 VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
@@ -1212,6 +1223,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 HFunc(TEvHugeLockChunks, Handle)
                 HFunc(TEvHugeStat, Handle)
                 HFunc(TEvHugeShredNotify, Handle)
+                HFunc(TEvListChunks, Handle)
+                FFunc(TEvBlobStorage::EvHugeQueryForbiddenChunks, HandleQueryForbiddenChunks)
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(NMon::TEvHttpInfo, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)

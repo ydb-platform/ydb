@@ -76,11 +76,9 @@ namespace NKikimr {
                     Yield();
                 }
                 ChunksToDefrag.emplace(findChunks.GetChunksToDefrag(DCtx->MaxChunksToDefrag));
-            } else {
-                Y_ABORT_UNLESS(*ChunksToDefrag || ChunksToDefrag->IsShred());
             }
-            if (*ChunksToDefrag || ChunksToDefrag->IsShred()) {
-                const bool isShred = ChunksToDefrag->IsShred();
+            if (*ChunksToDefrag || ChunksToDefrag->IsShred) {
+                const bool isShred = ChunksToDefrag->IsShred;
 
                 TDefragChunks lockedChunks;
 
@@ -97,8 +95,27 @@ namespace NKikimr {
                     STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD11, DCtx->VCtx->VDiskLogPrefix << "locked chunks",
                         (ActorId, SelfActorId), (LockedChunks, lockedChunks));
                 } else {
+                    auto forbiddenChunks = GetForbiddenChunks();
+
                     STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD14, DCtx->VCtx->VDiskLogPrefix
-                        << "commencing shredding", (ActorId, SelfActorId), (ChunksToShred, ChunksToDefrag->ChunksToShred));
+                        << "commencing shredding", (ActorId, SelfActorId), (ChunksToShred, ChunksToDefrag->ChunksToShred),
+                        (ForbiddenChunks, forbiddenChunks));
+
+                    // filter chunks to shred via forbidden chunks
+                    auto& chunksToShred = ChunksToDefrag->ChunksToShred;
+                    for (const TChunkIdx chunkIdx : std::exchange(chunksToShred, {})) {
+                        if (forbiddenChunks.contains(chunkIdx)) {
+                            chunksToShred.insert(chunkIdx);
+                        }
+                    }
+
+                    // check if we have something remaining to process
+                    if (chunksToShred.empty()) {
+                        STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD15, DCtx->VCtx->VDiskLogPrefix << "nothing to do",
+                            (ActorId, SelfActorId), (Stat, stat));
+                        Send(ParentActorId, new TEvDefragQuantumResult(std::move(stat)));
+                        return;
+                    }
                 }
 
                 TDefragQuantumFindRecords findRecords(std::move(*ChunksToDefrag), lockedChunks);
@@ -126,6 +143,7 @@ namespace NKikimr {
                         auto pred = [&](const auto& record) { return !set.contains(record.OldDiskPart.ChunkIdx); };
                         auto range = std::ranges::remove_if(records, pred);
                         records.erase(range.begin(), range.end());
+                        findRecords.SetLockedChunks(std::move(set));
                     }
 
                     auto getSortedChunks = [&] {
@@ -196,6 +214,13 @@ namespace NKikimr {
             Send(DCtx->HugeKeeperId, new TEvHugeLockChunks(chunks.Chunks));
             auto res = WaitForSpecificEvent<TEvHugeLockChunksResult>(&TDefragQuantum::ProcessUnexpectedEvent);
             return res->Get()->LockedChunks;
+        }
+
+        THashSet<TChunkIdx> GetForbiddenChunks() {
+            TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvHugeQueryForbiddenChunks, 0, DCtx->HugeKeeperId,
+                SelfActorId, nullptr, 0));
+            auto res = WaitForSpecificEvent<TEvHugeForbiddenChunks>(&TDefragQuantum::ProcessUnexpectedEvent);
+            return res->Get()->ForbiddenChunks;
         }
 
         void Compact(THashSet<ui64> tablesToCompact, bool needsFreshCompaction) {

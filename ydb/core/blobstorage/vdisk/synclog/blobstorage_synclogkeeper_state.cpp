@@ -388,6 +388,23 @@ namespace NKikimr {
             return firstDataInRecovLogLsnToKeep;
         }
 
+        void TSyncLogKeeperState::ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks) {
+            auto process = [&](const auto& m) {
+                for (const TChunkIdx chunkId : m) {
+                    if (chunksOfInterest.contains(chunkId)) {
+                        chunks.insert(chunkId);
+                    }
+                }
+            };
+
+            process(ChunksToDelete);
+            process(ChunksToDeleteDelayed.Get());
+
+            TSet<ui32> temp;
+            SyncLogPtr->GetOwnedChunks(temp);
+            process(temp);
+        }
+
     } // NSyncLog
 } // NKikimr
 

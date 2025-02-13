@@ -9,7 +9,18 @@
 
 namespace NKikimr {
 
-    IActor *CreateSkeletonShredActor(NPDisk::TEvShredVDisk::TPtr ev, TPDiskCtxPtr pdiskCtx, TActorId hugeKeeperId,
-        TActorId defragId, TVDiskContextPtr vctx);
+    struct TShredCtx {
+        ui64 Lsn;
+        TIntrusivePtr<TVDiskContext> VCtx;
+        TPDiskCtxPtr PDiskCtx;
+        TActorId SkeletonId;
+        TActorId HugeKeeperId;
+        TActorId DefragId;
+        TActorId SyncLogId;
+    };
+
+    using TShredCtxPtr = std::shared_ptr<TShredCtx>;
+
+    IActor *CreateSkeletonShredActor(NPDisk::TEvShredVDisk::TPtr ev, TShredCtxPtr shredCtx);
 
 } // NKikimr

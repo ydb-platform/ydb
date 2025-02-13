@@ -285,6 +285,7 @@ public:
     // unpoisoned: [0, +sz)
     void* Alloc(const size_t sz, const EMemorySubPool pagePool = EMemorySubPool::Default) {
         auto* page = CurrentPages_[(TMemorySubPoolIdx)pagePool];
+        TWithoutPoison antidote(page != &TAllocState::EmptyPageHeader ? page : nullptr);
 
         if (Y_LIKELY(page->Offset + sz <= page->Capacity)) {
             void* ret = (char*)page + page->Offset;
@@ -307,7 +308,7 @@ private:
     TAllocState::TCurrentPages CurrentPages_ = TAllocState::EmptyCurrentPages;
 };
 
-void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool); // unpoisoned: [0, +sz)
+void* MKQLAllocSlow(size_t size, TAllocState* state, const EMemorySubPool mPool); // unpoisoned: [0, +size)
 
 #if !defined(_asan_enabled_)
 // unpoisoned: [0, +sz)
@@ -362,6 +363,7 @@ inline void* MKQLAllocFastWithSize(const size_t size, TAllocState* state, const 
     }
 
     auto* page = state->CurrentPages[(TMemorySubPoolIdx)mPool];
+    TWithoutPoison antidote(page != &TAllocState::EmptyPageHeader ? page : nullptr);
 
     if (Y_LIKELY(page->Offset + size + MKQL_ALIGNMENT <= page->Capacity)) {
         void* ret = (char*)page + page->Offset;

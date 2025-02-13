@@ -202,6 +202,7 @@ void* MKQLAllocSlow(size_t size, TAllocState* state, const EMemorySubPool mPool)
     page->Link = nullptr;
 
     auto*& mPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
+    // should be already unpoisoned from outside
 
     auto newPageAvailable = capacity - alignedSize;
     auto curPageAvailable = mPage->Capacity - mPage->Offset;
@@ -230,15 +231,15 @@ void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySub
     }
 }
 
-void* TPagedArena::AllocSlow(const size_t sz, const EMemorySubPool mPool) {
+void* TPagedArena::AllocSlow(const size_t size, const EMemorySubPool mPool) {
     auto*& currentPage = CurrentPages_[(TMemorySubPoolIdx)mPool];
-    auto prevLink = currentPage;
-    auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
-    auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
+    auto* prevLink = currentPage;
+    auto alignedSize = AlignUp(size + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
+    auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), alignedSize);
 
     currentPage = (TAllocPageHeader*)PagePool_->GetBlock(capacity);
     currentPage->Capacity = capacity;
-    currentPage->Offset = roundedSize;
+    currentPage->Offset = alignedSize;
     currentPage->UseCount = 0;
     currentPage->MyAlloc = PagePool_;
     currentPage->Link = prevLink;
@@ -246,7 +247,7 @@ void* TPagedArena::AllocSlow(const size_t sz, const EMemorySubPool mPool) {
     ASAN_POISON_MEMORY_REGION(currentPage, sizeof(TAllocPageHeader));
 
     void* ret = (char*)currentPage + sizeof(TAllocPageHeader);
-    ASAN_POISON_MEMORY_REGION((char*)ret + sz, capacity - sz - sizeof(TAllocPageHeader));
+    ASAN_POISON_MEMORY_REGION((char*)ret + size, capacity - size - sizeof(TAllocPageHeader));
     return ret;
 }
 
@@ -254,8 +255,10 @@ void TPagedArena::Clear() noexcept {
     for (auto&& i : CurrentPages_) {
         auto* page = i;
         while (page != &TAllocState::EmptyPageHeader) {
+            TWithoutPoison antidote(page);
             auto* next = page->Link;
             auto capacity = page->Capacity;
+            antidote.Poison();
             PagePool_->ReturnBlock(page, capacity);
             page = next;
         }

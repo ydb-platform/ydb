@@ -1,4 +1,5 @@
 * Fixed a bug where `ydb auth get-token` command tried to authenticate twice: while listing andpoints and while executing actual token request.
+* Fixed a bug where `ydb import file csv` command was saving progress even if a batch upload had been failed.
 * Include coordination nodes in local backups (`ydb tools dump` and `ydb tools restore`). Rate limiters that utilize the coordination node are saved in the coordination node's backup folder, preserving the existing path hierarchy.
 * Fixed a bug where some errors could be ignored when restoring from a local backup.
 * Added `ydb workload log import generator` command.

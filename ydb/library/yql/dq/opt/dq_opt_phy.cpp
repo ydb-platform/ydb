@@ -762,7 +762,7 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
     Y_UNUSED(optCtx);
-    
+
     if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
@@ -2014,11 +2014,29 @@ TExprBase DqBuildTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationC
         .Args({"stream"})
         .Body<TCoTake>()
             .Input("stream")
-            .Count<TCoAggrAdd>()
-                .Left(take.Count())
-                .Right(skip.Count())
+            .Count<TCoIf>()
+                .Predicate<TCoCmpGreater>()
+                    .Left(take.Count())
+                    .Right<TCoSub>()
+                        .Left<TCoUint64>()
+                            .Literal()
+                                .Value(ToString(Max<ui64>()), TNodeFlags::Default)
+                            .Build()
+                        .Build()
+                        .Right(skip.Count())
+                    .Build()
+                .Build()
+                .ThenValue<TCoUint64>()
+                    .Literal()
+                        .Value(ToString(Max<ui64>()), TNodeFlags::Default)
+                    .Build()
+                .Build()
+                .ElseValue<TCoAggrAdd>()
+                    .Left(take.Count())
+                    .Right(skip.Count())
                 .Build()
             .Build()
+        .Build()
         .Done();
 
     auto newDqUnion = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);

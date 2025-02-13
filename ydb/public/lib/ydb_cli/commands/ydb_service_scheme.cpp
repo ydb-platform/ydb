@@ -620,7 +620,7 @@ int TCommandDescribe::DescribeView(const TDriver& driver) {
 }
 
 int TCommandDescribe::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& description) const {
-    Cout << "\nProperties:\n" << "to be done..." << Endl;
+    // to do
     return EXIT_SUCCESS;
 }
 
@@ -635,7 +635,7 @@ int TCommandDescribe::DescribeExternalDataSource(const TDriver& driver) {
 }
 
 int TCommandDescribe::PrintExternalTableResponsePretty(const NYdb::NTable::TExternalTableDescription& description) const {
-    Cout << "\nProperties:\n" << "to be done..." << Endl;
+    // to do
     return EXIT_SUCCESS;
 }
 

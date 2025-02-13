@@ -216,17 +216,6 @@ protected:
         FillTokens(gatewayConfig.mutable_ydb());
         FillTokens(gatewayConfig.mutable_solomon());
 
-        for (auto& gateway : *RunnerOptions.FqSettings.FqConfig.mutable_gateways()->mutable_pq()->mutable_clustermapping()) {
-            if (!gateway.GetToken()) {
-                gateway.SetToken(RunnerOptions.FqSettings.YqlToken);
-            }
-        }
-        for (auto& gateway : *RunnerOptions.FqSettings.FqConfig.mutable_gateways()->mutable_s3()->mutable_clustermapping()) {
-            if (!gateway.GetToken()) {
-                gateway.SetToken(RunnerOptions.FqSettings.YqlToken);
-            }
-        }
-
         auto& logConfig = RunnerOptions.FqSettings.LogConfig;
         logConfig.SetDefaultLevel(NActors::NLog::EPriority::PRI_CRIT);
         FillLogConfig(logConfig);

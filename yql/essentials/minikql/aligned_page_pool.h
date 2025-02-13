@@ -8,6 +8,8 @@
 #include <util/system/defaults.h>
 #include <util/system/yassert.h>
 
+#include <sanitizer/asan_interface.h>
+
 #include <stack>
 #include <unordered_map>
 #include <unordered_set>
@@ -20,6 +22,39 @@ namespace NKikimr {
 // Call this method once at the start of the process - to enable usage of default allocator.
 void UseDefaultAllocator();
 #endif
+
+template <class T>
+struct TWithoutPoison {
+#if defined(_asan_enabled_)
+    explicit TWithoutPoison(const T* ptr) : Ptr(ptr) {
+        if (Y_LIKELY(Ptr)) {
+            ASAN_UNPOISON_MEMORY_REGION(Ptr, sizeof(T));
+        }
+    }
+
+    void Poison() {
+        if (Ptr) {
+            ASAN_POISON_MEMORY_REGION(Ptr, sizeof(T));
+            Ptr = nullptr;
+        }
+    }
+
+    void Reset() {
+        Ptr = nullptr;
+    }
+
+    ~TWithoutPoison() {
+        Poison();
+    }
+
+private:
+    const T* Ptr;
+#else
+    explicit TWithoutPoison(const T*) {}
+    void Poison() {}
+    void Reset() {}
+#endif
+};
 
 struct TAlignedPagePoolCounters {
     explicit TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString());

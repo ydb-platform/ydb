@@ -300,14 +300,14 @@ public:
     void Clear() noexcept;
 
 private:
-    void* AllocSlow(const size_t sz, const EMemorySubPool pagePool); // unpoisoned: [-sizeof(TAllocPageHeader), +sz)
+    void* AllocSlow(const size_t sz, const EMemorySubPool pagePool); // unpoisoned: [0, +sz)
 
 private:
     TAlignedPagePool* PagePool_;
     TAllocState::TCurrentPages CurrentPages_ = TAllocState::EmptyCurrentPages;
 };
 
-void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool); // unpoisoned: [-sizeof(TAllocPageHeader), +sz)
+void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool); // unpoisoned: [0, +sz)
 
 #if !defined(_asan_enabled_)
 // unpoisoned: [0, +sz)
@@ -375,6 +375,7 @@ inline void* MKQLAllocFastWithSize(const size_t size, TAllocState* state, const 
     return ret;
 }
 
+// expects unpoisoned `header`
 void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept;
 
 #if !defined(_asan_enabled_)
@@ -427,6 +428,8 @@ inline void MKQLFreeFastWithSize(const void* mem, const size_t sz, TAllocState* 
     }
 
     auto* page = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
+    TWithoutPoison antidote(page);
+
     Y_DEBUG_ABORT_UNLESS(page->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << page->MyAlloc->GetDebugInfo() << " freed with: " << TlsAllocState->GetDebugInfo()).data());
     if (Y_LIKELY(--page->UseCount != 0)) {
@@ -435,6 +438,7 @@ inline void MKQLFreeFastWithSize(const void* mem, const size_t sz, TAllocState* 
         return;
     }
 
+    antidote.Reset();
     MKQLFreeSlow(page, state, mPool);
 }
 

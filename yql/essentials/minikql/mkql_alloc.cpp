@@ -106,10 +106,11 @@ void TAllocState::InvalidateMemInfo() {
 
 size_t TAllocState::GetDeallocatedInPages() const {
     size_t deallocated = 0;
-    for (auto x : AllPages) {
-        auto currPage = (TAllocPageHeader*)x;
-        if (currPage->UseCount) {
-            deallocated += currPage->Deallocated;
+    for (auto* page : AllPages) {
+        auto* header = (TAllocPageHeader*)page;
+        TWithoutPoison antidote(header != &TAllocState::EmptyPageHeader ? header : nullptr);
+        if (header->UseCount) {
+            deallocated += header->Deallocated;
         }
     }
 
@@ -209,6 +210,8 @@ void* MKQLAllocSlow(size_t size, TAllocState* state, const EMemorySubPool mPool)
         mPage = page;
     }
 
+    ASAN_POISON_MEMORY_REGION(page, sizeof(TAllocPageHeader));
+
     void* ret = (char*)page + sizeof(TAllocPageHeader);
     ASAN_POISON_MEMORY_REGION((char*)ret + size, capacity - size - sizeof(TAllocPageHeader));
     return ret;
@@ -219,6 +222,8 @@ void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySub
     Y_DEBUG_ABORT_UNLESS(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << header->MyAlloc->GetDebugInfo() << " freed with: " << TlsAllocState->GetDebugInfo()).data());
     state->ReturnBlock(header, header->Capacity);
+
+    // now `header` is poisoned
 
     if (header == state->CurrentPages[(TMemorySubPoolIdx)mPool]) {
         state->CurrentPages[(TMemorySubPoolIdx)mPool] = &TAllocState::EmptyPageHeader;
@@ -237,6 +242,8 @@ void* TPagedArena::AllocSlow(const size_t sz, const EMemorySubPool mPool) {
     currentPage->UseCount = 0;
     currentPage->MyAlloc = PagePool_;
     currentPage->Link = prevLink;
+
+    ASAN_POISON_MEMORY_REGION(currentPage, sizeof(TAllocPageHeader));
 
     void* ret = (char*)currentPage + sizeof(TAllocPageHeader);
     ASAN_POISON_MEMORY_REGION((char*)ret + sz, capacity - sz - sizeof(TAllocPageHeader));

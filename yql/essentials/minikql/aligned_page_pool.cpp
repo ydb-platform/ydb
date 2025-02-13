@@ -10,7 +10,6 @@
 #include <util/system/info.h>
 #include <util/thread/lfstack.h>
 
-#include <sanitizer/asan_interface.h>
 #if defined(_asan_enabled_)
 #   include <mutex>
 #   include <queue>

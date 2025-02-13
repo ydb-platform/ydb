@@ -35,6 +35,9 @@ std::optional<TPredicate> TTxScan::GetTtlPredicate(const TTierInfo& tier, const 
     if (!ttlColumnId) {
         return std::nullopt;
     }
+    if (schema->GetIndexInfo().GetPKFirstColumnId() != *ttlColumnId) {
+        return std::nullopt;
+    }
 
     std::shared_ptr<arrow::Schema> predicateSchema = schema->GetIndexInfo().GetColumnSchema(*ttlColumnId);
     std::shared_ptr<arrow::Scalar> evictionBound =

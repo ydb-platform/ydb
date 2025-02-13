@@ -321,6 +321,11 @@ namespace {
                 const auto& data = item.Data.at(i);
                 result.emplace(Sprintf("%s/data_%02d%s", prefix.data(), i, data.Ext().c_str()), data.Data);
             }
+
+            // for (const auto& x : result) {
+            //     Cerr << "key: " << x.first << Endl << "value: " << x.second << Endl;
+            // }
+
         }
 
         return result;
@@ -5129,51 +5134,103 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    // Y_UNIT_TEST(Changefeeds) {
-    //     TTestBasicRuntime runtime;
-    //     TTestEnv env(runtime);
-    //     ui64 txId = 100;
+    Y_UNIT_TEST(Changefeeds) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
 
-    //     const auto changefeedDesc = R"(
+        const auto changefeedDesc = R"(
+            name: "updates_feed1"
+            mode: MODE_UPDATES
+            format: FORMAT_JSON
+            state: STATE_ENABLED
+        )";
 
-    //     )";
+        const auto topicDesc = R"(
+            partitioning_settings {
+            min_active_partitions: 1
+            max_active_partitions: 1
+            auto_partitioning_settings {
+                strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+                partition_write_speed {
+                stabilization_window {
+                    seconds: 300
+                }
+                up_utilization_percent: 80
+                down_utilization_percent: 20
+                }
+            }
+            }
+            partitions {
+            active: true
+            }
+            retention_period {
+            seconds: 86400
+            }
+            partition_write_speed_bytes_per_second: 1048576
+            partition_write_burst_bytes: 1048576
+            attributes {
+            key: "__max_partition_message_groups_seqno_stored"
+            value: "6000000"
+            }
+            attributes {
+            key: "_allow_unauthenticated_read"
+            value: "true"
+            }
+            attributes {
+            key: "_allow_unauthenticated_write"
+            value: "true"
+            }
+            attributes {
+            key: "_message_group_seqno_retention_period_ms"
+            value: "1382400000"
+            }
+            consumers {
+            name: "my_consumer"
+            read_from {
+            }
+            attributes {
+                key: "_service_type"
+                value: "data-streams"
+            }
+            }
+        )";
 
-    //     const auto data = GenerateTestData(R"(
-    //         columns {
-    //           name: "key"
-    //           type { optional_type { item { type_id: UTF8 } } }
-    //         }
-    //         columns {
-    //           name: "value"
-    //           type { optional_type { item { type_id: UTF8 } } }
-    //         }
-    //         primary_key: "key"
-    //     )", {{"a", 1}});
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, "", "", {{"updates_feed1", changefeedDesc, topicDesc}});
 
-    //     TPortManager portManager;
-    //     const ui16 port = portManager.GetPort();
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
 
-    //     TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
-    //     UNIT_ASSERT(s3Mock.Start());
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
 
-    //     TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-    //         ImportFromS3Settings {
-    //           endpoint: "localhost:%d"
-    //           scheme: HTTP
-    //           items {
-    //             source_prefix: ""
-    //             destination_path: "/MyRoot/Table"
-    //           }
-    //         }
-    //     )", port));
-    //     env.TestWaitNotification(runtime, txId);
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
 
-    //     TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-    //         NLs::PathExist,
-    //         NLs::HasOwner("eve"),
-    //         NLs::HasRight("+R:alice"),
-    //         NLs::HasRight("+W:alice"),
-    //         NLs::HasRight("+R:bob")
-    //     });
-    // }
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/updates_feed1"), {
+            NLs::PathExist,
+        });
+    }
 }

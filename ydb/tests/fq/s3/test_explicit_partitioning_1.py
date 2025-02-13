@@ -574,7 +574,7 @@ Banana,3,100'''
         assert result_set.rows[1].items[2].int32_value == 2
         assert result_set.rows[2].items[2].int32_value == 1
         assert result_set.rows[3].items[2].int32_value == 2
-    
+
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", ["true"])

@@ -675,6 +675,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         THullHugeKeeperState State;
         TActiveActors ActiveActors;
         std::unordered_set<ui32> AllocatingChunkPerSlotSize;
+        std::multimap<ui64, std::unique_ptr<IEventHandle>> PendingLockResponses;
+        std::set<ui64> WritesInFlight;
 
         void CheckLsn(ui64 lsn, const char *action) {
             const ui64 firstLsnToKeep = State.FirstLsnToKeep();
@@ -701,6 +703,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 const ui64 lsnInfimum = HugeKeeperCtx->LsnMngr->GetLsn();
                 CheckLsn(lsnInfimum, "WriteHugeBlob");
                 const ui64 wId = State.LsnFifo.Push(lsnInfimum);
+                WritesInFlight.insert(wId);
                 auto aid = ctx.Register(new THullHugeBlobWriter(HugeKeeperCtx, ctx.SelfID, hugeSlot,
                     std::unique_ptr<TEvHullWriteHugeBlob>(ev->Release().Release()), wId, std::move(traceId)));
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
@@ -985,6 +988,10 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 // and remove chunk size record
                 State.Pers->DeleteChunkSize(hugeSlot);
             }
+
+            size_t numErased = WritesInFlight.erase(msg->WriteId);
+            Y_ABORT_UNLESS(numErased);
+            CheckPendingLockResponses();
         }
 
         void Handle(TEvHugePreCompact::TPtr ev, const TActorContext& ctx) {
@@ -1008,10 +1015,17 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             for (const auto &d : msg->Chunks) {
                 bool locked = State.Pers->Heap->LockChunkForAllocation(d.ChunkId, d.SlotSize);
                 if (locked) {
-                    lockedChunks.emplace_back(d.ChunkId, d.SlotSize);
+                    lockedChunks.push_back(d);
                 }
             }
-            ctx.Send(ev->Sender, new TEvHugeLockChunksResult(std::move(lockedChunks)));
+
+            auto response = std::make_unique<TEvHugeLockChunksResult>(std::move(lockedChunks));
+            auto handle = std::make_unique<IEventHandle>(ev->Sender, SelfId(), response.release());
+            if (WritesInFlight.empty()) {
+                TActivationContext::Send(handle.release());
+            } else {
+                PendingLockResponses.emplace(*--WritesInFlight.end(), std::move(handle));
+            }
         }
 
         void Handle(TEvHugeStat::TPtr &ev, const TActorContext &ctx) {
@@ -1030,8 +1044,14 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             std::ranges::sort(msg->ChunksToShred);
             State.Pers->Heap->ShredNotify(msg->ChunksToShred);
             FreeChunks(ctx);
-            TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvHugeShredNotifyResult, 0, ev->Sender, SelfId(),
-                nullptr, 0));
+
+            auto handle = std::make_unique<IEventHandle>(TEvBlobStorage::EvHugeShredNotifyResult, 0, ev->Sender, SelfId(),
+                nullptr, 0);
+            if (WritesInFlight.empty()) {
+                TActivationContext::Send(handle.release());
+            } else {
+                PendingLockResponses.emplace(*--WritesInFlight.end(), std::move(handle));
+            }
         }
 
         void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
@@ -1053,7 +1073,6 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::HugeKeeperId));
         }
 
-
         void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
             ActiveActors.KillAndClear(ctx);
@@ -1067,6 +1086,15 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             HugeKeeperCtx->DskOutOfSpaceGroup.HugeLockedChunks() = stat.LockedChunks.size();
             // update global stat
             HugeKeeperCtx->VCtx->GetHugeHeapFragmentation().Set(stat.CurrentlyUsedChunks, stat.CanBeFreedChunks);
+        }
+
+        void CheckPendingLockResponses() {
+            const ui64 writeId = WritesInFlight.empty() ? Max<ui64>() : *WritesInFlight.begin();
+            std::multimap<ui64, std::unique_ptr<IEventHandle>>::iterator it;
+            for (it = PendingLockResponses.begin(); it != PendingLockResponses.end() && it->first < writeId; ++it) {
+                TActivationContext::Send(it->second.release());
+            }
+            PendingLockResponses.erase(PendingLockResponses.begin(), it);
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

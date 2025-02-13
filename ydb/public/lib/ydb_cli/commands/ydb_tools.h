@@ -32,7 +32,6 @@ class TCommandDump : public TToolsCommand, public TCommandWithPath {
 public:
     TCommandDump();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
     virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
@@ -51,7 +50,7 @@ class TCommandRestore : public TToolsCommand, public TCommandWithPath {
 public:
     TCommandRestore();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -67,7 +66,7 @@ private:
     TString RowsPerRequest;
     TString BytesPerRequest;
     TString RequestUnitsPerRequest;
-    ui32 InFly;
+    ui32 InFlight;
     bool UseBulkUpsert = false;
     bool UseImportData = false;
 };
@@ -77,6 +76,7 @@ public:
     TCommandCopy();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -95,6 +95,7 @@ public:
     TCommandRename();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -113,7 +114,6 @@ class TCommandPgConvert : public TToolsCommand {
 public:
     TCommandPgConvert();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:

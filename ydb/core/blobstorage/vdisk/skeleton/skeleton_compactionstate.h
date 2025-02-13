@@ -30,12 +30,13 @@ namespace NKikimr {
         void Compacted(const TActorContext &ctx, i64 reqId, EHullDbType dbType, const TIntrusivePtr<TVDiskContext>& vCtx);
         // when data is flushed to recovery log run compaction
         void Logged(const TActorContext &ctx, ui64 lsn) {
-            if (Triggered && lsn >= LsnToCommit) {
-                Triggered = false;
-                for (auto &req : WaitQueue) {
+            for (; !WaitQueue.empty(); WaitQueue.pop_front()) {
+                auto& [waitingLsn, req] = WaitQueue.front();
+                if (waitingLsn <= lsn) {
                     SendLocalCompactCmd(ctx, std::move(req));
+                } else {
+                    break;
                 }
-                WaitQueue.clear();
             }
         }
         void RenderHtml(IOutputStream &str, TDbMon::ESubRequestID subId) const;
@@ -48,11 +49,8 @@ namespace NKikimr {
         // requests sent to execution (id to compaction request mapping)
         std::unordered_map<ui64, TCompactionReq> Requests;
         // requests waiting until commit to recovery log
-        std::deque<TCompactionReq> WaitQueue;
-        // true if we are waiting for all prev records to commit
-        bool Triggered = false;
+        std::deque<std::tuple<ui64, TCompactionReq>> WaitQueue;
         // wait for lsn to commit
-        ui64 LsnToCommit = 0;
         ui64 RequestIdCounter = 0;
 
         void SendLocalCompactCmd(const TActorContext &ctx, TCompactionReq cState);

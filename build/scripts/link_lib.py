@@ -1,19 +1,33 @@
+from __future__ import print_function
+
 import sys
 import subprocess
 import tempfile
 import os
 import shutil
+import argparse
 
 
 class Opts(object):
     def __init__(self, args):
+        kvs = args.index('--')
+        kve = args.index('--', kvs + 1)
+        kv = args[kvs + 1:kve]
+        args = args[:kvs] + args[kve + 1:]
+
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--plugin')
+        kvargs = parser.parse_args(kv)
+
+        self.ar_plugin = kvargs.plugin
         self.archiver = args[0]
         self.arch_type = args[1]
         self.llvm_ar_format = args[2]
         self.build_root = args[3]
         self.plugin = args[4]
-        self.output = args[5]
-        auto_input = args[6:]
+        self.enable_openssl3 = args[5]
+        self.output = args[6]
+        auto_input = args[7:]
 
         self.need_modify = False
         self.extra_args = []
@@ -162,5 +176,8 @@ if __name__ == "__main__":
     if exit_code != 0:
         raise Exception('{0} returned non-zero exit code {1}. Stop.'.format(' '.join(cmd), exit_code))
 
-    if os.path.basename(opts.output) in ['libcontrib-libs-openssl.a', 'liblibs-openssl-crypto.a']:
+    if opts.enable_openssl3 != 'no-openssl3' and os.path.basename(opts.output) in ['libcontrib-libs-openssl.a', 'liblibs-openssl-crypto.a']:
         rename_syms(os.path.dirname(opts.archiver) + '/', opts.output)
+
+    if opts.ar_plugin:
+        subprocess.check_call([sys.executable, opts.ar_plugin, opts.output, '--'] + sys.argv[1:])

@@ -88,6 +88,7 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     config.UseStaticCredentials = Settings.UseStaticCredentials.GetRef();
     config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
+    config.StorageUrl = Settings.StorageUrl;
     SetCredentialsGetter(config);
 }
 
@@ -349,11 +350,11 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     ParseProfile();
 
     ParseDatabase(config);
+    ParseAddress(config);
     ParseCaCerts(config);
     ParseIamEndpoint(config);
 
     ParseCredentials(config);
-    ParseAddress(config);
 }
 
 namespace {

@@ -3,6 +3,7 @@
 #include "util.h"
 
 #include <ydb-cpp-sdk/client/cms/cms.h>
+#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
@@ -10,6 +11,7 @@
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/topic/client.h>
 #include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/draft/ydb_view.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
@@ -52,6 +54,7 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <format>
 
 namespace NYdb::NBackup {
 
@@ -683,6 +686,105 @@ void BackupCoordinationNode(TDriver driver, const TString& dbPath, const TFsPath
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
+namespace {
+
+NReplication::TReplicationDescription DescribeReplication(TDriver driver, const TString& path) {
+    NReplication::TReplicationClient client(driver);
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeReplication(path).ExtractValueSync();
+    });
+    VerifyStatus(status, "describe async replication");
+    return status.GetReplicationDescription();
+}
+
+TString BuildConnectionString(const NReplication::TConnectionParams& params) {
+    return TStringBuilder()
+        << (params.GetEnableSsl() ? "grpcs://" : "grpc://")
+        << params.GetDiscoveryEndpoint()
+        << "/?database=" << params.GetDatabase();
+}
+
+inline TString BuildTarget(const char* src, const char* dst) {
+    return TStringBuilder() << "  `" << src << "` AS `" << dst << "`";
+}
+
+inline TString Quote(const char* value) {
+    return TStringBuilder() << "'" << value << "'";
+}
+
+template <typename StringType>
+inline TString Quote(const StringType& value) {
+    return Quote(value.c_str());
+}
+
+inline TString BuildOption(const char* key, const TString& value) {
+    return TStringBuilder() << "  " << key << " = " << value << "";
+}
+
+inline TString Interval(const TDuration& value) {
+    return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
+}
+
+TString BuildCreateReplicationQuery(
+        const TString& db,
+        const TString& backupRoot,
+        const TString& name,
+        const NReplication::TReplicationDescription& desc)
+{
+    TVector<TString> targets(::Reserve(desc.GetItems().size()));
+    for (const auto& item : desc.GetItems()) {
+        if (!item.DstPath.ends_with("/indexImplTable")) { // TODO(ilnaz): get rid of this hack
+            targets.push_back(BuildTarget(item.SrcPath.c_str(), item.DstPath.c_str()));
+        }
+    }
+
+    const auto& params = desc.GetConnectionParams();
+
+    TVector<TString> opts(::Reserve(5 /* max options */));
+    opts.push_back(BuildOption("CONNECTION_STRING", Quote(BuildConnectionString(params))));
+    switch (params.GetCredentials()) {
+        case NReplication::TConnectionParams::ECredentials::Static:
+            opts.push_back(BuildOption("USER", Quote(params.GetStaticCredentials().User)));
+            opts.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(params.GetStaticCredentials().PasswordSecretName)));
+            break;
+        case NReplication::TConnectionParams::ECredentials::OAuth:
+            opts.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(params.GetOAuthCredentials().TokenSecretName)));
+            break;
+    }
+
+    opts.push_back(BuildOption("CONSISTENCY_LEVEL", Quote(ToString(desc.GetConsistencyLevel()))));
+    if (desc.GetConsistencyLevel() == NReplication::TReplicationDescription::EConsistencyLevel::Global) {
+        opts.push_back(BuildOption("COMMIT_INTERVAL", Interval(desc.GetGlobalConsistency().GetCommitInterval())));
+    }
+
+    return std::format(
+            "-- database: \"{}\"\n"
+            "-- backup root: \"{}\"\n"
+            "CREATE ASYNC REPLICATION `{}`\nFOR\n{}\nWITH (\n{}\n);",
+        db.c_str(), backupRoot.c_str(), name.c_str(), JoinSeq(",\n", targets).c_str(), JoinSeq(",\n", opts).c_str());
+}
+
+}
+
+void BackupReplication(
+    TDriver driver,
+    const TString& db,
+    const TString& dbBackupRoot,
+    const TString& dbPathRelativeToBackupRoot,
+    const TFsPath& fsBackupFolder)
+{
+    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
+    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
+
+    LOG_I("Backup async replication " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto desc = DescribeReplication(driver, dbPath);
+    const auto creationQuery = BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), desc);
+
+    WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateAsyncReplication());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
 void CreateClusterDirectory(const TDriver& driver, const TString& path, bool rootBackupDir = false) {
     if (rootBackupDir) {
         LOG_I("Create temporary directory " << path.Quote() << " in database");
@@ -727,7 +829,7 @@ static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
     }
 }
 
-void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& backupPrefix,
+void BackupFolderImpl(TDriver driver, const TString& database, const TString& dbPrefix, const TString& backupPrefix,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
         NYql::TIssues& issues
@@ -775,6 +877,9 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
             }
             if (dbIt.IsCoordinationNode()) {
                 BackupCoordinationNode(driver, dbIt.GetFullPath(), childFolderPath);
+            }
+            if (dbIt.IsReplication()) {
+                BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
             }
             dbIt.Next();
         }
@@ -1081,6 +1186,7 @@ void BackupDatabaseImpl(TDriver driver, const TString& dbPath, const TFsPath& fo
             BackupFolderImpl(
                 driver,
                 dbPath,
+                dbPath,
                 tmpDbFolder,
                 folderPath,
                 /* exclusionPatterns */ {},
@@ -1162,7 +1268,7 @@ void BackupFolder(const TDriver& driver, const TString& database, const TString&
         }
 
         NYql::TIssues issues;
-        BackupFolderImpl(driver, dbPrefix, tmpDbFolder, folderPath, exclusionPatterns,
+        BackupFolderImpl(driver, database, dbPrefix, tmpDbFolder, folderPath, exclusionPatterns,
             schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, issues
         );
 

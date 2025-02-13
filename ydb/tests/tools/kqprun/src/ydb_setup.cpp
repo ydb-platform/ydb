@@ -136,6 +136,7 @@ void FillQueryMeta(TQueryMeta& meta, const NKikimrKqp::TQueryResponse& response)
 
 class TYdbSetup::TImpl {
     using EVerbose = TYdbSetupSettings::EVerbose;
+    using EHealthCheck = TYdbSetupSettings::EHealthCheck;
 
 private:
     TAutoPtr<TLogBackend> CreateLogBackend() const {
@@ -191,7 +192,6 @@ private:
                 if (!google::protobuf::TextFormat::ParseFromString(TFileInput(StorageMetaPath_.GetPath()).ReadAll(), &StorageMeta_)) {
                     ythrow yexception() << "Storage meta is corrupted, please use --format-storage";
                 }
-                StorageMeta_.SetStorageGeneration(StorageMeta_.GetStorageGeneration() + 1);
                 formatDisk = false;
             }
 
@@ -288,11 +288,17 @@ private:
     void CreateTenant(Ydb::Cms::CreateDatabaseRequest&& request, const TString& relativePath, const TString& type, TStorageMeta::TTenant tenantInfo) {
         const auto absolutePath = request.path();
         const auto [it, inserted] = StorageMeta_.MutableTenants()->emplace(relativePath, tenantInfo);
-        if (inserted) {
+        if (inserted || it->second.GetCreationInProgress()) {
             if (Settings_.VerboseLevel >= EVerbose::Info) {
                 Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating " << type << " tenant " << absolutePath << "..." << CoutColors_.Default() << Endl;
             }
-            Tenants_->CreateTenant(std::move(request), tenantInfo.GetNodesCount());
+
+            it->second.SetCreationInProgress(true);
+            UpdateStorageMeta();
+
+            Tenants_->CreateTenant(std::move(request), tenantInfo.GetNodesCount(), TENANT_CREATION_TIMEOUT, true);
+
+            it->second.SetCreationInProgress(false);
             UpdateStorageMeta();
         } else {
             if (it->second.GetType() != tenantInfo.GetType()) {
@@ -377,6 +383,10 @@ private:
         NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(grpcPort);
 
         Server_ = MakeIntrusive<NKikimr::Tests::TServer>(serverSettings);
+
+        StorageMeta_.SetStorageGeneration(StorageMeta_.GetStorageGeneration() + 1);
+        UpdateStorageMeta();
+
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
 
         if (Settings_.GrpcEnabled) {
@@ -399,19 +409,36 @@ private:
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
-    void WaitResourcesPublishing() const {
-        auto promise = NThreading::NewPromise();
+    NThreading::TFuture<void> RunHealthCheck(const TString& database) const {
+        EHealthCheck level = Settings_.HealthCheckLevel;
+        i32 nodesCount = Settings_.NodeCount;
+        if (database != Settings_.DomainName) {
+            nodesCount = Tenants_->Size(database);
+        } else if (StorageMeta_.TenantsSize() > 0) {
+            level = std::min(level, EHealthCheck::NodesCount);
+        }
+
         const TWaitResourcesSettings settings = {
-            .ExpectedNodeCount = static_cast<i32>(Settings_.NodeCount),
-            .HealthCheckLevel = Settings_.HealthCheckLevel,
+            .ExpectedNodeCount = nodesCount,
+            .HealthCheckLevel = level,
             .HealthCheckTimeout = Settings_.HealthCheckTimeout,
             .VerboseLevel = Settings_.VerboseLevel,
-            .Database = NKikimr::CanonizePath(Settings_.DomainName)
+            .Database = NKikimr::CanonizePath(database)
         };
-        GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), 0, GetRuntime()->GetAppData().SystemPoolId);
+        const auto promise = NThreading::NewPromise();
+        GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), GetNodeIndexForDatabase(database), GetRuntime()->GetAppData().SystemPoolId);
+
+        return promise.GetFuture();
+    }
+
+    void WaitResourcesPublishing() const {
+        std::vector<NThreading::TFuture<void>> futures(1, RunHealthCheck(Settings_.DomainName));
+        for (const auto& [tenantName, _] : StorageMeta_.GetTenants()) {
+            futures.emplace_back(RunHealthCheck(GetTenantPath(tenantName)));
+        }
 
         try {
-            promise.GetFuture().GetValue(2 * Settings_.HealthCheckTimeout);
+            NThreading::WaitAll(futures).GetValue(2 * Settings_.HealthCheckTimeout);
         } catch (...) {
             ythrow yexception() << "Failed to initialize all resources: " << CurrentExceptionMessage();
         }
@@ -628,7 +655,11 @@ private:
     }
 
     TString GetDatabasePath(const TString& database) const {
-        return NKikimr::CanonizePath(database ? database : GetDefaultDatabase());
+        const TString& result = NKikimr::CanonizePath(database ? database : GetDefaultDatabase());
+        if (StorageMeta_.TenantsSize() > 0 && result == NKikimr::CanonizePath(Settings_.DomainName)) {
+            ythrow yexception() << "Cannot use root domain '" << result << "' as request database then created additional tenants";
+        }
+        return result;
     }
 
     ui32 GetNodeIndexForDatabase(const TString& path) const {
@@ -653,7 +684,7 @@ private:
             ythrow yexception() << "Can not choose default database, there is more than one tenants, please use `-D <database name>`";
         }
         if (StorageMeta_.TenantsSize() == 1) {
-            return StorageMeta_.GetTenants().begin()->first;
+            return GetTenantPath(StorageMeta_.GetTenants().begin()->first);
         }
         return Settings_.DomainName;
     }

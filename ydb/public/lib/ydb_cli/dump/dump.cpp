@@ -8,8 +8,7 @@
 
 #include <util/string/printf.h>
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 TString DataFileName(ui32 id) {
     return Sprintf("data_%02d.csv", id);
@@ -85,5 +84,4 @@ TDumpResult TClient::DumpDatabase(const TString& database, const TString& fsPath
     return Impl_->DumpDatabase(database, fsPath);
 }
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

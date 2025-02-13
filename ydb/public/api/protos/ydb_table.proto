@@ -1294,3 +1294,43 @@ message ExecuteScanQueryPartialResult {
     // collects additional diagnostics about query compilation, including query plan and scheme
     string query_full_diagnostics = 7;
 }
+
+// Returns information about an external data source with a given path.
+message DescribeExternalDataSourceRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
+}
+
+message DescribeExternalDataSourceResponse {
+    // Holds DescribeExternalDataSourceResult in case of a successful call.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeExternalDataSourceResult {
+    // Description of a generic scheme object.
+    Ydb.Scheme.Entry self = 1;
+    optional string source_type = 2;
+    optional string location = 3;
+    map<string, string> properties = 4;
+}
+
+// Returns information about an external table with a given path.
+message DescribeExternalTableRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
+}
+
+message DescribeExternalTableResponse {
+    // Holds DescribeExternalTableResult in case of a successful call.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeExternalTableResult {
+    // Description of a generic scheme object.
+    Ydb.Scheme.Entry self = 1;
+    optional string source_type = 2;
+    optional string data_source_path = 3;
+    optional string location = 4;
+    repeated ColumnMeta columns = 5;
+    map<string, string> content = 6;
+}

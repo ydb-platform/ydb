@@ -279,8 +279,9 @@ struct TChunkState {
     std::atomic<i64> OperationsInProgress;
     TOwner OwnerId;
     ECommitState CommitState;
+    std::atomic<bool> IsDirty;
     ui64 CommitsInProgress;
-
+    ui64 ShredGeneration;
     TChunkState()
         : Nonce(0)
         , CurrentNonce(0)
@@ -288,7 +289,9 @@ struct TChunkState {
         , OperationsInProgress(0)
         , OwnerId(OwnerUnallocated)
         , CommitState(FREE)
+        , IsDirty(false)
         , CommitsInProgress(0)
+        , ShredGeneration(0)
     {}
 
     bool HasAnyOperationsInProgress() const {
@@ -308,7 +311,9 @@ struct TChunkState {
         OUT_VAR(OperationsInProgress.load());
         OUT_VAR(OwnerId);
         OUT_VAR(CommitState);
+        OUT_VAR(IsDirty.load());
         OUT_VAR(CommitsInProgress);
+        OUT_VAR(ShredGeneration);
         str << "}";
         return str.Str();
     }

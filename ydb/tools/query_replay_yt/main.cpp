@@ -251,6 +251,18 @@ int main(int argc, const char** argv) {
             NJson::ReadJsonTree(&in, &readConfig, &queryJson, false);
         }
 
+        Cerr << "Running local replay of the query:" << Endl
+	     << "Database: " << queryJson["query_database"].GetStringSafe() << Endl
+	     << UnescapeC(queryJson["query_text"].GetStringSafe()) << Endl;
+        auto TableMetadata = ExtractStaticMetadata(queryJson);
+        Cerr << "Tables: " << Endl;
+	for(auto& [name, meta]: TableMetadata) {
+            Cerr << "TableName: " << name << Endl;
+            NKikimrKqp::TKqpTableMetadataProto protoDescription;
+            meta->ToMessage(&protoDescription);
+            Cerr << protoDescription.Utf8DebugString() << Endl;
+        }
+
         auto result = fakeMapper.RunReplay(std::move(queryJson));
 
         auto status = result.Get()->Status;
@@ -285,6 +297,14 @@ int main(int argc, const char** argv) {
     spec.MaxFailedJobCount(10000);
 
     client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.YqlLogLevel));
+
+    auto mergeSpec = NYT::TMergeOperationSpec();
+    mergeSpec.AddInput(NYT::TRichYPath(config.DstPath));
+    mergeSpec.Output(NYT::TRichYPath(config.DstPath));
+    mergeSpec.CombineChunks(true);
+    mergeSpec.ForceTransform(true);
+
+    client->Merge(mergeSpec);
 
     return EXIT_SUCCESS;
 }

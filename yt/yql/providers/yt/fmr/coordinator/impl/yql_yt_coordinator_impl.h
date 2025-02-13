@@ -4,7 +4,7 @@
 #include <util/generic/queue.h>
 #include <yt/yql/providers/yt/fmr/coordinator/interface/yql_yt_coordinator.h>
 
-namespace NYql {
+namespace NYql::NFmr {
 
 struct TFmrCoordinatorSettings {
     ui32 WorkersNum; // Not supported yet
@@ -15,4 +15,4 @@ struct TFmrCoordinatorSettings {
 
 IFmrCoordinator::TPtr MakeFmrCoordinator(const TFmrCoordinatorSettings& settings = {.WorkersNum = 1, .RandomProvider = CreateDeterministicRandomProvider(2)});
 
-} // namspace NYql
+} // namespace NYql::NFmr

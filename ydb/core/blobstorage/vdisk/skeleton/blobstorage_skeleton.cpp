@@ -215,9 +215,6 @@ namespace NKikimr {
                     if (Hull) {
                         Hull->ApplyHugeBlobSize(MinHugeBlobInBytes, ctx);
                     }
-                    if (DefragId) {
-                        ctx.Send(DefragId, new TEvMinHugeBlobSizeUpdate(MinHugeBlobInBytes));
-                    }
                     ctx.Send(*SkeletonFrontIDPtr, new TEvMinHugeBlobSizeUpdate(MinHugeBlobInBytes));
                 }
             }
@@ -750,7 +747,8 @@ namespace NKikimr {
             const ui64 bufSize = info.Buffer.GetSize();
 
             try {
-                info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinHugeBlobInBytes);
+                info.IsHugeBlob = ev->Get()->RewriteBlob || // if we are rewriting a huge blob, keep it that way
+                    HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinHugeBlobInBytes);
             } catch (yexception ex) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what()  << " Marker# BSVS41");
                 info.HullStatus = {NKikimrProto::ERROR, "", false};
@@ -1865,7 +1863,7 @@ namespace NKikimr {
         void StartDefrag(const TActorContext &ctx) {
             auto defragCtx = std::make_shared<TDefragCtx>(VCtx, Config, HugeBlobCtx, PDiskCtx, ctx.SelfID,
                 Db->HugeKeeperID, true);
-            DefragId = ctx.Register(CreateDefragActor(defragCtx, GInfo, MinHugeBlobInBytes));
+            DefragId = ctx.Register(CreateDefragActor(defragCtx, GInfo));
             ActiveActors.Insert(DefragId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
         }
 

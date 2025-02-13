@@ -280,6 +280,7 @@ public:
             request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
         }
         request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkUtilizationFieldNumber);
+        request.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkWriteThroughputFieldNumber);
     }
 
     void SendWhiteboardSystemStateRequest(const TNodeId nodeId) {
@@ -849,6 +850,9 @@ public:
                         if (nodeInfo.HasNetworkUtilization()) {
                             tenant.SetNetworkUtilization(tenant.GetNetworkUtilization() + nodeInfo.GetNetworkUtilization());
                             ++nodesWithNetworkUtilization;
+                        }
+                        if (nodeInfo.HasNetworkWriteThroughput()) {
+                            tenant.SetNetworkWriteThroughput(tenant.GetNetworkWriteThroughput() + nodeInfo.GetNetworkWriteThroughput());
                         }
                         overall = Max(overall, GetViewerFlag(nodeInfo.GetSystemState()));
                     }

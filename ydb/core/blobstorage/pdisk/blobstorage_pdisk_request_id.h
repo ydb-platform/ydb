@@ -93,6 +93,8 @@ struct TReqId {
         PreShredCompactVDiskResult = 74,
         ShredVDiskResult = 75,
         MarkDirty = 76,
+        ChunkShred = 77,
+        ChunkShredResult = 78,
     };
 
     // 56 bit idx, 8 bit source
@@ -161,6 +163,7 @@ enum class ERequestType {
     RequestPreShredCompactVDiskResult,
     RequestShredVDiskResult,
     RequestMarkDirty,
+    RequestChunkShredResult,
 };
 
 inline IOutputStream& operator <<(IOutputStream& out, const TReqId& reqId) {

@@ -182,6 +182,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore59: // alter transfer
         case TRule_sql_stmt_core::kAltSqlStmtCore60: // drop transfer
         case TRule_sql_stmt_core::kAltSqlStmtCore61: // alter database
+        case TRule_sql_stmt_core::kAltSqlStmtCore62: // show create table
             return false;
     }
 }

@@ -18,6 +18,7 @@ enum EFilesType {
     CREATE_USER,
     CREATE_GROUP,
     ALTER_GROUP,
+    CREATE_ASYNC_REPLICATION,
 };
 
 static constexpr TFileInfo FILES_INFO[] = {
@@ -36,6 +37,7 @@ static constexpr TFileInfo FILES_INFO[] = {
     {"create_user.sql", "users"},
     {"create_group.sql", "groups"},
     {"alter_group.sql", "group members"},
+    {"create_async_replication.sql", "async replication"},
 };
 
 const TFileInfo& TableScheme() {
@@ -96,6 +98,10 @@ const TFileInfo& CreateGroup() {
 
 const TFileInfo& AlterGroup() {
     return FILES_INFO[ALTER_GROUP];
+}
+
+const TFileInfo& CreateAsyncReplication() {
+    return FILES_INFO[CREATE_ASYNC_REPLICATION];
 }
 
 } // NYdb::NDump::NFiles

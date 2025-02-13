@@ -3222,7 +3222,7 @@ namespace Tests {
         return Server->DynamicNodes();
     }
 
-    void TTenants::CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes, TDuration timeout) {
+    void TTenants::CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes, TDuration timeout, bool acceptAlreadyExist) {
         const TString path = request.path();
         const bool serverless = request.has_serverless_resources();
 
@@ -3232,7 +3232,7 @@ namespace Tests {
             std::move(request), "", "", runtime.GetActorSystem(0), true
         ).ExtractValueSync();
 
-        if (result.operation().status() != Ydb::StatusIds::SUCCESS) {
+        if (result.operation().status() != Ydb::StatusIds::SUCCESS && (!acceptAlreadyExist || result.operation().status() != Ydb::StatusIds::ALREADY_EXISTS)) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(result.operation().issues(), issues);
             ythrow yexception() << "Failed to create tenant " << path << ", " << result.operation().status() << ", reason:\n" << issues.ToString();

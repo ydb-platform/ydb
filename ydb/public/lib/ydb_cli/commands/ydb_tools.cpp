@@ -14,6 +14,7 @@
 #include <util/generic/serialized_enum.h>
 #include <util/stream/format.h>
 #include <util/string/split.h>
+#include <util/system/info.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -84,10 +85,6 @@ void TCommandDump::Config(TConfig& config) {
         .DefaultValue(defaults.Ordered_).StoreTrue(&Ordered);
 }
 
-void TCommandDump::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
-}
-
 void TCommandDump::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     AdjustPath(config);
@@ -146,18 +143,16 @@ void TCommandRestore::Config(TConfig& config) {
 
     NDump::TRestoreSettings defaults;
 
-    config.Opts->AddLongOption("restore-data", "Whether to restore data or not")
+    config.Opts->AddLongOption("restore-data", "Whether to restore data or not.")
         .DefaultValue(defaults.RestoreData_).StoreResult(&RestoreData);
 
-    config.Opts->AddLongOption("restore-indexes", "Whether to restore indexes or not")
+    config.Opts->AddLongOption("restore-indexes", "Whether to restore indexes or not.")
         .DefaultValue(defaults.RestoreIndexes_).StoreResult(&RestoreIndexes);
     
-    config.Opts->AddLongOption("restore-acl", "Whether to restore ACL and owner or not")
+    config.Opts->AddLongOption("restore-acl", "Whether to restore ACL and owner or not.")
         .DefaultValue(defaults.RestoreACL_).StoreResult(&RestoreACL);
 
-    config.Opts->AddLongOption("skip-document-tables", TStringBuilder()
-            << "Document API tables cannot be restored for now. "
-            << "Specify this option to skip such tables")
+    config.Opts->AddLongOption("skip-document-tables", "Skip Document API tables.")
         .DefaultValue(defaults.SkipDocumentTables_).StoreResult(&SkipDocumentTables)
         .Hidden(); // Deprecated
 
@@ -166,41 +161,64 @@ void TCommandRestore::Config(TConfig& config) {
             " will be reverted in case of error.")
         .StoreTrue(&SavePartialResult);
 
-    config.Opts->AddLongOption("bandwidth", "Limit data upload bandwidth, bytes per second (example: 2MiB)")
-        .DefaultValue("0").StoreResult(&UploadBandwidth);
+    config.Opts->AddLongOption("bandwidth", "Limit data upload bandwidth, bytes per second (example: 2MiB).")
+        .DefaultValue("no limit")
+        .Handler1T<TString>([this](const TString& arg) {
+            UploadBandwidth = (arg == "no limit") ? "0" : arg;
+        })
+        .Hidden();
 
-    config.Opts->AddLongOption("rps", "Limit requests per second (example: 100)")
-        .DefaultValue(defaults.RateLimiterSettings_.GetRps()).StoreResult(&UploadRps);
+    config.Opts->AddLongOption("rps", "Limit requests per second (example: 100).")
+        .DefaultValue("no limit")
+        .Handler1T<TString>([this](const TString& arg) {
+            UploadRps = (arg == "no limit") ? "0" : arg;
+        });
 
-    config.Opts->AddLongOption("upload-batch-rows", "Limit upload batch size in rows (example: 1K)")
-        .DefaultValue(defaults.RowsPerRequest_).StoreResult(&RowsPerRequest);
+    config.Opts->AddLongOption("upload-batch-rows", "Limit upload batch size in rows (example: 1K)."
+            " Not applicable in ImportData mode.")
+        .DefaultValue("no limit")
+        .Handler1T<TString>([this](const TString& arg) {
+            RowsPerRequest = (arg == "no limit") ? "0" : arg;
+        });
 
-    config.Opts->AddLongOption("upload-batch-bytes", "Limit upload batch size in bytes (example: 1MiB)")
-        .DefaultValue(HumanReadableSize(defaults.BytesPerRequest_, SF_BYTES)).StoreResult(&BytesPerRequest);
+    config.Opts->AddLongOption("upload-batch-rus", "Limit upload batch size in request units (example: 100)."
+            " Not applicable in ImportData mode.")
+        .DefaultValue("no limit")
+        .Handler1T<TString>([this](const TString& arg) {
+            RequestUnitsPerRequest = (arg == "no limit") ? "0" : arg;
+        });
 
-    config.Opts->AddLongOption("upload-batch-rus", "Limit upload batch size in request units (example: 100)")
-        .DefaultValue(defaults.RequestUnitsPerRequest_).StoreResult(&RequestUnitsPerRequest);
+    config.Opts->AddLongOption("upload-batch-bytes", "Limit upload batch size in bytes (example: 1MiB).")
+        .DefaultValue("auto")
+        .Handler1T<TString>([this](const TString& arg) {
+            BytesPerRequest = (arg == "auto") ? "0" : arg;
+        });
 
-    config.Opts->AddLongOption("in-flight", "Limit in-flight request count")
-        .DefaultValue(defaults.InFly_).StoreResult(&InFly);
+    config.Opts->AddLongOption("in-flight", "Limit in-flight request count.")
+        .DefaultValue("auto")
+        .Handler1T<TString>([this](const TString& arg) {
+            InFlight = (arg == "auto") ? 0 : FromString<ui32>(arg);
+        });
 
     config.Opts->AddLongOption("bulk-upsert", "Use BulkUpsert - a more efficient way to upload data with lower consistency level."
-        " Global secondary indexes are not supported in this mode.")
+            " Global secondary indexes are not supported in this mode.")
         .StoreTrue(&UseBulkUpsert)
         .Hidden(); // Deprecated. Using ImportData should be more effective.
 
     config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data."
-        " ImportData will throw an error if you try to upload data into an existing table that has"
-        " secondary indexes or is in the process of building them. If you need to restore a table"
-        " with secondary indexes, make sure it's not already present in the scheme.")
+            " ImportData will throw an error if you try to upload data into an existing table that has"
+            " secondary indexes or is in the process of building them. If you need to restore a table"
+            " with secondary indexes, make sure it's not already present in the scheme.")
         .StoreTrue(&UseImportData);
 
     config.Opts->MutuallyExclusive("bandwidth", "rps");
     config.Opts->MutuallyExclusive("import-data", "bulk-upsert");
+    config.Opts->MutuallyExclusive("import-data", "upload-batch-rows");
+    config.Opts->MutuallyExclusive("import-data", "upload-batch-rus");
 }
 
-void TCommandRestore::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandRestore::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     AdjustPath(config);
 }
 
@@ -212,17 +230,24 @@ int TCommandRestore::Run(TConfig& config) {
         .RestoreACL(RestoreACL)
         .SkipDocumentTables(SkipDocumentTables)
         .SavePartialResult(SavePartialResult)
-        .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))
-        .InFly(InFly);
+        .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest));
+
+    if (InFlight) {
+        settings.MaxInFlight(InFlight);
+    } else if (!UseImportData) {
+        settings.MaxInFlight(NSystemInfo::CachedNumberOfCpus());
+    }
 
     if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
-        if (bytesPerRequest > NDump::TRestoreSettings::MaxBytesPerRequest) {
+        if (UseImportData && bytesPerRequest > NDump::TRestoreSettings::MaxImportDataBytesPerRequest) {
             throw TMisuseException()
                 << "--upload-batch-bytes cannot be larger than "
-                << HumanReadableSize(NDump::TRestoreSettings::MaxBytesPerRequest, SF_BYTES);
+                << HumanReadableSize(NDump::TRestoreSettings::MaxImportDataBytesPerRequest, SF_BYTES);
         }
 
         settings.BytesPerRequest(bytesPerRequest);
+    } else if (UseImportData) {
+        settings.BytesPerRequest(NDump::TRestoreSettings::MaxImportDataBytesPerRequest);
     }
 
     if (RequestUnitsPerRequest) {
@@ -283,6 +308,10 @@ void TCommandCopy::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
+
+void TCommandCopy::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);
@@ -373,6 +402,10 @@ void TCommandRename::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
+
+void TCommandRename::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);
@@ -409,10 +442,6 @@ void TCommandPgConvert::Config(TConfig& config) {
 
     config.Opts->AddLongOption('i', "input", "Path to input SQL file. Read from stdin if not specified.").StoreResult(&Path);
     config.Opts->AddLongOption("ignore-unsupported", "Comment unsupported statements in result dump file if specified.").StoreTrue(&IgnoreUnsupported);
-}
-
-void TCommandPgConvert::Parse(TConfig& config) {
-    TToolsCommand::Parse(config);
 }
 
 int TCommandPgConvert::Run(TConfig& config) {

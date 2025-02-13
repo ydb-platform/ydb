@@ -380,11 +380,13 @@ private:
     }
 
     static TTableCreatorRetryPolicy::IRetryState::TPtr CreateRetryState() {
-        return TTableCreatorRetryPolicy::GetFixedIntervalPolicy(
+        return TTableCreatorRetryPolicy::GetExponentialBackoffPolicy(
                   [](bool longDelay){return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;}
                 , TDuration::MilliSeconds(100)
                 , TDuration::MilliSeconds(300)
-                , 100
+                , TDuration::Seconds(1)
+                , std::numeric_limits<size_t>::max()
+                , TDuration::Seconds(10)
             )->CreateRetryState();
     }
 

@@ -66,6 +66,8 @@ public:
     TFuture<TStatus> RenameTables(Ydb::Table::RenameTablesRequest&& request, const TRenameTablesSettings& settings);
     TFuture<TStatus> DropTable(const std::string& sessionId, const std::string& path, const TDropTableSettings& settings);
     TAsyncDescribeTableResult DescribeTable(const std::string& sessionId, const std::string& path, const TDescribeTableSettings& settings);
+    TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings);
+    TAsyncDescribeExternalTableResult DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings);
 
     template<typename TParamsType>
     TAsyncDataQueryResult ExecuteDataQuery(TSession& session, const std::string& query, const TTxControl& txControl,

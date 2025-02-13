@@ -3810,6 +3810,65 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
+    Y_UNIT_TEST(TestHiveBalancerWithPreferredDC3) {
+        // Tablet prefers DC 1, but the nodes there are constantly crashing
+        // Test that it will be eventually launched in DC 2
+        static const int NUM_NODES = 4;
+        TTestBasicRuntime runtime(NUM_NODES, false);
+
+        runtime.LocationCallback = GetLocation;
+
+        Setup(runtime, true);
+        const int nodeBase = runtime.GetNodeId(0);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
+            runtime.DispatchEvents(options);
+        }
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
+        ev->Record.SetFollowerCount(3);
+        auto* group = ev->Record.MutableDataCentersPreference()->AddDataCentersGroups();
+        group->AddDataCenter(ToString(1));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        auto getTabletDC = [&]() -> std::optional<TString> {
+            std::unique_ptr<TEvHive::TEvRequestHiveInfo> request = std::make_unique<TEvHive::TEvRequestHiveInfo>();
+            runtime.SendToPipe(hiveTablet, senderA, request.release());
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                if (tablet.GetTabletID() == tabletId) {
+                    ui32 nodeId = tablet.GetNodeID();
+                    if (nodeId == 0) {
+                        return std::nullopt;
+                    }
+                    auto location = GetLocation(nodeId - nodeBase);
+                    return location.GetDataCenterId();
+                }
+            }
+            return std::nullopt;
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(getTabletDC(), "1");
+        for (ui32 i = 0;; ++i) {
+            // restart node in DC 1
+            SendKillLocal(runtime, i % 2);
+            CreateLocal(runtime, i % 2);
+            auto dc = getTabletDC();
+            Ctest << "tablet is in dc" << dc << Endl;
+            if (dc == "2") {
+                break;
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestHiveFollowersWithChangingDC) {
         static const int NUM_NODES = 6;
         static const int NUM_TABLETS = 1;

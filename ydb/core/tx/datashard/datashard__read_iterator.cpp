@@ -468,6 +468,10 @@ public:
         ui32 queryIndex)
     {
         ui64 rowsLeft = GetRowsLeft();
+        ui64 prechargedRowsSize = 0;
+        ui64 prechargedCount = 0;
+
+        txc.Env.EnableReadMissingReferences();
 
         bool ready = true;
         while (rowsLeft > 0) {
@@ -481,9 +485,30 @@ public:
             }
             if (!PrechargeKey(txc, State.Request->Keys[queryIndex])) {
                 ready = false;
+            } else {
+                const auto key = ToRawTypeValue(State.Request->Keys[queryIndex].GetCells(), TableInfo, true);
+
+                NTable::TRowState rowState;
+                rowState.Init(State.Columns.size());
+                NTable::TSelectStats stats;
+                txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
+
+                if (txc.Env.MissingReferencesSize()) {
+                    prechargedRowsSize += EstimateSize(*rowState);
+                }
             }
+
+            prechargedCount++;
+
+            if (ShouldStop(prechargedCount, prechargedRowsSize + txc.Env.MissingReferencesSize())) {
+                break;
+            }
+
             --rowsLeft;
         }
+
+        txc.Env.DisableReadMissingReferences();
+
         return ready;
     }
 

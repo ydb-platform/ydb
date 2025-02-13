@@ -523,6 +523,7 @@ public:
         bucket.LineCount++;
 
         // Prepare space for raw data
+        MKQL_ENSURE(BufferForUsedInputItems.size() == 0, "Internal logic error");
         BufferForUsedInputItems.resize(ItemNodesSize);
         BufferForUsedInputItemsBucketId = bucketId;
 
@@ -1497,7 +1498,6 @@ public:
             while (true) {
                 switch(ptr->Update()) {
                     case TSpillingSupportState::EUpdateResult::ReadInput: {
-                        // std::cerr << "[update] Readinput\n";
                         for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
                             fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
                         switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
@@ -1512,35 +1512,28 @@ public:
                         break;
                     }
                     case TSpillingSupportState::EUpdateResult::Yield:
-                        // std::cerr << "[update] Yield\n";
                         return EFetchResult::Yield;
                     case TSpillingSupportState::EUpdateResult::ExtractRawData:
-                        // std::cerr << "[update] ExtractRawData\n";
                         Nodes.ExtractRawData(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                         break;
                     case TSpillingSupportState::EUpdateResult::Extract:
-                        // std::cerr << "[update] Extract\n";
                         if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
                             Nodes.FinishItem(ctx, values, output);
                             return EFetchResult::One;
                         }
                         continue;
                     case TSpillingSupportState::EUpdateResult::Finish:
-                        // std::cerr << "[update] Finish\n";
                         return EFetchResult::Finish;
                 }
 
                 switch(ptr->TasteIt()) {
                     case TSpillingSupportState::ETasteResult::Init:
-                        // std::cerr << "[TasteIt] Init\n";
                         Nodes.ProcessItem(ctx, nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                         break;
                     case TSpillingSupportState::ETasteResult::Update:
-                        // std::cerr << "[TasteIt] Update\n";
                         Nodes.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                         break;
                     case TSpillingSupportState::ETasteResult::ConsumeRawData:
-                        // std::cerr << "[TasteIt] ConsumeRawData\n";
                         Nodes.ConsumeRawData(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                         break;
                 }

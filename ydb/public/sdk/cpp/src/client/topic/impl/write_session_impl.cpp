@@ -988,6 +988,7 @@ TStringBuilder TWriteSessionImpl::LogPrefixImpl() const {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     TStringBuilder ret;
+    ret << " TraceId [" << Settings.TraceId_ << "] ";;
     ret << " SessionId [" << SessionId << "] ";
 
     if (Settings.PartitionId_.has_value() || DirectWriteToPartitionId.has_value()) {

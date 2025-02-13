@@ -13,9 +13,11 @@ from ...retries import (
     RetrySettings,
     retry_operation_async,
 )
+from ...query.base import BaseQueryTxMode
 from ...query.base import QueryClientSettings
 from ... import convert
 from ..._grpc.grpcwrapper import common_utils
+from ..._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,39 @@ class QuerySessionPool:
         async def wrapped_callee():
             async with self.checkout() as session:
                 return await callee(session, *args, **kwargs)
+
+        return await retry_operation_async(wrapped_callee, retry_settings)
+
+    async def retry_tx_async(
+        self,
+        callee: Callable,
+        tx_mode: Optional[BaseQueryTxMode] = None,
+        retry_settings: Optional[RetrySettings] = None,
+        *args,
+        **kwargs,
+    ):
+        """Special interface to execute a bunch of commands with transaction in a safe, retriable way.
+
+        :param callee: A function, that works with session.
+        :param tx_mode: Transaction mode, which is a one from the following choises:
+          1) QuerySerializableReadWrite() which is default mode;
+          2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
+          3) QuerySnapshotReadOnly();
+          4) QueryStaleReadOnly().
+        :param retry_settings: RetrySettings object.
+
+        :return: Result sets or exception in case of execution errors.
+        """
+
+        tx_mode = tx_mode if tx_mode else _ydb_query_public.QuerySerializableReadWrite()
+        retry_settings = RetrySettings() if retry_settings is None else retry_settings
+
+        async def wrapped_callee():
+            async with self.checkout() as session:
+                async with session.transaction(tx_mode=tx_mode) as tx:
+                    result = await callee(tx, *args, **kwargs)
+                    await tx.commit()
+                return result
 
         return await retry_operation_async(wrapped_callee, retry_settings)
 

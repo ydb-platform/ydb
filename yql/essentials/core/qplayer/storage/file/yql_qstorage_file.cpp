@@ -166,12 +166,6 @@ public:
         }
     }
 
-    void Close() override final {
-        with_lock(Mutex_) {
-            DataFile_.Clear();
-        }
-    }
-
 private:
     const TQWriterSettings Settings_;
     const bool AlwaysFlushIndex_;

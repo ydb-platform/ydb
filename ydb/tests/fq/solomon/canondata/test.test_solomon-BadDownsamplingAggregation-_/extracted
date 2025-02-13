@@ -7,4 +7,4 @@ Issues:
     <main>:1:15: Error: downsampling.aggregation must be one of AVG, COUNT, DEFAULT_AGGREGATION, LAST, MAX, MIN, SUM, but has ABC
 
 
-(yexception) ydb/tests/tools/kqprun/kqprun.cpp:xxx: ISOTIME Query execution failed
+

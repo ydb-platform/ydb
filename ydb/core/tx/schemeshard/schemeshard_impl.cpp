@@ -4718,7 +4718,7 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
 }
 
 void TSchemeShard::StateConfigure(STFUNC_SIG) {
-    // SelfPinger->OnAnyEvent(this->ActorContext());
+    SelfPinger->OnAnyEvent(this->ActorContext());
 
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
@@ -4731,8 +4731,8 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvMigrateSchemeShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvPublishTenantAsReadOnly, Handle);
 
-        // HFuncTraced(TEvSchemeShard::TEvMeasureSelfResponseTime, SelfPinger->Handle);
-        // HFuncTraced(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime, SelfPinger->Handle);
+        HFuncTraced(TEvSchemeShard::TEvMeasureSelfResponseTime, SelfPinger->Handle);
+        HFuncTraced(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime, SelfPinger->Handle);
 
         //operation initiate msg, must return error
         HFuncTraced(TEvSchemeShard::TEvModifySchemeTransaction, Handle);
@@ -4762,7 +4762,7 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
 }
 
 void TSchemeShard::StateWork(STFUNC_SIG) {
-    // SelfPinger->OnAnyEvent(this->ActorContext());
+    SelfPinger->OnAnyEvent(this->ActorContext());
 
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
@@ -4771,8 +4771,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
         HFuncTraced(NKikimr::NOlap::NBackground::TEvRemoveSession, Handle);
 
-        // HFuncTraced(TEvSchemeShard::TEvMeasureSelfResponseTime, SelfPinger->Handle);
-        // HFuncTraced(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime, SelfPinger->Handle);
+        HFuncTraced(TEvSchemeShard::TEvMeasureSelfResponseTime, SelfPinger->Handle);
+        HFuncTraced(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime, SelfPinger->Handle);
 
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunDataErasure, DataErasureScheduler->Handle);
 

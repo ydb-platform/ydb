@@ -2679,6 +2679,9 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> request(new NMsgBusProxy::TBusBlobStorageConfigRequest());
         request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
         request->Record.SetDomain(Domain);
+        if (SecurityToken) {
+            request->Record.SetSecurityToken(SecurityToken);
+        }
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);

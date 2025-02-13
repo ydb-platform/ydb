@@ -2528,8 +2528,6 @@ TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizati
 
     auto stage = output.Stage().Cast<TDqStage>();
 
-    YQL_CLOG(TRACE, CoreDq) << "Before Stream Ensure";
-
     YQL_ENSURE(stage.Program().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream ||
                stage.Program().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow);
 

@@ -527,11 +527,13 @@ public:
             RequestId_,
             stage);
 
+        auto error = TError(NYT::EErrorCode::Timeout, "Request timed out");
+
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            AbortStreamsUnlessClosed(TError(NYT::EErrorCode::Timeout, "Request timed out"));
+            AbortStreamsUnlessClosed(error);
         }
 
-        CanceledList_.Fire(GetCanceledError());
+        CanceledList_.Fire(error << GetCanceledError());
 
         MethodPerformanceCounters_->TimedOutRequestCounter.Increment();
 

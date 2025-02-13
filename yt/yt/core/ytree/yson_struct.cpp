@@ -7,6 +7,8 @@
 
 #include <util/generic/algorithm.h>
 
+#include <util/system/platform.h>
+
 namespace NYT::NYTree {
 
 using namespace NYPath;
@@ -17,6 +19,19 @@ using namespace NYson;
 TYsonStructFinalClassHolder::TYsonStructFinalClassHolder(std::type_index typeIndex)
     : FinalType_(typeIndex)
 { }
+
+#ifdef _win_
+
+// This constructor is not actually called.
+// This dummy implementation is only provided for MSVC
+// as the latter fails to link the binary in debug mode unless it is implemented.
+// If we just delete it, the default constructor of TYsonStructLite
+// will be implicitly deleted as well and compilation will fail.
+TYsonStructFinalClassHolder::TYsonStructFinalClassHolder()
+    : FinalType_{typeid(void)}
+{ }
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -6990,6 +6990,96 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
     }
+
+    Y_UNIT_TEST(TestStopTenant) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0); // root hive good
+        TActorId sender = runtime.AllocateEdgeActor(0);
+
+        THolder<TEvHive::TEvCreateTablet> createTablet1 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet1->Record.AddAllowedDomains();
+        createTablet1->Record.MutableAllowedDomains(0)->SetSchemeShard(TTestTxConfig::SchemeShard);
+        createTablet1->Record.MutableAllowedDomains(0)->SetPathId(1);
+        createTablet1->Record.MutableObjectDomain()->SetSchemeShard(1);
+        createTablet1->Record.MutableObjectDomain()->SetPathId(3);
+        ui64 tablet1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true);
+
+        THolder<TEvHive::TEvCreateTablet> createTablet2 = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 2, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet2->Record.AddAllowedDomains();
+        createTablet2->Record.MutableAllowedDomains(0)->SetSchemeShard(TTestTxConfig::SchemeShard);
+        createTablet2->Record.MutableAllowedDomains(0)->SetPathId(1);
+        createTablet2->Record.MutableObjectDomain()->SetSchemeShard(1);
+        createTablet2->Record.MutableObjectDomain()->SetPathId(4);
+        ui64 tablet2 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet2), 0, true);
+
+        MakeSureTabletIsUp(runtime, tablet1, 0);
+        MakeSureTabletIsUp(runtime, tablet2, 0);
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_GET);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("StopDomain");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("ss");
+            p3->SetValue("1");
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("path");
+            p4->SetValue("4");
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+        }
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
+            runtime.DispatchEvents(options);
+        }
+
+        MakeSureTabletIsUp(runtime, tablet1, 0);
+        MakeSureTabletIsDown(runtime, tablet2, 0);
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_GET);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("StopDomain");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("ss");
+            p3->SetValue("1");
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("path");
+            p4->SetValue("4");
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("stop");
+            p5->SetValue("0");
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+        }
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvBootTablet);
+            runtime.DispatchEvents(options);
+        }
+
+        MakeSureTabletIsUp(runtime, tablet1, 0);
+        MakeSureTabletIsUp(runtime, tablet2, 0);
+    }
 }
 
 Y_UNIT_TEST_SUITE(THeavyPerfTest) {

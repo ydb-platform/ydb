@@ -157,7 +157,10 @@ void TCommandExportToYt::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
 
+void TCommandExportToYt::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);
 
@@ -317,6 +320,10 @@ void TCommandExportToS3::Parse(TConfig& config) {
     if (Items.empty()) {
         throw TMisuseException() << "At least one item should be provided";
     }
+}
+
+void TCommandExportToS3::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
 
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);

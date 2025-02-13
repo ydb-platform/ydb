@@ -15,6 +15,7 @@ RECURSE(
     kqp
     large_serializable
     limits
+    minidumps
     postgresql
     query_cache
     rename

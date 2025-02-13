@@ -21,7 +21,7 @@ namespace NKikimr {
 
         // process on-disk data
         void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
-                ui64 /*circaLsn*/) {
+                ui64 /*circaLsn*/, const void* /*sst*/) {
             if (memRec.GetType() != TBlobType::DiskBlob) {
                 return;
             }
@@ -68,9 +68,9 @@ namespace NKikimr {
 
         // process on-disk data
         void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
-                ui64 circaLsn) {
+                ui64 circaLsn, const auto *sst) {
             if (memRec.GetType() == TBlobType::DiskBlob) {
-                TBlobLocationExtractorMerger::AddFromSegment(memRec, outbound, key, circaLsn);
+                TBlobLocationExtractorMerger::AddFromSegment(memRec, outbound, key, circaLsn, sst);
             }
         }
 

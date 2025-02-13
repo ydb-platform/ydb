@@ -848,7 +848,8 @@ private:
                 << importInfo->Settings.items(msg.ItemIdx).source_prefix() << NYdb::NDump::NFiles::CreateView().FileName;
 
             NYql::TIssues issues;
-            if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, source, issues)) {
+            if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
+                issues.AddIssue(TStringBuilder() << "path: " << source);
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid view creation query");
             }
             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(

@@ -1069,7 +1069,6 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
 
     TKey resKey = newWrite->Key;
     resKey.SetType(TKeyPrefix::TypeData);
-    write->SetKeyToCache(resKey.ToString());
     WriteCycleSize += newWrite->Value.size();
 }
 
@@ -1485,9 +1484,6 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());
     write->SetValue(valueD);
-
-    if (!key.IsHead())
-        write->SetKeyToCache(key.Data(), key.Size());
 
     bool isInline = key.IsHead() && valueD.size() < MAX_INLINE_SIZE;
 

@@ -132,6 +132,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.__configurator.suppress_version_check:
             command.append("--suppress-version-check")
 
+        if self.__configurator.use_config_store:
+            command.append("--config-store=%s" % self.__config_path)
+        else:
+            command.append("--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"))
+
         if self.__node_broker_port is not None:
             command.append("--node-broker=%s%s:%d" % (
                 "grpcs://" if self.__configurator.grpc_ssl_enable else "",
@@ -169,7 +174,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         command.extend(
             [
-                "--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"),
                 "--grpc-port=%s" % self.grpc_port,
                 "--mon-port=%d" % self.mon_port,
                 "--ic-port=%d" % self.ic_port,

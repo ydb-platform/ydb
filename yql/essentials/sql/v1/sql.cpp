@@ -91,7 +91,7 @@ NYql::TAstParseResult SqlASTToYql(const TString& query,
 NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules)
 {
     TAstParseResult res;
-    const TString queryName = "query";
+    const TString queryName = settings.File;
 
     NSQLTranslation::TSQLHints hints;
     auto lexer = MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
@@ -182,6 +182,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore59: // alter transfer
         case TRule_sql_stmt_core::kAltSqlStmtCore60: // drop transfer
         case TRule_sql_stmt_core::kAltSqlStmtCore61: // alter database
+        case TRule_sql_stmt_core::kAltSqlStmtCore62: // show create table
             return false;
     }
 }
@@ -190,7 +191,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& queryText, cons
     TVector<NYql::TStmtParseInfo>* stmtParseInfo)
 {
     TVector<TAstParseResult> result;
-    const TString queryName = "query";
+    const TString queryName = settings.File;
     TIssues issues;
 
     NSQLTranslation::TSQLHints hints;
@@ -261,7 +262,7 @@ bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, 
 
     for (auto& currentQuery : parts) {
         NYql::TIssues parserIssues;
-        auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
+        auto message = NSQLTranslationV1::SqlAST(currentQuery, settings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
             settings.AnsiLexer, settings.Antlr4Parser, settings.TestAntlr4, settings.Arena);
         if (!message) {
             // Skip empty statements

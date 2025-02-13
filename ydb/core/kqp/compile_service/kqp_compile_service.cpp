@@ -292,12 +292,11 @@ private:
         ui64 rangesLimit = TableServiceConfig.GetExtractPredicateRangesLimit();
         ui64 idxLookupPointsLimit = TableServiceConfig.GetIdxLookupJoinPointsLimit();
 
-        bool enableSequences = TableServiceConfig.GetEnableSequences();
-        bool enableColumnsWithDefault = TableServiceConfig.GetEnableColumnsWithDefault();
         bool allowOlapDataQuery = TableServiceConfig.GetAllowOlapDataQuery();
         bool enableOlapSink = TableServiceConfig.GetEnableOlapSink();
         bool enableOltpSink = TableServiceConfig.GetEnableOltpSink();
         bool enableHtapTx = TableServiceConfig.GetEnableHtapTx();
+        bool enableStreamWrite = TableServiceConfig.GetEnableStreamWrite();
         bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
         auto blockChannelsMode = TableServiceConfig.GetBlockChannelsMode();
 
@@ -327,9 +326,8 @@ private:
             TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
             TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
-            TableServiceConfig.GetEnableSequences() != enableSequences ||
-            TableServiceConfig.GetEnableColumnsWithDefault() != enableColumnsWithDefault ||
             TableServiceConfig.GetAllowOlapDataQuery() != allowOlapDataQuery ||
+            TableServiceConfig.GetEnableStreamWrite() != enableStreamWrite ||
             TableServiceConfig.GetEnableOlapSink() != enableOlapSink ||
             TableServiceConfig.GetEnableOltpSink() != enableOltpSink ||
             TableServiceConfig.GetEnableHtapTx() != enableHtapTx ||

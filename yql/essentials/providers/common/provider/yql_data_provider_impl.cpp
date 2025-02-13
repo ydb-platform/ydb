@@ -10,6 +10,11 @@ namespace NYql {
 
 using namespace NNodes;
 
+bool TPlanFormatterBase::HasCustomPlan(const TExprNode& node) {
+    Y_UNUSED(node);
+    return false;
+}
+
 void TPlanFormatterBase::WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) {
     Y_UNUSED(node);
     Y_UNUSED(writer);
@@ -337,6 +342,14 @@ IDqIntegration* TDataProviderBase::GetDqIntegration() {
 }
 
 IDqOptimization* TDataProviderBase::GetDqOptimization() {
+    return nullptr;
+}
+
+IYtflowIntegration* TDataProviderBase::GetYtflowIntegration() {
+    return nullptr;
+}
+
+IYtflowOptimization* TDataProviderBase::GetYtflowOptimization() {
     return nullptr;
 }
 

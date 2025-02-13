@@ -742,6 +742,7 @@ message TKqpTableSinkSettings {
     repeated uint32 WriteIndexes = 13;
     optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 14;
     optional NKikimrDataEvents.ELockMode LockMode = 15;
+    optional bool EnableStreamWrite = 16;
 }
 
 message TKqpStreamLookupSettings {

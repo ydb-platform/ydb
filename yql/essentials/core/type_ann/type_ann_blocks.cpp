@@ -872,11 +872,11 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+    if (!EnsureWideStreamType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    const auto multiType = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
     TTypeAnnotationNode::TListType retMultiType;
     for (const auto& type : multiType->GetItems()) {
         if (type->IsBlockOrScalar()) {
@@ -893,7 +893,7 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
 
     retMultiType.push_back(ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
     auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(retMultiType);
-    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
+    input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(outputItemType));
     return IGraphTransformer::TStatus::Ok;
 }
 

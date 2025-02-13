@@ -66,7 +66,8 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         if self.s3_client.get_bucket_stat(medium_bucket) != (0, 0):
             raise Exception("Bucket for medium data is not empty")
 
-        self.ydb_client.query(f"""
+        self.ydb_client.query(
+            f"""
             CREATE TABLE `{table_path}` (
                 ts Timestamp NOT NULL,
                 s String,
@@ -229,7 +230,8 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         if self.s3_client.get_bucket_stat(self.frozen_bucket) != (0, 0):
             raise Exception("Bucket for frozen data is not empty")
 
-        self.ydb_client.query(f"""
+        self.ydb_client.query(
+            f"""
             CREATE TABLE `{table_path}` (
                 ts Timestamp NOT NULL,
                 s String,

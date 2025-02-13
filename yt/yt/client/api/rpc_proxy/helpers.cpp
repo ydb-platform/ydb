@@ -732,6 +732,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
         protoOperation->set_suspended(*operation.Suspended);
     }
 
+    if (operation.SuspendReason) {
+        protoOperation->set_suspend_reason(*operation.SuspendReason);
+    }
+
     if (operation.Events) {
         protoOperation->set_events(operation.Events.ToString());
     }

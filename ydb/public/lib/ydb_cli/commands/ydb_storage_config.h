@@ -9,7 +9,10 @@ namespace NYdb::NConsoleClient::NStorageConfig {
 
 class TCommandStorageConfig : public TClientCommandTree {
 public:
-    TCommandStorageConfig();
+    TCommandStorageConfig(std::optional<bool> overrideOnlyExplicitProfile = std::nullopt);
+    void PropagateFlags(const TCommandFlags& flags) override;
+private:
+    std::optional<bool> OverrideOnlyExplicitProfile;
 };
 
 class TCommandStorageConfigReplace : public TYdbCommand {

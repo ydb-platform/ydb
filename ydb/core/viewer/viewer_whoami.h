@@ -2,6 +2,7 @@
 #include "json_handlers.h"
 #include "viewer.h"
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/auth.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 #include <ydb/library/aclib/aclib.h>
@@ -29,18 +30,6 @@ public:
         ReplyAndDie(ctx);
     }
 
-    bool CheckGroupMembership(std::unique_ptr<NACLib::TUserToken>& token, const NProtoBuf::RepeatedPtrField<TString>& sids) {
-        if (sids.empty()) {
-            return true;
-        }
-        for (const auto& sid : sids) {
-            if (token->IsExist(sid)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     void ReplyAndDie(const  TActorContext &ctx) {
         NACLibProto::TUserToken userToken;
         Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(Event->Get()->UserToken);
@@ -63,10 +52,11 @@ public:
         if (userToken.HasAuthType()) {
             json["AuthType"] = userToken.GetAuthType();
         }
-        auto token = std::make_unique<NACLib::TUserToken>(userToken);
-        json["IsViewerAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
-        json["IsMonitoringAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
-        json["IsAdministrationAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+
+        NACLib::TUserToken token(std::move(userToken));
+        json["IsViewerAllowed"] = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
+        json["IsMonitoringAllowed"] = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
+        json["IsAdministrationAllowed"] = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
         ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }

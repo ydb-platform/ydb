@@ -88,8 +88,9 @@ namespace NKikimr::NBsController {
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNeeded:
                 if (ConsolePipe) {
                     Y_ABORT_UNLESS(Self.YamlConfig);
-                    const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig;
-                    NTabletPipe::SendData(Self.SelfId(), ConsolePipe, new TEvBlobStorage::TEvControllerConsoleCommitRequest(yaml));
+                    if (const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig; yaml) {
+                        NTabletPipe::SendData(Self.SelfId(), ConsolePipe, new TEvBlobStorage::TEvControllerConsoleCommitRequest(yaml));
+                    }
                 }
                 break;
 
@@ -143,8 +144,9 @@ namespace NKikimr::NBsController {
         }
         if (ConsolePipe) {
             Y_ABORT_UNLESS(Self.YamlConfig);
-            const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig;
-            NTabletPipe::SendData(Self.SelfId(), ConsolePipe, new TEvBlobStorage::TEvControllerConsoleCommitRequest(yaml));
+            if (const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig; yaml) {
+                NTabletPipe::SendData(Self.SelfId(), ConsolePipe, new TEvBlobStorage::TEvControllerConsoleCommitRequest(yaml));
+            }
         } else {
             Y_ABORT_UNLESS(!ClientId);
         }
@@ -170,7 +172,7 @@ namespace NKikimr::NBsController {
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted:
-                STLOG(PRI_CRIT, BS_CONTROLLER, BSC28, "Console config not commited");
+                STLOG(PRI_CRIT, BS_CONTROLLER, BSC28, "Console config not committed");
                 Y_DEBUG_ABORT();
                 break;
 

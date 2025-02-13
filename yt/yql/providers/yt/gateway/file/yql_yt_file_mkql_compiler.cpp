@@ -661,7 +661,9 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             }
 
             if (IsWideBlockType(lambdaInputType)) {
-                values = ctx.ProgramBuilder.WideToBlocks(values);
+                values = ctx.ProgramBuilder.ToFlow(
+                    ctx.ProgramBuilder.WideToBlocks(
+                        ctx.ProgramBuilder.FromFlow(values)));
             }
 
             NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMap.Mapper().Ref().UniqueId());
@@ -1113,7 +1115,8 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
                 auto values = BuildTableContentCall("YtTableInputFile", outputType, cluster,
                     ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
                 values = ApplyPathRangesAndSampling(values, outputType, ytRead.Input().Ref(), ctx);
-                return ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.WideToBlocks(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
+
+                return ctx.ProgramBuilder.WideToBlocks(ctx.ProgramBuilder.FromFlow(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
             }
 
             return TRuntimeNode();

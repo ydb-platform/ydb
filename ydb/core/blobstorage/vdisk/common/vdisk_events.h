@@ -771,6 +771,8 @@ namespace NKikimr {
         // LWTrace doesn't support distributed shuttels yet
         mutable NLWTrace::TOrbit Orbit;
 
+        TDiskPart WrittenLocation;
+
         TEvVPutResult();
 
         TEvVPutResult(const NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, const TVDiskID &vdisk,

@@ -180,7 +180,6 @@ namespace NKikimr::NStorage {
         TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         TControlWrapper MaxChunksToDefragInflight;
 
-        TControlWrapper ThrottlingDeviceSpeed;
         TControlWrapper ThrottlingDryRun;
         TControlWrapper ThrottlingMinLevel0SstCount;
         TControlWrapper ThrottlingMaxLevel0SstCount;

@@ -3455,6 +3455,378 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
     }
 
+    Y_UNIT_TEST(CompactedVolatileChangesCommit) {
+        // Test explained:
+        // 1. distributed tx that writes some data (commits to channel 0 are blocked)
+        // 2. shard receives a successful readset and marks commits in local db
+        // 3. table is compacted (commit to channel 0 are blocked, but SST switches)
+        // 4. perform a read, it shouldn't reply with success (tx not persistent yet and may rollback)
+        // Note: this is already the case due to committing ops tracking
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        Cerr << "========= Creating table =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key uint32, value uint32, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+
+        // We need to fill table with some data
+        Cerr << "========= Upserting initial values =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (1, 1), (11, 11);
+                )"),
+            "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` WHERE key = 2;
+            )"),
+            "");
+
+        // We need to start a distributed write
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime);
+        Cerr << "========= Starting a distributed write =========" << Endl;
+        auto upsertFuture = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES (2, 2), (12, 12);
+        )");
+        runtime.WaitFor("blocked plans", [&]{ return blockedPlan.size() >= 2; });
+        UNIT_ASSERT_VALUES_EQUAL(blockedPlan.size(), 2u);
+
+        // Make sure the first blocked message is for the first shard
+        auto shard1actor = ResolveTablet(runtime, shards.at(0));
+        if (blockedPlan[0]->GetRecipientRewrite() != shard1actor) {
+            std::swap(blockedPlan[0], blockedPlan[1]);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(blockedPlan[0]->GetRecipientRewrite(), shard1actor);
+
+        // Block channel 0 commits at the first shard and wait for the commit attempt
+        TBlockEvents<TEvBlobStorage::TEvPut> blockedCommits(runtime,
+            [shard1 = shards.at(0)](const auto& ev) {
+                auto* msg = ev->Get();
+                if (msg->Id.TabletID() == shard1 && msg->Id.Channel() == 0) {
+                    return true;
+                }
+                return false;
+            });
+        Cerr << "========= Unblocking plan at shard1 =========" << Endl;
+        blockedPlan.Unblock(1);
+        runtime.WaitFor("two commits (plan + exec)", [&]{ return blockedCommits.size() >= 2; });
+
+        Cerr << "========= Unblocking plan at shard2 =========" << Endl;
+        blockedPlan.Unblock();
+        runtime.WaitFor("two more commits (readset + volatile commit)", [&]{ return blockedCommits.size() >= 4; });
+
+        Cerr << "========= Compacting table =========" << Endl;
+        CompactTable(runtime, shards.at(0), tableId, false);
+
+        Cerr << "========= Starting an immediate read =========" << Endl;
+        auto readFuture = KqpSimpleSend(runtime, R"(
+            SELECT key, value FROM `/Root/table` WHERE key = 2;
+        )");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(!readFuture.HasValue());
+
+        blockedCommits.Stop().Unblock();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(runtime.WaitFuture(std::move(upsertFuture))),
+            "<empty>");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(runtime.WaitFuture(std::move(readFuture))),
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+    }
+
+    Y_UNIT_TEST(CompactedVolatileChangesAbort) {
+        // Test explained:
+        // 1. distributed tx that writes some data, volatile transactions are persisted
+        // 2. commits to channel 0 are blocked
+        // 3. shard receives a nodata readset and starts to rollback the tx
+        // 4. tx is marked as removed in the local db, but it's not persistent yet
+        // 5. table is compacted, the commit is blocked, but SST switches
+        // 6. since there are no traces of the volatile tx in the table the
+        //    read may erroneously reply that these changes do not exist
+        // 7. a nodata readset is allowed to be spurious in tablets that cannot
+        //    commit, technically a newer generation may have committed already
+        // Note: in practice this shouldn't happen, since new generation commit
+        // implies older generations no longer having a read lease, and read
+        // results wouldn't be sent anyway, but there's no guarantee that it's
+        // true for all reads and decisions, we must wait for abort to commit.
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        Cerr << "========= Creating table =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key uint32, value uint32, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+
+        // We need to fill table with some data
+        Cerr << "========= Upserting initial values =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (1, 1), (11, 11);
+                )"),
+            "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` WHERE key = 2;
+            )"),
+            "");
+
+        // We need to start a distributed write
+        TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime);
+        Cerr << "========= Starting a distributed write =========" << Endl;
+        auto upsertFuture = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES (2, 2), (12, 12);
+        )");
+        runtime.WaitFor("blocked readsets", [&]{ return blockedReadSets.size() >= 4; });
+        UNIT_ASSERT_VALUES_EQUAL(blockedReadSets.size(), 4u);
+        blockedReadSets.Stop();
+
+        // Block channel 0 commits at the first shard
+        TBlockEvents<TEvBlobStorage::TEvPut> blockedCommits(runtime,
+            [shard1 = shards.at(0)](const auto& ev) {
+                auto* msg = ev->Get();
+                if (msg->Id.TabletID() == shard1 && msg->Id.Channel() == 0) {
+                    return true;
+                }
+                return false;
+            });
+
+        // Send a nodata reply to the shard1 expectation
+        Cerr << "========= Sending a spurious nodata reply =========" << Endl;
+        auto shard1actor = ResolveTablet(runtime, shards.at(0));
+        bool replied = false;
+        for (auto& ev : blockedReadSets) {
+            if (ev->Sender == shard1actor) {
+                const auto& record = ev->Get()->Record;
+                if (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET) {
+                    auto event = MakeHolder<TEvTxProcessing::TEvReadSet>(
+                        record.GetStep(),
+                        record.GetTxId(),
+                        record.GetTabletDest(),
+                        record.GetTabletSource(),
+                        shards.at(1));
+                    event->Record.SetFlags(NKikimrTx::TEvReadSet::FLAG_NO_DATA | NKikimrTx::TEvReadSet::FLAG_NO_ACK);
+                    runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), event.Release()));
+                    replied = true;
+                    break;
+                }
+            }
+        }
+        UNIT_ASSERT_C(replied, "Could not find an expected expectation readset");
+        runtime.WaitFor("one commit (volatile abort)", [&]{ return blockedCommits.size() >= 1; });
+
+        Cerr << "========= Compacting table =========" << Endl;
+        CompactTable(runtime, shards.at(0), tableId, false);
+
+        Cerr << "========= Starting an immediate read =========" << Endl;
+        auto readFuture = KqpSimpleSend(runtime, R"(
+            SELECT key, value FROM `/Root/table` WHERE key = 2;
+        )");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(!readFuture.HasValue());
+    }
+
+    Y_UNIT_TEST(GracefulShardRestartNoEarlyReadSetAck) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        struct TBootInfo {
+            ui32 Generation;
+            TActorId Launcher;
+        };
+        THashMap<ui64, TBootInfo> bootInfo;
+        auto observeBootInfo = runtime.AddObserver<TEvTablet::TEvBoot>([&](auto& ev) {
+            auto* msg = ev->Get();
+            auto& info = bootInfo[msg->TabletID];
+            info.Generation = msg->Generation;
+            info.Launcher = msg->Launcher;
+        });
+
+        Cerr << "========= Creating table =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key uint32, value uint32, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10, 20));
+            )"),
+            "SUCCESS");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 3u);
+        // const auto tableId = ResolveTableId(server, sender, "/Root/table");
+
+        // We need to fill table with some data
+        Cerr << "========= Upserting initial values =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (1, 1), (11, 11), (21, 21);
+                )"),
+            "<empty>");
+
+        Cerr << "========= Starting a transaction =========" << Endl;
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 11 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 21 } items { uint32_value: 21 } }");
+
+        Cerr << "========= Upserting a row to shard 2 to break the lock =========" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (11, 111);
+                )"),
+            "<empty>");
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // Block channel 0 commits at shard 3
+        TBlockEvents<TEvBlobStorage::TEvPut> blockedCommits(runtime,
+            [shard3 = shards.at(2)](const auto& ev) {
+                auto* msg = ev->Get();
+                if (msg->Id.TabletID() == shard3 && msg->Id.Channel() == 0) {
+                    return true;
+                }
+                return false;
+            });
+
+        // Block readsets at shard 3
+        TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime,
+            [shard3actor = ResolveTablet(runtime, shards.at(2))](const auto& ev) {
+                return ev->GetRecipientRewrite() == shard3actor;
+            });
+
+        // Force shard 1 to be the arbiter
+        TForceVolatileProposeArbiter forceArbiter(runtime, shards.at(0));
+
+        Cerr << "========= Starting to commit =========" << Endl;
+        auto commitFuture = KqpSimpleSendCommit(runtime, sessionId, txId, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES (2, 2), (12, 12), (22, 22);
+        )");
+
+        // After a short while shard 3 must have 2 blocked commits and 2 blocked readsets (expectation + abort):
+        // - Sys update on the new PlanStep
+        // - Execute and persist volatile tx
+        // - Processed abort tx persistence
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(blockedCommits.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(blockedReadSets.size(), 2u);
+
+        // Unblock readsets and wait for one more commit attempt (abort persistence)
+        blockedReadSets.Stop().Unblock();
+        runtime.WaitFor("1 more commit", [&]{ return blockedCommits.size() >= 3; });
+
+        // Block channel 0 commit responses at shard 3
+        TBlockEvents<TEvBlobStorage::TEvPutResult> blockedCommitResults(runtime,
+            [shard3 = shards.at(2)](const auto& ev) {
+                auto* msg = ev->Get();
+                if (msg->Id.TabletID() == shard3 && msg->Id.Channel() == 0) {
+                    return true;
+                }
+                return false;
+            });
+
+        // Unblock the first two commits and wait for their blocked responses
+        blockedCommits.Unblock(2);
+        runtime.WaitFor("2 commit results", [&]{ return blockedCommitResults.size() >= 2; });
+        blockedCommits.Stop();
+        blockedCommitResults.Stop();
+
+        Cerr << "========= Starting new shard3 generation =========" << Endl;
+        UNIT_ASSERT(bootInfo.contains(shards.at(2)));
+        auto shard3sys = ResolveTablet(runtime, shards.at(2), 0, true);
+        auto shard3info = bootInfo.at(shards.at(2));
+        runtime.Send(
+            new IEventHandle(shard3info.Launcher, shard3sys,
+                new TEvTablet::TEvTabletDead(shards.at(2), TEvTablet::TEvTabletDead::ReasonPill, shard3info.Generation)),
+            0, true);
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        InvalidateTabletResolverCache(runtime, shards.at(2), 0);
+
+        Cerr << "========= Unblocking old shard3 generation =========" << Endl;
+        blockedCommitResults.Unblock();
+        blockedCommits.Unblock();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(runtime.WaitFuture(std::move(commitFuture))),
+            "ERROR: ABORTED");
+
+        Cerr << "========= Final read (must not hang) =========" << Endl;
+        auto readFuture = KqpSimpleSend(runtime, R"(
+            SELECT key, value FROM `/Root/table` ORDER BY key;
+        )");
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_C(readFuture.HasValue(), "Read didn't finish in 100ms of simulated time");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(readFuture.ExtractValueSync()),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 11 } items { uint32_value: 111 } }, "
+            "{ items { uint32_value: 21 } items { uint32_value: 21 } }");
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)
 
 } // namespace NKikimr

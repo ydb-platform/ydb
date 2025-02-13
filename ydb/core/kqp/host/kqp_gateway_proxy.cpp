@@ -674,14 +674,6 @@ public:
                         }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
-                    if (sequences.size() > 0 && !sessionCtx->Config().EnableSequences) {
-                        IKqpGateway::TGenericResult errResult;
-                        errResult.AddIssue(NYql::TIssue("Sequences are not supported yet."));
-                        errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::UNSUPPORTED));
-                        tablePromise.SetValue(errResult);
-                        return;
-                    }
-
                     for(const auto& [seq, seqType]: sequences) {
                         auto seqDesc = schemeTx.MutableCreateIndexedTable()->MutableSequenceDescription()->Add();
                         seqDesc->SetName(seq);
@@ -1943,13 +1935,6 @@ public:
             const TCreateSequenceSettings& settings, bool existingOk) override {
         CHECK_PREPARED_DDL(CreateSequence);
 
-        if (!SessionCtx->Config().EnableSequences) {
-            IKqpGateway::TGenericResult errResult;
-            errResult.AddIssue(NYql::TIssue("Sequences are not supported yet."));
-            errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::UNSUPPORTED));
-            return MakeFuture(std::move(errResult));
-        }
-
         try {
 
             if (cluster != SessionCtx->GetCluster()) {
@@ -2024,13 +2009,6 @@ public:
             const NYql::TDropSequenceSettings& settings, bool missingOk) override {
         CHECK_PREPARED_DDL(DropSequence);
 
-        if (!SessionCtx->Config().EnableSequences) {
-            IKqpGateway::TGenericResult errResult;
-            errResult.AddIssue(NYql::TIssue("Sequences are not supported yet."));
-            errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::UNSUPPORTED));
-            return MakeFuture(std::move(errResult));
-        }
-
         try {
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
@@ -2073,13 +2051,6 @@ public:
     TFuture<TGenericResult> AlterSequence(const TString& cluster,
             const TAlterSequenceSettings& settings, bool missingOk) override {
         CHECK_PREPARED_DDL(AlterSequence);
-
-        if (!SessionCtx->Config().EnableSequences) {
-            IKqpGateway::TGenericResult errResult;
-            errResult.AddIssue(NYql::TIssue("Sequences are not supported yet."));
-            errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::UNSUPPORTED));
-            return MakeFuture(std::move(errResult));
-        }
 
         try {
 

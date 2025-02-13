@@ -246,7 +246,6 @@ namespace NKikimr {
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 
         ///////////// THROTTLING SETTINGS //////////////////
-        TControlWrapper ThrottlingDeviceSpeed;
         TControlWrapper ThrottlingDryRun;
         TControlWrapper ThrottlingMinLevel0SstCount;
         TControlWrapper ThrottlingMaxLevel0SstCount;

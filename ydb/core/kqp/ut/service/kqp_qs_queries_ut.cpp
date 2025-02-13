@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
@@ -690,6 +691,46 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             auto rollbackTxResult = transaction.Rollback().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(rollbackTxResult.GetStatus(), EStatus::NOT_FOUND, rollbackTxResult.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(Followers) {
+        NKikimrConfig::TAppConfig config;
+
+        auto kikimr = TKikimrRunner(TKikimrSettings().SetAppConfig(config).SetUseRealThreads(false));
+        auto db = kikimr.GetQueryClient();
+
+        TExecuteQuerySettings settings;
+
+        THashMap<TActorId, ui64> countResolveTablet;
+        countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] = 0;
+        countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] = 0;
+        auto counterObserver = [&countResolveTablet](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::TEvPipeCache::TEvGetTabletNode::EventType) {
+                countResolveTablet[ev->Recipient]++;
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        kikimr.GetTestServer().GetRuntime()->SetObserverFunc(counterObserver);
+
+        Y_DEFER {
+            kikimr.GetTestServer().GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        };
+
+        {
+            const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Key = 1u";
+            auto result = kikimr.RunCall([&] { return db.ExecuteQuery(query, NQuery::TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            CompareYson(R"([
+                [[1u];[-1]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] == 0);
+            // using followers resolver.
+            UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] > 0);
         }
     }
 
@@ -1653,7 +1694,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAuthToken("user0@builtin");
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
@@ -4490,14 +4532,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0);
                 INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (1u, 'test');
                 INSERT INTO `/Root/DataShard` (Col1, Col3, Col2) VALUES (2u, 't', 3);
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(10000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             {
                 auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(10000))).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
                 CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[3];["t"]]])");
@@ -4506,21 +4548,21 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             {
                 auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` SET Col2 = 42 WHERE Col3 == 'not found';
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(10000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             {
                 auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` SET Col2 = 42 WHERE Col3 == 't';
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(10000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             {
                 auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(10000))).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
                 CompareYson(output, R"([[0u;[0];#];[1u;#;["test"]];[2u;[42];["t"]]])");
@@ -4529,20 +4571,20 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             {
                 auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 1 AS Col2, 'text' AS Col3;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(10000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             {
                 auto it = client.ExecuteQuery(R"(
                 UPDATE `/Root/DataShard` ON SELECT 10u AS Col1, 1 AS Col2, 'text' AS Col3;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(10000))).ExtractValueSync();
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             }
 
             auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(10000))).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
                 TString output = StreamResultToYson(it);
                 CompareYson(output, R"([[0u;[1];["text"]];[1u;#;["test"]];[2u;[42];["t"]]])");

@@ -11,7 +11,7 @@ using namespace NSQLTranslationV1;
 std::pair<TParsedTokenList, NYql::TIssues> Tokenize(ILexer::TPtr& lexer, TString queryUtf8) {
     TParsedTokenList tokens;
     NYql::TIssues issues;
-    Tokenize(*lexer, queryUtf8, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS);
+    Tokenize(*lexer, queryUtf8, "", tokens, issues, SQL_MAX_PARSER_ERRORS);
     return {tokens, issues};
 }
 

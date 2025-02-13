@@ -1,13 +1,13 @@
 #include "rpc_scheme_base.h"
 #include "service_table.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 namespace NKikimr::NGRpcService {
 
 using namespace NActors;
+using namespace NYql;
 
 using TEvDescribeExternalTableRequest = TGrpcRequestOperationCall<
     Ydb::Table::DescribeExternalTableRequest,
@@ -18,65 +18,69 @@ class TDescribeExternalTableRPC : public TRpcSchemeRequestActor<TDescribeExterna
     using TBase = TRpcSchemeRequestActor<TDescribeExternalTableRPC, TEvDescribeExternalTableRequest>;
 
 public:
-    TDescribeExternalTableRPC(IRequestOpCtx* msg)
-        : TBase(msg)
-    {}
 
-    void Bootstrap(const TActorContext &ctx) {
-        TBase::Bootstrap(ctx);
+    using TBase::TBase;
 
-        const auto* request = GetProtoRequest();
-        const auto& path = request->path();
-        const auto paths = NKikimr::SplitPath(path);
-        if (paths.empty()) {
-            Request_->RaiseIssue(NYql::TIssue("Invalid path"));
-            return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
-        }
-
-        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        navigate->DatabaseName = CanonizePath(Request_->GetDatabaseName().GetOrElse(""));
-        auto& entry = navigate->ResultSet.emplace_back();
-        entry.Path = std::move(paths);
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        entry.SyncVersion = true;
-
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate));
-        Become(&TDescribeExternalTableRPC::StateWork);
+    void Bootstrap() {
+        DescribeScheme();
     }
 
 private:
-    void StateWork(TAutoPtr<IEventHandle>& ev) {
+
+    void DescribeScheme() {
+        auto ev = std::make_unique<TEvTxUserProxy::TEvNavigate>();
+        SetAuthToken(ev, *Request_);
+        SetDatabase(ev.get(), *Request_);
+        ev->Record.MutableDescribePath()->SetPath(GetProtoRequest()->path());
+
+        Send(MakeTxProxyID(), ev.release());
+        Become(&TDescribeExternalTableRPC::StateDescribeScheme);
+    }
+
+    STATEFN(StateDescribeScheme) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            default: TBase::StateWork(ev);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+        default:
+            return TBase::StateWork(ev);
         }
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        const auto* navigate = ev->Get()->Request.Get();
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->GetRecord();
+        const auto& pathDescription = record.GetPathDescription();
 
-        if (navigate->ResultSet.size() != 1) {
-            return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
+        if (record.HasReason()) {
+            Request_->RaiseIssue(TIssue(record.GetReason()));
         }
-        const auto& entry = navigate->ResultSet.front();
 
-        if (navigate->ErrorCount > 0) {
-            switch (entry.Status) {
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
-                return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
-            default:
-                return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
+        switch (record.GetStatus()) {
+            case NKikimrScheme::StatusSuccess: {
+                if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeExternalTable) {
+                    Request_->RaiseIssue(TIssue(
+                        TStringBuilder() << "Unexpected path type: " << pathDescription.GetSelf().GetPathType()
+                    ));
+                    return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                }
+
+                return ReplyWithResult(
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::Table::DescribeExternalTableResult(), // to do: convert private proto to public
+                    ctx
+                );
             }
-        }
-        if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            // an invariant is broken: error count is equal to zero, but the status is not ok
-            return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
-        }
+            case NKikimrScheme::StatusPathDoesNotExist:
+            case NKikimrScheme::StatusSchemeError:
+                return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
 
-        // to do: fill the description from the received navigation entry
-        Ydb::Table::DescribeExternalTableResult description;
-        return ReplyWithResult(Ydb::StatusIds::SUCCESS, description, ctx);
+            case NKikimrScheme::StatusAccessDenied:
+                return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
+
+            case NKikimrScheme::StatusNotAvailable:
+                return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
+
+            default:
+                return Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
+        }
     }
 };
 

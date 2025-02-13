@@ -47,6 +47,8 @@ namespace NKikimr::NBsController {
         bool CommitInProgress = false;
 
         std::optional<TString> PendingYamlConfig;
+        bool AllowUnknownFields = false;
+
         std::optional<std::optional<TString>> PendingStorageYamlConfig;
 
         void MakeCommitToConsole(TString& config, ui32 configVersion);

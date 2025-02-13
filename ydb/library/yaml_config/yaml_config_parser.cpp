@@ -699,8 +699,10 @@ namespace NKikimr::NYaml {
             auto& vdiskLoc = ctx.CombinedDiskInfo[TCombinedDiskInfoKey{}];
 
             vdiskLoc.SetNodeID("1");
-            vdiskLoc.SetPath(drivePath.value());
-            vdiskLoc.SetPDiskCategory(diskType.value());
+            if (drivePath && diskType) {
+                vdiskLoc.SetPath(drivePath.value());
+                vdiskLoc.SetPDiskCategory(diskType.value());
+            }
         }
 
         if (!config.HasChannelProfileConfig()) {
@@ -710,7 +712,9 @@ namespace NKikimr::NYaml {
                 auto& channel = *channelProfile.AddChannel();
                 channel.SetErasureSpecies(erasureName);
                 channel.SetPDiskCategory(1);
-                channel.SetStoragePoolKind(diskTypeLower.value());
+                if (diskTypeLower) {
+                    channel.SetStoragePoolKind(diskTypeLower.value());
+                }
             };
         }
     }
@@ -1417,7 +1421,8 @@ namespace NKikimr::NYaml {
     void TransformProtoConfig(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
         PrepareHosts(ephemeralConfig);
         MoveFields(ctx, config, ephemeralConfig);
-        ApplyDefaultConfigs(ctx, config, ephemeralConfig);
+        // FIXME
+        //ApplyDefaultConfigs(ctx, config, ephemeralConfig);
         PrepareNameserviceConfig(config, ephemeralConfig);
         PrepareStaticGroup(ctx, config, ephemeralConfig);
         PrepareBlobStorageConfig(config, ephemeralConfig);

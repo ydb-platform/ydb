@@ -122,7 +122,10 @@ public:
             opt(&T::has_main_config, &T::main_config),
             opt(&T::has_storage_config, &T::storage_config),
             opt(&T::has_switch_dedicated_storage_section, &T::switch_dedicated_storage_section),
-            request->dedicated_config_mode());
+            request->dedicated_config_mode(),
+            request->allow_unknown_fields(),
+            request->allow_incorrect_version(),
+            request->allow_incorrect_cluster());
     }
 };
 

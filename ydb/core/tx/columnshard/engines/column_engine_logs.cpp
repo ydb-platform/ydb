@@ -28,12 +28,13 @@ namespace NKikimr::NOlap {
 
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema)
+    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
     , SchemaObjectsCache(schemaCache)
     , TabletId(tabletId)
+    , Counters(counters)
     , LastPortion(0)
     , LastGranule(0) {
     ActualizationController = std::make_shared<NActualizer::TController>();
@@ -42,60 +43,17 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
 
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& schema)
+    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
     , SchemaObjectsCache(schemaCache)
     , TabletId(tabletId)
+    , Counters(counters)
     , LastPortion(0)
     , LastGranule(0) {
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, presetId, std::move(schema));
-}
-
-const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& TColumnEngineForLogs::GetStats() const {
-    return PathStats;
-}
-
-const TColumnEngineStats& TColumnEngineForLogs::GetTotalStats() {
-    Counters.Tables = GranulesStorage->GetTables().size();
-    return Counters;
-}
-
-void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, const EStatsUpdateType updateType) {
-    const TColumnEngineStats::TPortionsStats delta = TColumnEngineStats::TPortionsStats::DeltaStats(portionInfo);
-    const NPortion::EProduced statsClass = portionInfo.GetProduced();
-
-    const auto& updateStats = [&delta, updateType](TColumnEngineStats::TPortionsStats& container) {
-        switch (updateType) {
-            case EStatsUpdateType::ADD:
-                container += delta;
-                break;
-            case EStatsUpdateType::SUB:
-                container -= delta;
-                break;
-        }
-    };
-
-    if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD)) {
-        auto before = Counters.Active();
-        updateStats(Counters.StatsByType[statsClass]);
-        auto after = Counters.Active();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_stats_updated")("type", updateType)("path_id", portionInfo.GetPathId())(
-            "portion", portionInfo.GetPortionId())("before_size", before.Bytes)("after_size", after.Bytes)("before_rows", before.Rows)(
-            "after_rows", after.Rows);
-    } else {
-        updateStats(Counters.StatsByType[statsClass]);
-    }
-    const ui64 pathId = portionInfo.GetPathId();
-    Y_ABORT_UNLESS(pathId);
-    if (!PathStats.contains(pathId)) {
-        auto& stats = PathStats[pathId];
-        stats = std::make_shared<TColumnEngineStats>();
-        stats->Tables = 1;
-    }
-    updateStats(PathStats[pathId]->StatsByType[statsClass]);
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& indexInfo) {
@@ -196,7 +154,7 @@ std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_p
 bool TColumnEngineForLogs::FinishLoading() {
     for (const auto& [pathId, spg] : GranulesStorage->GetTables()) {
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
-            UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
+            Counters->AddPortion(*portionInfo);
             if (portionInfo->CheckForCleanup()) {
                 AddCleanupPortion(portionInfo);
             }
@@ -434,7 +392,7 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& po
     AFL_VERIFY(portionInfo);
     auto granule = GetGranulePtrVerified(portionInfo->GetPathId());
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
-    UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
+    Counters->AddPortion(*portionInfo);
     granule->AppendPortion(portionInfo);
     if (portionInfo->HasRemoveSnapshot()) {
         AddCleanupPortion(portionInfo);
@@ -444,7 +402,7 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& po
 void TColumnEngineForLogs::AppendPortion(const TPortionDataAccessor& portionInfo) {
     auto granule = GetGranulePtrVerified(portionInfo.GetPortionInfo().GetPathId());
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo.GetPortionInfo().GetPortionId()));
-    UpdatePortionStats(portionInfo.GetPortionInfo(), EStatsUpdateType::ADD);
+    Counters->AddPortion(portionInfo.GetPortionInfo());
     granule->AppendPortion(portionInfo);
     if (portionInfo.GetPortionInfo().HasRemoveSnapshot()) {
         AddCleanupPortion(portionInfo.GetPortionInfoPtr());
@@ -461,7 +419,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
         return false;
     } else {
         if (updateStats) {
-            UpdatePortionStats(*p, EStatsUpdateType::SUB);
+            Counters->RemovePortion(*p);
         }
         Y_ABORT_UNLESS(spg.ErasePortion(portion));
         return true;

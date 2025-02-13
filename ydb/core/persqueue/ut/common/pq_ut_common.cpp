@@ -12,6 +12,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/lib/base/msgbus.h>
 
+#include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/streams/bzip2/bzip2.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 
@@ -137,6 +139,65 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
     PQTabletPrepare(parameters, users, *context.Runtime, context.TabletId, context.Edge);
 }
 
+void PQTabletPrepareFromResource(const TTabletPreparationParameters& parameters,
+                                 const TVector<std::pair<TString, bool>>& users,
+                                 const TString& resourceName,
+                                 TTestActorRuntime& runtime,
+                                 ui64 tabletId,
+                                 TActorId edge)
+{
+    PQTabletPrepare(parameters,
+                    users,
+                    runtime,
+                    tabletId,
+                    edge);
+
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    size_t count = 0;
+
+    for (TStringStream stream(NResource::Find(resourceName)); true; ++count) {
+        TString key, encoded;
+
+        stream >> key >> encoded;
+        if (key.empty() || encoded.empty()) {
+            break;
+        }
+
+        auto decoded = Base64Decode(encoded);
+        TStringInput decodedStream(decoded);
+        TBZipDecompress decompressor(&decodedStream);
+
+        auto* cmd = request->Record.AddCmdWrite();
+        cmd->SetKey(key);
+        cmd->SetValue(decompressor.ReadAll());
+    }
+
+    runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.WriteResultSize(), count);
+
+    for (size_t i = 0; i < response->Record.WriteResultSize(); ++i) {
+        const auto &result = response->Record.GetWriteResult(i);
+        UNIT_ASSERT(result.HasStatus());
+        UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
+    }
+
+    PQTabletRestart(runtime, tabletId, edge);
+}
+
+void PQTabletPrepareFromResource(const TTabletPreparationParameters& parameters,
+                                 const TVector<std::pair<TString, bool>>& users,
+                                 const TString& resourceName,
+                                 TTestContext& context)
+{
+    PQTabletPrepareFromResource(parameters, users, resourceName, *context.Runtime, context.TabletId, context.Edge);
+}
 
 void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset, TTestContext& tc, i64 ctime,
                   ui64 writeTime) {
@@ -294,37 +355,6 @@ void PQTabletRestart(TTestActorRuntime& runtime, ui64 tabletId, TActorId edge) {
     runtime.DispatchEvents(rebootOptions);
 }
  
-void SetTabletValue(TTestContext& tc,
-                    const TString& key, const TString& value)
-{
-    return SetTabletValue(*tc.Runtime, tc.TabletId, key, value, tc.Edge);
-}
-
-void SetTabletValue(TTestActorRuntime& runtime,
-                    ui64 tabletId,
-                    const TString& key,
-                    const TString& value,
-                    const TActorId& edge)
-{
-    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-    auto* cmd = request->Record.AddCmdWrite();
-    cmd->SetKey(key);
-    cmd->SetValue(value);
-
-    runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
-
-    TAutoPtr<IEventHandle> handle;
-    auto* response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
-    UNIT_ASSERT(response);
-    UNIT_ASSERT(response->Record.HasStatus());
-    UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-
-    UNIT_ASSERT_VALUES_EQUAL(response->Record.WriteResultSize(), 1);
-    const auto &result = response->Record.GetWriteResult(0);
-    UNIT_ASSERT(result.HasStatus());
-    UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
-}
-
 TActorId SetOwner(const ui32 partition, TTestContext& tc, const TString& owner, bool force) {
     return SetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition, owner, force);
 }

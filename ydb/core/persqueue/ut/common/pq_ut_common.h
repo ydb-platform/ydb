@@ -262,9 +262,18 @@ struct TTabletPreparationParameters {
     TString account{"federationAccount"};
     ::NKikimrPQ::TPQTabletConfig_EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY;
 };
+
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TVector<std::pair<TString, bool>>& users,
+    TTestActorRuntime& runtime,
+    ui64 tabletId,
+    TActorId edge);
+
+void PQTabletPrepareFromResource(
+    const TTabletPreparationParameters& parameters,
+    const TVector<std::pair<TString, bool>>& users,
+    const TString& resourceName,
     TTestActorRuntime& runtime,
     ui64 tabletId,
     TActorId edge);
@@ -284,11 +293,6 @@ void PQTabletRestart(
     ui64 tabletId,
     TActorId edge);
 
-void SetTabletValue(TTestActorRuntime& runtime,
-                    ui64 tabletId,
-                    const TString& key, const TString& value,
-                    const TActorId& edge);
-
 /*
 ** TTestContext requiring functions
 */
@@ -296,6 +300,12 @@ void SetTabletValue(TTestActorRuntime& runtime,
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TVector<std::pair<TString, bool>>& users,
+    TTestContext& context);
+
+void PQTabletPrepareFromResource(
+    const TTabletPreparationParameters& parameters,
+    const TVector<std::pair<TString, bool>>& users,
+    const TString& resourceName,
     TTestContext& context);
 
 void PQBalancerPrepare(
@@ -307,9 +317,6 @@ void PQBalancerPrepare(
     bool kill = true);
 
 void PQTabletRestart(TTestContext& context);
-
-void SetTabletValue(TTestContext& context,
-                    const TString& key, const TString& value);
 
 TActorId RegisterReadSession(
    const TString& session,

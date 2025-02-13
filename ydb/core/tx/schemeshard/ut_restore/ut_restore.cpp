@@ -5129,49 +5129,51 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(Changefeeds) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
+    // Y_UNIT_TEST(Changefeeds) {
+    //     TTestBasicRuntime runtime;
+    //     TTestEnv env(runtime);
+    //     ui64 txId = 100;
 
-        // const auto changefeedDesc = ;
+    //     const auto changefeedDesc = R"(
 
-        const auto data = GenerateTestData(R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            primary_key: "key"
-        )", {{"a", 1}}, permissions);
+    //     )";
 
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
+    //     const auto data = GenerateTestData(R"(
+    //         columns {
+    //           name: "key"
+    //           type { optional_type { item { type_id: UTF8 } } }
+    //         }
+    //         columns {
+    //           name: "value"
+    //           type { optional_type { item { type_id: UTF8 } } }
+    //         }
+    //         primary_key: "key"
+    //     )", {{"a", 1}});
 
-        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
+    //     TPortManager portManager;
+    //     const ui16 port = portManager.GetPort();
 
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
+    //     TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+    //     UNIT_ASSERT(s3Mock.Start());
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::PathExist,
-            NLs::HasOwner("eve"),
-            NLs::HasRight("+R:alice"),
-            NLs::HasRight("+W:alice"),
-            NLs::HasRight("+R:bob")
-        });
-    }
+    //     TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+    //         ImportFromS3Settings {
+    //           endpoint: "localhost:%d"
+    //           scheme: HTTP
+    //           items {
+    //             source_prefix: ""
+    //             destination_path: "/MyRoot/Table"
+    //           }
+    //         }
+    //     )", port));
+    //     env.TestWaitNotification(runtime, txId);
+
+    //     TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+    //         NLs::PathExist,
+    //         NLs::HasOwner("eve"),
+    //         NLs::HasRight("+R:alice"),
+    //         NLs::HasRight("+W:alice"),
+    //         NLs::HasRight("+R:bob")
+    //     });
+    // }
 }

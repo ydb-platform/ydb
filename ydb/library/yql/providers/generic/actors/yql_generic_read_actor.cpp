@@ -418,8 +418,6 @@ namespace NYql::NDq {
         TVector<TString> splitDescriptions;
         ExtractSplitDescriptions(splitDescriptions, taskParams, readRanges);
 
-        Cout << "CRAB CreateGenericReadActor: " << readRanges.size() << Endl;
-
         const auto dsi = source.select().data_source_instance();
         YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
                                         << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())

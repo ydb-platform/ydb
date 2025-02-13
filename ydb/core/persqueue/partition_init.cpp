@@ -486,20 +486,40 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     };
 }
 
-static bool IsIncludes(const TKey& lhs, const TKey& rhs)
-{
-    if (lhs.GetOffset() > rhs.GetOffset()) {
-        return false;
-    }
-    if (lhs.GetOffset() + lhs.GetCount() < rhs.GetOffset() + rhs.GetCount()) {
-        return false;
-    }
-    return true;
-}
+enum EKeyPosition {
+    RhsContainsLhs,
+    RhsAfterLhs,
+    LhsContainsRhs
+};
 
-static bool IsAdjacentToTheLeft(const TKey& lhs, const TKey& rhs)
+static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
 {
-    return lhs.GetOffset() + lhs.GetCount() == rhs.GetOffset();
+    Y_ABORT_UNLESS(lhs.GetOffset() <= rhs.GetOffset(),
+                   "lhs: %s, rhs: %s",
+                   lhs.ToString().data(), rhs.ToString().data());
+
+    if (lhs.GetOffset() == rhs.GetOffset()) {
+        if (lhs.GetPartNo() == rhs.GetPartNo()) {
+            Y_ABORT_UNLESS(lhs.GetCount() < rhs.GetCount(),
+                           "lhs: %s, rhs: %s",
+                           lhs.ToString().data(), rhs.ToString().data());
+            return RhsContainsLhs;
+        }
+        Y_ABORT_UNLESS(lhs.GetPartNo() + lhs.GetInternalPartsCount() == rhs.GetPartNo(),
+                       "lhs: %s, rhs: %s",
+                       lhs.ToString().data(), rhs.ToString().data());
+        return RhsAfterLhs;
+    }
+
+    // case lhs.GetOffset() < rhs.GetOffset()
+    if (ui64 nextOffset = lhs.GetOffset() + lhs.GetCount(); nextOffset > rhs.GetOffset()) {
+        return LhsContainsRhs;
+    } else if (nextOffset == rhs.GetOffset()) {
+        return RhsAfterLhs;
+    }
+
+    Y_ABORT("lhs: %s, rhs: %s",
+            lhs.ToString().data(), rhs.ToString().data());
 }
 
 static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
@@ -527,25 +547,25 @@ static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueRespo
 
         auto candidate = MakeKeyFromString(keys[i], partitionId);
 
-        // `lastKey` includes `candidate`
-        if (IsIncludes(lastKey, candidate)) {
-            continue;
-        }
-        // `candidate` includes `lastKey`
-        if (IsIncludes(candidate, lastKey)) {
+        switch (KeyPosition(lastKey, candidate)) {
+        case RhsContainsLhs:
             filtered.back() = keys[i];
             lastKey = MakeKeyFromString(filtered.back(), partitionId);
-            continue;
-        }
-        // `lastKey` is adjacent to `candidate' on the left
-        if (IsAdjacentToTheLeft(lastKey, candidate)) {
+            break;
+        case RhsAfterLhs:
             filtered.push_back(keys[i]);
             lastKey = MakeKeyFromString(filtered.back(), partitionId);
-            continue;
+            break;
+        case LhsContainsRhs:
+            break;
+        default:
+            Y_ABORT("A strange key %s, last key %s",
+                    keys[i].data(), filtered.back().data());
         }
+    }
 
-        Y_ABORT_UNLESS(false, "A strange key %s, last key %s",
-                       keys[i].data(), filtered.back().data());
+    for (const auto& k : filtered) {
+        Cerr << "key: " << k << Endl;
     }
 
     return {filtered.begin(), filtered.end()};

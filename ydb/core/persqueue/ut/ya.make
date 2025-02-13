@@ -59,6 +59,8 @@ RESOURCE(
     ydb/core/persqueue/ut/resources/counters_labeled.json counters_labeled.json
 
     ydb/core/persqueue/ut/resources/new_version_topic.dat new_version_topic.dat
+    ydb/core/persqueue/ut/resources/new_version_topic_many_parts_1.dat new_version_topic_many_parts_1.dat
+    ydb/core/persqueue/ut/resources/new_version_topic_many_parts_2.dat new_version_topic_many_parts_2.dat
 )
 
 END()

@@ -2429,13 +2429,20 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
     });
 }
 
-Y_UNIT_TEST(Test_The_Partition_And_Blob_Created_By_The_New_Version)
+void TestHowDoesABatchDownloadBlobsFromANewVersion(const TString& resourceName)
 {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();
 
-    PQTabletPrepareFromResource({.partitions = 1}, {}, "new_version_topic.dat", tc);
+    PQTabletPrepareFromResource({.partitions = 1}, {}, resourceName, tc);
+}
+
+Y_UNIT_TEST(Test_The_Partition_And_Blob_Created_By_The_New_Version)
+{
+    TestHowDoesABatchDownloadBlobsFromANewVersion("new_version_topic.dat");
+    TestHowDoesABatchDownloadBlobsFromANewVersion("new_version_topic_many_parts_1.dat");
+    TestHowDoesABatchDownloadBlobsFromANewVersion("new_version_topic_many_parts_2.dat");
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

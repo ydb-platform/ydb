@@ -597,7 +597,7 @@ void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, NKi
         appConfig.MutableSelfManagementConfig()->SetInitialConfigYaml(mainYamlConfigString);
     }
 
-    if (appConfig.HasConfigStorePath() && mainYamlConfigFile.StartsWith(appConfig.GetConfigStorePath())) {
+    if (appConfig.GetConfigLoadedFromStore()) {
         auto* yamlConfig = appConfig.MutableStoredConfigYaml();
         yamlConfig->SetYAML(mainYamlConfigString);
         yamlConfig->SetConfigVersion(NYamlConfig::GetVersion(mainYamlConfigString));

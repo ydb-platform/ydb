@@ -354,29 +354,27 @@ public:
             }
         }
 
-        return true;
-    }
-
-    void CheckConfigVersion() {
-        const auto& record = Request->Get()->Record;
+        // Check config version
         if (Self->YamlConfig && !Self->StorageYamlConfig) {
-            const auto& configVersion = std::get<1>(*Self->YamlConfig);
+            const auto& configVersion = GetVersion(*Self->YamlConfig);
             const auto& nodeId = record.GetNodeID();
             if (record.GetConfigVersion() != configVersion) {
                 if (record.GetConfigVersion() > configVersion) {
                     STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "Version on node greater than BSC", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
                 }
-                STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN09, "Send update config", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
-                auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
-                auto *yamlConfig = ev->Record.MutableYamlConfig();
-                yamlConfig->SetYAML(NYamlConfig::CompressSingleConfig(*Self->YamlConfig));
+                STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN10, "Send update config", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
+                auto *yamlConfig = Response->Record.MutableYamlConfig();
+                yamlConfig->SetYAML(CompressSingleConfig(*Self->YamlConfig));
                 yamlConfig->SetConfigVersion(record.GetConfigVersion());
-                Self->SendToWarden(nodeId, std::move(ev), 0);
             }
-        }
-        else {
+            else if (record.GetConfigHash() != GetSingleConfigHash(*Self->YamlConfig)) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN11, "Config hash on node mismatch", (NodeId, nodeId));
+            }
+        } else {
             // TODO(mregrock): Implement for double config mode
-        }
+        } 
+
+        return true;
     }
 
     void Complete(const TActorContext&) override {
@@ -385,7 +383,6 @@ public:
             Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
         }
         Self->ShredState.OnNodeReportTxComplete();
-        CheckConfigVersion();
     }
 };
 
@@ -666,3 +663,4 @@ void TBlobStorageController::SendInReply(const IEventHandle& query, std::unique_
 }
 
 } // NKikimr::NBsController
+

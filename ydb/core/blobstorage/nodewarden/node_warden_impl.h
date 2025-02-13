@@ -145,6 +145,7 @@ namespace NKikimr::NStorage {
 
         TBackoffTimer ConfigSaveTimer{BackoffMin.MilliSeconds(), BackoffMax.MilliSeconds()};
         std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
+        ui64 ExpectedSaveConfigCookie = 0;
 
         TVector<NPDisk::TDriveData> WorkingLocalDrives;
 
@@ -163,6 +164,8 @@ namespace NKikimr::NStorage {
                 EvGetGroup,
                 EvGroupPendingQueueTick,
                 EvDereferencePDisk,
+                EvSaveConfigResult,
+                EvRetrySaveConfig,
             };
 
             struct TEvSendDiskMetrics : TEventLocal<TEvSendDiskMetrics, EvSendDiskMetrics> {};
@@ -171,6 +174,13 @@ namespace NKikimr::NStorage {
             struct TEvDereferencePDisk : TEventLocal<TEvDereferencePDisk, EvDereferencePDisk> {
                 TPDiskKey PDiskKey;
                 TEvDereferencePDisk(TPDiskKey pdiskKey) : PDiskKey(pdiskKey) {}
+            };
+
+            struct TEvRetrySaveConfig : TEventLocal<TEvRetrySaveConfig, EvRetrySaveConfig> {
+                NKikimrBlobStorage::TYamlConfig YamlConfig;
+                TEvRetrySaveConfig(const NKikimrBlobStorage::TYamlConfig& yamlConfig)
+                    : YamlConfig(yamlConfig)
+                {}
             };
         };
 
@@ -558,8 +568,7 @@ namespace NKikimr::NStorage {
         void Handle(NPDisk::TEvShredPDisk::TPtr ev);
         void ProcessShredStatus(ui64 cookie, ui64 generation, std::optional<TString> error);
 
-        bool SaveConfig(const TString& yaml, const TString& configFileName);
-        bool PersistConfig(const TString& yaml, std::optional<TString> storageYaml = std::nullopt);
+        void PersistConfig(const TString& yaml, ui64 version, std::optional<TString> storageYaml = std::nullopt);
         void LoadConfigVersion();
 
         void Handle(TEvRegisterPDiskLoadActor::TPtr ev);
@@ -577,6 +586,8 @@ namespace NKikimr::NStorage {
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
         void Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&);
         void Handle(TEvPrivate::TEvUpdateNodeDrives ::TPtr&);
+        void Handle(TEvPrivate::TEvRetrySaveConfig::TPtr&);
+
         void Handle(NMon::TEvHttpInfo::TPtr&);
         void RenderJsonGroupInfo(IOutputStream& out, const std::set<ui32>& groupIds);
         void RenderWholePage(IOutputStream&);

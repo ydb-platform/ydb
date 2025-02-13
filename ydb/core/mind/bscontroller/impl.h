@@ -1509,8 +1509,6 @@ public:
 
     using THostRecordMap = std::shared_ptr<THostRecordMapImpl>;
 
-    using TYamlConfig = NYamlConfig::TYamlConfig; // tuple of yaml, configVersion, yamlReturnedByFetch; this tuple must not change
-
 private:
     TString InstanceId;
     std::shared_ptr<std::atomic_uint64_t> SelfHealUnreassignableGroups = std::make_shared<std::atomic_uint64_t>();

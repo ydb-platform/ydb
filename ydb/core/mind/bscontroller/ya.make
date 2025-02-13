@@ -62,6 +62,7 @@ SRCS(
     update_last_seen_ready.cpp
     update_seen_operational.cpp
     virtual_group.cpp
+    yaml_config_helpers.h
 )
 
 PEERDIR(

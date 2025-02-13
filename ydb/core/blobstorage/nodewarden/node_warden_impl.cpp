@@ -11,8 +11,7 @@
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/library/pdisk_io/file_params.h>
-#include <ydb/library/yaml_config/yaml_config.h>
-#include <ydb/library/yaml_config/yaml_config_compress.h>
+#include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/protos/key.pb.h>
 #include <util/folder/dirut.h>
@@ -125,6 +124,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
         hFunc(TEvPrivate::TEvSendDiskMetrics, Handle);
         hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
+        hFunc(TEvPrivate::TEvRetrySaveConfig, Handle);
+
         hFunc(NMon::TEvHttpInfo, Handle);
         cFunc(NActors::TEvents::TSystem::Poison, PassAway);
 
@@ -444,7 +445,7 @@ void TNodeWarden::Bootstrap() {
 
     //LoadConfigVersion();
     if (Cfg->YamlConfig) {
-        YamlConfig.emplace(NKikimrBlobStorage::TYamlConfig());
+        YamlConfig.emplace();
         YamlConfig->CopyFrom(*Cfg->YamlConfig);
     }
 
@@ -636,91 +637,93 @@ void TNodeWarden::ProcessShredStatus(ui64 cookie, ui64 generation, std::optional
     }
 }
 
-bool TNodeWarden::PersistConfig(const TString& configYaml, std::optional<TString> storageYaml) {
+void TNodeWarden::PersistConfig(const TString& configYaml, ui64 version, std::optional<TString> storageYaml) {
     if (!Cfg->ConfigStorePath) {
-        return true;
+        return;
     }
 
     struct TSaveContext {
         TString ConfigStorePath;
         TString ConfigYaml;
+        ui64 Version;
         std::optional<TString> StorageYaml;
         bool Success = true;
         TString ErrorMessage;
+        TActorId SelfId;
     };
 
     auto saveCtx = std::make_shared<TSaveContext>();
     saveCtx->ConfigStorePath = Cfg->ConfigStorePath;
-    saveCtx->ConfigYaml = configYaml;
-    saveCtx->StorageYaml = storageYaml;
+    saveCtx->ConfigYaml = std::move(configYaml);
+    saveCtx->StorageYaml = std::move(storageYaml);
+    saveCtx->Version = std::move(version);
+    saveCtx->SelfId = SelfId();
 
-    EnqueueSyncOp([saveCtx](const TActorContext&) {
-        return [saveCtx] {
+    EnqueueSyncOp([this, saveCtx](const TActorContext&) {
+        bool success = true;
+        try {
+            MakePathIfNotExist(saveCtx->ConfigStorePath.c_str());
+        } catch (const yexception& e) {
+            STLOG(PRI_ERROR, BS_NODE, NW91, "Failed to create config store path", (Error, e.what()));
+            success = false;
+        }
+
+        auto saveConfig = [&](const TString& yaml, const TString& configFileName) -> bool {
             try {
-                MakePathIfNotExist(saveCtx->ConfigStorePath.c_str());
-            } catch (const yexception& e) {
-                STLOG(PRI_ERROR, BS_NODE, NW91, "Failed to create config store path", (Error, e.what()));
-                saveCtx->Success = false;
-                return;
-            }
+                TString tempPath = TStringBuilder() << saveCtx->ConfigStorePath << "/temp_" << configFileName;
+                TString configPath = TStringBuilder() << saveCtx->ConfigStorePath << "/" << configFileName;
 
-            auto saveConfig = [&](const TString& yaml, const TString& configFileName) -> bool {
-                try {
-                    TString tempPath = TStringBuilder() << saveCtx->ConfigStorePath << "/temp_" << configFileName;
-                    TString configPath = TStringBuilder() << saveCtx->ConfigStorePath << "/" << configFileName;
-                    
-                    {
-                        TFileOutput tempFile(tempPath);
-                        tempFile << yaml;
-                        tempFile.Flush();
-                    }
-                    
-                    if (!NFs::Rename(tempPath, configPath)) {
-                        STLOG(PRI_ERROR, BS_NODE, NW92, "Failed to rename temporary file", (Error, LastSystemErrorText()));
-                        saveCtx->Success = false;
-                        return false;
-                    }
-                    return true;
-                } catch (const std::exception& e) {
-                    STLOG(PRI_ERROR, BS_NODE, NW93, "Failed to save config file", (Error, e.what()));
-                    saveCtx->Success = false;
+                {
+                    TFileOutput tempFile(tempPath);
+                    tempFile << yaml;
+                    tempFile.Flush();
+                }
+
+                if (!NFs::Rename(tempPath, configPath)) {
+                    STLOG(PRI_ERROR, BS_NODE, NW92, "Failed to rename temporary file", (Error, LastSystemErrorText()));
+                    success = false;
                     return false;
                 }
-            };
-
-            if (!saveConfig(saveCtx->ConfigYaml, YamlConfigFileName)) {
-                return;
+                return true;
+            } catch (const std::exception& e) {
+                STLOG(PRI_ERROR, BS_NODE, NW93, "Failed to save config file", (Error, e.what()));
+                success = false;
+                return false;
             }
-            STLOG(PRI_INFO, BS_NODE, NW94, "Yaml config saved");
+        };
 
-            if (saveCtx->StorageYaml) {
-                if (!saveConfig(*saveCtx->StorageYaml, StorageConfigFileName)) {
-                    return;
-                }
+        if (success) {
+            success = saveConfig(saveCtx->ConfigYaml, YamlConfigFileName);
+            if (success) {
+                STLOG(PRI_INFO, BS_NODE, NW94, "Yaml config saved");
+            }
+        }
+
+        if (success && saveCtx->StorageYaml) {
+            success = saveConfig(*saveCtx->StorageYaml, StorageConfigFileName);
+            if (success) {
                 STLOG(PRI_INFO, BS_NODE, NW95, "Storage config saved");
+            }
+        }
+
+        return [this, saveCtx, success]() { 
+            if (success) {
+                if (!YamlConfig) {
+                    YamlConfig.emplace();
+                }
+                YamlConfig->SetYAML(saveCtx->ConfigYaml);
+                YamlConfig->SetConfigVersion(saveCtx->Version);
+                ConfigSaveTimer.Reset();
+            } else {
+                NKikimrBlobStorage::TYamlConfig yamlConfig;
+                yamlConfig.SetYAML(saveCtx->ConfigYaml);
+                yamlConfig.SetConfigVersion(saveCtx->Version);
+                TActivationContext::Schedule(TDuration::MilliSeconds(ConfigSaveTimer.NextBackoffMs()),
+                    new IEventHandle(SelfId(), SelfId(),
+                                     new TEvPrivate::TEvRetrySaveConfig(yamlConfig), 0, ExpectedSaveConfigCookie));
             }
         };
     });
-
-    return saveCtx->Success;
-}
-
-void TNodeWarden::LoadConfigVersion() {
-    TString yamlConfig = TStringBuilder() << Cfg->ConfigStorePath << "/" << YamlConfigFileName;
-    TFsPath yamlConfigPath(yamlConfig);
-    if (yamlConfigPath.Exists() && yamlConfigPath.IsFile()) {
-        try {
-            TFileInput file(yamlConfig.c_str());
-            TString yaml = file.ReadAll();
-            auto version = NYamlConfig::GetVersion(yaml);
-            if (!YamlConfig) {
-                YamlConfig.emplace(NKikimrBlobStorage::TYamlConfig());
-            }
-            YamlConfig->SetConfigVersion(version);
-        } catch (const std::exception& e) {
-            STLOG(PRI_ERROR, BS_NODE, NW95, "Failed to read config version", (NodeId, LocalNodeId), (Error, e.what()));
-        }
-    }
 }
 
 void TNodeWarden::Handle(TEvRegisterPDiskLoadActor::TPtr ev) {
@@ -810,23 +813,11 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
 
     if (record.HasYamlConfig()) {
         const auto& request = record.GetYamlConfig();
-        if (request.GetYAML()) {
+        if (request.HasYAML()) {
             TString yaml = NYamlConfig::DecompressYamlString(request.GetYAML());
-            if (PersistConfig(yaml)) {
-                if (!YamlConfig) {
-                    YamlConfig.emplace(NKikimrBlobStorage::TYamlConfig());
-                }
-                YamlConfig->SetYAML(request.GetYAML());
-                YamlConfig->SetConfigVersion(request.GetConfigVersion());
-                ConfigSaveTimer.Reset();
-            }
-            else{
-                auto retryUpdateEv = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
-                auto *yamlConfig = retryUpdateEv->Record.MutableYamlConfig();
-                yamlConfig->SetYAML(request.GetYAML());
-                yamlConfig->SetConfigVersion(request.GetConfigVersion());
-                TActivationContext::Schedule(TDuration::MilliSeconds(ConfigSaveTimer.NextBackoffMs()), new IEventHandle(SelfId(), SelfId(), retryUpdateEv.release()));
-            }
+            ui64 version = request.GetConfigVersion();
+            PersistConfig(yaml, version);
+            ExpectedSaveConfigCookie++;
         }
     }
 }
@@ -1050,6 +1041,15 @@ void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) {
         };
     });
     Schedule(TDuration::Seconds(10), new TEvPrivate::TEvUpdateNodeDrives());
+}
+
+void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
+    STLOG(PRI_TRACE, BS_NODE, NW97, "Handle(TEvRetrySaveConfig)");
+    if (ev->Cookie == ExpectedSaveConfigCookie) {
+        const auto& yamlConfig = ev->Get()->YamlConfig;
+        PersistConfig(yamlConfig.GetYAML(), yamlConfig.GetConfigVersion());
+        ExpectedSaveConfigCookie++;
+    }
 }
 
 void TNodeWarden::SendDiskMetrics(bool reportMetrics) {

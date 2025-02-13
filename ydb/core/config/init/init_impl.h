@@ -1074,6 +1074,7 @@ public:
             const TString autoConfigPath = TStringBuilder() << CommonAppOptions.ConfigStorePath << "/" << CONFIG_NAME;
             fs::path path(autoConfigPath.c_str());
             if (IsFileExists(path)) {
+                AppConfig.SetConfigLoadedFromStore(true);
                 yamlConfigFile = autoConfigPath;
             }
         }

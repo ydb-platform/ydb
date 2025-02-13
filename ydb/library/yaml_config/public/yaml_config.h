@@ -20,7 +20,6 @@ namespace NKikimr::NYamlConfig {
 struct TYamlConfigEx : public yexception {};
 
 using TDocumentConfig = std::pair<NFyaml::TDocument, NFyaml::TNodeRef>;
-using TYamlConfig = std::tuple<TString, ui64, TString>;
 
 /**
  * Open - labels like tenant, where we don't know final set of values
@@ -177,11 +176,6 @@ void AppendDatabaseConfig(NFyaml::TDocument& config, NFyaml::TDocument& database
  * Parses config version
  */
 ui64 GetVersion(const TString& config);
-
-/**
- * Parses config version from TYamlConfig
- */
-ui64 GetVersion(const TYamlConfig& config);
 
 /**
  * Represents config metadata

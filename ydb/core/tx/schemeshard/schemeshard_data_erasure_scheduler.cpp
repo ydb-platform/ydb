@@ -3,15 +3,15 @@
 
 namespace NKikimr::NSchemeShard {
 
-TDataErasureScheduler::TDataErasureScheduler(const NActors::TActorId& schemeShardId, const TDuration& dataErasureInterval)
+TDataErasureScheduler::TDataErasureScheduler(const NActors::TActorId& schemeShardId, const TDuration& dataErasureInterval, const TDuration& dataErasureBSCInterval)
     : SchemeShardId(schemeShardId)
     , DataErasureInterval(dataErasureInterval)
+    , DataErasureBSCInterval(dataErasureBSCInterval)
     , DataErasureWakeupScheduled(false)
     , CurrentWakeupInterval(DataErasureInterval)
 {}
 
-void TDataErasureScheduler::Handle(TEvSchemeShard::TEvCompleteDataErasurePtr& ev, const NActors::TActorContext& ctx) {
-    Y_UNUSED(ev);
+void TDataErasureScheduler::CompleteDataErasure(const NActors::TActorContext& ctx) {
     Status = EStatus::COMPLETED;
     FinishTime = AppData(ctx)->TimeProvider->Now();
     TDuration dataErasureDuration = FinishTime - StartTime;
@@ -30,17 +30,17 @@ void TDataErasureScheduler::Handle(TEvSchemeShard::TEvWakeupToRunDataErasurePtr&
 }
 
 void TDataErasureScheduler::StartDataErasure(const NActors::TActorContext& ctx) {
-    if (Status == EStatus::IN_PROGRESS_TENANTS || Status == EStatus::IN_PROGRESS_BSC) {
+    if (Status == EStatus::IN_PROGRESS_TENANT || Status == EStatus::IN_PROGRESS_BSC) {
         return;
     }
     Generation++;
-    Status = EStatus::IN_PROGRESS_TENANTS;
+    Status = EStatus::IN_PROGRESS_TENANT;
     StartTime = AppData(ctx)->TimeProvider->Now();
     ctx.Send(SchemeShardId, new TEvSchemeShard::TEvRunDataErasure(Generation, StartTime));
 }
 
 void TDataErasureScheduler::ContinueDataErasure(const NActors::TActorContext& ctx) {
-    if (Status == EStatus::IN_PROGRESS_TENANTS) {
+    if (Status == EStatus::IN_PROGRESS_TENANT) {
         ctx.Send(SchemeShardId, new TEvSchemeShard::TEvRunDataErasure(Generation, StartTime));
     } else if (Status == EStatus::IN_PROGRESS_BSC) {
         // do request to BSC
@@ -66,6 +66,14 @@ ui64 TDataErasureScheduler::GetGeneration() const {
 
 bool TDataErasureScheduler::NeedInitialize() const {
     return !IsInitialized;
+}
+
+void TDataErasureScheduler::SetStatus(const EStatus& status) {
+    Status = status;
+}
+
+TDuration TDataErasureScheduler::GetDataErasureBSCInterval() const {
+    return DataErasureBSCInterval;
 }
 
 void TDataErasureScheduler::Restore(const TRestoreValues& restoreValues, const NActors::TActorContext& ctx) {

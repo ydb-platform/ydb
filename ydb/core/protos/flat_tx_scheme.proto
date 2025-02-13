@@ -465,7 +465,8 @@ message TEvDataErasureInfoResponse {
     enum EStatus {
         UNSPECIFIED = 0;
         COMPLETED = 1;
-        IN_PROGRESS = 2;
+        IN_PROGRESS_TENANT = 2;
+        IN_PROGRESS_BSC = 3;
     }
 
     optional EStatus Status = 1;

@@ -101,6 +101,8 @@ namespace TEvSchemeShard {
         EvTenantDataErasureRequest,
         EvTenantDataErasureResponse,
         EvWakeupToRunDataErasure,
+        EvMeasureDataErasureBSC,
+        EvWakeupToRunDataErasureBSC,
         EvRunDataErasure,
         EvCompleteDataErasure,
         EvDataErasureInfoRequest,
@@ -411,6 +413,9 @@ namespace TEvSchemeShard {
     struct TEvWakeupToRunDataErasure : public TEventLocal<TEvWakeupToRunDataErasure, EvWakeupToRunDataErasure> {
     };
 
+    struct TEvWakeupToRunDataErasureBSC : public TEventLocal<TEvWakeupToRunDataErasureBSC, EvWakeupToRunDataErasureBSC> {
+    };
+
     struct TEvInitTenantSchemeShard: public TEventPB<TEvInitTenantSchemeShard,
                                                             NKikimrScheme::TEvInitTenantSchemeShard,
                                                             EvInitTenantSchemeShard> {
@@ -694,14 +699,6 @@ namespace TEvSchemeShard {
         {}
     };
 
-    struct TEvCompleteDataErasure : TEventLocal<TEvCompleteDataErasure, EvCompleteDataErasure> {
-        const ui64 Generation;
-
-        TEvCompleteDataErasure(ui64 generation)
-            : Generation(generation)
-        {}
-    };
-
     struct TEvTenantDataErasureRequest : TEventPB<TEvTenantDataErasureRequest, NKikimrScheme::TEvTenantDataErasureRequest, EvTenantDataErasureRequest> {
         TEvTenantDataErasureRequest() = default;
 
@@ -748,7 +745,8 @@ namespace TEvSchemeShard {
         enum class EStatus {
             UNSPECIFIED,
             COMPLETED,
-            IN_PROGRESS,
+            IN_PROGRESS_TENANT,
+            IN_PROGRESS_BSC,
         };
 
         TEvDataErasureInfoResponse() = default;
@@ -763,8 +761,10 @@ namespace TEvSchemeShard {
                     return NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
                 case EStatus::COMPLETED:
                     return NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED;
-                case EStatus::IN_PROGRESS:
-                    return NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS;
+                case EStatus::IN_PROGRESS_TENANT:
+                    return NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_TENANT;
+                case EStatus::IN_PROGRESS_BSC:
+                return NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_BSC;
             }
         }
     };

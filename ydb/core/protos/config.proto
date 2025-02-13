@@ -1951,18 +1951,23 @@ message TBackgroundCleaningConfig {
     optional TRetrySettings RetrySettings = 5;
 }
 
+
 message TDataErasureConfig {
     message TTenantDataErasureConfig {
-        optional double MaxRate = 1 [default = 0];
+        optional double MaxRate = 1 [default = 1]; // unlimited
         optional uint64 InflightLimit = 2 [default = 10];
+        // After this interval started data erasure in shard is considered as finished
         optional uint64 TimeoutSeconds = 3 [default = 15];
     }
 
-    optional double MaxRate = 1 [default = 0];
+    optional double MaxRate = 1 [default = 0]; // unlimited
     optional uint64 InflightLimit = 2 [default = 10];
-    optional uint64 TimeoutSeconds = 3 [default = 15];
-    optional uint64 DataErasureIntervalSeconds = 4 [default = 604800]; // Run data erasure every week
-    optional uint64 BlobStorageControllerRequestIntervalSeconds = 5 [default = 600]; // Every 10 m do request to BSC
+    // After this interval started data erasure in tenant is considered as finished
+    optional uint64 TimeoutSeconds = 3 [default = 600];
+    // Run data erasure every week
+    optional uint64 DataErasureIntervalSeconds = 4 [default = 604800];
+    // Every 10 m do request to BSC
+    optional uint64 BlobStorageControllerRequestIntervalSeconds = 5 [default = 600];
     optional TTenantDataErasureConfig TenantDataErasureConfig = 6;
 }
 

@@ -120,7 +120,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, con
 
         const ui64 rootSchemeshard = ParentDomainId.OwnerId;
 
-        /*RunningDataErasureForTenants[pathId] = */PipeClientCache->Send(
+        PipeClientCache->Send(
             ctx,
             ui64(rootSchemeshard),
             response.release());
@@ -200,6 +200,8 @@ struct TSchemeShard::TTxRunTenantDataErasure : public TSchemeShard::TRwTxBase {
         const auto& record = Ev->Get()->Record;
         if (Self->DataErasureGeneration < record.GetGeneration()) {
             Self->DataErasureGeneration = record.GetGeneration();
+            Self->TenantDataErasureQueue->Clear();
+            Self->RunningDataErasureShards.clear();
             for (const auto& [shardIdx, shardInfo] : Self->ShardInfos) {
                 if (shardInfo.TabletType == ETabletType::DataShard) {
                     Self->EnqueueTenantDataErasure(shardIdx); // forward generation

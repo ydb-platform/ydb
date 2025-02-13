@@ -115,9 +115,11 @@ void TSchemeShard::DataErasureHandleDisconnect(TTabletId tabletId, const TActorI
 void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
-    if (record.GetGeneration() == DataErasureGeneration) {
-        Execute(CreateTxCompleteDataErasure(ev), ctx);
+    if (record.GetGeneration() != DataErasureGeneration) {
+        return;
     }
+
+    Execute(CreateTxCompleteDataErasure(ev), ctx);
 
     auto pathId = TPathId(
         record.GetPathId().GetOwnerId(),
@@ -161,6 +163,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev
 
     if (isDataErasureCompleted) {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Data erasure in tenants is completed. Send request to BS controller");
+        DataErasureScheduler->SetStatus(TDataErasureScheduler::EStatus::IN_PROGRESS_BSC);
         std::unique_ptr<TEvBlobStorage::TEvControllerShredRequest> request(
             new TEvBlobStorage::TEvControllerShredRequest(DataErasureGeneration));
 
@@ -178,12 +181,19 @@ void TSchemeShard::Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, 
 
     if (record.GetCompleted()) {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvControllerShredResponse: Data shred in BSC is completed");
+        DataErasureScheduler->CompleteDataErasure(ctx);
     } else {
-        // Schedule new request to BS controller to get data shred progress
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvControllerShredResponse: Progress data shred in BSC " << record.GetProgress10k());
+        ctx.Schedule(DataErasureScheduler->GetDataErasureBSCInterval(), new TEvSchemeShard::TEvWakeupToRunDataErasure);
     }
-    // BS Controller always return completed as false
-    ctx.Send(SelfId(), new TEvSchemeShard::TEvCompleteDataErasure(DataErasureGeneration));
+}
+
+void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunDataErasureBSC::TPtr& ev, const NActors::TActorContext& ctx) {
+    Y_UNUSED(ev);
+    std::unique_ptr<TEvBlobStorage::TEvControllerShredRequest> request(
+        new TEvBlobStorage::TEvControllerShredRequest(DataErasureGeneration));
+
+    PipeClientCache->Send(ctx, MakeBSControllerID(), request.release());
 }
 
 void TSchemeShard::UpdateDataErasureQueueMetrics() {
@@ -214,6 +224,8 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
         if (Self->DataErasureGeneration < RequestedGeneration) {
             Self->DataErasureGeneration = RequestedGeneration;
             Self->DataErasureQueue->Clear();
+            Self->ActiveDataErasureTenants.clear();
+            Self->RunningDataErasureTenants.clear();
             for (auto& [pathId, subdomain] : Self->SubDomains) {
                 auto path = TPath::Init(pathId, Self);
                 if (path->IsRoot()) {
@@ -231,6 +243,7 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
             }
         } else if (Self->DataErasureGeneration == RequestedGeneration) {
             Self->DataErasureQueue->Clear();
+            Self->RunningDataErasureTenants.clear();
             for (const auto& [pathId, status] : Self->ActiveDataErasureTenants) {
                 if (status == EDataErasureStatus::IN_PROGRESS) {
                     Self->DataErasureQueue->Enqueue(pathId);

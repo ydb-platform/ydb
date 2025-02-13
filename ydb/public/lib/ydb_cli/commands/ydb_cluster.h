@@ -33,4 +33,16 @@ private:
     TString FilePath;
 };
 
+class TCommandClusterRestore : public TYdbCommand {
+public:
+    TCommandClusterRestore();
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    TString FilePath;
+    TDuration WaitNodesDuration;
+};
+
 } // namespace NYdb::NConsoleClient::NCluster

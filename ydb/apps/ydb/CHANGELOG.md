@@ -5,6 +5,8 @@
 * Added `ydb workload log import generator` command.
 * Queries in `ydb workload run` command are now executed in random order.
 * Include topics in local backups (`ydb tools dump` and `ydb tools restore`). In this release, only the settings of the topics are retained; messages are not included in the backup.
+* Added `ydb admin cluster dump` and `ydb admin cluster restore` commands for dumping all cluster-level data
+* Added `ydb admin database dump` and `ydb admin database restore` commands for dumping all database-level data
 
 ## 2.19.0 ##
 

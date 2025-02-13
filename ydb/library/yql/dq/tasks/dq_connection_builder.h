@@ -224,7 +224,6 @@ void BuildBroadcastChannels(TGraph& graph, const typename TGraph::TStageInfoType
     const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, bool enableSpilling,
     const TChannelLogFunc& logFunc)
 {
-    //YQL_ENSURE(inputStageInfo.Tasks.size() == 1);
     auto& originTasks = inputStageInfo.Tasks;
     auto& targetTasks = stageInfo.Tasks;
 

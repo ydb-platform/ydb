@@ -14,7 +14,7 @@
 using namespace NThreading;
 using namespace NYql::NNodes;
 
-namespace NYql {
+namespace NYql::NFmr {
 
 namespace {
 
@@ -282,4 +282,4 @@ IYtGateway::TPtr CreateYtFmrGateway(IYtGateway::TPtr slave, IFmrCoordinator::TPt
     return MakeIntrusive<TFmrYtGateway>(std::move(slave), std::move(coordinator), settings);
 }
 
-} // namspace NYql
+} // namespace NYql::NFmr

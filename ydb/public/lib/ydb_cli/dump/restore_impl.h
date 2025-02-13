@@ -16,8 +16,7 @@
 #include <util/stream/fwd.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 extern const char DOC_API_TABLE_VERSION_ATTR[23];
 extern const char DOC_API_REQUEST_TYPE[22];
@@ -131,6 +130,7 @@ class TRestoreClient {
     TRestoreResult RestoreTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreView(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreTopic(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
+    TRestoreResult RestoreReplication(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreCoordinationNode(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreDependentResources(const TFsPath& fsPath, const TString& dbPath);
     TRestoreResult RestoreRateLimiter(const TFsPath& fsPath, const TString& coordinationNodePath, const TString& resourcePath);
@@ -178,5 +178,4 @@ private:
 
 }; // TRestoreClient
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

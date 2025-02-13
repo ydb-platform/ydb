@@ -6,6 +6,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/mind/node_broker.h>
 #include <ydb/core/protos/node_broker.pb.h>
@@ -170,18 +171,11 @@ public:
 
 private:
     bool CheckAccess() {
-        const auto& serializedToken = Request->GetSerializedToken();
-        // Empty serializedToken means token is not required. Checked in secure_request.h
-        if (!serializedToken.empty() && !AppData()->RegisterDynamicNodeAllowedSIDs.empty()) {
-            NACLib::TUserToken token(serializedToken);
-            for (const auto& sid : AppData()->RegisterDynamicNodeAllowedSIDs) {
-                if (token.IsExist(sid)) {
-                    IsNodeAuthorizedByCertificate = true;
-                    return true;
-                }
-            }
-            return false;
+        if (Request->GetInternalToken()) {
+            return IsTokenAllowed(Request->GetInternalToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
         }
+        // No token at this stage means that token is not required
+        // and access should be granted
         return true;
     }
 

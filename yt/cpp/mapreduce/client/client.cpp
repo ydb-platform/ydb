@@ -273,7 +273,7 @@ void TClientBase::Concatenate(
         auto end = sourcePaths.begin() + std::min(i + options.MaxBatchSize_, std::ssize(sourcePaths));
         batch.assign(begin, end);
 
-        bool firstBatch = i == 0;
+        bool firstBatch = (i == 0);
         RequestWithRetry<void>(
             ClientRetryPolicy_->CreatePolicyForGenericRequest(),
             [this, &batch, &destinationPath, &options, outerClient, firstBatch] (TMutationId /*mutationId*/) {

@@ -140,6 +140,8 @@ namespace NKikimr {
         void Walk(std::optional<TKey> key, TMerger merger, TCallback&& callback) {
             if (key.has_value()) {
                 Seek(key.value());
+            } else {
+                SeekImpl([](auto*) {}); // just continue where it took off
             }
             while (Valid()) {
                 const TKey key = GetCurKey();

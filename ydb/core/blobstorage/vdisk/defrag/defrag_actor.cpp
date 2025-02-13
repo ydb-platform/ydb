@@ -31,7 +31,6 @@ namespace NKikimr {
         , HugeKeeperId(hugeKeeperId)
         , DefragMonGroup(VCtx->VDiskCounters, "subsystem", "defrag")
         , RunDefragBySchedule(runDefrageBySchedule)
-        , AddHeader(vconfig->AddHeader)
         , MaxChunksToDefrag(vconfig->MaxChunksToDefragInflight)
     {}
 
@@ -236,7 +235,6 @@ namespace NKikimr {
         std::deque<TTask> WaitQueue;
         TActiveActors ActiveActors;
         TSublog<TCircleBufStringStream<81920>> Sublog = { true };
-        ui32 MinHugeBlobInBytes;
 
         friend class TActorBootstrapped<TDefragActor>;
 
@@ -266,7 +264,7 @@ namespace NKikimr {
             ++TotalDefragRuns;
             InProgress = true;
             ActiveActors.Insert(ctx.Register(CreateDefragQuantumActor(DCtx, GInfo->GetVDiskId(DCtx->VCtx->ShortSelfVDisk),
-                std::visit(getChunksToDefrag, task.Request), MinHugeBlobInBytes)), __FILE__, __LINE__, ctx,
+                std::visit(getChunksToDefrag, task.Request))), __FILE__, __LINE__, ctx,
                 NKikimrServices::BLOBSTORAGE);
         }
 
@@ -374,10 +372,6 @@ namespace NKikimr {
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), subrequest));
         }
 
-        void Handle(TEvMinHugeBlobSizeUpdate::TPtr ev) {
-            MinHugeBlobInBytes = ev->Get()->MinHugeBlobInBytes;
-        }
-
         void RenderHtml(IOutputStream &str) const {
             HTML(str) {
                 DIV_CLASS("panel panel-info") {
@@ -453,7 +447,6 @@ namespace NKikimr {
             HFunc(TEvSublogLine, Handle)
             HFunc(TEvDefragStartQuantum, Handle)
             HFunc(TEvDefragQuantumResult, Handle)
-            hFunc(TEvMinHugeBlobSizeUpdate, Handle)
         );
 
     public:
@@ -461,12 +454,10 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_DEFRAG;
         }
 
-        TDefragActor(const std::shared_ptr<TDefragCtx> &dCtx, const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-                ui32 minHugeBlobInBytes)
+        TDefragActor(const std::shared_ptr<TDefragCtx> &dCtx, const TIntrusivePtr<TBlobStorageGroupInfo> &info)
             : TActorBootstrapped<TDefragActor>()
             , DCtx(dCtx)
             , GInfo(info)
-            , MinHugeBlobInBytes(minHugeBlobInBytes)
         {}
     };
 
@@ -474,9 +465,8 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // CreateDefragActor
     ////////////////////////////////////////////////////////////////////////////
-    IActor* CreateDefragActor(const std::shared_ptr<TDefragCtx> &dCtx, const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            ui32 minHugeBlobInBytes) {
-        return new TDefragActor(dCtx, info, minHugeBlobInBytes);
+    IActor* CreateDefragActor(const std::shared_ptr<TDefragCtx> &dCtx, const TIntrusivePtr<TBlobStorageGroupInfo> &info) {
+        return new TDefragActor(dCtx, info);
     }
 
 } // NKikimr

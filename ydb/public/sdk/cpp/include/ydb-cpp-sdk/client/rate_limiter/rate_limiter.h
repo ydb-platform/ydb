@@ -275,14 +275,14 @@ struct TDescribeResourceResult : public TStatus {
         return HierarchicalDrrProps_;
     }
 
-    const TMeteringConfig& GetMeteringConfig() const {
+    const std::optional<TMeteringConfig>& GetMeteringConfig() const {
         return MeteringConfig_;
     }
 
 private:
     std::string ResourcePath_;
     THierarchicalDrrProps HierarchicalDrrProps_;
-    TMeteringConfig MeteringConfig_;
+    std::optional<TMeteringConfig> MeteringConfig_;
 };
 
 using TAsyncDescribeResourceResult = NThreading::TFuture<TDescribeResourceResult>;

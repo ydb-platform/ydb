@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/workload_service/actors
     ydb/core/testlib
 
     ydb/tests/tools/kqprun/runlib

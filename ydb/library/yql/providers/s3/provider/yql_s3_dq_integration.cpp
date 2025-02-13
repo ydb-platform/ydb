@@ -468,20 +468,9 @@ public:
                         std::make_move_iterator(pathsChunk.end()));
                 }
 
-                NS3::TRange range;
-                range.SetStartPathIndex(0);
-                TFileTreeBuilder builder;
-                std::for_each(paths.cbegin(), paths.cend(), [&builder](const TPath& f) {
-                    builder.AddPath(f.Path, f.Size, f.IsDirectory);
-                });
-                builder.Save(&range);
-
-                TVector<TString> serialized(1);
-                TStringOutput out(serialized.front());
-                range.Save(&out);
-
-                paths.clear();
-                ReadPathsList({}, serialized, paths);
+                for (size_t i = 0; i < paths.size(); ++i) {
+                    paths[i].PathIndex = i;
+                }
 
                 const NDq::TS3ReadActorFactoryConfig& readActorConfig = State_->Configuration->S3ReadActorFactoryConfig;
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;

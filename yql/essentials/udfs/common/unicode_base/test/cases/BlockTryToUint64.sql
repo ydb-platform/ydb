@@ -1,4 +1,7 @@
 /* syntax version 1 */
+
+pragma UseBlocks;
+
 SELECT
     value as value,
     Unicode::TryToUint64(value, 10),

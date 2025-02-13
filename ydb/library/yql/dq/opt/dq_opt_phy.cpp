@@ -2528,6 +2528,8 @@ TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizati
 
     auto stage = output.Stage().Cast<TDqStage>();
 
+    YQL_CLOG(TRACE, CoreDq) << "Before Stream Ensure";
+
     YQL_ENSURE(stage.Program().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream ||
                stage.Program().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow);
 
@@ -2576,11 +2578,13 @@ TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizati
         auto takeProgram = Build<TCoLambda>(ctx, node.Pos())
             .Args({"take_arg"})
             // DqOutput expects stream as input, thus form stream with one element
-            .Body<TCoToStream>()
-                .Input<TCoTake>()
-                    .Input({"take_arg"})
-                    .Count<TCoUint64>()
-                        .Literal().Build("1")
+            .Body<TCoToFlow>()
+                .Input<TCoToStream>()
+                    .Input<TCoTake>()
+                        .Input({"take_arg"})
+                        .Count<TCoUint64>()
+                            .Literal().Build("1")
+                            .Build()
                         .Build()
                     .Build()
                 .Build()

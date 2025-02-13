@@ -337,7 +337,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
     std::string_view suffix = buildInfo.KMeans.Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
-    op = CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
+    op = CalcVectorKmeansTreePostingImplTableDesc({}, tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
 
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
 
@@ -1010,8 +1010,12 @@ public:
             } else if (!buildInfo.InitiateTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.InitiateTxId)));
             } else {
-                if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel()) {
-                    ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
+                if (buildInfo.IsBuildVectorIndex() && buildInfo.IndexColumns.size() != 1) {
+                    // TODO(mbkkt) in this state every prefixed vector index is empty
+                    // So we need some new code to fill it
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Applying);
+                } else if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel()) {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
                 } else {
                     ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 }

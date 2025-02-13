@@ -10,7 +10,11 @@
 #include <span>
 #include <string_view>
 
-namespace NKikimr::NTableIndex {
+namespace NKikimr {
+
+inline constexpr const char* SYSTEM_COLUMN_PREFIX = "__ydb_";
+
+namespace NTableIndex {
 
 struct TTableColumns {
     THashSet<TString> Columns;
@@ -31,4 +35,5 @@ std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType inde
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
 
+}
 }

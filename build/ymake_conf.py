@@ -2016,10 +2016,6 @@ class MSVCCompiler(MSVC, Compiler):
                 # for msvc compatibility
                 # https://clang.llvm.org/docs/UsersManual.html#microsoft-extensions
                 # '-fdelayed-template-parsing',
-                '-Wno-deprecated-this-capture',
-                '-Wno-c++11-narrowing-const-reference',
-                '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
-                '-Wno-invalid-offsetof',
             ]
             if target.is_x86:
                 flags.append('-m32')
@@ -2040,12 +2036,16 @@ class MSVCCompiler(MSVC, Compiler):
                 # Issue a warning if certain overload is hidden due to inheritance
                 '-Woverloaded-virtual',
                 '-Wno-ambiguous-reversed-operator',
+                '-Wno-c++11-narrowing-const-reference',
                 '-Wno-defaulted-function-deleted',
                 '-Wno-deprecated-anon-enum-enum-conversion',
                 '-Wno-deprecated-enum-enum-conversion',
                 '-Wno-deprecated-enum-float-conversion',
+                '-Wno-deprecated-this-capture',
                 '-Wno-deprecated-volatile',
+                '-Wno-invalid-offsetof',
                 '-Wno-undefined-var-template',
+                '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
             ]
 
         defines.append('/D_WIN32_WINNT={0}'.format(WINDOWS_VERSION_MIN))

@@ -63,7 +63,7 @@ void TCommandStorageConfigFetch::Parse(TConfig& config) {
 int TCommandStorageConfigFetch::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NStorageConfig::TStorageConfigClient(*driver);
-    auto result = client.FetchStorageConfig(DedicatedStorageSection, DedicatedClusterSection).GetValueSync();
+    auto result = client.FetchConfig(DedicatedStorageSection, DedicatedClusterSection).GetValueSync();
     NStatusHelpers::ThrowOnError(result);
 
     const auto& clusterConfig = result.GetConfig();
@@ -142,12 +142,12 @@ void TCommandStorageConfigReplace::Parse(TConfig& config) {
 int TCommandStorageConfigReplace::Run(TConfig& config) {
     std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NStorageConfig::TStorageConfigClient(*driver);
-    NYdb::NStorageConfig::TReplaceStorageConfigSettings settings;
+    NYdb::NStorageConfig::TReplaceConfigSettings settings;
     settings
         .SwitchDedicatedStorageSection(SwitchDedicatedStorageSection)
         .DedicatedConfigMode(DedicatedConfigMode);
 
-    auto status = client.ReplaceStorageConfig(ClusterYaml, StorageYaml, settings).GetValueSync();
+    auto status = client.ReplaceConfig(ClusterYaml, StorageYaml, settings).GetValueSync();
     NStatusHelpers::ThrowOnError(status);
 
     if (!status.GetIssues()) {

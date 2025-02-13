@@ -183,7 +183,7 @@ int TCommandConfigReplace::Run(TConfig& config) {
     std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NStorageConfig::TStorageConfigClient(*driver);
 
-    NYdb::NStorageConfig::TReplaceStorageConfigSettings settings;
+    NYdb::NStorageConfig::TReplaceConfigSettings settings;
 
     if (Force) {
         settings.AllowIncorrectVersion();
@@ -200,7 +200,7 @@ int TCommandConfigReplace::Run(TConfig& config) {
 
     // TODO absent database
 
-    auto status = client.ReplaceStorageConfig(
+    auto status = client.ReplaceConfig(
         DynamicConfig,
         {},
         settings).GetValueSync();

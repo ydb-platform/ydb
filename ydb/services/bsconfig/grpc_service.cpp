@@ -28,8 +28,8 @@ void TBSConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     #define SETUP_BS_METHOD(methodName, method, rlMode, requestType) \
         SETUP_METHOD(methodName, method, rlMode, requestType, BSConfig, bsconfig)
 
-    SETUP_BS_METHOD(ReplaceStorageConfig, DoReplaceBSConfig, Rps, BSCONFIG_REPLACESTORAGECONFIG);
-    SETUP_BS_METHOD(FetchStorageConfig, DoFetchBSConfig, Rps, BSCONFIG_FETCHSTORAGECONFIG);
+    SETUP_BS_METHOD(ReplaceConfig, DoReplaceBSConfig, Rps, BSCONFIG_REPLACESTORAGECONFIG);
+    SETUP_BS_METHOD(FetchConfig, DoFetchBSConfig, Rps, BSCONFIG_FETCHSTORAGECONFIG);
     SETUP_BS_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, BSCONFIG_BOOTSTRAP);
 
     #undef SETUP_BS_METHOD

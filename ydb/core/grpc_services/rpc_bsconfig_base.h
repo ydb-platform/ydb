@@ -103,10 +103,10 @@ private:
 };
 
 
-bool CopyToConfigRequest(const Ydb::BSConfig::ReplaceStorageConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
-bool CopyToConfigRequest(const Ydb::BSConfig::FetchStorageConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
-void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &/*from*/, Ydb::BSConfig::ReplaceStorageConfigResult* /*to*/);
-void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb::BSConfig::FetchStorageConfigResult *to);
+bool CopyToConfigRequest(const Ydb::BSConfig::ReplaceConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
+bool CopyToConfigRequest(const Ydb::BSConfig::FetchConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to);
+void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &/*from*/, Ydb::BSConfig::ReplaceConfigResult* /*to*/);
+void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb::BSConfig::FetchConfigResult *to);
 
 template <typename TDerived>
 class TBaseBSConfigRequest {
@@ -281,7 +281,7 @@ protected:
 
     void Handle(TEvBlobStorage::TEvControllerFetchConfigResponse::TPtr ev) {
         auto *self = Self();
-        if constexpr (std::is_same_v<TResultRecord, Ydb::BSConfig::FetchStorageConfigResult>) {
+        if constexpr (std::is_same_v<TResultRecord, Ydb::BSConfig::FetchConfigResult>) {
             TResultRecord result;
             const auto& record = ev->Get()->Record;
             if (record.HasClusterYaml()) {
@@ -299,7 +299,7 @@ protected:
 
     void Handle(TEvBlobStorage::TEvControllerReplaceConfigResponse::TPtr ev) {
         auto *self = Self();
-        if constexpr (std::is_same_v<TResultRecord, Ydb::BSConfig::ReplaceStorageConfigResult>) {
+        if constexpr (std::is_same_v<TResultRecord, Ydb::BSConfig::ReplaceConfigResult>) {
             const auto& record = ev->Get()->Record;
             if (record.GetStatus() == NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success) {
                 TResultRecord result;

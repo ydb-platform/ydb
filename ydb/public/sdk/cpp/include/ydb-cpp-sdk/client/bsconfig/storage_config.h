@@ -11,8 +11,8 @@
 
 namespace NYdb::inline V3::NStorageConfig {
 
-struct TFetchStorageConfigResult : public TStatus {
-    TFetchStorageConfigResult(
+struct TFetchConfigResult : public TStatus {
+    TFetchConfigResult(
             TStatus&& status,
             std::string&& config,
             std::string&& storage_config)
@@ -34,9 +34,9 @@ private:
     std::string StorageConfig_;
 };
 
-using TAsyncFetchStorageConfigResult = NThreading::TFuture<TFetchStorageConfigResult>;
+using TAsyncFetchConfigResult = NThreading::TFuture<TFetchConfigResult>;
 
-struct TReplaceStorageConfigSettings : public NYdb::TOperationRequestSettings<TReplaceStorageConfigSettings> {
+struct TReplaceConfigSettings : public NYdb::TOperationRequestSettings<TReplaceConfigSettings> {
     FLUENT_SETTING_OPTIONAL(bool, SwitchDedicatedStorageSection);
     FLUENT_SETTING_FLAG(DedicatedConfigMode);
     FLUENT_SETTING_FLAG(DryRun);
@@ -46,7 +46,7 @@ struct TReplaceStorageConfigSettings : public NYdb::TOperationRequestSettings<TR
     FLUENT_SETTING_FLAG(AllowIncorrectCluster);
 };
 
-struct TFetchStorageConfigSettings : public NYdb::TOperationRequestSettings<TFetchStorageConfigSettings> {};
+struct TFetchConfigSettings : public NYdb::TOperationRequestSettings<TFetchConfigSettings> {};
 
 struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {};
 
@@ -57,14 +57,14 @@ public:
     ~TStorageConfigClient();
 
     // Replace config
-    TAsyncStatus ReplaceStorageConfig(
+    TAsyncStatus ReplaceConfig(
         const std::optional<std::string>& yaml_config,
         const std::optional<std::string>& storage_yaml_config,
-        const TReplaceStorageConfigSettings& settings = {});
+        const TReplaceConfigSettings& settings = {});
 
     // Fetch current cluster storage config
-    TAsyncFetchStorageConfigResult FetchStorageConfig(bool dedicated_storage_section, bool dedicated_cluster_section,
-        const TFetchStorageConfigSettings& settings = {});
+    TAsyncFetchConfigResult FetchConfig(bool dedicated_storage_section, bool dedicated_cluster_section,
+        const TFetchConfigSettings& settings = {});
 
     // Bootstrap cluster with automatic configuration
     TAsyncStatus BootstrapCluster(const std::string& selfAssemblyUUID, const TBootstrapClusterSettings& settings = {});

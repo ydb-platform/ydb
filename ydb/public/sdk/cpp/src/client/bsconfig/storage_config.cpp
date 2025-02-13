@@ -14,12 +14,12 @@ public:
     {
     }
 
-    TAsyncStatus ReplaceStorageConfig(
+    TAsyncStatus ReplaceConfig(
             const std::optional<std::string>& yaml_config,
             const std::optional<std::string>& storage_yaml_config,
-            const TReplaceStorageConfigSettings& settings)
+            const TReplaceConfigSettings& settings)
     {
-        auto request = MakeRequest<Ydb::BSConfig::ReplaceStorageConfigRequest>();
+        auto request = MakeRequest<Ydb::BSConfig::ReplaceConfigRequest>();
 
         if (yaml_config) {
             request.set_main_config(*yaml_config);
@@ -40,41 +40,41 @@ public:
         request.set_allow_incorrect_version(settings.AllowIncorrectVersion_);
         request.set_allow_incorrect_cluster(settings.AllowIncorrectCluster_);
 
-        return RunSimple<Ydb::BSConfig::V1::BSConfigService, Ydb::BSConfig::ReplaceStorageConfigRequest, Ydb::BSConfig::ReplaceStorageConfigResponse>(
+        return RunSimple<Ydb::BSConfig::V1::BSConfigService, Ydb::BSConfig::ReplaceConfigRequest, Ydb::BSConfig::ReplaceConfigResponse>(
             std::move(request),
-            &Ydb::BSConfig::V1::BSConfigService::Stub::AsyncReplaceStorageConfig,
+            &Ydb::BSConfig::V1::BSConfigService::Stub::AsyncReplaceConfig,
             TRpcRequestSettings::Make(settings));
     }
 
-    TAsyncFetchStorageConfigResult FetchStorageConfig(bool dedicated_storage_section, bool dedicated_cluster_section,
-            const TFetchStorageConfigSettings& settings)
+    TAsyncFetchConfigResult FetchConfig(bool dedicated_storage_section, bool dedicated_cluster_section,
+            const TFetchConfigSettings& settings)
     {
-        auto request = MakeOperationRequest<Ydb::BSConfig::FetchStorageConfigRequest>(settings);
+        auto request = MakeOperationRequest<Ydb::BSConfig::FetchConfigRequest>(settings);
         if (dedicated_storage_section) {
             request.set_dedicated_storage_section(true);
         }
         if (dedicated_cluster_section) {
             request.set_dedicated_cluster_section(true);
         }
-        auto promise = NThreading::NewPromise<TFetchStorageConfigResult>();
+        auto promise = NThreading::NewPromise<TFetchConfigResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
             NYdb::TStringType config;
             NYdb::TStringType storage_config;
-            if (Ydb::BSConfig::FetchStorageConfigResult result; any && any->UnpackTo(&result)) {
+            if (Ydb::BSConfig::FetchConfigResult result; any && any->UnpackTo(&result)) {
                 config = result.main_config();
                 storage_config = result.storage_config();
             }
 
-            TFetchStorageConfigResult val(TStatus(std::move(status)), std::string{std::move(config)},
+            TFetchConfigResult val(TStatus(std::move(status)), std::string{std::move(config)},
                 std::string{std::move(storage_config)});
             promise.SetValue(std::move(val));
         };
 
-        Connections_->RunDeferred<Ydb::BSConfig::V1::BSConfigService, Ydb::BSConfig::FetchStorageConfigRequest, Ydb::BSConfig::FetchStorageConfigResponse>(
+        Connections_->RunDeferred<Ydb::BSConfig::V1::BSConfigService, Ydb::BSConfig::FetchConfigRequest, Ydb::BSConfig::FetchConfigResponse>(
             std::move(request),
             extractor,
-            &Ydb::BSConfig::V1::BSConfigService::Stub::AsyncFetchStorageConfig,
+            &Ydb::BSConfig::V1::BSConfigService::Stub::AsyncFetchConfig,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -97,18 +97,18 @@ TStorageConfigClient::TStorageConfigClient(const TDriver& driver, const TCommonC
 
 TStorageConfigClient::~TStorageConfigClient() = default;
 
-TAsyncStatus TStorageConfigClient::ReplaceStorageConfig(
+TAsyncStatus TStorageConfigClient::ReplaceConfig(
         const std::optional<std::string>& yaml_config,
         const std::optional<std::string>& storage_yaml_config,
-        const TReplaceStorageConfigSettings& settings)
+        const TReplaceConfigSettings& settings)
 {
-    return Impl_->ReplaceStorageConfig(yaml_config, storage_yaml_config, settings);
+    return Impl_->ReplaceConfig(yaml_config, storage_yaml_config, settings);
 }
 
-TAsyncFetchStorageConfigResult TStorageConfigClient::FetchStorageConfig(bool dedicated_storage_section,
-        bool dedicated_cluster_section, const TFetchStorageConfigSettings& settings)
+TAsyncFetchConfigResult TStorageConfigClient::FetchConfig(bool dedicated_storage_section,
+        bool dedicated_cluster_section, const TFetchConfigSettings& settings)
 {
-    return Impl_->FetchStorageConfig(dedicated_storage_section, dedicated_cluster_section, settings);
+    return Impl_->FetchConfig(dedicated_storage_section, dedicated_cluster_section, settings);
 }
 
 TAsyncStatus TStorageConfigClient::BootstrapCluster(const std::string& selfAssemblyUUID, const TBootstrapClusterSettings& settings) {

@@ -56,7 +56,7 @@ namespace NKikimr::NYaml {
         TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector = nullptr);
 
     NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data);
-    Ydb::BSConfig::ReplaceStorageConfigRequest BuildReplaceDistributedStorageCommand(const TString& data);
+    Ydb::BSConfig::ReplaceConfigRequest BuildReplaceDistributedStorageCommand(const TString& data);
     TString ParseProtoToYaml(const NKikimrConfig::StorageConfig& protoConfig);
 
     void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx);

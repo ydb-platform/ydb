@@ -11,10 +11,10 @@ import "ydb/public/api/protos/ydb_bsconfig.proto";
 service BSConfigService {
 
     // Initialize Blobstorage/single config
-    rpc ReplaceStorageConfig(BSConfig.ReplaceStorageConfigRequest) returns (BSConfig.ReplaceStorageConfigResponse);
+    rpc ReplaceConfig(BSConfig.ReplaceConfigRequest) returns (BSConfig.ReplaceConfigResponse);
 
     // Fetch Blobstorage/single config
-    rpc FetchStorageConfig(BSConfig.FetchStorageConfigRequest) returns (BSConfig.FetchStorageConfigResponse);
+    rpc FetchConfig(BSConfig.FetchConfigRequest) returns (BSConfig.FetchConfigResponse);
 
     // Bootstrap automatically configured cluster
     rpc BootstrapCluster(BSConfig.BootstrapClusterRequest) returns (BSConfig.BootstrapClusterResponse);

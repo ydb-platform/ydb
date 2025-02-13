@@ -12,11 +12,11 @@
 namespace NKikimr::NGRpcService {
 
 using TEvReplaceStorageConfigRequest =
-    TGrpcRequestOperationCall<Ydb::BSConfig::ReplaceStorageConfigRequest,
-        Ydb::BSConfig::ReplaceStorageConfigResponse>;
+    TGrpcRequestOperationCall<Ydb::BSConfig::ReplaceConfigRequest,
+        Ydb::BSConfig::ReplaceConfigResponse>;
 using TEvFetchStorageConfigRequest =
-    TGrpcRequestOperationCall<Ydb::BSConfig::FetchStorageConfigRequest,
-        Ydb::BSConfig::FetchStorageConfigResponse>;
+    TGrpcRequestOperationCall<Ydb::BSConfig::FetchConfigRequest,
+        Ydb::BSConfig::FetchConfigResponse>;
 using TEvBootstrapClusterRequest =
     TGrpcRequestOperationCall<Ydb::BSConfig::BootstrapClusterRequest,
         Ydb::BSConfig::BootstrapClusterResponse>;
@@ -24,21 +24,21 @@ using TEvBootstrapClusterRequest =
 using namespace NActors;
 using namespace Ydb;
 
-bool CopyToConfigRequest(const Ydb::BSConfig::ReplaceStorageConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to) {
+bool CopyToConfigRequest(const Ydb::BSConfig::ReplaceConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to) {
     to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(from.main_config()));
     return true;
 }
 
-void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &/*from*/, Ydb::BSConfig::ReplaceStorageConfigResult* /*to*/) {
+void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &/*from*/, Ydb::BSConfig::ReplaceConfigResult* /*to*/) {
 }
 
-bool CopyToConfigRequest(const Ydb::BSConfig::FetchStorageConfigRequest &/*from*/, NKikimrBlobStorage::TConfigRequest *to) {
+bool CopyToConfigRequest(const Ydb::BSConfig::FetchConfigRequest &/*from*/, NKikimrBlobStorage::TConfigRequest *to) {
     to->AddCommand()->MutableReadHostConfig();
     to->AddCommand()->MutableReadBox();
     return true;
 }
 
-void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb::BSConfig::FetchStorageConfigResult *to) {
+void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb::BSConfig::FetchConfigResult *to) {
     auto hostConfigStatus = from.GetStatus()[0];
     auto boxStatus = from.GetStatus()[1];
     NKikimrConfig::StorageConfig storageConfig;
@@ -81,9 +81,9 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
 }
 
 class TReplaceStorageConfigRequest : public TBSConfigRequestGrpc<TReplaceStorageConfigRequest, TEvReplaceStorageConfigRequest,
-    Ydb::BSConfig::ReplaceStorageConfigResult> {
+    Ydb::BSConfig::ReplaceConfigResult> {
 public:
-    using TBase = TBSConfigRequestGrpc<TReplaceStorageConfigRequest, TEvReplaceStorageConfigRequest, Ydb::BSConfig::ReplaceStorageConfigResult>;
+    using TBase = TBSConfigRequestGrpc<TReplaceStorageConfigRequest, TEvReplaceStorageConfigRequest, Ydb::BSConfig::ReplaceConfigResult>;
     using TBase::TBase;
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) override {
@@ -99,7 +99,7 @@ public:
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
-            Ydb::BSConfig::ReplaceStorageConfigResult& /*result*/)
+            Ydb::BSConfig::ReplaceConfigResult& /*result*/)
     {}
 
     bool IsDistconfEnableQuery() const {
@@ -130,9 +130,9 @@ public:
 };
 
 class TFetchStorageConfigRequest : public TBSConfigRequestGrpc<TFetchStorageConfigRequest, TEvFetchStorageConfigRequest,
-    Ydb::BSConfig::FetchStorageConfigResult> {
+    Ydb::BSConfig::FetchConfigResult> {
 public:
-    using TBase = TBSConfigRequestGrpc<TFetchStorageConfigRequest, TEvFetchStorageConfigRequest, Ydb::BSConfig::FetchStorageConfigResult>;
+    using TBase = TBSConfigRequestGrpc<TFetchStorageConfigRequest, TEvFetchStorageConfigRequest, Ydb::BSConfig::FetchConfigResult>;
     using TBase::TBase;
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) override {
@@ -147,7 +147,7 @@ public:
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record,
-            Ydb::BSConfig::FetchStorageConfigResult& result) {
+            Ydb::BSConfig::FetchConfigResult& result) {
         result.set_main_config(record.GetFetchStorageConfig().GetYAML());
     }
 

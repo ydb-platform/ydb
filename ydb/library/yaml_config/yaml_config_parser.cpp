@@ -1483,8 +1483,8 @@ namespace NKikimr::NYaml {
         return result;
     }
 
-    Ydb::BSConfig::ReplaceStorageConfigRequest BuildReplaceDistributedStorageCommand(const TString& data) {
-        Ydb::BSConfig::ReplaceStorageConfigRequest replaceRequest;
+    Ydb::BSConfig::ReplaceConfigRequest BuildReplaceDistributedStorageCommand(const TString& data) {
+        Ydb::BSConfig::ReplaceConfigRequest replaceRequest;
         replaceRequest.set_main_config(data);
         return replaceRequest;
     }

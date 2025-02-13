@@ -13,7 +13,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 // BSConfig API.
 //
 
-message ReplaceStorageConfigRequest {
+message ReplaceConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
     // cluster yaml config
@@ -37,24 +37,24 @@ message ReplaceStorageConfigRequest {
     bool allow_incorrect_cluster = 11;
 }
 
-message ReplaceStorageConfigResponse {
+message ReplaceConfigResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-message ReplaceStorageConfigResult {
+message ReplaceConfigResult {
 }
 
-message FetchStorageConfigRequest {
+message FetchConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     bool dedicated_storage_section = 2;
     bool dedicated_cluster_section = 3;
 }
 
-message FetchStorageConfigResponse {
+message FetchConfigResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-message FetchStorageConfigResult {
+message FetchConfigResult {
     optional string main_config = 1;
     optional string storage_config = 2;
 }

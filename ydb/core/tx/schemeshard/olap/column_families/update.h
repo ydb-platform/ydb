@@ -14,7 +14,7 @@ private:
     YDB_ACCESSOR_DEF(TString, Name);
     YDB_ACCESSOR_DEF(std::optional<NKikimrSchemeOp::EColumnCodec>, Codec);
     YDB_ACCESSOR_DEF(std::optional<i32>, CodecLevel);
-    YDB_ACCESSOR_DEF(std::optional<NArrow::NAccessor::TRequestedConstructorContainer>, AccessorConstructor);
+    YDB_ACCESSOR_DEF(NArrow::NAccessor::TRequestedConstructorContainer, AccessorConstructor);
 
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TFamilyDescription& diffColumnFamily, IErrorCollector& errors);

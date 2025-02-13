@@ -206,7 +206,7 @@ TString TTestHelper::TCompression::ToString() const {
 }
 
 bool TTestHelper::TColumnFamily::DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& family) {
-    if (!family.HasId() || !family.HasName()) {
+    if (!family.HasId() || !family.HasName() || (!family.HasColumnCodec() && family.HasColumnCodecLevel())) {
         return false;
     }
     Id = family.GetId();
@@ -218,7 +218,9 @@ bool TTestHelper::TColumnFamily::DeserializeFromProto(const NKikimrSchemeOp::TFa
     if (family.HasColumnCodecLevel()) {
         Compression.SetCompressionLevel(family.GetColumnCodecLevel());
     }
-    DataAccessor = family.GetDataAccessorConstructor().GetClassName();
+    if (family.HasDataAccessorConstructor()) {
+        DataAccessor = family.GetDataAccessorConstructor().GetClassName();
+    }
     return true;
 }
 

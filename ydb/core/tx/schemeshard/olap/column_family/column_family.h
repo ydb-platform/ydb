@@ -16,11 +16,9 @@ private:
     YDB_ACCESSOR_DEF(std::optional<ui32>, Id);
     YDB_ACCESSOR_DEF(std::optional<NKikimrSchemeOp::EColumnCodec>, ColumnCodec);
     YDB_ACCESSOR_DEF(std::optional<i32>, ColumnCodecLevel);
-    YDB_ACCESSOR_DEF(NKikimrArrowAccessorProto::TRequestedConstructor, AccessorConstructor);
+    YDB_ACCESSOR_DEF(std::optional<NKikimrArrowAccessorProto::TRequestedConstructor>, AccessorConstructor);
 
 public:
-    TColumnFamily();
-
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& proto);
     TConclusionStatus DeserializeFromProto(const Ydb::Table::ColumnFamily& proto);
     NKikimrSchemeOp::TFamilyDescription SerializeToProto() const;
@@ -29,7 +27,6 @@ public:
     TConclusion<NKikimrSchemeOp::TOlapColumn::TSerializer> GetSerializer() const;
     TConclusionStatus SetSerializer(const NArrow::NSerialization::TSerializerContainer& serializer);
 
-    static NKikimrSchemeOp::TFamilyDescription GetColumnFamilyWithDefaultSettings();
     static NKikimrSchemeOp::TFamilyDescription GetDefaultColumnFamily();
 };
 }

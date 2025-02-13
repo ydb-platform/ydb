@@ -37,7 +37,7 @@ public:
         YDB_ACCESSOR_DEF(TString, FamilyName);
         YDB_ACCESSOR_DEF(TString, Data);
         YDB_ACCESSOR_DEF(TCompression, Compression);
-        YDB_ACCESSOR(TString, DataAccessor, "PLAIN");
+        YDB_ACCESSOR_DEF(TString, DataAccessor);
 
     public:
         bool DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& family);

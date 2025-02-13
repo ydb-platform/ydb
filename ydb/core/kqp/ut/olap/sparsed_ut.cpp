@@ -354,15 +354,15 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
     Y_UNIT_TEST(SetSparsedViaColumnFamily) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true));
 
         TString tableName = "/Root/TableWithDefaultColumnFamily";
         TTestHelper::TCompression offCompression =
             TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
 
         TVector<TTestHelper::TColumnFamily> families = {
-            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(offCompression).SetDataAccessor("PLAIN"),
-            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(offCompression).SetDataAccessor("PLAIN")
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(offCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(offCompression),
         };
 
         {
@@ -394,9 +394,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
             auto columns = schema.GetColumns();
             for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
-                auto column = columns[i];
-                UNIT_ASSERT(column.HasDataAccessorConstructor());
-                UNIT_ASSERT_EQUAL(column.GetDataAccessorConstructor().GetClassName(), NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
+                UNIT_ASSERT(!columns[i].HasDataAccessorConstructor());
             }
         }
 
@@ -469,13 +467,46 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                 auto columns = schema.GetColumns();
                 for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
                     auto column = columns[i];
-                    UNIT_ASSERT(column.HasDataAccessorConstructor());
                     if (column.GetName() == "Value1") {
-                        UNIT_ASSERT_EQUAL(
-                            column.GetDataAccessorConstructor().GetClassName(), NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
+                        UNIT_ASSERT(!column.HasDataAccessorConstructor());
                     } else {
+                        UNIT_ASSERT(column.HasDataAccessorConstructor());
                         UNIT_ASSERT_EQUAL(
                             column.GetDataAccessorConstructor().GetClassName(), NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
+                    }
+                }
+            }
+        }
+
+        {
+            families[0].SetDataAccessor("PLAIN");
+            auto alterQuery =
+                TStringBuilder() << R"(ALTER OBJECT `)" << tableName
+                                 << R"(` (TYPE TABLE) SET (ACTION=ALTER_FAMILY, NAME=default, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`))";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_C(alterResult.IsSuccess(), alterResult.GetIssues().ToString());
+
+            {
+                auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+                auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+                UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+                for (ui32 i = 0; i < families.size(); i++) {
+                    TTestHelper::TColumnFamily familyFromScheme;
+                    UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                    TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
+                }
+
+                auto columns = schema.GetColumns();
+                for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                    auto column = columns[i];
+                    if (column.GetName() == "Value1") {
+                        UNIT_ASSERT(!column.HasDataAccessorConstructor());
+                    } else {
+                        UNIT_ASSERT(column.HasDataAccessorConstructor());
+                        UNIT_ASSERT_EQUAL(
+                            column.GetDataAccessorConstructor().GetClassName(), NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
                     }
                 }
             }

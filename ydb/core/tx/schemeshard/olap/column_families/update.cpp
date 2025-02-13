@@ -55,7 +55,7 @@ bool TOlapColumnFamlilyAdd::ParseFromRequest(const NKikimrSchemeOp::TFamilyDescr
         SerializerContainer = serializerContainer.GetResult();
     }
 
-    if (!AccessorConstructor.DeserializeFromProto(family.GetAccessorConstructor())) {
+    if (family.GetAccessorConstructor().has_value() && !AccessorConstructor.DeserializeFromProto(family.GetAccessorConstructor().value())) {
         errors.AddError("cannot parse accessor constructor from proto");
         return false;
     }
@@ -72,23 +72,26 @@ void TOlapColumnFamlilyAdd::ParseFromLocalDB(const NKikimrSchemeOp::TFamilyDescr
         Y_VERIFY_S(serializer.IsSuccess(), serializer.GetErrorMessage());
         Y_VERIFY(SerializerContainer.DeserializeFromProto(serializer.GetResult()));
     }
-    Y_VERIFY(AccessorConstructor.DeserializeFromProto(family.GetAccessorConstructor()));
+    if (family.GetAccessorConstructor().has_value()) {
+        Y_VERIFY(AccessorConstructor.DeserializeFromProto(family.GetAccessorConstructor().value()));
+    }
 }
 
 void TOlapColumnFamlilyAdd::Serialize(NKikimrSchemeOp::TFamilyDescription& columnFamily) const {
     columnFamily.SetName(Name);
-    TColumnFamily family;
     if (SerializerContainer.HasObject()) {
+        TColumnFamily family;
         TConclusionStatus result = family.SetSerializer(SerializerContainer);
         Y_VERIFY_S(result.IsSuccess(), result.GetErrorMessage());
         Y_VERIFY(family.GetColumnCodec().has_value());
+        columnFamily.SetColumnCodec(family.GetColumnCodec().value());
+        if (family.GetColumnCodecLevel().has_value()) {
+            columnFamily.SetColumnCodecLevel(family.GetColumnCodecLevel().value());
+        }
     }
-    columnFamily.SetColumnCodec(family.GetColumnCodec().value());
-    if (family.GetColumnCodecLevel().has_value()) {
-        columnFamily.SetColumnCodecLevel(family.GetColumnCodecLevel().value());
+    if (AccessorConstructor.HasObject()) {
+        *columnFamily.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
     }
-    Y_VERIFY(AccessorConstructor);
-    *columnFamily.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
 }
 
 bool TOlapColumnFamlilyAdd::ApplyDiff(const TOlapColumnFamlilyDiff& diffColumnFamily, IErrorCollector& errors) {
@@ -124,9 +127,8 @@ bool TOlapColumnFamlilyAdd::ApplyDiff(const TOlapColumnFamlilyDiff& diffColumnFa
         }
         SerializerContainer = resultBuild.GetResult();
     }
-    auto accessorConstructor = diffColumnFamily.GetAccessorConstructor();
-    if (accessorConstructor.has_value()) {
-        AccessorConstructor = diffColumnFamily.GetAccessorConstructor().value();
+    if (diffColumnFamily.GetAccessorConstructor().HasObject()) {
+        AccessorConstructor = diffColumnFamily.GetAccessorConstructor();
     }
     return true;
 }

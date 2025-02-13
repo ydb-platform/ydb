@@ -385,7 +385,6 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             return false;
         }
         auto familyDescription = schema.AddColumnFamilies();
-        *familyDescription = NSchemeShard::TColumnFamily::GetColumnFamilyWithDefaultSettings();
         familyDescription->SetName(family.Name);
         ui32 id = 0;
         if (familyDescription->GetName() != "default") {

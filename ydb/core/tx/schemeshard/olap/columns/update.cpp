@@ -196,36 +196,45 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
     }
 }
 
-void TOlapColumnBase::ApplyColumnFamily(const TOlapColumnFamily& columnFamily) {
+bool TOlapColumnBase::ApplyColumnFamilySettings(const TOlapColumnFamily& columnFamily, IErrorCollector& errors) {
+    if (columnFamily.GetSerializerContainer().HasObject()) {
+        SetSerializer(columnFamily.GetSerializerContainer());
+    } else {
+        SetSerializer(NArrow::NSerialization::TSerializerContainer());
+    }
+
+    if (columnFamily.GetAccessorConstructor().HasObject()) {
+        auto conclusion = columnFamily.GetAccessorConstructor()->BuildConstructor();
+        if (conclusion.IsFail()) {
+            errors.AddError(conclusion.GetErrorMessage());
+            return false;
+        }
+        SetAccessorConstructor(conclusion.GetResult());
+    } else {
+        SetAccessorConstructor(NArrow::NAccessor::TConstructorContainer());
+    }
+    return true;
+}
+
+bool TOlapColumnBase::ApplyColumnFamily(const TOlapColumnFamily& columnFamily, IErrorCollector& errors) {
     ColumnFamilyId = columnFamily.GetId();
-    SetSerializer(columnFamily.GetSerializerContainer());
-    auto conclusion = columnFamily.GetAccessorConstructor()->BuildConstructor();
-    SetAccessorConstructor(conclusion.GetResult());
+    return ApplyColumnFamilySettings(columnFamily, errors);
 }
 
 bool TOlapColumnBase::ApplyColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
     if (!GetColumnFamilyId().has_value()) {
         TString familyName = "default";
         const TOlapColumnFamily* columnFamily = columnFamilies.GetByName(familyName);
-
         if (!columnFamily) {
             errors.AddError(NKikimrScheme::StatusSchemeError,
                 TStringBuilder() << "Cannot set column family `" << familyName << "` for column `" << GetName() << "`. Family not found");
             return false;
         }
-
         ColumnFamilyId = columnFamily->GetId();
     }
     Y_VERIFY(ColumnFamilyId.has_value());
     const TOlapColumnFamily* columnFamily = columnFamilies.GetByIdVerified(ColumnFamilyId.value());
-    SetSerializer(columnFamily->GetSerializerContainer());
-    auto conclusion = columnFamily->GetAccessorConstructor()->BuildConstructor();
-    if (conclusion.IsFail()) {
-        errors.AddError(conclusion.GetErrorMessage());
-        return false;
-    }
-    SetAccessorConstructor(conclusion.GetResult());
-    return true;
+    return ApplyColumnFamilySettings(*columnFamily, errors);
 }
 
 bool TOlapColumnBase::ApplyDiff(

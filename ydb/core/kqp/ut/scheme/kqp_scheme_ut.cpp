@@ -10396,13 +10396,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto columns = schema.GetColumns();
         for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
             auto column = columns[i];
-            UNIT_ASSERT(column.HasSerializer());
+            UNIT_ASSERT(!column.HasSerializer());
             UNIT_ASSERT_EQUAL_C(
                 column.GetColumnFamilyId(), 0, TStringBuilder() << "family for column " << column.GetName() << " is not default");
-            TTestHelper::TCompression compression;
-            UNIT_ASSERT(compression.DeserializeFromProto(schema.GetColumns(i).GetSerializer()));
-            TConclusionStatus result = compression.IsEqual(defaultFamily.GetCompression());
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
     }
 
@@ -11213,7 +11209,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             if (familyFromScheme.GetFamilyName() == "default") {
                 familyIndex = 1;
             }
-            TString errorMessage;
             TConclusionStatus result = familyFromScheme.IsEqual(families[familyIndex]);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
@@ -11568,11 +11563,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnFamily defaultFamily = TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default");
 
         UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
-        TTestHelper::TColumnFamily defaultFromScheme;
-        UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
         {
-            TString errorMessage;
-            UNIT_ASSERT_C(defaultFromScheme.IsEqual(defaultFamily, errorMessage), errorMessage);
+            TTestHelper::TColumnFamily defaultFromScheme;
+            UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
+            TConclusionStatus result = defaultFromScheme.IsEqual(defaultFamily);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
     }
 

@@ -10,30 +10,28 @@
 
 namespace NKikimr::NSchemeShard {
 
-TColumnFamily::TColumnFamily() {
-    AccessorConstructor.SetClassName(NKikimr::NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
-    AccessorConstructor.MutablePlain();
-}
-
 TConclusionStatus TColumnFamily::DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& proto) {
     if (!proto.HasName()) {
         return TConclusionStatus::Fail("field `Name` is empty in proto");
     }
-    if (!proto.HasColumnCodec() || !proto.HasDataAccessorConstructor()) {
-        return TConclusionStatus::Fail("field `ColumnCodec` is empty in proto");
+
+    if (!proto.HasColumnCodec() && proto.HasColumnCodecLevel()) {
+        return TConclusionStatus::Fail("field `ColumnCodecLevel` is not empty, but field `ColumnCodec` is empty in proto");
     }
-    if (!proto.HasDataAccessorConstructor()) {
-        return TConclusionStatus::Fail("field `DataAccessorConstructor` is empty in proto");
-    }
+
     if (proto.HasId()) {
         Id = proto.GetId();
     }
     Name = proto.GetName();
-    ColumnCodec = proto.GetColumnCodec();
+    if (proto.HasColumnCodec()) {
+        ColumnCodec = proto.GetColumnCodec();
+    }
     if (proto.HasColumnCodecLevel()) {
         ColumnCodecLevel = proto.GetColumnCodecLevel();
     }
-    AccessorConstructor = proto.GetDataAccessorConstructor();
+    if (proto.HasDataAccessorConstructor()) {
+        AccessorConstructor = proto.GetDataAccessorConstructor();
+    }
     return TConclusionStatus::Success();
 }
 
@@ -79,7 +77,9 @@ void TColumnFamily::SerializeToProto(NKikimrSchemeOp::TFamilyDescription& proto)
     if (ColumnCodecLevel.has_value()) {
         proto.SetColumnCodecLevel(ColumnCodecLevel.value());
     }
-    *proto.MutableDataAccessorConstructor() = AccessorConstructor;
+    if (AccessorConstructor.has_value()) {
+        *proto.MutableDataAccessorConstructor() = AccessorConstructor.value();
+    }
 }
 
 TConclusion<NKikimrSchemeOp::TOlapColumn::TSerializer> TColumnFamily::GetSerializer() const {
@@ -135,17 +135,8 @@ TConclusionStatus TColumnFamily::SetSerializer(const NArrow::NSerialization::TSe
     return TConclusionStatus::Success();
 }
 
-NKikimrSchemeOp::TFamilyDescription TColumnFamily::GetColumnFamilyWithDefaultSettings() {
-    NKikimrSchemeOp::TFamilyDescription family;
-    family.SetColumnCodec(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
-    auto dataAccessor = family.MutableDataAccessorConstructor();
-    dataAccessor->SetClassName(NKikimr::NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
-    dataAccessor->MutablePlain();
-    return family;
-}
-
 NKikimrSchemeOp::TFamilyDescription TColumnFamily::GetDefaultColumnFamily() {
-    NKikimrSchemeOp::TFamilyDescription defaultFamily = GetColumnFamilyWithDefaultSettings();
+    NKikimrSchemeOp::TFamilyDescription defaultFamily;
     defaultFamily.SetName("default");
     defaultFamily.SetId(0);
     return defaultFamily;

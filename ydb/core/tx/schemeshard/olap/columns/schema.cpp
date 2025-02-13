@@ -122,7 +122,9 @@ bool TOlapColumnsDescription::ApplyUpdate(
             }
             ui32 id = column.GetColumnFamilyId().value();
             if (alterColumnFamiliesId.contains(id)) {
-                column.ApplyColumnFamily(*columnFamilies.GetByIdVerified(id));
+                if (!column.ApplyColumnFamily(*columnFamilies.GetByIdVerified(id), errors)) {
+                    return false;
+                }
             }
         }
     }

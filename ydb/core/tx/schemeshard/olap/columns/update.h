@@ -41,6 +41,8 @@ private:
     YDB_ACCESSOR_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
     YDB_READONLY_PROTECT(std::optional<ui32>, ColumnFamilyId, std::nullopt);
 
+    bool ApplyColumnFamilySettings(const TOlapColumnFamily& columnFamilies, IErrorCollector& errors);
+
 public:
     TOlapColumnBase(const std::optional<ui32>& keyOrder, const std::optional<ui32> columnFamilyId = {})
         : KeyOrder(keyOrder)
@@ -51,7 +53,7 @@ public:
     void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
     void Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const;
     bool ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors);
-    void ApplyColumnFamily(const TOlapColumnFamily& columnFamilies);
+    bool ApplyColumnFamily(const TOlapColumnFamily& columnFamilies, IErrorCollector& errors);
     bool ApplyColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors);
     bool ApplyDiff(const TOlapColumnDiff& diffColumn, const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors);
     bool IsKeyColumn() const {

@@ -1114,7 +1114,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                     return false;
                 }
-                allowACLBypass = checkAdmin && isAdmin;
+                allowACLBypass = isAdmin;
 
                 // Any user can change their own password (but nothing else)
                 auto isUserChangesOwnPassword = [](const auto& modifyScheme, const NACLib::TSID& subjectSid) {

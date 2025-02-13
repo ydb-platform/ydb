@@ -383,11 +383,11 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
         },
         { .Tag = "CreateUser", .SqlStatement = "CREATE USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
-            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = false
+            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
         { .Tag = "CreateUser", .SqlStatement = "CREATE USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
-            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = false
+            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
         { .Tag = "CreateUser", .SqlStatement = "CREATE USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
@@ -487,11 +487,11 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
         },
         { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
-            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = false
+            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
         { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
-            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = false
+            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
         { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
@@ -591,11 +591,11 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
         },
         { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
-            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = false
+            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
         { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
-            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = false
+            .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
         { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},

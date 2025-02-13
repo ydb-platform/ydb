@@ -93,8 +93,7 @@ void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-        NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
-        kqpQueryError << status;
+        kqpQueryError << issues.ToString();
 
         SendResponseFail(ctx, kafkaErr, kqpQueryError);
     }
@@ -165,11 +164,11 @@ std::optional<TGroupStatus> TKafkaBalancerActor::ParseCheckStateAndGeneration(
         return result;
     }
 
-    result.State = parser.ColumnParser("state").GetOptionalUint64().GetOrElse(0);
-    result.Generation = parser.ColumnParser("generation").GetOptionalUint64().GetOrElse(0);
-    result.MasterId = parser.ColumnParser("master").GetOptionalUtf8().GetOrElse("");
-    result.LastHeartbeat = parser.ColumnParser("last_heartbeat_time").GetOptionalDatetime().GetOrElse(TInstant::Zero());
-    result.ProtocolName = parser.ColumnParser("protocol").GetOptionalUtf8().GetOrElse("");
+    result.State = parser.ColumnParser("state").GetOptionalUint64().value_or(0);
+    result.Generation = parser.ColumnParser("generation").GetOptionalUint64().value_or(0);
+    result.MasterId = parser.ColumnParser("master").GetOptionalUtf8().value_or("");
+    result.LastHeartbeat = parser.ColumnParser("last_heartbeat_time").GetOptionalDatetime().value_or(TInstant::Zero());
+    result.ProtocolName = parser.ColumnParser("protocol").GetOptionalUtf8().value_or("");
     result.Exists = true;
 
     if (parser.TryNextRow()) {
@@ -199,7 +198,7 @@ bool TKafkaBalancerActor::ParseAssignments(
         return false;
     }
 
-    assignments = parser.ColumnParser("assignment").GetOptionalString().GetOrElse("");
+    assignments = parser.ColumnParser("assignment").GetOptionalString().value_or("");
 
     if (parser.TryNextRow()) {
         return false;
@@ -232,8 +231,8 @@ bool TKafkaBalancerActor::ParseWorkerStatesAndChooseProtocol(
 
     std::vector<TParsedState> states;
     while (parser.TryNextRow()) {
-        TString protoStr = parser.ColumnParser("worker_state_proto").GetOptionalString().GetOrElse("");
-        TString memberId = parser.ColumnParser("member_id").GetOptionalUtf8().GetOrElse("");
+        TString protoStr = parser.ColumnParser("worker_state_proto").GetOptionalString().value_or("");
+        TString memberId = parser.ColumnParser("member_id").GetOptionalUtf8().value_or("");
 
         NKafka::TWorkerState workerState;
         if (!protoStr.empty() && !workerState.ParseFromString(protoStr)) {

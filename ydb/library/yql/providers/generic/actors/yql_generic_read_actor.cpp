@@ -48,7 +48,7 @@ namespace NYql::NDq {
             Generic::TSource&& source,
             const NActors::TActorId& computeActorId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-            const TVector<TString>& splitDescriptions)
+            TVector<TString>&& splitDescriptions)
             : InputIndex_(inputIndex)
             , ComputeActorId_(computeActorId)
             , Client_(std::move(client))
@@ -385,6 +385,23 @@ namespace NYql::NDq {
         Generic::TSource Source_;
     };
 
+    void ExtractSplitDescriptions(
+        TVector<TString>& splitDescriptions, 
+        const THashMap<TString, TString>& taskParams,  // ranges are here in v1
+        const TVector<TString>& srcReadRanges          // ranges are here in v2
+    ) {
+        if (srcReadRanges.size() > 0) {
+            splitDescriptions = srcReadRanges;
+        } else {
+            const auto& range = taskParams.find(GenericProviderName);
+            if (range != taskParams.end()) {
+                splitDescriptions.push_back(range->second);
+            }
+        }
+
+        Y_ENSURE(splitDescriptions.size() > 0, "read ranges must not be empty");
+    }
+
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>
     CreateGenericReadActor(NConnector::IClient::TPtr genericClient,
                            Generic::TSource&& source,
@@ -392,12 +409,16 @@ namespace NYql::NDq {
                            TCollectStatsLevel statsLevel,
                            const THashMap<TString, TString>& /*secureParams*/,
                            const ui64 taskId,
-                           const TVector<TString>& readRanges,
+                           const THashMap<TString, TString>& taskParams, 
+                           const TVector<TString>& readRanges,           
                            const NActors::TActorId& computeActorId,
                            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                            const NKikimr::NMiniKQL::THolderFactory& holderFactory)
     {
-        Y_ENSURE(readRanges.size() > 0, "read ranges must not be empty");
+        TVector<TString> splitDescriptions;
+        ExtractSplitDescriptions(splitDescriptions, taskParams, readRanges);
+
+        Cout << "CRAB CreateGenericReadActor: " << readRanges.size() << Endl;
 
         const auto dsi = source.select().data_source_instance();
         YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
@@ -434,7 +455,7 @@ namespace NYql::NDq {
             std::move(source),
             computeActorId,
             holderFactory,
-            readRanges);
+            std::move(splitDescriptions));
 
         return {actor, actor};
     }

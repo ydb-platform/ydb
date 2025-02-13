@@ -16,6 +16,7 @@ namespace NYql::NDq {
         TCollectStatsLevel statsLevel, 
         const THashMap<TString, TString>& secureParams,
         const ui64 taskId,
+        const THashMap<TString, TString>& taskParams, 
         const TVector<TString>& readRanges,
         const NActors::TActorId& computeActorId,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,

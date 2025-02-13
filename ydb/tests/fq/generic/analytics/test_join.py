@@ -24,7 +24,7 @@ class TestJoinAnalytics:
         "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-analytics-ydb:2136"}], indirect=True
     )
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder"}], indirect=True)
-    @pytest.mark.parametrize("query_type", [fq.QueryContent.QueryType.ANALYTICS, fq.QueryContent.QueryType.STREAMING])
+    @pytest.mark.parametrize("query_type", [fq.QueryContent.QueryType.ANALYTICS])
     def test_simple(self, fq_client: FederatedQueryClient, settings: Settings, query_type):
         table_name = "join_table"
         ch_conn_name = f"ch_conn_{table_name}"

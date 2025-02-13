@@ -20,10 +20,12 @@ namespace NYql::NDq {
                 args.StatsLevel,
                 args.SecureParams,
                 args.TaskId,
+                args.TaskParams,
                 args.ReadRanges,
                 args.ComputeActorId,
                 credentialsFactory, 
-                args.HolderFactory);
+                args.HolderFactory
+            );
         };
 
         auto lookupActorFactory = [credentialsFactory, genericClient](NYql::Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {

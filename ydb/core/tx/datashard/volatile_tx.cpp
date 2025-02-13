@@ -803,10 +803,9 @@ namespace NKikimr::NDataShard {
                 return true;
 
             case EVolatileTxState::Aborting:
-                // Aborting state will not change as long as we're still leader
-                return true;
-                // Ack readset normally as long as we're still a leader
-                return true;
+                // We need to wait until volatile tx abort is committed to send rs acks
+                info->DelayedAcks.push_back(std::move(ack));
+                return false;
         }
 
         ui64 srcTabletId = record.GetTabletSource();
@@ -861,8 +860,10 @@ namespace NKikimr::NDataShard {
         }();
 
         if (!committed) {
+            // We need to wait until volatile tx abort is committed to send rs acks
+            info->DelayedAcks.push_back(std::move(ack));
             AbortWaitingTransaction(info);
-            return true;
+            return false;
         }
 
         NIceDb::TNiceDb db(txc.DB);

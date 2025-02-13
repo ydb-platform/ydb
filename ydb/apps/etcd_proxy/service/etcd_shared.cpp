@@ -1,6 +1,19 @@
 #include "etcd_shared.h"
 
 namespace NEtcd {
+
+std::string IncrementKey(std::string key) {
+    for (auto i = key.size(); i > 0u;) {
+        if (const auto k = key[--i]; ~k) {
+            key[i] = k + '\x01';
+            return key;
+        } else {
+            key[i] = '\x00';
+        }
+    }
+    return std::string();
+}
+
 std::string DecrementKey(std::string key) {
     for (auto i = key.size(); i > 0u;) {
         if (const auto k = key[--i]) {

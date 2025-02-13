@@ -144,7 +144,7 @@ TProxy::TProxy(int argc, char** argv)
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     bool useStdErr = false;
     bool mlock = false;
-    TString sslCertificateFile;
+
     opts.AddLongOption("database", "YDB etcd databse").Required().RequiredArgument("DATABASE").StoreResult(&Database);
     opts.AddLongOption("endpoint", "YDB endpoint to connect").Required().RequiredArgument("ENDPOINT").StoreResult(&Endpoint);
     opts.AddLongOption("port", "Listening port").Optional().DefaultValue("2379").RequiredArgument("PORT").StoreResult(&ListeningPort);

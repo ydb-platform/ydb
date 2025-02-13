@@ -44,9 +44,9 @@ private:
     std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
 
     bool Initialize_ = false;
-    TString Database, Endpoint;
-    uint16_t ListeningPort = 2379;
-    TString Root, Cert, Key;
+    std::string Database, Endpoint;
+    ui16 ListeningPort = 2379U;
+    std::string Root, Cert, Key;
 };
 
 }

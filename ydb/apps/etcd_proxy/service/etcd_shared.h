@@ -17,6 +17,7 @@ struct TSharedStuff {
     NActors::TActorId Watchtower;
 };
 
+std::string IncrementKey(std::string key);
 std::string DecrementKey(std::string key);
 
 std::ostream& DumpKeyRange(std::ostream& out, std::string_view key, std::string_view end = {});

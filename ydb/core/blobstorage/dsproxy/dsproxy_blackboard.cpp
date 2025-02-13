@@ -244,6 +244,25 @@ TString TBlobState::SituationToString(ESituation situation) {
     return "";
 }
 
+TString TBlobState::SituationToShortString(ESituation situation) {
+    switch (situation) {
+        case ESituation::Unknown:
+            return "U";
+        case ESituation::Error:
+            return "E";
+        case ESituation::Absent:
+            return "A";
+        case ESituation::Lost:
+            return "L";
+        case ESituation::Present:
+            return "P";
+        case ESituation::Sent:
+            return "S";
+    }
+    Y_ABORT_UNLESS(false, "Unexpected situation# %" PRIu64, ui64(situation));
+    return "";
+}
+
 TString TBlobState::TDisk::ToString() const {
     TStringStream str;
     str << "{OrderNumber# " << OrderNumber;
@@ -285,7 +304,7 @@ TString TBlobState::TWholeState::ToString() const {
     return str.Str();
 }
 
-TString TBlobState::ReportErrorReasons(const TBlobStorageGroupInfo& info) const {
+TString TBlobState::ReportProblems(const TBlobStorageGroupInfo& info) const {
     TStackVec<TStackVec<TString, 3>, TypicalDisksInSubring> errorsByDisk(Disks.size());
     for (const TDisk& disk : Disks) {
         for (const TDiskPart& part : disk.DiskParts) {
@@ -312,7 +331,17 @@ TString TBlobState::ReportErrorReasons(const TBlobStorageGroupInfo& info) const 
             str << "] } ";
         }
     }
-    str << "]";
+    str << "] ";
+
+    str << " Part situations# [ ";
+    for (const TDisk& disk : Disks) {
+        str << "{ OrderNumber# " << disk.OrderNumber << " Situations# ";
+        for (const TDiskPart& part : disk.DiskParts) {
+            str << SituationToShortString(part.Situation);
+        }
+        str << "} ";
+    }
+    str << "] ";
 
     return str.Str();
 }

@@ -166,7 +166,9 @@ std::optional<EStrategyOutcome> TStrategyBase::ProcessOptimistic(TBlobStorageGro
             if (!isDryRun) {
                 return EStrategyOutcome::Error(TStringBuilder() << "TStrategyBase saw optimisticState# "
                     << TBlobStorageGroupInfo::BlobStateToString(optimisticState)
-                    << " Reported ErrorReasons# " << state.ReportErrorReasons(info));
+                    << " GroupId# " << info.GroupID
+                    << " BlobId# " << state.Id
+                    << " Reported ErrorReasons# " << state.ReportProblems(info));
             }
             return EStrategyOutcome::DONE;
         case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:

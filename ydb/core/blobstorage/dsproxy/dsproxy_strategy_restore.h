@@ -71,7 +71,9 @@ public:
             case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
                 return EStrategyOutcome::Error(TStringBuilder() << "TRestoreStrategy saw optimisticState# "
                         << TBlobStorageGroupInfo::BlobStateToString(optimisticState)
-                        << " Reported ErrorReasons# " << state.ReportErrorReasons(info));
+                        << " GroupId# " << info.GroupID
+                        << " BlobId# " << state.Id
+                        << " Reported ErrorReasons# " << state.ReportProblems(info));
             case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:
             case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY:
             case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED:

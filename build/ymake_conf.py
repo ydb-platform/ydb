@@ -1067,6 +1067,7 @@ class GnuToolchainOptions(ToolchainOptions):
         self.objcopy = self.params.get('objcopy')
         self.objdump = self.params.get('objdump')
         self.isystem = self.params.get('isystem')
+        self.nm = self.params.get('nm')
 
         self.dwarf_tool = self.target.find_in_dict(self.params.get('dwarf_tool'))
 
@@ -1665,6 +1666,7 @@ class LD(Linker):
         self.strip = self.tc.strip
         self.objcopy = self.tc.objcopy
         self.objdump = self.tc.objdump
+        self.nm = self.tc.nm
 
         self.musl = Setting('MUSL', convert=to_bool)
 
@@ -1728,6 +1730,7 @@ class LD(Linker):
         emit('STRIP_TOOL_VENDOR', self.strip)
         emit('OBJCOPY_TOOL_VENDOR', self.objcopy)
         emit('OBJDUMP_TOOL_VENDOR', self.objdump)
+        emit('NM_TOOL_VENDOR', self.nm)
 
         emit('_LD_FLAGS', self.ld_flags)
         emit('LD_SDK_VERSION', self.ld_sdk)

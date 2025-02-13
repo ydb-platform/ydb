@@ -195,11 +195,12 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         env.FireDummyTablet(TestTabletFlags);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(234);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DataCleanupGeneration, 234);
     }
 
     Y_UNIT_TEST(CleanupDataNoTablesWithRestart) {
@@ -207,18 +208,20 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         env.FireDummyTablet(TestTabletFlags);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(234);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->DataCleanupGeneration, 234);
 
         env.RestartTablet(TestTabletFlags);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(235);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } }, true);
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->DataCleanupGeneration, 235);
     }
 
     Y_UNIT_TEST(CleanupDataLog) {
@@ -244,11 +247,11 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(234);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
-
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DataCleanupGeneration, 234);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, "Some_value"), 0);
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, "Some_other_value"), 0);
@@ -274,11 +277,11 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT_VALUES_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(234);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
-
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DataCleanupGeneration, 234);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
     }
@@ -311,10 +314,11 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT_VALUES_EQUAL(readRows, 2);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(234);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->DataCleanupGeneration, 234);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCount(env, value42, 1), 1);
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCount(env, value43, 2), 1);
@@ -342,7 +346,7 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         env.WaitFor<NFake::TEvCompacted>();
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(235);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -350,7 +354,8 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT(!env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(10)));
 
         env.SendEvToBSProxy(2, new NFake::TEvBlobStorageDeferGc(false));
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->DataCleanupGeneration, 235);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value43), 0);
@@ -393,10 +398,11 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(234);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DataCleanupGeneration, 234);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value43), 0);
@@ -435,10 +441,11 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(234);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DataCleanupGeneration, 234);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value41), 0);
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
@@ -466,11 +473,12 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
-            executor->CleanupData();
+            executor->CleanupData(234);
+            executor->CleanupData(235);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
-        env.WaitFor<NFake::TEvDataCleaned>(2);
+        auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->DataCleanupGeneration, 235); // only last genration should be present
 
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 43, value43) });
 
@@ -484,16 +492,17 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendAsync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(236);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
         env.SendAsync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(237);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
-        env.WaitFor<NFake::TEvDataCleaned>(2);
+        auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->DataCleanupGeneration, 237); // only last genration should be present
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value43), 0);
@@ -509,11 +518,12 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(234);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DataCleanupGeneration, 234);
     }
 
     Y_UNIT_TEST(CleanupDataWithRestarts) {
@@ -537,10 +547,11 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 43) }, true);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(234);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->DataCleanupGeneration, 234);
 
         env.RestartTablet(TestTabletFlags);
 
@@ -560,7 +571,7 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         env.WaitFor<NFake::TEvCompacted>();
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->CleanupData();
+            executor->CleanupData(235);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -568,10 +579,54 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT(!env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(10)));
 
         env.SendEvToBSProxy(1, new NFake::TEvBlobStorageDeferGc(false));
-        env.WaitFor<NFake::TEvDataCleaned>();
+        auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->DataCleanupGeneration, 235);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value43), 0);
+    }
+
+    Y_UNIT_TEST(CleanupDataRetryWithNotGreaterGenerations) {
+        TString value42(size_t(100 * 1024), 'a');
+
+        TMyEnvBase env;
+        env.FireDummyTablet(TestTabletFlags);
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
+
+        env.SendSync(new NFake::TEvCompact(101));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCount(env, value42, 1), 1);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 42) });
+
+        int readRows = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(101, readRows) });
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 0);
+
+        env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
+            executor->CleanupData(234);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        } });
+        auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->DataCleanupGeneration, 234);
+
+        env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
+            executor->CleanupData(115);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        } });
+        auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->DataCleanupGeneration, 234);
+
+        env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
+            executor->CleanupData(234);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        } });
+        auto ev3 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev3->Get()->DataCleanupGeneration, 234);
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
     }
 }
 } // namespace NKikimr::NTable

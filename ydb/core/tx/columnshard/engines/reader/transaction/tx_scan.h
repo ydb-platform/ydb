@@ -8,6 +8,7 @@ class TTxScan: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColum
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;
     void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;
+    static std::optional<TPredicate> GetTtlPredicate(const TTierInfo& tier, const ISnapshotSchema::TPtr schema);
 
 public:
     using TReadMetadataPtr = TReadMetadataBase::TConstPtr;

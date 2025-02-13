@@ -26,6 +26,24 @@ void TTxScan::SendError(const TString& problem, const TString& details, const TA
     ctx.Send(scanComputeActor, ev.Release());
 }
 
+std::optional<TPredicate> TTxScan::GetTtlPredicate(const TTierInfo& tier, const ISnapshotSchema::TPtr schema) {
+    if (tier.GetExternalStorageId()) {
+        return std::nullopt;
+    }
+
+    std::optional<ui32> ttlColumnId = schema->GetColumnIdOptional(tier.GetEvictColumnName());
+    if (!ttlColumnId) {
+        return std::nullopt;
+    }
+
+    std::shared_ptr<arrow::Schema> predicateSchema = schema->GetIndexInfo().GetColumnSchema(*ttlColumnId);
+    std::shared_ptr<arrow::Scalar> evictionBound =
+        tier.GetLargestExpiredScalar(tier.GetEvictInstant(TInstant::Now()), predicateSchema->field(0)->type()->id());
+    std::shared_ptr<arrow::RecordBatch> batch =
+        arrow::RecordBatch::Make(predicateSchema, 1, { NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*evictionBound, 1)) });
+    return TPredicate(NArrow::EOperation::Greater, batch);
+}
+
 bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
     return true;
 }
@@ -111,14 +129,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
             return SendError("cannot parse program", parseResult.GetErrorMessage(), ctx);
         }
 
-        if (!request.RangesSize()) {
-            auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
-            if (newRange.IsSuccess()) {
-                readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
-            } else {
-                return SendError("cannot build metadata withno ranges", newRange.GetErrorMessage(), ctx);
-            }
-        } else {
+        if (request.RangesSize()) {
             auto ydbKey = scannerConstructor->GetPrimaryKeyScheme(Self);
             {
                 auto filterConclusion = NOlap::TPKRangesFilter::BuildFromProto(request, request.GetReverse(), ydbKey);
@@ -127,11 +138,27 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 }
                 read.PKRangesFilter = std::make_shared<NOlap::TPKRangesFilter>(filterConclusion.DetachResult());
             }
-            auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
-            if (!newRange) {
-                return SendError("cannot build metadata", newRange.GetErrorMessage(), ctx);
+        }
+
+        if (Self->HasIndex()) {
+            if (const auto* tableTtl = Self->GetTablesManager().GetTtl().FindPtr(read.PathId)) {
+                const TTierInfo& lastTier = std::prev(tableTtl->GetOrderedTiers().end())->Get();
+                const auto ttlSchema = Self->GetTablesManager().GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
+                if (const auto ttlPredicate = GetTtlPredicate(lastTier, ttlSchema)) {
+                    if (!read.PKRangesFilter) {
+                        read.PKRangesFilter = std::make_shared<NOlap::TPKRangesFilter>(false);
+                    }
+                    read.PKRangesFilter->Add(std::make_shared<TPredicate>(*ttlPredicate), nullptr, ttlSchema->GetIndexInfo().GetPrimaryKey())
+                        .Validate();
+                }
             }
+        }
+
+        auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
+        if (newRange.IsSuccess()) {
             readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
+        } else {
+            return SendError("cannot build metadata", newRange.GetErrorMessage(), ctx);
         }
     }
     AFL_VERIFY(readMetadataRange);

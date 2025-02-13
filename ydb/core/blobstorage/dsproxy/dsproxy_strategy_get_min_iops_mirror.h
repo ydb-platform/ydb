@@ -32,7 +32,7 @@ public:
 
         if (auto res = SetAbsentForUnrecoverableAltruistic(altruisticState, state)) {
             return *res;
-        } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state)) {
+        } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state, info)) {
             return *res;
         } else if (auto res = ProcessPessimistic(info, pessimisticState, false, state)) {
             return *res;

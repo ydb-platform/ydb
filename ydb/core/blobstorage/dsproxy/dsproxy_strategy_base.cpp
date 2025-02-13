@@ -159,13 +159,14 @@ std::optional<EStrategyOutcome> TStrategyBase::SetAbsentForUnrecoverableAltruist
 }
 
 std::optional<EStrategyOutcome> TStrategyBase::ProcessOptimistic(TBlobStorageGroupInfo::EBlobState altruisticState,
-        TBlobStorageGroupInfo::EBlobState optimisticState, bool isDryRun, TBlobState &state) {
+        TBlobStorageGroupInfo::EBlobState optimisticState, bool isDryRun, TBlobState &state,
+        const TBlobStorageGroupInfo& info) {
     switch (optimisticState) {
         case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
             if (!isDryRun) {
                 return EStrategyOutcome::Error(TStringBuilder() << "TStrategyBase saw optimisticState# "
                     << TBlobStorageGroupInfo::BlobStateToString(optimisticState)
-                    << " Reported ErrorReasons# " << state.ReportErrorReasons());
+                    << " Reported ErrorReasons# " << state.ReportErrorReasons(info));
             }
             return EStrategyOutcome::DONE;
         case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:

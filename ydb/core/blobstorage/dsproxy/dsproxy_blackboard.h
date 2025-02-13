@@ -103,7 +103,7 @@ struct TBlobState {
             NKikimrBlobStorage::EVDiskQueueId queueId, TDiskDelayPredictions *outNWorst,
             const TAccelerationParams& accelerationParams) const;
     TString ToString() const;
-    TString ReportErrorReasons() const;
+    TString ReportErrorReasons(const TBlobStorageGroupInfo& info) const;
     bool HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const;
     static TString SituationToString(ESituation situation);
 };

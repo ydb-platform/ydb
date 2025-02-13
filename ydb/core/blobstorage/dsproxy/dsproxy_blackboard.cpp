@@ -285,22 +285,28 @@ TString TBlobState::TWholeState::ToString() const {
     return str.Str();
 }
 
-TString TBlobState::ReportErrorReasons() const {
-    TStackVec<std::unordered_set<TString>, TypicalDisksInSubring> errorsByDisk(Disks.size());
+TString TBlobState::ReportErrorReasons(const TBlobStorageGroupInfo& info) const {
+    TStackVec<TStackVec<TString, 3>, TypicalDisksInSubring> errorsByDisk(Disks.size());
     for (const TDisk& disk : Disks) {
         for (const TDiskPart& part : disk.DiskParts) {
             if (part.ErrorReason) {
-                errorsByDisk[disk.OrderNumber].insert(part.ErrorReason);
+                TVDiskID vdiskId = info.GetVDiskId(disk.OrderNumber);
+                ui32 diskIdx = info.GetIdxInSubgroup(vdiskId, Id.Hash());
+                errorsByDisk[diskIdx].push_back(part.ErrorReason);
             }
         }
     }
 
     TStringStream str;
     str << "[ ";
-    for (ui32 orderNumber = 0; orderNumber < errorsByDisk.size(); ++orderNumber) {
-        if (!errorsByDisk[orderNumber].empty()) {
-            str << "{ OrderNumber# " << orderNumber << " ErrorReasons# [ ";
-            for (const TString& errorReason : errorsByDisk[orderNumber]) {
+    for (ui32 diskIdx = 0; diskIdx < errorsByDisk.size(); ++diskIdx) {
+        if (!errorsByDisk[diskIdx].empty()) {
+            ui32 orderNumber = Disks[diskIdx].OrderNumber;
+            str << "{ OrderNumber# " << orderNumber;
+            str << " VDiskId# " << info.GetVDiskId(orderNumber);
+            str << " NodeId# " << info.GetActorId(orderNumber).NodeId();
+            str << " ErrorReasons# [ ";
+            for (const TString& errorReason : errorsByDisk[diskIdx]) {
                 str << "\"" << errorReason << "\", ";
             }
             str << "] } ";

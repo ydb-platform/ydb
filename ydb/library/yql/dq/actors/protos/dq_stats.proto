@@ -247,11 +247,8 @@ message TDqTaskStats {
 
     google.protobuf.Any Extra = 200;
 
-    // BASIC: StartTs from TR since we don't have better times
-    // FULL+: min(FirstMessageMs) from all Inputs
+    uint64 CreateTimeMs = 166;
     uint64 StartTimeMs = 158;
-
-    // always FinishTs from TR
     uint64 FinishTimeMs = 5;
 
     reserved 4;   // was FirstRowTimeMs

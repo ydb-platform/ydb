@@ -11,7 +11,7 @@ namespace NYql::NDq {
                                           ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                                           NYql::NConnector::IClient::TPtr genericClient) {
         auto readActorFactory = [credentialsFactory, genericClient](
-                                    Generic::TSource&& settings,
+                                    NGeneric::TSource&& settings,
                                     IDqAsyncIoFactory::TSourceArguments&& args) {
             return CreateGenericReadActor(
                 genericClient, 
@@ -28,7 +28,7 @@ namespace NYql::NDq {
             );
         };
 
-        auto lookupActorFactory = [credentialsFactory, genericClient](NYql::Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
+        auto lookupActorFactory = [credentialsFactory, genericClient](NYql::NGeneric::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
             return CreateGenericLookupActor(
                 genericClient,
                 credentialsFactory,
@@ -54,8 +54,8 @@ namespace NYql::NDq {
             "OracleGeneric",
             "LoggingGeneric"}
             ) {
-            factory.RegisterSource<Generic::TSource>(name, readActorFactory);
-            factory.RegisterLookupSource<Generic::TLookupSource>(name, lookupActorFactory);
+            factory.RegisterSource<NGeneric::TSource>(name, readActorFactory);
+            factory.RegisterLookupSource<NGeneric::TLookupSource>(name, lookupActorFactory);
         }
     }
 

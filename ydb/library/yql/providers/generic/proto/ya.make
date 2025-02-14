@@ -8,6 +8,7 @@ PEERDIR(
 )
 
 SRCS(
+    partition.proto
     source.proto
 )
 

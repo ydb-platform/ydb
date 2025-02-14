@@ -1,5 +1,4 @@
 #include "yql_generic_dq_integration.h"
-
 #include "yql_generic_mkql_compiler.h"
 #include "yql_generic_predicate_pushdown.h"
 
@@ -8,6 +7,7 @@
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
+#include <ydb/library/yql/providers/generic/proto/partition.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
@@ -105,29 +105,68 @@ namespace NYql {
                 return read;
             }
 
-            // FIXME: check TPartitonSettings::MaxPartitions, otherwise `PRAGMA ydb.MaxTasksPerStage="..."` won't work
-            ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext& ctx, const TPartitionSettings&) override {
-                if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
-                    auto srcSettings = maybeDqSource.Cast().Settings();
-                    if (auto maybeGenSourceSettings = TMaybeNode<TGenSourceSettings>(srcSettings.Raw())) {
-                        const TGenericState::TTableAddress tableAddress{
-                            maybeGenSourceSettings.Cast().Cluster().StringValue(),
-                            maybeGenSourceSettings.Cast().Table().StringValue()
-                        };
+            ui64 Partition(
+                const TExprNode& node,
+                TVector<TString>& partitions,
+                TString*, 
+                TExprContext& ctx,
+                const TPartitionSettings& partitionSettings
+            ) override {
+                auto maybeDqSource = TMaybeNode<TDqSource>(&node); 
+                if (!maybeDqSource) {
+                    return 0;
+                }
 
-                        auto [tableMeta, issues] = State_->GetTable(tableAddress);
-                        if (issues) {
-                            for (const auto& issue : issues) {
-                                ctx.AddError(issue);
-                            }
+                auto srcSettings = maybeDqSource.Cast().Settings();
+                auto maybeGenSourceSettings = TMaybeNode<TGenSourceSettings>(srcSettings.Raw());
+                Y_ENSURE(maybeGenSourceSettings); 
 
-                            return 0;
+                const TGenericState::TTableAddress tableAddress{
+                    maybeGenSourceSettings.Cast().Cluster().StringValue(),
+                    maybeGenSourceSettings.Cast().Table().StringValue()
+                };
+
+                // Extract table metadata from provider state>.
+                auto [tableMeta, issues] = State_->GetTable(tableAddress);
+                if (issues) {
+                    for (const auto& issue : issues) {
+                        ctx.AddError(issue);
+                    }
+
+                    return 0;
+                }
+
+                const std::size_t totalSplits = tableMeta->Splits.size();
+
+                partitions.clear();
+
+                if (totalSplits <= partitionSettings.MaxPartitions) {
+                    // If there are not too many splits, simply make a single-split partitions.
+                    for (std::size_t i = 0; i < totalSplits; i++) {
+                        NGeneric::TPartition partition;
+                        partition.add_splits()->CopyFrom(tableMeta->Splits[i]);
+                        partitions.emplace_back();
+                        TStringOutput out(partitions.back());
+                        partition.Save(&out);
+                    }
+                } else {
+                    // If the number of splits is greater than the partitions limit,
+                    // we have to make split batches in each partition.
+                    std::size_t splitsPerPartition;
+                    if (totalSplits % partitionSettings.MaxPartitions == 0) {
+                        splitsPerPartition = totalSplits / partitionSettings.MaxPartitions;
+                    } else {
+                        splitsPerPartition = (totalSplits / partitionSettings.MaxPartitions) + 1;
+                    }
+
+                    for (std::size_t i = 0; i < totalSplits; i += splitsPerPartition) {
+                        NGeneric::TPartition partition;
+                        for (std::size_t j = i; j < i + splitsPerPartition && j < totalSplits; j++) {
+                            partition.add_splits()->CopyFrom(tableMeta->Splits[j]);
                         }
-
-                        partitions.clear();
-                        for (auto split : tableMeta->Splits) {
-                            partitions.push_back(split);
-                        }
+                        partitions.emplace_back();
+                        TStringOutput out(partitions.back());
+                        partition.Save(&out);
                     }
                 }
 
@@ -145,7 +184,7 @@ namespace NYql {
                     const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                     const auto& endpoint = clusterConfig.endpoint();
 
-                    Generic::TSource source;
+                    NGeneric::TSource source;
 
                     YQL_CLOG(INFO, ProviderGeneric)
                         << "Filling source settings"
@@ -304,7 +343,7 @@ namespace NYql {
                     ythrow yexception() << "Get table metadata: " << issues.ToOneLineString();
                 }
 
-                Generic::TLookupSource source;
+                NGeneric::TLookupSource source;
                 source.set_table(tableName);
                 *source.mutable_data_source_instance() = tableMeta->DataSourceInstance;
 

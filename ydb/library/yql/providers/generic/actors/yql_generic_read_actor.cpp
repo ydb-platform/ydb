@@ -2,23 +2,23 @@
 #include "yql_generic_read_actor.h"
 #include "yql_generic_token_provider.h"
 
-#include <util/string/join.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
+#include <ydb/library/yql/providers/generic/proto/partition.pb.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 namespace NYql::NDq {
 
@@ -45,15 +45,15 @@ namespace NYql::NDq {
             TCollectStatsLevel statsLevel,
             NConnector::IClient::TPtr client,
             TGenericTokenProvider::TPtr tokenProvider,
-            Generic::TSource&& source,
+            NGeneric::TSource&& source,
             const NActors::TActorId& computeActorId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-            TVector<TString>&& splitDescriptions)
+            TVector<NGeneric::TPartition>&& partitions)
             : InputIndex_(inputIndex)
             , ComputeActorId_(computeActorId)
             , Client_(std::move(client))
             , TokenProvider_(std::move(tokenProvider))
-            , SplitDescriptions_(std::move(splitDescriptions))
+            , Partitions_(std::move(partitions))
             , HolderFactory_(holderFactory)
             , Source_(source)
         {
@@ -87,31 +87,38 @@ namespace NYql::NDq {
         TMaybe<TIssue> InitSplitsReading() {
             YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits reading";
 
-            if (SplitDescriptions_.empty()) {
-                YQL_CLOG(WARN, ProviderGeneric) << "Accumulated empty list of splits";
+            if (Partitions_.empty()) {
+                YQL_CLOG(WARN, ProviderGeneric) << "Got empty list of partitions";
                 ReadSplitsFinished_ = true;
                 NotifyComputeActorWithData();
                 return Nothing();
             }
 
             // Prepare ReadSplits request. For the sake of simplicity,
-            // all the splits will be packed into a single ReadSplits call.
+            // all the splits from all partitions will be packed into a single ReadSplits call.
+            // There's a lot of space for the optimizations here.
             NConnector::NApi::TReadSplitsRequest request;
             request.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
             request.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL);
-            request.mutable_splits()->Reserve(SplitDescriptions_.size());
 
-            for (const auto& splitDescription : SplitDescriptions_) {
-                NConnector::NApi::TSplit split;
-                split.mutable_select()->CopyFrom(Source_.select());
-                split.set_description(splitDescription);
+            for (const auto& partition : Partitions_) {
+                request.mutable_splits()->Reserve(request.splits().size() + partition.splits().size());
 
-                auto error = TokenProvider_->MaybeFillToken(*split.mutable_select()->mutable_data_source_instance());
-                if (error) {
-                    return TIssue(std::move(error));
+                for (const auto& srcSplit : partition.splits()) {
+                    auto dstSplit = request.add_splits();
+
+                    // Take actual SQL request from the source, because it contains predicates
+                    dstSplit->mutable_select()->CopyFrom(Source_.select());
+
+                    // Take split description from task params
+                    dstSplit->set_description(srcSplit.description());
+
+                    // Assign actual IAM token to a split
+                    auto error = TokenProvider_->MaybeFillToken(*dstSplit->mutable_select()->mutable_data_source_instance());
+                    if (error) {
+                        return TIssue(std::move(error));
+                    }
                 }
-
-                *request.mutable_splits()->Add() = std::move(split);
             }
 
             // Start streaming
@@ -373,7 +380,7 @@ namespace NYql::NDq {
         NConnector::IClient::TPtr Client_;
         TGenericTokenProvider::TPtr TokenProvider_;
 
-        const TVector<TString> SplitDescriptions_; 
+        TVector<NGeneric::TPartition> Partitions_; 
 
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator_;
         std::optional<NConnector::NApi::TReadSplitsResponse> LastReadSplitsResponse_;
@@ -381,29 +388,37 @@ namespace NYql::NDq {
 
         NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
-        Generic::TSource Source_;
+        NGeneric::TSource Source_;
     };
 
-    void ExtractSplitDescriptions(
-        TVector<TString>& splitDescriptions, 
+    void ExtractSplitsFromPartitions(
+        TVector<NGeneric::TPartition>& partitions, 
         const THashMap<TString, TString>& taskParams,  // ranges are here in v1
         const TVector<TString>& srcReadRanges          // ranges are here in v2
     ) {
         if (srcReadRanges.size() > 0) {
-            splitDescriptions = srcReadRanges;
+            for (const auto& readRange : srcReadRanges) {
+                NGeneric::TPartition partition;
+                TStringInput input(readRange);
+                partition.Load(&input);
+                partitions.emplace_back(std::move(partition));
+            }
         } else {
-            const auto& range = taskParams.find(GenericProviderName);
-            if (range != taskParams.end()) {
-                splitDescriptions.push_back(range->second);
+            const auto& readRange = taskParams.find(GenericProviderName);
+            if (readRange != taskParams.end()) {
+                NGeneric::TPartition partition;
+                TStringInput input(readRange->first);
+                partition.Load(&input);
+                partitions.emplace_back(std::move(partition));
             }
         }
 
-        Y_ENSURE(splitDescriptions.size() > 0, "read ranges must not be empty");
+        Y_ENSURE(partitions.size() > 0, "partitions must not be empty");
     }
 
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>
     CreateGenericReadActor(NConnector::IClient::TPtr genericClient,
-                           Generic::TSource&& source,
+                           NGeneric::TSource&& source,
                            ui64 inputIndex,
                            TCollectStatsLevel statsLevel,
                            const THashMap<TString, TString>& /*secureParams*/,
@@ -414,8 +429,8 @@ namespace NYql::NDq {
                            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                            const NKikimr::NMiniKQL::THolderFactory& holderFactory)
     {
-        TVector<TString> splitDescriptions;
-        ExtractSplitDescriptions(splitDescriptions, taskParams, readRanges);
+        TVector<NGeneric::TPartition> partitions;
+        ExtractSplitsFromPartitions(partitions, taskParams, readRanges);
 
         const auto dsi = source.select().data_source_instance();
         YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
@@ -424,8 +439,8 @@ namespace NYql::NDq {
                                         << ", database=" << dsi.database()
                                         << ", use_tls=" << ToString(dsi.use_tls())
                                         << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
-                                        << ", taskId=" << taskId
-                                        << ", splitDescriptions=" << JoinSeq(",", splitDescriptions);
+                                        << ", task_id=" << taskId
+                                        << ", partitions_count=" << partitions.size();
 
         // FIXME: strange piece of logic - authToken is created but not used:
         // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140
@@ -452,7 +467,7 @@ namespace NYql::NDq {
             std::move(source),
             computeActorId,
             holderFactory,
-            std::move(splitDescriptions));
+            std::move(partitions));
 
         return {actor, actor};
     }

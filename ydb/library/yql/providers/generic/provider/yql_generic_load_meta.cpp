@@ -183,9 +183,12 @@ namespace NYql {
                             auto drainer =
                                 NConnector::MakeListSplitsStreamIteratorDrainer(std::move(streamIterResult.Iterator));
 
-                            drainer->Run().Subscribe([desc, promise, tableAddress,
-                                                      drainer // pass drainer to the callback because we want him to
-                                                              // stay alive until the callback is called
+                            drainer->Run().Subscribe([
+                                desc, 
+                                promise, 
+                                tableAddress,
+                                drainer // pass drainer to the callback because we want him to
+                                        // stay alive until the callback is called
                             ](const NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer>&
                                                          f5) mutable {
                                 NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer> f6(f5);
@@ -251,7 +254,7 @@ namespace NYql {
                     return TStatus::Error;
                 }
 
-                const auto& result = iter->second;
+                auto& result = iter->second;
 
                 // If errors occured during network interaction with Connector, return them
                 if (result->Issues) {
@@ -268,9 +271,7 @@ namespace NYql {
                 TGenericState::TTableMeta tableMeta;
                 tableMeta.Schema = *result->Schema;
                 tableMeta.DataSourceInstance = result->DataSourceInstance;
-                for (auto& split : result->Splits) {
-                    tableMeta.Splits.push_back(split.description());
-                }
+                tableMeta.Splits = result->Splits;
 
                 // Parse table schema
                 ParseTableMeta(ctx, ctx.GetPosition(genRead.Pos()), tableAddress, tableMeta);

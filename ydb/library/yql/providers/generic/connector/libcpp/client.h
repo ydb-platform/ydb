@@ -86,7 +86,7 @@ namespace NYql::NConnector {
         };
 
         IStreamIteratorDrainer(IStreamIterator<TResponse>::TPtr&& iterator)
-            : Iterator_(iterator) {
+            : Iterator_(std::move(iterator)) {
         }
 
         NThreading::TFuture<TBuffer> Run() {
@@ -134,7 +134,7 @@ namespace NYql::NConnector {
                 self->Responses_.push_back(std::move(*result.Response));
                 self->Next(promise);
             });
-        };
+        }
     };
 
     using TListSplitsStreamIteratorDrainer = IStreamIteratorDrainer<NApi::TListSplitsResponse>;

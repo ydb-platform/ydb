@@ -41,7 +41,7 @@ namespace NYql {
             // External table schema
             NYql::NConnector::NApi::TSchema Schema; 
             // Contains some binary description of table splits (partitions) produced by Connector
-            TVector<TString> Splits; 
+            std::vector<NYql::NConnector::NApi::TSplit> Splits; 
         };
 
         using TGetTableResult = std::pair<const TTableMeta*, TIssues>;

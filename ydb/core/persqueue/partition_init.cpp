@@ -574,10 +574,6 @@ static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueRespo
         }
     }
 
-    for (const auto& k : filtered) {
-        Cerr << "key: " << k << Endl;
-    }
-
     return {filtered.begin(), filtered.end()};
 }
 

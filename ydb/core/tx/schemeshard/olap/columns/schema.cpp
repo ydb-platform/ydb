@@ -116,8 +116,8 @@ bool TOlapColumnsDescription::ApplyUpdate(
                 return false;
             }
             ui32 id = column.GetColumnFamilyId().value();
-            if (alterColumnFamiliesId.contains(id)) {
-                column.SetSerializer(columnFamilies.GetByIdVerified(id)->GetSerializerContainer());
+            if (!column.ApplyColumnFamily(*columnFamilies.GetByIdVerified(id), errors)) {
+                return false;
             }
         }
     }

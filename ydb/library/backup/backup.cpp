@@ -837,11 +837,11 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
         NYql::TIssues& issues
 ) {
-    TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways);
+    TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
     TMap<TString, TAsyncStatus> copiedTablesStatuses;
     TVector<NTable::TCopyItem> tablesToCopy;
-    // Copy all tables to temporal folder
+    // Copy all tables to temporal folder and backup other scheme objects along the way.
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
         while (dbIt) {
@@ -1040,7 +1040,7 @@ TAdmins FindAdmins(TDriver driver, const TString& dbPath) {
 struct TBackupDatabaseSettings {
     bool WithRegularUsers = false;
     bool WithContent = false;
-    TString TemporalBackupPostfix;
+    TString TemporalBackupPostfix = "";
 };
 
 void BackupUsers(TDriver driver, const TString& dbPath, const TFsPath& folderPath, const THashSet<TString>& filter = {}) {
@@ -1165,7 +1165,7 @@ void BackupDatabaseImpl(TDriver driver, const TString& dbPath, const TFsPath& fo
     Ydb::Cms::CreateDatabaseRequest proto;
     status.SerializeTo(proto);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::Database());
-    
+
     if (!settings.WithRegularUsers) {
         TAdmins admins = FindAdmins(driver, dbPath);
         BackupUsers(driver, dbPath, folderPath, admins.UserSids);
@@ -1308,7 +1308,7 @@ void BackupDatabase(const TDriver& driver, const TString& database, TFsPath fold
 
     try {
         NYql::TIssues issues;
-        TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways);
+        TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
         BackupDatabaseImpl(driver, database, folderPath, {
             .WithRegularUsers = true,
@@ -1339,7 +1339,7 @@ void BackupCluster(const TDriver& driver, TFsPath folderPath) {
 
     try {
         NYql::TIssues issues;
-        TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways);
+        TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
         BackupClusterRoot(driver, folderPath);
         auto databases = ListDatabases(driver);

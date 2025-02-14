@@ -1,9 +1,10 @@
 #pragma once
 
+#include "error.h"
+
 #include <library/cpp/threading/future/core/future.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -121,9 +122,15 @@ namespace NYql::NConnector {
                     return;
                 }
 
+                // Check logic error
+                if (!NConnector::IsSuccess(*result.Response)) {
+                    self->Issues_.AddIssues(NConnector::ErrorToIssues(result.Response->error()));
+                    promise.SetValue(TBuffer{std::move(self->Responses_), std::move(self->Issues_)});
+                    return;
+                }
+
                 Y_ENSURE(result.Response);
 
-                self->Responses_.push_back({});
                 self->Responses_.push_back(std::move(*result.Response));
                 self->Next(promise);
             });
@@ -133,8 +140,10 @@ namespace NYql::NConnector {
     using TListSplitsStreamIteratorDrainer = IStreamIteratorDrainer<NApi::TListSplitsResponse>;
     using TReadSplitsStreamIteratorDrainer = IStreamIteratorDrainer<NApi::TReadSplitsResponse>;
 
-    TListSplitsStreamIteratorDrainer::TPtr MakeListSplitsStreamIteratorDrainer(IListSplitsStreamIterator::TPtr&& iterator);
-    TReadSplitsStreamIteratorDrainer::TPtr MakeReadSplitsStreamIteratorDrainer(IReadSplitsStreamIterator::TPtr&& iterator);
+    TListSplitsStreamIteratorDrainer::TPtr
+    MakeListSplitsStreamIteratorDrainer(IListSplitsStreamIterator::TPtr&& iterator);
+    TReadSplitsStreamIteratorDrainer::TPtr
+    MakeReadSplitsStreamIteratorDrainer(IReadSplitsStreamIterator::TPtr&& iterator);
 
     template <class TIterator>
     struct TIteratorResult {

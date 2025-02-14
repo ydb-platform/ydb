@@ -2,7 +2,7 @@
 
 namespace NYql {
     void TGenericState::AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta) {
-        Tables_.emplace(tableAddress, tableMeta);
+        Tables_.emplace(tableAddress, std::move(tableMeta));
     }
 
     TGenericState::TGetTableResult TGenericState::GetTable(const TTableAddress& tableAddress) const {
@@ -14,7 +14,7 @@ namespace NYql {
         TIssues issues;
         issues.AddIssue(TIssue(TStringBuilder() << "no metadata for table " << tableAddress.String()));
 
-        return std::make_pair<TTableMeta*, TIssues>(nullptr, std::move(issues)); 
-    };
+        return std::make_pair<TTableMeta*, TIssues>(nullptr, std::move(issues));
+    }
 
 } // namespace NYql

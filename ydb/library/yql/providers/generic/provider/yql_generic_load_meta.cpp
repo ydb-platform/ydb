@@ -1,3 +1,4 @@
+// clang-format off
 #include "yql_generic_provider_impl.h"
 
 #include <library/cpp/json/json_reader.h>
@@ -106,14 +107,14 @@ namespace NYql {
             AsyncFuture_ = NThreading::WaitExceptionOrAll(handles);
             return TStatus::Async;
         }
-    
+        // clang-format on
+
     private:
-        void LoadTableMetadataFromConnector(
-            const TGenericState::TTableAddress& tableAddress,
-            std::vector<NThreading::TFuture<void>>& handles
-        ) {
+        void LoadTableMetadataFromConnector(const TGenericState::TTableAddress& tableAddress,
+                                            std::vector<NThreading::TFuture<void>>& handles) {
             const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(tableAddress.ClusterName);
-            YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "cluster not found: " << tableAddress.ClusterName);
+            YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it,
+                       "cluster not found: " << tableAddress.ClusterName);
 
             NConnector::NApi::TDescribeTableRequest request;
             FillDescribeTableRequest(request, it->second, tableAddress.TableName);
@@ -122,30 +123,33 @@ namespace NYql {
             handles.emplace_back(promise.GetFuture());
 
             // preserve data source instance for the further usage
-            auto emplaceIt = TableDescriptions_.emplace(std::make_pair(tableAddress, std::make_shared<TTableDescription>()));
+            auto emplaceIt =
+                TableDescriptions_.emplace(std::make_pair(tableAddress, std::make_shared<TTableDescription>()));
             auto desc = emplaceIt.first->second;
             desc->DataSourceInstance = request.data_source_instance();
 
             Y_ENSURE(State_->GenericClient);
+
             State_->GenericClient->DescribeTable(request).Subscribe(
-                [desc, tableAddress, promise, client = State_->GenericClient](
-                    const NConnector::TDescribeTableAsyncResult& f1) mutable {
+                [desc, tableAddress, promise,
+                 client = State_->GenericClient](const NConnector::TDescribeTableAsyncResult& f1) mutable {
                     NConnector::TDescribeTableAsyncResult f2(f1);
                     auto result = f2.ExtractValueSync();
 
                     // Check transport error
                     if (!result.Status.Ok()) {
-                        desc->Issues.AddIssue(TStringBuilder() << "Call DescribeTable for table "<< tableAddress.String() << ": " << result.Status.ToDebugString());
+                        desc->Issues.AddIssue(TStringBuilder()
+                                              << "Call DescribeTable for table " << tableAddress.String() << ": "
+                                              << result.Status.ToDebugString());
                         promise.SetValue();
-                        return; 
-                    } 
+                        return;
+                    }
 
                     // Check logical error
                     if (!NConnector::IsSuccess(*result.Response)) {
-                        desc->Issues.AddIssues(NConnector::ErrorToIssues( 
+                        desc->Issues.AddIssues(NConnector::ErrorToIssues(
                             result.Response->error(),
-                            TStringBuilder() << "Call DescribeTable for table "<< tableAddress.String() << ": "
-                        ));
+                            TStringBuilder() << "Call DescribeTable for table " << tableAddress.String() << ": "));
                         promise.SetValue();
                         return;
                     }
@@ -156,71 +160,60 @@ namespace NYql {
                     // Call ListSplits
                     NConnector::NApi::TListSplitsRequest request;
                     auto select = request.add_selects();
-                    select->mutable_data_source_instance()->CopyFrom(desc->DataSourceInstance); 
+                    select->mutable_data_source_instance()->CopyFrom(desc->DataSourceInstance);
                     select->mutable_from()->set_table(tableAddress.TableName);
 
                     client->ListSplits(request).Subscribe(
-                        [desc, promise, tableAddress](const NConnector::TListSplitsStreamIteratorAsyncResult f3) mutable {
+                        [desc, promise,
+                         tableAddress](const NConnector::TListSplitsStreamIteratorAsyncResult f3) mutable {
                             NConnector::TListSplitsStreamIteratorAsyncResult f4(f3);
                             auto streamIterResult = f4.ExtractValueSync();
 
                             // Check transport error
                             if (!streamIterResult.Status.Ok()) {
-                                desc->Issues.AddIssue(
-                                    TStringBuilder() << "Call ListSplits for table "<< tableAddress.String() << ": " <<
-                                    streamIterResult.Status.ToDebugString()
-                                );
+                                desc->Issues.AddIssue(TStringBuilder()
+                                                      << "Call ListSplits for table " << tableAddress.String() << ": "
+                                                      << streamIterResult.Status.ToDebugString());
                                 promise.SetValue();
-                                return; 
-                            } 
+                                return;
+                            }
 
                             Y_ENSURE(streamIterResult.Iterator);
 
-                            auto drainer = NConnector::MakeListSplitsStreamIteratorDrainer(std::move(streamIterResult.Iterator));
+                            auto drainer =
+                                NConnector::MakeListSplitsStreamIteratorDrainer(std::move(streamIterResult.Iterator));
 
-                            drainer->Run().Subscribe([
-                                desc, 
-                                promise, 
-                                tableAddress, 
-                                drainer // pass drainer to the callback because we want him to stay alive until the callback is called
-                            ](
-                                const NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer>& f5) mutable {
+                            drainer->Run().Subscribe([desc, promise, tableAddress,
+                                                      drainer // pass drainer to the callback because we want him to
+                                                              // stay alive until the callback is called
+                            ](const NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer>&
+                                                         f5) mutable {
                                 NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer> f6(f5);
                                 auto drainerResult = f6.ExtractValueSync();
 
+                                // check transport and logical errors
                                 if (drainerResult.Issues) {
-                                    desc->Issues.AddIssues(drainerResult.Issues);
+                                    for (auto&& issue : drainerResult.Issues) {
+                                        desc->Issues.AddIssue(TStringBuilder()
+                                                              << "Call ListSplits for table " << tableAddress.String()
+                                                              << ": " << issue);
+                                    };
                                     promise.SetValue();
                                     return;
                                 }
 
+                                // collect all the splits from every response into a single vector
                                 for (auto&& response : drainerResult.Responses) {
-                                    if (!NConnector::IsSuccess(response)) {
-                                        desc->Issues.AddIssues(
-                                            NConnector::ErrorToIssues(
-                                                response.error(),
-                                                TStringBuilder() << "Call ListSplits for table "<< tableAddress.String() << ": "
-                                            )
-                                        );
-                                        promise.SetValue();
-                                        return;
-                                    }
-
-                                    // collect all the splits from every response into a single vector
-                                    std::transform(
-                                        std::make_move_iterator(response.mutable_splits()->begin()),
-                                        std::make_move_iterator(response.mutable_splits()->end()),
-                                        std::back_inserter(desc->Splits),
-                                        [](auto&& split) { return std::move(split); }
-                                    );
+                                    std::transform(std::make_move_iterator(response.mutable_splits()->begin()),
+                                                   std::make_move_iterator(response.mutable_splits()->end()),
+                                                   std::back_inserter(desc->Splits),
+                                                   [](auto&& split) { return std::move(split); });
                                 }
 
                                 promise.SetValue();
                             });
-                        }
-                    );
-                }
-            );
+                        });
+                });
         }
 
     public:
@@ -241,7 +234,7 @@ namespace NYql {
             TNodeOnNodeOwnedMap replaces(reads.size());
 
             // Iterate over all the requested tables, check Connector responses
-            for (const auto& r: reads) {
+            for (const auto& r : reads) {
                 const TGenRead genRead(r);
                 const auto clusterName = genRead.DataSource().Cluster().StringValue();
                 const auto& keyArg = TExprBase(genRead.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
@@ -251,10 +244,9 @@ namespace NYql {
                 // Find appropriate response
                 auto iter = TableDescriptions_.find(tableAddress);
                 if (iter == TableDescriptions_.end()) {
-                    ctx.AddError(
-                        TIssue(ctx.GetPosition(genRead.Pos()), 
-                                TStringBuilder() << "Connector response not found for table " << tableAddress.String())
-                    );
+                    ctx.AddError(TIssue(ctx.GetPosition(genRead.Pos()), TStringBuilder()
+                                                                            << "Connector response not found for table "
+                                                                            << tableAddress.String()));
 
                     return TStatus::Error;
                 }
@@ -263,7 +255,7 @@ namespace NYql {
 
                 // If errors occured during network interaction with Connector, return them
                 if (result->Issues) {
-                    for (const auto& issue: result->Issues) {
+                    for (const auto& issue : result->Issues) {
                         ctx.AddError(issue);
                     }
 
@@ -276,13 +268,13 @@ namespace NYql {
                 TGenericState::TTableMeta tableMeta;
                 tableMeta.Schema = *result->Schema;
                 tableMeta.DataSourceInstance = result->DataSourceInstance;
-                for (auto& split: result->Splits) {
+                for (auto& split : result->Splits) {
                     tableMeta.Splits.push_back(split.description());
                 }
 
                 // Parse table schema
                 ParseTableMeta(ctx, ctx.GetPosition(genRead.Pos()), tableAddress, tableMeta);
-                
+
                 // Fill AST for a table
                 if (const auto ins = replaces.emplace(genRead.Raw(), TExprNode::TPtr()); ins.second) {
                     ins.first->second = MakeTableMetaNode(ctx, genRead, tableName);
@@ -294,6 +286,8 @@ namespace NYql {
 
             return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
         }
+
+        // clang-format off
 
         void Rewind() final {
             TableDescriptions_.clear();
@@ -365,8 +359,8 @@ namespace NYql {
             // clang-format on
         }
 
-        void FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
-                                      const TString& tablePath) {
+        void FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request,
+                                      const TGenericClusterConfig& clusterConfig, const TString& tablePath) {
             const auto dataSourceKind = clusterConfig.GetKind();
             auto dsi = request.mutable_data_source_instance();
             *dsi->mutable_endpoint() = clusterConfig.GetEndpoint();
@@ -379,7 +373,8 @@ namespace NYql {
             FillTablePath(request, clusterConfig, tablePath);
         }
 
-        void FillCredentials(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
+        void FillCredentials(NConnector::NApi::TDescribeTableRequest& request,
+                             const TGenericClusterConfig& clusterConfig) {
             auto dsi = request.mutable_data_source_instance();
 
             // If login/password is provided, just copy them into request:
@@ -393,9 +388,7 @@ namespace NYql {
 
             // 1. Client provided own IAM-token to access external data source
             auto iamToken = State_->Types->Credentials->FindCredentialContent(
-                "default_" + clusterConfig.name(),
-                "default_generic",
-                clusterConfig.GetToken());
+                "default_" + clusterConfig.name(), "default_generic", clusterConfig.GetToken());
             if (iamToken) {
                 *dsi->mutable_credentials()->mutable_token()->mutable_value() = iamToken;
                 *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
@@ -405,8 +398,8 @@ namespace NYql {
             // 2. Client provided service account creds that must be converted into IAM-token
             Y_ENSURE(State_->CredentialsFactory, "CredentialsFactory is not initialized");
 
-            auto structuredTokenJSON = TStructuredTokenBuilder().SetServiceAccountIdAuth(
-                                                                    clusterConfig.GetServiceAccountId(),
+            auto structuredTokenJSON = TStructuredTokenBuilder()
+                                           .SetServiceAccountIdAuth(clusterConfig.GetServiceAccountId(),
                                                                     clusterConfig.GetServiceAccountIdSignature())
                                            .ToJson();
 
@@ -417,13 +410,12 @@ namespace NYql {
             auto providersIt = State_->CredentialProviders.find(clusterConfig.name());
             if (providersIt == State_->CredentialProviders.end()) {
                 auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
-                    State_->CredentialsFactory,
-                    structuredTokenJSON,
-                    false);
+                    State_->CredentialsFactory, structuredTokenJSON, false);
 
-                providersIt = State_->CredentialProviders.emplace(
-                                                             std::make_pair(clusterConfig.name(), credentialsProviderFactory->CreateProvider()))
-                                  .first;
+                providersIt =
+                    State_->CredentialProviders
+                        .emplace(std::make_pair(clusterConfig.name(), credentialsProviderFactory->CreateProvider()))
+                        .first;
             }
 
             iamToken = providersIt->second->GetAuthInfo();
@@ -461,7 +453,8 @@ namespace NYql {
             }
         }
 
-        void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
+        void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request,
+                                   const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
             switch (dataSourceKind) {
                 case NYql::EGenericDataSourceKind::CLICKHOUSE:
@@ -489,8 +482,8 @@ namespace NYql {
                     SetLoggingFolderId(*options, clusterConfig);
                 } break;
                 default:
-                    ythrow yexception() << "Unexpected data source kind: '" << NYql::EGenericDataSourceKind_Name(dataSourceKind)
-                                        << "'";
+                    ythrow yexception() << "Unexpected data source kind: '"
+                                        << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";
             }
         }
 

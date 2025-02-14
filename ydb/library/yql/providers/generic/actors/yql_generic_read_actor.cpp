@@ -1,8 +1,8 @@
-#include "util/string/join.h"
 #include "yql_generic_base_actor.h"
 #include "yql_generic_read_actor.h"
 #include "yql_generic_token_provider.h"
 
+#include <util/string/join.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -53,7 +53,7 @@ namespace NYql::NDq {
             , ComputeActorId_(computeActorId)
             , Client_(std::move(client))
             , TokenProvider_(std::move(tokenProvider))
-            , SplitDescriptions_(splitDescriptions)
+            , SplitDescriptions_(std::move(splitDescriptions))
             , HolderFactory_(holderFactory)
             , Source_(source)
         {
@@ -75,7 +75,6 @@ namespace NYql::NDq {
         static constexpr char ActorName[] = "GENERIC_READ_ACTOR";
 
     private:
-        // TODO: make two different states
         // clang-format off
         STRICT_STFUNC(StateFunc,
                       hFunc(TEvReadSplitsIterator, Handle);
@@ -426,7 +425,7 @@ namespace NYql::NDq {
                                         << ", use_tls=" << ToString(dsi.use_tls())
                                         << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
                                         << ", taskId=" << taskId
-                                        << ", readRanges=" << JoinSeq(",", readRanges);
+                                        << ", splitDescriptions=" << JoinSeq(",", splitDescriptions);
 
         // FIXME: strange piece of logic - authToken is created but not used:
         // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140

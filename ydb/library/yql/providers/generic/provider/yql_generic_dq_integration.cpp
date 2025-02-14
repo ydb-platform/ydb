@@ -116,7 +116,7 @@ namespace NYql {
 
                         auto [tableMeta, issues] = State_->GetTable(tableAddress);
                         if (issues) {
-                            for (auto &issue : issues) {
+                            for (const auto &issue : issues) {
                                 ctx.AddError(issue);
                             }
 
@@ -124,7 +124,7 @@ namespace NYql {
                         }
 
                         partitions.clear();
-                        for (auto split: tableMeta->Splits) {
+                        for (auto split : tableMeta->Splits) {
                             partitions.push_back(split);
                         }
                     }
@@ -300,7 +300,7 @@ namespace NYql {
 
                 auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
                 if (issues) {
-                    ythrow yexception() << "Get table metadata: " << issues;
+                    ythrow yexception() << "Get table metadata: " << issues.ToOneLineString();
                 }
 
                 Generic::TLookupSource source;

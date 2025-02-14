@@ -2111,29 +2111,31 @@ public:
     TQueryStats ExtractQueryStats() { return std::move(*QueryStats_); }
 
     // Deprecated. Use GetMeta() of TQueryStats
-    bool HasDiagnostics() const { return FakeDiagnostics_.has_value(); }
-    const std::string& GetDiagnostics() const { return *FakeDiagnostics_; }
-    std::string&& ExtractDiagnostics() { return std::move(*FakeDiagnostics_); }
+    bool HasDiagnostics() const { return Diagnostics_.has_value(); }
+    const std::string& GetDiagnostics() const { return *Diagnostics_; }
+    std::string&& ExtractDiagnostics() { return std::move(*Diagnostics_); }
 
     TScanQueryPart(TStatus&& status)
         : TStreamPartStatus(std::move(status))
     {}
 
-    TScanQueryPart(TStatus&& status, const std::optional<TQueryStats>& queryStats)
+    TScanQueryPart(TStatus&& status, const std::optional<TQueryStats>& queryStats, const std::optional<std::string>& diagnostics)
         : TStreamPartStatus(std::move(status))
         , QueryStats_(queryStats)
+        , Diagnostics_(diagnostics)
     {}
 
-    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const std::optional<TQueryStats>& queryStats)
+    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const std::optional<TQueryStats>& queryStats, const std::optional<std::string>& diagnostics)
         : TStreamPartStatus(std::move(status))
         , ResultSet_(std::move(resultSet))
         , QueryStats_(queryStats)
+        , Diagnostics_(diagnostics)
     {}
 
 private:
     std::optional<TResultSet> ResultSet_;
     std::optional<TQueryStats> QueryStats_;
-    std::optional<std::string> FakeDiagnostics_;
+    std::optional<std::string> Diagnostics_;
 };
 
 using TAsyncScanQueryPart = NThreading::TFuture<TScanQueryPart>;

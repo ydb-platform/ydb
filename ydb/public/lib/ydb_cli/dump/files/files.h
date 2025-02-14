@@ -23,5 +23,6 @@ const TFileInfo& CreateUser();
 const TFileInfo& CreateGroup();
 const TFileInfo& AlterGroup();
 const TFileInfo& CreateAsyncReplication();
+const TFileInfo& CreateExternalDataSource();
 
 } // NYdb::NDump:NFiles

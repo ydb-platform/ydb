@@ -55,6 +55,7 @@
 #include <google/protobuf/text_format.h>
 
 #include <format>
+#include <ranges>
 
 namespace NYdb::NBackup {
 
@@ -788,6 +789,62 @@ void BackupReplication(
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
+namespace {
+
+Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TDriver driver, const TString& path) {
+    NTable::TTableClient client(driver);
+    Ydb::Table::DescribeExternalDataSourceResult description;
+    auto status = client.RetryOperationSync([&](NTable::TSession session) {
+        auto result = session.DescribeExternalDataSource(path).ExtractValueSync();
+        if (result.IsSuccess()) {
+            description = TProtoAccessor::GetProto(result.GetExternalDataSourceDescription());
+        }
+        return result;
+    });
+    VerifyStatus(status, "describe external data source");
+    return description;
+}
+
+std::string ToString(std::string_view key, std::string_view value) {
+    // indented to follow the default YQL formatting
+    return std::format(R"(    {} = "{}")", key, value);
+}
+
+namespace NExternalDataSource {
+
+    std::string PropertyToString(const std::pair<TProtoStringType, TProtoStringType>& property) {
+        const auto& [key, value] = property;
+        return ToString(key, value);
+    }
+
+}
+
+TString BuildCreateExternalDataSourceQuery(const Ydb::Table::DescribeExternalDataSourceResult& description) {
+    return std::format(
+        "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}` WITH (\n{},\n{}{}\n);",
+        description.self().name().c_str(),
+        ToString("SOURCE_TYPE", description.source_type()),
+        ToString("LOCATION", description.location()),
+        description.properties().empty()
+            ? ""
+            : std::string(",\n") +
+                JoinSeq(",\n", std::views::transform(description.properties(), NExternalDataSource::PropertyToString)).c_str()
+    );
+}
+
+}
+
+void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto description = DescribeExternalDataSource(driver, dbPath);
+    const auto creationQuery = BuildCreateExternalDataSourceQuery(description);
+
+    WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalDataSource());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
 void CreateClusterDirectory(const TDriver& driver, const TString& path, bool rootBackupDir = false) {
     if (rootBackupDir) {
         LOG_I("Create temporary directory " << path.Quote() << " in database");
@@ -883,6 +940,9 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             }
             if (dbIt.IsReplication()) {
                 BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
+            }
+            if (dbIt.IsExternalDataSource()) {
+                BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
             }
             dbIt.Next();
         }

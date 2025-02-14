@@ -33,6 +33,7 @@
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/regex/pcre/regexp.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -845,6 +846,76 @@ void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPa
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
+namespace {
+
+Ydb::Table::DescribeExternalTableResult DescribeExternalTable(TDriver driver, const TString& path) {
+    NTable::TTableClient client(driver);
+    Ydb::Table::DescribeExternalTableResult description;
+    auto status = client.RetryOperationSync([&](NTable::TSession session) {
+        auto result = session.DescribeExternalTable(path).ExtractValueSync();
+        if (result.IsSuccess()) {
+            description = TProtoAccessor::GetProto(result.GetExternalTableDescription());
+        }
+        return result;
+    });
+    VerifyStatus(status, "describe external table");
+    return description;
+}
+
+namespace NExternalTable {
+
+    std::string PropertyToString(const std::pair<TProtoStringType, TProtoStringType>& property) {
+        const auto& [key, json] = property;
+        const auto items = NJson::ReadJsonFastTree(json).GetArray();
+        Y_ENSURE(!items.empty(), "Empty items for an external table property: " << key);
+        if (items.size() == 1) {
+            return ToString(key, items.front().GetString());
+        } else {
+            return ToString(key, std::format("[{}]", JoinSeq(", ", items).c_str()));
+        }
+    }
+
+}
+
+std::string ColumnToString(const Ydb::Table::ColumnMeta& column) {
+    const auto& type = column.type();
+    const bool notNull = !type.has_optional_type() || (type.has_pg_type() && column.not_null());
+    return std::format(
+        "    {} {}{}",
+        column.name().c_str(),
+        TType(type).ToString(),
+        notNull ? " NOT NULL" : ""
+    );
+}
+
+TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableResult& description) {
+    return std::format(
+        "CREATE EXTERNAL TABLE IF NOT EXISTS `{}` (\n{}\n) WITH (\n{},\n{},\n{}{}\n);",
+        description.self().name().c_str(),
+        JoinSeq(",\n", std::views::transform(description.columns(), ColumnToString)).c_str(),
+        ToString("SOURCE_TYPE", description.source_type()),
+        ToString("DATA_SOURCE_PATH", description.data_source_path()),
+        ToString("LOCATION", description.location()),
+        description.content().empty()
+            ? ""
+            : std::string(",\n") +
+                JoinSeq(",\n", std::views::transform(description.content(), NExternalTable::PropertyToString)).c_str()
+    );
+}
+
+}
+
+void BackupExternalTable(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup external table " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto description = DescribeExternalTable(driver, dbPath);
+    const auto creationQuery = BuildCreateExternalTableQuery(description);
+
+    WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalTable());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
 void CreateClusterDirectory(const TDriver& driver, const TString& path, bool rootBackupDir = false) {
     if (rootBackupDir) {
         LOG_I("Create temporary directory " << path.Quote() << " in database");
@@ -943,6 +1014,9 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             }
             if (dbIt.IsExternalDataSource()) {
                 BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
+            }
+            if (dbIt.IsExternalTable()) {
+                BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
             }
             dbIt.Next();
         }

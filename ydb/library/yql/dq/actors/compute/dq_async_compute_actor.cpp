@@ -696,7 +696,13 @@ private:
     }
 
     void DoExecuteImpl() override {
-        PollAsyncInput();
+        bool isFull = false;
+        if (ProcessOutputsState.Inflight == 0 && ProcessOutputsState.HasDataToSend && !ProcessOutputsState.DataWasSent && ProcessOutputsState.LastRunStatus == ERunStatus::PendingOutput) {
+            // FIXME is this condition correct?
+            // we need to stop polling when output is full and all input buffers are full
+            isFull = true;
+        }
+        PollAsyncInput(!isFull);
         if (ProcessSourcesState.Inflight == 0) {
             auto req = GetCheckpointRequest();
             CA_LOG_T("DoExecuteImpl: " << (bool) req);

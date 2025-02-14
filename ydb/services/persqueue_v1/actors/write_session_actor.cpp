@@ -444,7 +444,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     LogSession(ctx);
 
     if (Request->GetSerializedToken().empty()) { // session without auth
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials");
             Die(ctx);
             return;
@@ -626,7 +626,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     SetMeteringMode(meteringMode);
 
     if (Request->GetSerializedToken().empty()) { // session without auth
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials");
             Die(ctx);
             return;
@@ -1278,7 +1278,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvUpdateToken::T
     }
 
     const auto& token = ev->Get()->Request.update_token_request().token();
-    if (token == Auth || (token.empty() && !AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol())) {
+    if (token == Auth || (token.empty() && !(AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()))) {
         // Got same token or empty token with no non-empty token requirement, do not trigger any checks
         TServerMessage serverMessage;
         serverMessage.set_status(Ydb::StatusIds::SUCCESS);

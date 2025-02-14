@@ -917,12 +917,6 @@ TCheckFunc SequenceCache(ui64 cache) {
     };
 }
 
-TCheckFunc StreamName(const TString& name) {
-    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetName(), name);
-    };
-}
-
 TCheckFunc StreamMode(NKikimrSchemeOp::ECdcStreamMode mode) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetMode(), mode);

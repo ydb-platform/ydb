@@ -162,7 +162,6 @@ namespace NLs {
     TCheckFunc SequenceCache(ui64 cache);
 
     TCheckFunc StreamMode(NKikimrSchemeOp::ECdcStreamMode mode);
-    TCheckFunc StreamName(const TString& name);
     TCheckFunc StreamFormat(NKikimrSchemeOp::ECdcStreamFormat format);
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
     TCheckFunc StreamVirtualTimestamps(bool value);

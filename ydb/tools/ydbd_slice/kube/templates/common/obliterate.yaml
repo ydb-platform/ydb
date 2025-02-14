@@ -1,22 +1,21 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ydbd-obl-job-{{ nodeclaim_name }}-{{ node_name.split('.')[0] }}
+  # https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-subdomain-names
+  # 255 characters is the maximum length of a DNS subdomain name
+  name: ydbd-obl-job-{{ node_name.split('.')[0] | truncate(180) }}
   namespace: {{ namespace_name }}
   annotations:
     ydb.tech/node-claim: {{ nodeclaim_name }}.{{ namespace_name }}
 spec:
   template:
-    metadata:
-      annotations:
-        ydb.tech/node-claim: {{ nodeclaim_name }}
     spec:
       nodeSelector:
         kubernetes.io/hostname: "{{ node_name }}"
       tolerations:
-      - key: "ydb.tech/node-claim"
-        value: "{{ nodeclaim_name }}.{{ namespace_name }}"
-        effect: "NoSchedule"
+      - effect: "NoSchedule"
+        operator: Exists
+        key: "ydb.tech/node-claim"
       - effect: NoExecute
         key: node.kubernetes.io/unreachable
         operator: Exists
@@ -26,7 +25,7 @@ spec:
       containers:
       - name: ydbd-obliterate
         image: {{ ydb_image }}
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         # Obliterate function doesn't sync the disk after the operation, so we need to do it manually
         # We don't have such problem on baremetal, because ydbd running in the same namespace witqh obliterate
         command:

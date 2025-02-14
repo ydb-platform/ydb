@@ -38,9 +38,9 @@ Issues:
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
-| REQ-LOAD-001-1.1 | Bulk Upsert - 25MB/s | Measure bulk upsert performance at 25MB/s. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/issue_id)](https://github.com/ydb-platform/ydb/issues/issue_id) | Pending |
-| REQ-LOAD-001-1.2 | Bulk Upsert - 1GB/s | Measure bulk upsert performance at 1GB/s. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/issue_id)](https://github.com/ydb-platform/ydb/issues/issue_id) | Pending |
-| REQ-LOAD-001-1.3 | SELECT | Measure bulk upsert performance at 1GB/s. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/issue_id)](https://github.com/ydb-platform/ydb/issues/issue_id) | Pending |
+| REQ-LOAD-001-1.1 | Bulk Upsert - 25MB/s | Measure bulk upsert performance at 25MB/s. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14493)](https://github.com/ydb-platform/ydb/issues/14493) | Pending |
+| REQ-LOAD-001-1.2 | Bulk Upsert - 1GB/s | Measure bulk upsert performance at 1GB/s. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14493)](https://github.com/ydb-platform/ydb/issues/14493) | Pending |
+| REQ-LOAD-001-1.3 | SELECT | Measure bulk upsert performance at 1GB/s. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14493)](https://github.com/ydb-platform/ydb/issues/14493) | Pending |
 
 #### REQ-LOAD-002
 Description: Evaluate system performance under simple queue scenarios.

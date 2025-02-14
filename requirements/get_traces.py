@@ -42,7 +42,7 @@ def parse_requirements(file_path):
             current_req['issues'].append({
                 'id': issue_id,
                 'description': issue_desc,
-                'bage': f"[![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/issue_id)](https://github.com/ydb-platform/ydb/issues/issue_id)" })
+                'bage': f"[![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/{issue_id})](https://github.com/ydb-platform/ydb/issues/{issue_id})" })
 
         # Identify cases with optional paths
         case_match = re.match(r"\s+- Case (\d+\.\d+): \[(.+)\]\((.+)\) - (.+)", line)
@@ -65,7 +65,7 @@ def parse_requirements(file_path):
             current_req['issues'].append({
                 'id': issue_id,
                 'description': issue_desc,
-                'bage': f"[![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/issue_id)](https://github.com/ydb-platform/ydb/issues/issue_id)" })
+                'bage': f"[![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/{issue_id})](https://github.com/ydb-platform/ydb/issues/{issue_id})" })
 
     if current_req:
         requirements.append(current_req)

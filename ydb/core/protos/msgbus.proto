@@ -568,6 +568,9 @@ message TSqsRequest {
         NKikimr.NSQS.TGetQueueAttributesBatchRequest GetQueueAttributesBatch = 22;
         NKikimr.NSQS.TListDeadLetterSourceQueuesRequest ListDeadLetterSourceQueues = 23;
         NKikimr.NSQS.TCountQueuesRequest CountQueues = 24;
+        NKikimr.NSQS.TListQueueTagsRequest ListQueueTags = 25;
+        NKikimr.NSQS.TTagQueueRequest TagQueue = 26;
+        NKikimr.NSQS.TUntagQueueRequest UntagQueue = 27;
     }
     optional string RequestId = 30;
     optional bool RequestRateLimit = 31 [default = true];
@@ -599,11 +602,16 @@ message TSqsResponse {
         NKikimr.NSQS.TGetQueueAttributesBatchResponse GetQueueAttributesBatch = 22;
         NKikimr.NSQS.TListDeadLetterSourceQueuesResponse ListDeadLetterSourceQueues = 23;
         NKikimr.NSQS.TCountQueuesResponse CountQueues = 24;
+        NKikimr.NSQS.TListQueueTagsResponse ListQueueTags = 25;
+        NKikimr.NSQS.TTagQueueResponse TagQueue = 26;
+        NKikimr.NSQS.TUntagQueueResponse UntagQueue = 27;
     }
     optional string RequestId = 30;
     optional string FolderId = 31;
     optional string ResourceId = 32;
     optional bool IsFifo = 33;
+
+    repeated NKikimr.NSQS.TQueueTag QueueTags = 34;
 }
 
 message TSqsActionCounterChanged {

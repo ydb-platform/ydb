@@ -143,6 +143,8 @@ private:
                 .Params()
                     .Uint64("QUEUE_ID_NUMBER", QueueVersion_.GetRef())
                     .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
+                    .Utf8("NAME", GetQueueName())
+                    .Utf8("USER_NAME", UserName_)
                 .ParentBuilder().Start();
             ++WaitCount_;
         }
@@ -221,7 +223,7 @@ private:
                         result->SetRedrivePolicy(redrivePolicy.ToJson());
                     }
                 }
-                
+
                 --WaitCount_;
                 ReplyIfReady();
                 return;

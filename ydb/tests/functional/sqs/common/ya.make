@@ -15,6 +15,7 @@ TEST_SRCS(
     test_format_without_version.py
     test_throttling.py
     test_queue_counters.py
+    test_queue_tags.py
 )
 
 IF (SANITIZER_TYPE == "thread")

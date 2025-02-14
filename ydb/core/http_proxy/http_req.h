@@ -59,6 +59,7 @@ struct THttpResponseData {
     TString YmqStatusCode;
     ui32 YmqHttpCode;
     bool YmqIsFifo = false;
+    THashMap<TString, TString> QueueTags;
 
     TString DumpBody(MimeTypes contentType);
 };

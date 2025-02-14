@@ -22,7 +22,7 @@ public:
     int Run(TConfig& config) override;
 };
 
-class TCommandClusterDump : public TYdbCommand {
+class TCommandClusterDump : public TYdbReadOnlyCommand {
 public:
     TCommandClusterDump();
     void Config(TConfig& config) override;

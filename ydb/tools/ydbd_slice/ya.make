@@ -24,7 +24,7 @@ PY_SRCS(
 PEERDIR(
     ydb/tools/cfg
     ydb/public/sdk/python
-    ydb/public/sdk/python/ydb_v3_new_behavior
+    ydb/public/sdk/python/enable_v3_new_behavior
     contrib/python/PyYAML
     contrib/python/ruamel.yaml
     contrib/python/kubernetes

@@ -11,8 +11,10 @@
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/library/pdisk_io/file_params.h>
+#include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/protos/key.pb.h>
+#include <util/folder/dirut.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
@@ -121,6 +123,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
         hFunc(TEvPrivate::TEvSendDiskMetrics, Handle);
         hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
+        hFunc(TEvPrivate::TEvRetrySaveConfig, Handle);
+
         hFunc(NMon::TEvHttpInfo, Handle);
         cFunc(NActors::TEvents::TSystem::Poison, PassAway);
 
@@ -437,6 +441,12 @@ void TNodeWarden::Bootstrap() {
     const bool success = DeriveStorageConfig(appConfig, &StorageConfig, &errorReason);
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
 
+    //LoadConfigVersion();
+    if (Cfg->YamlConfig) {
+        YamlConfig.emplace();
+        YamlConfig->CopyFrom(*Cfg->YamlConfig);
+    }
+
     // Start a statically configured set
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
         const auto& serviceSet = Cfg->BlobStorageConfig.GetServiceSet();
@@ -625,6 +635,95 @@ void TNodeWarden::ProcessShredStatus(ui64 cookie, ui64 generation, std::optional
     }
 }
 
+void TNodeWarden::PersistConfig(const TString& configYaml, ui64 version, std::optional<TString> storageYaml) {
+    if (!Cfg->ConfigStorePath) {
+        return;
+    }
+
+    struct TSaveContext {
+        TString ConfigStorePath;
+        TString ConfigYaml;
+        ui64 Version;
+        std::optional<TString> StorageYaml;
+        bool Success = true;
+        TString ErrorMessage;
+        TActorId SelfId;
+    };
+
+    auto saveCtx = std::make_shared<TSaveContext>();
+    saveCtx->ConfigStorePath = Cfg->ConfigStorePath;
+    saveCtx->ConfigYaml = std::move(configYaml);
+    saveCtx->StorageYaml = std::move(storageYaml);
+    saveCtx->Version = std::move(version);
+    saveCtx->SelfId = SelfId();
+
+    EnqueueSyncOp([this, saveCtx](const TActorContext&) {
+        bool success = true;
+        try {
+            MakePathIfNotExist(saveCtx->ConfigStorePath.c_str());
+        } catch (const yexception& e) {
+            STLOG(PRI_ERROR, BS_NODE, NW91, "Failed to create config store path", (Error, e.what()));
+            success = false;
+        }
+
+        auto saveConfig = [&](const TString& yaml, const TString& configFileName) -> bool {
+            try {
+                TString tempPath = TStringBuilder() << saveCtx->ConfigStorePath << "/temp_" << configFileName;
+                TString configPath = TStringBuilder() << saveCtx->ConfigStorePath << "/" << configFileName;
+
+                {
+                    TFileOutput tempFile(tempPath);
+                    tempFile << yaml;
+                    tempFile.Flush();
+                }
+
+                if (!NFs::Rename(tempPath, configPath)) {
+                    STLOG(PRI_ERROR, BS_NODE, NW92, "Failed to rename temporary file", (Error, LastSystemErrorText()));
+                    success = false;
+                    return false;
+                }
+                return true;
+            } catch (const std::exception& e) {
+                STLOG(PRI_ERROR, BS_NODE, NW93, "Failed to save config file", (Error, e.what()));
+                success = false;
+                return false;
+            }
+        };
+
+        if (success) {
+            success = saveConfig(saveCtx->ConfigYaml, YamlConfigFileName);
+            if (success) {
+                STLOG(PRI_INFO, BS_NODE, NW94, "Yaml config saved");
+            }
+        }
+
+        if (success && saveCtx->StorageYaml) {
+            success = saveConfig(*saveCtx->StorageYaml, StorageConfigFileName);
+            if (success) {
+                STLOG(PRI_INFO, BS_NODE, NW95, "Storage config saved");
+            }
+        }
+
+        return [this, saveCtx, success]() { 
+            if (success) {
+                if (!YamlConfig) {
+                    YamlConfig.emplace();
+                }
+                YamlConfig->SetYAML(saveCtx->ConfigYaml);
+                YamlConfig->SetConfigVersion(saveCtx->Version);
+                ConfigSaveTimer.Reset();
+            } else {
+                NKikimrBlobStorage::TYamlConfig yamlConfig;
+                yamlConfig.SetYAML(saveCtx->ConfigYaml);
+                yamlConfig.SetConfigVersion(saveCtx->Version);
+                TActivationContext::Schedule(TDuration::MilliSeconds(ConfigSaveTimer.NextBackoffMs()),
+                    new IEventHandle(SelfId(), SelfId(),
+                                     new TEvPrivate::TEvRetrySaveConfig(yamlConfig), 0, ExpectedSaveConfigCookie));
+            }
+        };
+    });
+}
+
 void TNodeWarden::Handle(TEvRegisterPDiskLoadActor::TPtr ev) {
     Send(ev.Get()->Sender, new TEvRegisterPDiskLoadActorResult(NextLocalPDiskInitOwnerRound()));
 }
@@ -671,7 +770,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
                 auto issueShredRequestToPDisk = [&] {
                     const ui64 cookie = ++LastShredCookie;
                     ShredInFlight.emplace(cookie, key);
-                    pdisk.ShredCookies.insert(cookie);
+                    pdisk.ShredCookies.emplace(cookie, generation);
 
                     const TActorId actorId = SelfId();
                     auto ev = std::make_unique<NPDisk::TEvShredPDisk>(generation);
@@ -707,6 +806,16 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
             } else {
                 SendPDiskReport(pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::PD_SHRED, "PDisk not found");
             }
+        }
+    }
+
+    if (record.HasYamlConfig()) {
+        const auto& request = record.GetYamlConfig();
+        if (request.HasYAML()) {
+            TString yaml = NYamlConfig::DecompressYamlString(request.GetYAML());
+            ui64 version = request.GetConfigVersion();
+            PersistConfig(yaml, version);
+            ExpectedSaveConfigCookie++;
         }
     }
 }
@@ -930,6 +1039,15 @@ void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) {
         };
     });
     Schedule(TDuration::Seconds(10), new TEvPrivate::TEvUpdateNodeDrives());
+}
+
+void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
+    STLOG(PRI_TRACE, BS_NODE, NW97, "Handle(TEvRetrySaveConfig)");
+    if (ev->Cookie == ExpectedSaveConfigCookie) {
+        const auto& yamlConfig = ev->Get()->YamlConfig;
+        PersistConfig(yamlConfig.GetYAML(), yamlConfig.GetConfigVersion());
+        ExpectedSaveConfigCookie++;
+    }
 }
 
 void TNodeWarden::SendDiskMetrics(bool reportMetrics) {

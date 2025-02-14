@@ -14,8 +14,6 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-inline constexpr TStringBuf SYSTEM_COLUMN_PREFIX = "__ydb_";
-
 inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames = false) {
     if (!allowSystemColumnNames && name.StartsWith(SYSTEM_COLUMN_PREFIX)) {
         return false;
@@ -65,6 +63,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
@@ -72,11 +71,26 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     std::string_view suffix = {});
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix = {});
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
@@ -128,9 +142,9 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
     if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         //We have already checked this in IsCompatibleIndex
-        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() == 1);
+        Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
-        const TString& indexColumnName = indexKeys.KeyColumns[0];
+        const TString& indexColumnName = indexKeys.KeyColumns.back();
         Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));
         auto typeInfo = baseColumnTypes.at(indexColumnName);
 

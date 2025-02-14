@@ -46,7 +46,7 @@ int TCommandClusterBootstrap::Run(TConfig& config) {
 }
 
 TCommandClusterDump::TCommandClusterDump()
-    : TYdbCommand("dump", {}, "Dump cluster into local directory")
+    : TYdbReadOnlyCommand("dump", {}, "Dump cluster into local directory")
 {}
 
 void TCommandClusterDump::Config(TConfig& config) {

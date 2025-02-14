@@ -486,7 +486,7 @@ class YqTenant(BaseTenant):
         fq_config['common']['keep_internal_errors'] = True
 
         fq_config['common']['ydb_driver_config'] = {}
-        fq_config['common']['ydb_driver_config']['network_threads_num']= 1
+        fq_config['common']['ydb_driver_config']['network_threads_num'] = 1
         fq_config['common']['ydb_driver_config']['client_threads_num'] = 1
 
         fq_config['common']['topic_client_handlers_executor_threads_num'] = 1

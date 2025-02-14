@@ -3904,8 +3904,8 @@ bool TExecutor::CompactTables() {
     }
 }
 
-void TExecutor::CleanupData() {
-    if (DataCleanupLogic->TryStartCleanup()) {
+void TExecutor::CleanupData(ui64 dataCleanupGeneration) {
+    if (DataCleanupLogic->TryStartCleanup(dataCleanupGeneration, OwnerCtx())) {
         for (const auto& [tableId, _] : Scheme().Tables) {
             auto compactionId = CompactionLogic->PrepareForceCompaction(tableId);
             DataCleanupLogic->OnCompactionPrepared(tableId, compactionId);
@@ -4260,6 +4260,10 @@ void TExecutor::SendUserAuxUpdateToFollowers(TString upd, const TActorContext &c
 
 NMetrics::TResourceMetrics* TExecutor::GetResourceMetrics() const {
     return ResourceMetrics.Get();
+}
+
+TExecutorCounters* TExecutor::GetCounters() {
+    return Counters.Get();
 }
 
 void TExecutor::ReadResourceProfile() {

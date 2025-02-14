@@ -13,6 +13,11 @@ items:
     href: coordination.md
   - name: Handling errors in the API
     href: error_handling.md
+    items:
+    - name: YDB server status codes
+      href: ydb-status-codes.md
+    - name: gRPC status codes
+      href: grpc-status-codes.md
   - name: gRPC API
     items:
     - name: Overview

@@ -36,6 +36,7 @@ PEERDIR(
     ydb/core/driver_lib/run
     ydb/core/protos
     ydb/core/security
+    ydb/core/tx/schemeshard
     ydb/core/ymq/actor
     ydb/core/ymq/base
     ydb/library/folder_service/mock
@@ -68,7 +69,8 @@ PEERDIR(
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/logs/dsv
-    ydb/public/sdk/cpp/src/client/persqueue_public/codecs
+#    ydb/library/breakpad 
+    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
 )
 
 YQL_LAST_ABI_VERSION()

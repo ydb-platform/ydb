@@ -13,5 +13,5 @@ NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi, bool antlr4);
 bool IsProbablyKeyword(const NSQLTranslation::TParsedToken& token);
 
 bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr& lexer,
-    TVector<TString>& statements, NYql::TIssues& issues);
+    TVector<TString>& statements, NYql::TIssues& issues, const TString& file = "");
 }

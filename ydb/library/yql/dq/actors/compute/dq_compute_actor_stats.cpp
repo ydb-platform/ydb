@@ -284,8 +284,9 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     protoTask->SetResultRows(resultStats.Rows);
     protoTask->SetResultBytes(resultStats.Bytes);
 
-    protoTask->SetFinishTimeMs(finishTime.MilliSeconds());
+    protoTask->SetCreateTimeMs(taskStats.CreateTs.MilliSeconds());
     protoTask->SetStartTimeMs(startTime.MilliSeconds());
+    protoTask->SetFinishTimeMs(finishTime.MilliSeconds());
 }
 
 } // namespace NDq

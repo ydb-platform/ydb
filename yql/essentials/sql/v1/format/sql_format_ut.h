@@ -20,6 +20,15 @@ Y_UNIT_TEST(DotAfterDigits) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(AlterDatabase) {
+    TCases cases {
+        {"use plato;alter database `/Root/test` owner to user1;", "USE plato;\n\nALTER DATABASE `/Root/test` OWNER TO user1;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(GrantPermissions) {
     TCases cases {
         {"use plato;grant connect, modify tables, list on `/Root` to user;", "USE plato;\n\nGRANT CONNECT, MODIFY TABLES, LIST ON `/Root` TO user;\n"},
@@ -135,6 +144,14 @@ Y_UNIT_TEST(AlterSequence) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(ShowCreateTable) {
+    TCases cases = {
+        {"use plato;show create table user;","USE plato;\n\nSHOW CREATE TABLE user;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
 
 Y_UNIT_TEST(Use) {
     TCases cases = {

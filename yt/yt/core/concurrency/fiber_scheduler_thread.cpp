@@ -804,7 +804,9 @@ protected:
     void OnSwitch()
     {
         FiberId_ = SwapCurrentFiberId(FiberId_);
+        TContextSwitchManager::Get()->OnOut();
         Fls_ = SwapCurrentFls(Fls_);
+        TContextSwitchManager::Get()->OnIn();
         MinLogLevel_ = SwapMinLogLevel(MinLogLevel_);
     }
 
@@ -931,8 +933,6 @@ private:
     // On finish fiber running.
     void OnOut()
     {
-        TContextSwitchManager::Get()->OnOut();
-
         for (auto it = UserHandlers_.begin(); it != UserHandlers_.end(); ++it) {
             if (it->Out) {
                 it->Out();
@@ -955,8 +955,6 @@ private:
                 it->In();
             }
         }
-
-        TContextSwitchManager::Get()->OnIn();
     }
 };
 

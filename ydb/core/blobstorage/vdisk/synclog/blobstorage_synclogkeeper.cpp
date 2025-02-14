@@ -31,8 +31,8 @@ namespace NKikimr {
 
             void Bootstrap(const TActorContext &ctx) {
                 KeepState.Init(
-                    std::make_shared<TActorNotify>(ctx.ExecutorThread.ActorSystem, ctx.SelfID),
-                    std::make_shared<TActorSystemLoggerCtx>(ctx.ExecutorThread.ActorSystem));
+                    std::make_shared<TActorNotify>(ctx.ActorSystem(), ctx.SelfID),
+                    std::make_shared<TActorSystemLoggerCtx>(ctx.ActorSystem()));
                 PerformActions(ctx);
                 Become(&TThis::StateFunc);
             }

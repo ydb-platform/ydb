@@ -1119,6 +1119,12 @@ message TEvControllerNodeServiceSetUpdate {
         repeated uint32 PDiskIds = 2; // a set of PDisks to start shred at
     }
 
+    message TSaveConfigRequest {
+        optional string YAML = 1;
+        optional string DedicatedStorageYAML = 2;
+        optional string DedicatedClusterYAML = 3;
+    }
+
     optional NKikimrProto.EReplyStatus Status = 1;
     optional uint32 NodeID = 2;
     optional TNodeWardenServiceSet ServiceSet = 3;
@@ -1127,6 +1133,7 @@ message TEvControllerNodeServiceSetUpdate {
     optional bool Comprehensive = 6; // if this flag is set to true, then there will be no any other entities than elisted in the ServiceSet
     optional uint64 AvailDomain = 7; // availability domain of the controller
     optional TShredRequest ShredRequest = 8;
+    optional TSaveConfigRequest SaveConfigRequest = 9;
 }
 
 message TEvControllerConfigRequest {

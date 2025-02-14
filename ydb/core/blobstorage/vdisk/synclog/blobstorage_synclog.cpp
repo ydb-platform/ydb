@@ -113,7 +113,7 @@ namespace NKikimr {
                 NeighborsPtr = MakeIntrusive<TSyncLogNeighbors>(SlCtx->VCtx->ShortSelfVDisk,
                                                                 SlCtx->VCtx->Top,
                                                                 SlCtx->VCtx->VDiskLogPrefix,
-                                                                ctx.ExecutorThread.ActorSystem);
+                                                                ctx.ActorSystem());
                 KeeperId = ctx.Register(CreateSyncLogKeeperActor(SlCtx, std::move(Repaired)));
                 ActiveActors.Insert(KeeperId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 TThis::Become(&TThis::StateFunc);

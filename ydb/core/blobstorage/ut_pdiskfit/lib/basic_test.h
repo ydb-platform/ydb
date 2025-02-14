@@ -71,7 +71,7 @@ public:
                     params.LogsToBeSent = 100;
                 }
             }
-            TActorId actorId = ctx.ExecutorThread.ActorSystem->Register(CreateFakeVDisk(vdiskId, PDiskServiceId,
+            TActorId actorId = ctx.ActorSystem()->Register(CreateFakeVDisk(vdiskId, PDiskServiceId,
                     PDiskConfig->PDiskGuid, StateManager, params));
             actors.push_back(actorId);
         }
@@ -83,15 +83,15 @@ public:
 
     void CreatePDiskActor(const TActorContext& ctx) {
         Y_ABORT_UNLESS(Counters);
-        Y_ABORT_UNLESS(ctx.ExecutorThread.ActorSystem);
+        Y_ABORT_UNLESS(ctx.ActorSystem());
         Y_ABORT_UNLESS(PDiskConfig);
         Y_ABORT_UNLESS(AppData(ctx));
         std::unique_ptr<IActor> pdiskActor(CreatePDisk(PDiskConfig, NPDisk::TMainKey{ .Keys = { 1 }, .IsInitialized = true },
                 Counters->GetSubgroup("subsystem", "pdisk")));
-        const TActorId actorId = ctx.ExecutorThread.ActorSystem->Register(pdiskActor.release(), TMailboxType::Simple,
+        const TActorId actorId = ctx.ActorSystem()->Register(pdiskActor.release(), TMailboxType::Simple,
                 AppData(ctx)->SystemPoolId);
-        PDiskServiceId = MakeBlobStoragePDiskID(ctx.ExecutorThread.ActorSystem->NodeId, PDiskConfig->PDiskId);
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(PDiskServiceId, actorId);
+        PDiskServiceId = MakeBlobStoragePDiskID(ctx.ActorSystem()->NodeId, PDiskConfig->PDiskId);
+        ctx.ActorSystem()->RegisterLocalService(PDiskServiceId, actorId);
     }
 
     void Finish(const TActorContext& ctx) {

@@ -16,4 +16,6 @@ SRCS(
     pack_num_bench.cpp
 )
 
+INCLUDE(${ARCADIA_ROOT}/devtools/large_on_multi_slots.inc)
+
 END()

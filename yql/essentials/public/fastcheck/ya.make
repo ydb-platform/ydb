@@ -2,6 +2,11 @@ LIBRARY()
 
 SRCS(
     fastcheck.cpp
+    linter.cpp
+    lexer.cpp
+    parser.cpp
+    translator.cpp
+    format.cpp
 )
 
 PEERDIR(
@@ -13,7 +18,14 @@ PEERDIR(
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     yql/essentials/providers/common/provider
+    yql/essentials/sql/v1/lexer
+    yql/essentials/sql/v1/proto_parser
+    yql/essentials/sql/v1/format
+    yql/essentials/sql/settings
+    yql/essentials/parser/pg_wrapper/interface
 )
+
+GENERATE_ENUM_SERIALIZATION(linter.h)
 
 END()
 

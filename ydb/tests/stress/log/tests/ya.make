@@ -6,14 +6,8 @@ TEST_SRCS(
     test_workload.py
 )
 
-IF (SANITIZER_TYPE)
-    SIZE(MEDIUM)
-    REQUIREMENTS(ram:32)
-ELSE()
-    SIZE(MEDIUM)
-    REQUIREMENTS(ram:16)
-ENDIF()
-
+SIZE(MEDIUM)
+REQUIREMENTS(ram:32)
 
 DEPENDS(
     ydb/apps/ydbd

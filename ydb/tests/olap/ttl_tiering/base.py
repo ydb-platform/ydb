@@ -67,6 +67,13 @@ class YdbClient:
     def query(self, statement):
         return self.session_pool.execute_with_retries(statement)
 
+    def bulk_upsert(self, table_path, column_types: ydb.BulkUpsertColumns, data_slice):
+        self.driver.table_client.bulk_upsert(
+            table_path,
+            data_slice,
+            column_types
+        )
+
 
 class ColumnTableHelper:
     def __init__(self, ydb_client: YdbClient, path: str):
@@ -91,6 +98,15 @@ class ColumnTableHelper:
         """
         results = self.ydb_client.query(stmt)
         return {row["TierName"]: {"Portions": row["Portions"], "BlobSize": row["BlobSize"], "BlobCount": row["BlobCount"]} for result_set in results for row in result_set.rows}
+
+    def set_fast_compaction(self):
+        self.ydb_client.query(
+            f"""
+            ALTER OBJECT `{self.path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                  {{"levels" : [{{"class_name" : "Zero", "portions_live_duration" : "5s", "expected_blobs_size" : 1000000000000, "portions_count_available" : 2}},
+                                {{"class_name" : "Zero"}}]}}`);
+            """
+        )
 
 
 class TllTieringTestBase(object):
@@ -120,6 +136,7 @@ class TllTieringTestBase(object):
                 "optimizer_freshness_check_duration_ms": 0,
                 "small_portion_detect_size_limit": 0,
                 "max_read_staleness_ms": 5000,
+                "alter_object_enabled": True,
             },
             additional_log_configs={
                 "TX_COLUMNSHARD_TIERING": LogLevels.DEBUG,

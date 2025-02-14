@@ -48,8 +48,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockTopTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto topBlocks = pb.WideTopBlocks(pb.WideToBlocks(pb.ExpandMap(pb.ToFlow(list),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; })),
+        const auto wideFlow = pb.ExpandMap(pb.ToFlow(list),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+        const auto blockFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+        const auto topBlocks = pb.WideTopBlocks(blockFlow,
             pb.NewDataLiteral<ui64>(4ULL), {{0U, pb.NewDataLiteral<bool>(true)}});
         const auto topFlow = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(topBlocks)));
         const auto pgmReturn = pb.Collect(pb.NarrowMap(topFlow,
@@ -113,8 +115,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockTopTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto topBlocks = pb.WideTopBlocks(pb.WideToBlocks(pb.ExpandMap(pb.ToFlow(list),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; })),
+        const auto wideFlow = pb.ExpandMap(pb.ToFlow(list),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+        const auto blockFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+        const auto topBlocks = pb.WideTopBlocks(blockFlow,
             pb.NewDataLiteral<ui64>(6ULL), {{0U, pb.NewDataLiteral<bool>(false)}});
         const auto topFlow = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(topBlocks)));
         const auto pgmReturn = pb.Collect(pb.NarrowMap(topFlow,
@@ -184,8 +188,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockTopTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto topBlocks = pb.WideTopBlocks(pb.WideToBlocks(pb.ExpandMap(pb.ToFlow(list),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; })),
+        const auto wideFlow = pb.ExpandMap(pb.ToFlow(list),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+        const auto blockFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+        const auto topBlocks = pb.WideTopBlocks(blockFlow,
             pb.NewDataLiteral<ui64>(3ULL), {{1U, pb.NewDataLiteral<bool>(true)}});
         const auto topFlow = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(topBlocks)));
         const auto pgmReturn = pb.Collect(pb.NarrowMap(topFlow,
@@ -246,8 +252,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockTopTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto topBlocks = pb.WideTopBlocks(pb.WideToBlocks(pb.ExpandMap(pb.ToFlow(list),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; })),
+        const auto wideFlow = pb.ExpandMap(pb.ToFlow(list),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+        const auto blockFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+        const auto topBlocks = pb.WideTopBlocks(blockFlow,
             pb.NewDataLiteral<ui64>(2ULL), {{1U, pb.NewDataLiteral<bool>(false)}});
         const auto topFlow = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(topBlocks)));
         const auto pgmReturn = pb.Collect(pb.NarrowMap(topFlow,
@@ -305,8 +313,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockTopTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto topSortBlocks = pb.WideTopSortBlocks(pb.WideToBlocks(pb.ExpandMap(pb.ToFlow(list),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; })),
+        const auto wideFlow = pb.ExpandMap(pb.ToFlow(list),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+        const auto blockFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+        const auto topSortBlocks = pb.WideTopSortBlocks(blockFlow,
             pb.NewDataLiteral<ui64>(4ULL), {{0U, pb.NewDataLiteral<bool>(true)}, {1U, pb.NewDataLiteral<bool>(false)}});
         const auto topSortFlow = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(topSortBlocks)));
         const auto pgmReturn = pb.Collect(pb.NarrowMap(topSortFlow,
@@ -370,8 +380,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockTopTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto topSortBlocks = pb.WideTopSortBlocks(pb.WideToBlocks(pb.ExpandMap(pb.ToFlow(list),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; })),
+        const auto wideFlow = pb.ExpandMap(pb.ToFlow(list),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+        const auto blockFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+        const auto topSortBlocks = pb.WideTopSortBlocks(blockFlow,
             pb.NewDataLiteral<ui64>(6ULL), {{0U, pb.NewDataLiteral<bool>(false)}, {1U, pb.NewDataLiteral<bool>(true)}});
         const auto topSortFlow = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(topSortBlocks)));
         const auto pgmReturn = pb.Collect(pb.NarrowMap(topSortFlow,
@@ -441,8 +453,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockTopTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto topSortBlocks = pb.WideTopSortBlocks(pb.WideToBlocks(pb.ExpandMap(pb.ToFlow(list),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; })),
+        const auto wideFlow = pb.ExpandMap(pb.ToFlow(list),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+        const auto blockFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+        const auto topSortBlocks = pb.WideTopSortBlocks(blockFlow,
             pb.NewDataLiteral<ui64>(4ULL), {{1U, pb.NewDataLiteral<bool>(true)}, {0U, pb.NewDataLiteral<bool>(false)}});
         const auto topSortFlow = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(topSortBlocks)));
         const auto pgmReturn = pb.Collect(pb.NarrowMap(topSortFlow,
@@ -506,8 +520,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockTopTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto topSortBlocks = pb.WideTopSortBlocks(pb.WideToBlocks(pb.ExpandMap(pb.ToFlow(list),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; })),
+        const auto wideFlow = pb.ExpandMap(pb.ToFlow(list),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+        const auto blockFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+        const auto topSortBlocks = pb.WideTopSortBlocks(blockFlow,
             pb.NewDataLiteral<ui64>(6ULL), {{1U, pb.NewDataLiteral<bool>(false)}, {0U, pb.NewDataLiteral<bool>(true)}});
         const auto topSortFlow = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(topSortBlocks)));
         const auto pgmReturn = pb.Collect(pb.NarrowMap(topSortFlow,
@@ -581,8 +597,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockSortTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto sortBlocks = pb.WideSortBlocks(pb.WideToBlocks(pb.ExpandMap(pb.ToFlow(list),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; })),
+        const auto wideFlow = pb.ExpandMap(pb.ToFlow(list),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+        const auto blockFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+        const auto sortBlocks = pb.WideSortBlocks(blockFlow,
             {{0U, pb.NewDataLiteral<bool>(true)}});
         const auto sortFlow = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(sortBlocks)));
         const auto pgmReturn = pb.Collect(pb.NarrowMap(sortFlow,

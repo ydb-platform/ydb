@@ -358,6 +358,8 @@ namespace NSQLTranslationV1 {
         bool SeqMode = false;
         bool EmitUnionMerge = false;
         TVector<size_t> ForAllStatementsParts;
+
+        TMaybe<TString> Engine;
     };
 
     class TColumnRefScope {

@@ -40,7 +40,7 @@ namespace NActors {
         TCpuMask Affinity; // Executor thread affinity
         TDuration TimePerMailbox = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         ui32 EventsPerMailbox = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
-        i16 SoftProcessingDurationTs = Us2Ts(500);
+        i16 SoftProcessingDurationTs = Us2Ts(10'000);
     };
 
     struct TIOExecutorPoolConfig {

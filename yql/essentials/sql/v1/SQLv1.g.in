@@ -79,6 +79,8 @@ sql_stmt_core:
   | create_transfer_stmt
   | alter_transfer_stmt
   | drop_transfer_stmt
+  | alter_database_stmt
+  | show_create_table_stmt
 ;
 
 expr:
@@ -691,6 +693,8 @@ table_tablestore: TABLESTORE simple_table_ref_core;
 table_settings_entry: an_id EQUALS table_setting_value;
 table_as_source: AS values_source;
 
+alter_database_stmt: ALTER DATABASE an_id_schema OWNER TO role_name;
+
 alter_table_stmt: ALTER TABLE simple_table_ref alter_table_action (COMMA alter_table_action)*;
 alter_table_action:
     alter_table_add_column
@@ -1095,6 +1099,8 @@ alter_sequence_action:
   | INCREMENT BY? integer
 ;
 
+show_create_table_stmt: SHOW CREATE TABLE simple_table_ref;
+
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;
 id: identifier | keyword;
@@ -1430,6 +1436,7 @@ keyword_as_compat:
   | OTHERS
   // | OUTER
   // | OVER
+  | OWNER
   | PARALLEL
   | PARTITION
   | PASSING
@@ -1658,6 +1665,7 @@ keyword_compat: (
   | OTHERS
   | OUTER
   | OVER
+  | OWNER
   | PARALLEL
   | PARTITION
   | PASSING
@@ -2022,6 +2030,7 @@ ORDER: O R D E R;
 OTHERS: O T H E R S;
 OUTER: O U T E R;
 OVER: O V E R;
+OWNER: O W N E R;
 PARALLEL: P A R A L L E L;
 PARTITION: P A R T I T I O N;
 PASSING: P A S S I N G;

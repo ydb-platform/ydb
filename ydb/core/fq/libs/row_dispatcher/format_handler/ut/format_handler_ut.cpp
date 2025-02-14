@@ -5,7 +5,7 @@ namespace NFq::NRowDispatcher::NTests {
 
 namespace {
 
-class TFormatHadlerFixture : public TBaseFixture {
+class TFormatHandlerFixture : public TBaseFixture {
 public:
     using TBase = TBaseFixture;
     using TCallback = std::function<void(TQueue<std::pair<TRope, TVector<ui64>>>&& data)>;
@@ -250,7 +250,7 @@ public:
 
 
 Y_UNIT_TEST_SUITE(TestFormatHandler) {
-    Y_UNIT_TEST_F(ManyJsonClients, TFormatHadlerFixture) {
+    Y_UNIT_TEST_F(ManyJsonClients, TFormatHandlerFixture) {
         const ui64 firstOffset = 42;
         const TSchemaColumn commonColumn = {"com_col", "[DataType; String]"};
 
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         });
     }
 
-    Y_UNIT_TEST_F(ManyRawClients, TFormatHadlerFixture) {
+    Y_UNIT_TEST_F(ManyRawClients, TFormatHandlerFixture) {
         CreateFormatHandler(
             {.JsonParserConfig = {}, .FiltersConfig = {.CompileServiceId = CompileService}},
             {.ParsingFormat = "raw"}
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         });
     }
 
-    Y_UNIT_TEST_F(ClientValidation, TFormatHadlerFixture) {
+    Y_UNIT_TEST_F(ClientValidation, TFormatHandlerFixture) {
         const TVector<TSchemaColumn> schema = {{"data", "[DataType; String]"}};
         const TString filter = "WHERE FALSE";
         const auto callback = EmptyCheck();
@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         );
     }
 
-    Y_UNIT_TEST_F(ClientError, TFormatHadlerFixture) {
+    Y_UNIT_TEST_F(ClientError, TFormatHandlerFixture) {
         const ui64 firstOffset = 42;
         const TSchemaColumn commonColumn = {"com_col", "[DataType; String]"};
 
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         );
     }
 
-    Y_UNIT_TEST_F(ClientErrorWithEmptyFilter, TFormatHadlerFixture) {
+    Y_UNIT_TEST_F(ClientErrorWithEmptyFilter, TFormatHandlerFixture) {
         const ui64 firstOffset = 42;
         const TSchemaColumn commonColumn = {"com_col", "[DataType; String]"};
 

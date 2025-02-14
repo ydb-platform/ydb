@@ -72,7 +72,7 @@ namespace NYql {
                             // Get table metadata
                             const auto [tableMeta, issue] = State_->GetTable(
                                 read.DataSource().Cluster().Value(),
-                                read.Table().Value(),
+                                read.Table().Name().Value(),
                                 ctx.GetPosition(node.Pos()));
                             if (issue.has_value()) {
                                 ctx.AddError(issue.value());

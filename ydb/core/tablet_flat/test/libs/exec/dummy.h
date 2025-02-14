@@ -124,10 +124,10 @@ namespace NFake {
                 Send(Owner, new NFake::TEvCompacted(table));
         }
 
-        void DataCleanupComplete(const TActorContext&) override
+        void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext&) override
         {
             if (Flags & ui32(EFlg::Clean))
-                Send(Owner, new NFake::TEvDataCleaned());
+                Send(Owner, new NFake::TEvDataCleaned(dataCleanupGeneration));
         }
 
         void SnapshotComplete(

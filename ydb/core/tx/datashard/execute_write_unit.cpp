@@ -96,7 +96,7 @@ public:
             return EExecutionStatus::Continue;
         
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because an duplicate key");
-        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Operation is aborting because an duplicate key");
+        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation is aborting because an duplicate key");
         ResetChanges(userDb, writeOp, txc);
         return EExecutionStatus::Executed;
     }

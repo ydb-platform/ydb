@@ -228,7 +228,6 @@ private:
     const TString BaseUrl_;
     const NLogging::TLogger Logger;
 
-
     TError TranslateRequest(const IRequestPtr& req, NRpc::NProto::TRequestHeader* rpcHeader, TRequestId* requestId)
     {
         using namespace NYT::NHttp::NHeaders;
@@ -304,6 +303,11 @@ private:
         auto userTicketString = httpHeaders->Find(UserTicketHeaderName);
         if (userTicketString) {
             getCredentialsExt()->set_user_ticket(TrimLeadingWhitespaces(*userTicketString));
+        }
+
+        auto serviceTicketString = httpHeaders->Find(ServiceTicketHeaderName);
+        if (serviceTicketString) {
+            getCredentialsExt()->set_service_ticket(TrimLeadingWhitespaces(*serviceTicketString));
         }
 
         auto cookieString = httpHeaders->Find(CookieHeaderName);

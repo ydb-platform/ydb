@@ -690,9 +690,11 @@ public:
     TString GetErrorMessage() const;
 
     const NKikimrConfig::TAppConfig &GetConfig() const;
-    bool HasYamlConfig() const;
-    const TString& GetYamlConfig() const;
+    bool HasMainYamlConfig() const;
+    const TString& GetMainYamlConfig() const;
     TMap<ui64, TString> GetVolatileYamlConfigs() const;
+    bool HasDatabaseYamlConfig() const;
+    const TString& GetDatabaseYamlConfig() const;
 
     const NKikimrClient::TConsoleResponse &Record() const;
 

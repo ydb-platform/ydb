@@ -4058,6 +4058,8 @@ void TPDisk::ProgressShredState() {
                     ChunkBeingShredded = GetUnshreddedFreeChunk();
                     ChunkBeingShreddedIteration = 0;
                     ChunkBeingShreddedNextSectorIdx = 0;
+                    // Write a syslog entry to mark the progress
+                    WriteSysLogRestorePoint(nullptr, TReqId(TReqId::MarkDirtySysLog, 0), {});
                 } 
                 if (ChunkBeingShredded) {
                     if (ChunkBeingShreddedIteration == 0 && ChunkBeingShreddedNextSectorIdx == 0) {
@@ -4232,10 +4234,17 @@ void TPDisk::ProgressShredState() {
 }
 
 void TPDisk::ProcessShredPDisk(TShredPDisk& request) {
-    LOG_NOTICE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
-        "ProcessShredPDisk at PDisk# " << PCtx->PDiskId
-        << " ShredGeneration# " << ShredGeneration
-        << " request# " << request.ToString());
+    if (NPDisk::TPDisk::IS_SHRED_ENABLED) {
+        LOG_NOTICE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "ProcessShredPDisk at PDisk# " << PCtx->PDiskId
+            << " ShredGeneration# " << ShredGeneration
+            << " request# " << request.ToString());
+    } else {
+        LOG_CRIT_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "ProcessShredPDisk with IS_SHRED_ENABLED# false at PDisk# " << PCtx->PDiskId
+            << " ShredGeneration# " << ShredGeneration
+            << " request# " << request.ToString());
+    }
     if (!PCtx->ActorSystem) {
         return;
     }

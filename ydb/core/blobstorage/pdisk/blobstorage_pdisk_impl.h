@@ -48,6 +48,11 @@ class TCompletionEventSender;
 
 class TPDisk : public IPDisk {
 public:
+#ifdef ENABLE_PDISK_SHRED
+    static constexpr bool IS_SHRED_ENABLED = true; 
+#else
+    static constexpr bool IS_SHRED_ENABLED = false; 
+#endif
     std::shared_ptr<TPDiskCtx> PCtx;
     // ui32 PDiskId; // deprecated, moved to PCtx
     // TActorId PDiskActor; // deprecated, moved to PCtx

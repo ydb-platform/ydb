@@ -342,13 +342,17 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
                     (OwnerId, (ui32)owner));
             } else {
                 ChunkState[i].CommitState = TChunkState::LOG_COMMITTED;
-                ChunkState[i].IsDirty = true;
+                if (TPDisk::IS_SHRED_ENABLED) {
+                    ChunkState[i].IsDirty = true;
+                }
             }
         } else {
             ChunkState[i].CommitState = TChunkState::FREE;
         }
         ChunkState[i].Nonce = chunkOwners[i].Nonce;
-        ChunkState[i].IsDirty = chunkOwners[i].IsDirty();
+        if (TPDisk::IS_SHRED_ENABLED) {
+            ChunkState[i].IsDirty = chunkOwners[i].IsDirty();
+        }
         if (chunkOwners[i].IsCurrentShredGeneration()) {
           ChunkState[i].ShredGeneration = ShredGeneration;
         } else {
@@ -923,7 +927,7 @@ bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, 
                 ChunkState[chunkIdx].OwnerId == OwnerUnallocatedTrimmed, "PDiskId# " << PCtx->PDiskId <<
                 " Unexpected ownerId# " << ui32(ChunkState[chunkIdx].OwnerId));
         ChunkState[chunkIdx].CommitState = TChunkState::LOG_RESERVED;
-        if (!ChunkState[chunkIdx].IsDirty) {
+        if (TPDisk::IS_SHRED_ENABLED && !ChunkState[chunkIdx].IsDirty) {
             ChunkState[chunkIdx].IsDirty = true;
             isDirtyMarked = true;
         }
@@ -958,6 +962,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     if (isCommitRecord) {
         ui64 commitSize = (sizeof(ui32) + sizeof(ui64)) * evLog.CommitRecord.CommitChunks.size() +
             sizeof(ui32) * evLog.CommitRecord.DeleteChunks.size() +
+            (TPDisk::IS_SHRED_ENABLED ? sizeof(ui32) * evLog.CommitRecord.DirtyChunks.size() : 0) +
             sizeof(NPDisk::TCommitRecordFooter);
         payloadSize += commitSize;
         *Mon.BandwidthPLogCommit += commitSize;
@@ -1011,8 +1016,16 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
             CommonLogger->LogDataPart(evLog.CommitRecord.DeleteChunks.data(), deleteChunksCount * sizeof(ui32),
                 evLog.ReqId, &evLogTraceId);
         }
+        if (TPDisk::IS_SHRED_ENABLED) {
+            ui32 dirtyChunksCount = evLog.CommitRecord.DirtyChunks.size();
+            if (dirtyChunksCount) {
+                CommonLogger->LogDataPart(evLog.CommitRecord.DirtyChunks.data(), dirtyChunksCount * sizeof(ui32),
+                    evLog.ReqId, &evLogTraceId);
+            }
+        }
         NPDisk::TCommitRecordFooter footer(evLog.Data.size(), evLog.CommitRecord.FirstLsnToKeep,
             evLog.CommitRecord.CommitChunks.size(), evLog.CommitRecord.DeleteChunks.size(),
+            evLog.CommitRecord.DirtyChunks.size(),
             evLog.CommitRecord.IsStartingPoint);
         CommonLogger->LogDataPart(&footer, sizeof(footer), evLog.ReqId, &evLogTraceId);
 
@@ -1101,30 +1114,32 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
         ++ChunkState[chunkIdx].CommitsInProgress;
     }
     bool isDirtyMarked = false;
-    bool isLogged = false;
-    for (ui32 chunkIdx : logWrite.CommitRecord.DirtyChunks) {
-        if (chunkIdx >= ChunkState.size()) {
-            if (!isLogged) {
-                isLogged = true;
-                LOG_CRIT_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
-                    "Commit DirtyChunk contains invalid chunkIdx# " << chunkIdx << " for PDisk# " << PCtx->PDiskId
-                    << " ShredGeneration# " << ShredGeneration);
-            }
-        } else {
-            if (!ChunkState[chunkIdx].IsDirty) {
-                ChunkState[chunkIdx].IsDirty = true;
-                isDirtyMarked = true;
-                LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
-                    "PDisk# " << PCtx->PDiskId << " marked chunkIdx# " << chunkIdx << " as dirty"
-                    << " chunk.ShredGeneration# " << ChunkState[chunkIdx].ShredGeneration
-                    << " ShredGeneration# " << ShredGeneration);
+    if (TPDisk::IS_SHRED_ENABLED) {
+        bool isLogged = false;
+        for (ui32 chunkIdx : logWrite.CommitRecord.DirtyChunks) {
+            if (chunkIdx >= ChunkState.size()) {
+                if (!isLogged) {
+                    isLogged = true;
+                    LOG_CRIT_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "Commit DirtyChunk contains invalid chunkIdx# " << chunkIdx << " for PDisk# " << PCtx->PDiskId
+                        << " ShredGeneration# " << ShredGeneration);
+                }
+            } else {
+                if (!ChunkState[chunkIdx].IsDirty) {
+                    ChunkState[chunkIdx].IsDirty = true;
+                    isDirtyMarked = true;
+                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "PDisk# " << PCtx->PDiskId << " marked chunkIdx# " << chunkIdx << " as dirty"
+                        << " chunk.ShredGeneration# " << ChunkState[chunkIdx].ShredGeneration
+                        << " ShredGeneration# " << ShredGeneration);
+                }
             }
         }
     }
     if (logWrite.CommitRecord.DeleteToDecommitted) {
         for (ui32 chunkIdx : logWrite.CommitRecord.DeleteChunks) {
             TChunkState& state = ChunkState[chunkIdx];
-            if (!state.IsDirty) {
+            if (TPDisk::IS_SHRED_ENABLED && !state.IsDirty) {
                 state.IsDirty = true;
                 isDirtyMarked = true;
             }
@@ -1147,8 +1162,7 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
     } else {
         for (ui32 chunkIdx : logWrite.CommitRecord.DeleteChunks) {
             TChunkState& state = ChunkState[chunkIdx];
-            if (!state.IsDirty) {
-                // TODO(cthulhu): log that chunk got dirty
+            if (TPDisk::IS_SHRED_ENABLED && !state.IsDirty) {
                 state.IsDirty = true;
                 isDirtyMarked = true;
             }

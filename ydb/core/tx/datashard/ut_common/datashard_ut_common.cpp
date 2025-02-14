@@ -2156,6 +2156,21 @@ std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<u
     return evWrite;
 }
 
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells) {
+    UNIT_ASSERT((cells.size() % columnIds.size()) == 0);
+
+    TSerializedCellMatrix matrix(cells, cells.size() / columnIds.size(), columnIds.size());
+    TString blobData = matrix.ReleaseBuffer();
+
+    std::unique_ptr<NKikimr::NEvents::TDataEvents::TEvWrite> evWrite = txId
+        ? std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(*txId, txMode)
+        : std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txMode);
+    ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+    evWrite->AddOperation(operationType, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+
+    return evWrite;
+}
+
 std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequestOneKeyValue(std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui64 key, ui64 value) {
     UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
 

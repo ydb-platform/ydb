@@ -32,6 +32,7 @@ extern TStatKey Combine_MaxRowsCount;
 namespace {
 
 bool HasMemoryForProcessing() {
+    return false;
     return !TlsAllocState->IsMemoryYellowZoneEnabled();
 }
 
@@ -837,7 +838,7 @@ private:
         //process spilled data
         if (!bucket.SpilledData->Empty()) {
             RecoverState = false;
-            BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
+            std::fill(BufferForUsedInputItems.begin(), BufferForUsedInputItems.end(),NUdf::TUnboxedValuePod());
             AsyncReadOperation = bucket.SpilledData->ExtractWideItem(BufferForUsedInputItems);
             if (AsyncReadOperation) {
                 return EUpdateResult::Yield;
@@ -886,6 +887,9 @@ private:
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
+                MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
+
+                BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
 
                 std::sort(SpilledBuckets.begin(), SpilledBuckets.end(), [](const TSpilledBucket& lhs, const TSpilledBucket& rhs) {
                     bool lhs_in_memory = lhs.BucketState == TSpilledBucket::EBucketState::InMemory;

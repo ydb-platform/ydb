@@ -26,9 +26,34 @@ using namespace NActors;
 using namespace Ydb;
 
 bool CopyToConfigRequest(const Ydb::Config::ReplaceConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to) {
-    Y_UNUSED(to, from);
-    // FIXME
-    // to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(from.main_config()));
+    TString configStr;
+
+    auto fillConfigs = [&](const auto& configBundle) {
+        for (const auto& config : configBundle.config()) {
+            if (NYamlConfig::IsMainConfig(config)) {
+                configStr = config;
+            }
+        }
+    };
+
+    switch (from.action_case()) {
+        case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceEnableDedicatedStorageSection:
+            fillConfigs(from.replace_enable_dedicated_storage_section());
+            break;
+        case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
+            fillConfigs(from.replace_disable_dedicated_storage_section());
+            break;
+        case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
+            fillConfigs(from.replace_with_dedicated_storage_section());
+            break;
+        case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
+            fillConfigs(from.replace());
+            break;
+        case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
+            break; // TODO: handle as error?
+    }
+
+    to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(configStr));
     return true;
 }
 
@@ -105,9 +130,35 @@ public:
 
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) {
         auto *cmd = ev.Record.MutableReplaceStorageConfig();
-        Y_UNUSED(cmd);
-        // FIXME
-        // cmd->SetYAML(GetProtoRequest()->main_config());
+
+        TString configStr;
+
+        auto fillConfigs = [&](const auto& configBundle) {
+            for (const auto& config : configBundle.config()) {
+                if (NYamlConfig::IsMainConfig(config)) {
+                    configStr = config;
+                }
+            }
+        };
+
+        switch (GetProtoRequest()->action_case()) {
+            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceEnableDedicatedStorageSection:
+                fillConfigs(GetProtoRequest()->replace_enable_dedicated_storage_section());
+                break;
+            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
+                fillConfigs(GetProtoRequest()->replace_disable_dedicated_storage_section());
+                break;
+            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
+                fillConfigs(GetProtoRequest()->replace_with_dedicated_storage_section());
+                break;
+            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
+                fillConfigs(GetProtoRequest()->replace());
+                break;
+            case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
+                break; // TODO: handle as error?
+        }
+
+        cmd->SetYAML(configStr);
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -153,14 +204,14 @@ public:
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
                 switch_dedicated_storage_section = false;
-                fillConfigs(request->replace_enable_dedicated_storage_section());
+                fillConfigs(request->replace_disable_dedicated_storage_section());
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
                 dedicated_config_mode = true;
-                fillConfigs(request->replace_enable_dedicated_storage_section());
-                [[fallthrough]];
+                fillConfigs(request->replace_with_dedicated_storage_section());
+                break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
-                fillConfigs(request->replace_enable_dedicated_storage_section());
+                fillConfigs(request->replace());
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
                 break; // TODO: handle as error?
@@ -224,7 +275,7 @@ public:
                 }
                 break;
             case Ydb::Config::FetchConfigRequest::ModeCase::kTarget:
-                // FIXME: error
+                // TODO: !imp error
                 break;
             case Ydb::Config::FetchConfigRequest::ModeCase::MODE_NOT_SET:
                 break; // TODO: maybe error

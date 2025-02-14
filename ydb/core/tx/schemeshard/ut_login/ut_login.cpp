@@ -451,10 +451,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         if (StrictAclCheck) {
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
-            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "SID user1 not found"}});
+            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "SID user1 not found in database `/MyRoot`"}});
 
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
-            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Owner SID user1 not found"}});
+            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Owner SID user1 not found in database `/MyRoot`"}});
         }
 
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
@@ -1091,6 +1091,58 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 3, .SidsSize = 1});
             CheckToken(resultLogin.token(), describe, "user1");
         }
+    }
+
+    Y_UNIT_TEST(ResetFailedAttemptCountAfterModifyUser) {
+        TTestBasicRuntime runtime;
+        runtime.AddAppDataInit([] (ui32 nodeIdx, NKikimr::TAppData& appData) {
+            Y_UNUSED(nodeIdx);
+            auto accountLockout = appData.AuthConfig.MutableAccountLockout();
+            accountLockout->SetAttemptThreshold(4);
+            accountLockout->SetAttemptResetDuration("3s");
+        });
+ 
+        TTestEnv env(runtime);
+        auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
+        ui64 txId = 100;
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
+        TString userName = "user1";
+        TString userPassword = "password1";
+
+        auto blockUser = [&]() {
+            for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {
+                auto resultLogin = Login(runtime, userName, TStringBuilder() << "wrongpassword" << attempt);
+                UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+            }
+        };
+
+        auto loginUser = [&](TString error) {
+            auto resultLogin = Login(runtime, userName, userPassword);
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), error);
+        };
+
+        auto reboot = [&]() {
+            TActorId sender = runtime.AllocateEdgeActor();
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        };
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", userName, userPassword);
+
+        blockUser();
+        loginUser(TStringBuilder() << "User " << userName << " is not permitted to log in");
+        reboot();
+        loginUser(TStringBuilder() << "User " << userName << " is not permitted to log in");
+        ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", userName, true);
+        loginUser("");
+
+        blockUser();
+        ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", userName, true);
+        reboot();
+        loginUser("");
     }
 }
 

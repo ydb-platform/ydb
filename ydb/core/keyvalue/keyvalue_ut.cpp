@@ -5,6 +5,7 @@
 #include "keyvalue_state.h"
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
 #include <ydb/core/base/blobstorage.h>
@@ -80,6 +81,7 @@ struct TTestContext {
     TVector<ui64> TabletIds;
     THolder<TTestActorRuntime> Runtime;
     TActorId Edge;
+    TVector<TIntrusivePtr<NFake::TProxyDS>> DsProxies;
 
     TTestContext() {
         TabletType = TTabletTypes::KeyValue;
@@ -87,15 +89,27 @@ struct TTestContext {
         TabletIds.push_back(TabletId);
     }
 
-    void Prepare(const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &outActiveZone) {
+    void Prepare(const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &outActiveZone, bool mockGroup = false) {
         Y_UNUSED(dispatchName);
         outActiveZone = false;
         Runtime.Reset(new TTestBasicRuntime);
         Runtime->SetScheduledLimit(200);
-        Runtime->SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
         Runtime->SetDispatchedEventsLimit(25'000'000);
         SetupLogging(*Runtime);
-        SetupTabletServices(*Runtime);
+        DsProxies.clear();
+        if (mockGroup) {
+            DsProxies.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(0)));
+            DsProxies.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(2181038080)));
+            DsProxies.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(4294967295)));
+        }
+        SetupTabletServices(
+            *Runtime,
+            /*app*/ nullptr,
+            /*mockDisk*/ true,
+            /*storage*/ {},
+            /*sharedCacheConfig*/ {},
+            /*forceFollowers*/ false,
+            DsProxies);
         setup(*Runtime);
         CreateTestBootstrapper(*Runtime,
             CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
@@ -561,9 +575,16 @@ void SendRequest(const decltype(std::declval<TRequestEvent>().Record) &record, T
 }
 
 template <typename TRequestEvent>
-auto ReceiveResponse(TTestContext &tc) -> decltype(std::declval<typename TRequestEvent::TResponse>().Record) {
+void SendRequestEvent(std::unique_ptr<TRequestEvent> request, TTestContext &tc) {
+    TestLog("Send event# ", TypeName(*request));
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.release(), 0, GetPipeConfigWithRetries());
+}
+
+template <typename TResponseEvent>
+auto ReceiveResponse(TTestContext &tc) -> decltype(std::declval<TResponseEvent>().Record) {
+    TestLog("Grab event# ", TypeName<TResponseEvent>());
     TAutoPtr<IEventHandle> handle;
-    typename TRequestEvent::TResponse *response = tc.Runtime->GrabEdgeEvent<typename TRequestEvent::TResponse>(handle);
+    TResponseEvent *response = tc.Runtime->GrabEdgeEvent<TResponseEvent>(handle);
     TestLog("Received event# ", TypeName(*response));
     return response->Record;
 }
@@ -573,9 +594,16 @@ void ExecuteEvent(TDesiredPair<TRequestEvent> &dp, TTestContext &tc) {
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         SendRequest<TRequestEvent>(dp.Request, tc);
-        dp.Response = ReceiveResponse<TRequestEvent>(tc);
+        dp.Response = ReceiveResponse<typename TRequestEvent::TResponse>(tc);
         return true;
     });
+}
+
+NKikimrKeyValue::CleanUpDataResponse SendCleanUpDataRequest(ui64 generation, TTestContext &tc) {
+    TDesiredPair<TEvKeyValue::TEvCleanUpDataRequest> dp;
+    dp.Request.set_generation(generation);
+    ExecuteEvent(dp, tc);
+    return dp.Response;
 }
 
 
@@ -631,46 +659,6 @@ enum class EBorderKind {
     Exclude,
     Without
 };
-
-
-void SendDeleteRange(TTestContext &tc,
-        const TString &from, EBorderKind fromKind,
-        const TString &to, EBorderKind toKind,
-        ui64 lock_generation)
-{
-    NKikimrKeyValue::ExecuteTransactionRequest record;
-    record.set_lock_generation(lock_generation);
-    record.set_tablet_id(tc.TabletId);
-
-    NKikimrKeyValue::ExecuteTransactionRequest::Command *cmd = record.add_commands();
-    NKikimrKeyValue::ExecuteTransactionRequest::Command::DeleteRange *deleteRange = cmd->mutable_delete_range();
-
-    auto *r = deleteRange->mutable_range();
-
-    switch (fromKind) {
-    case EBorderKind::Include:
-        r->set_from_key_inclusive(from);
-        break;
-    case EBorderKind::Exclude:
-        r->set_from_key_exclusive(from);
-        break;
-    case EBorderKind::Without:
-        break;
-    }
-
-    switch (toKind) {
-    case EBorderKind::Include:
-        r->set_to_key_inclusive(to);
-        break;
-    case EBorderKind::Exclude:
-        r->set_to_key_exclusive(to);
-        break;
-    case EBorderKind::Without:
-        break;
-    }
-
-    SendRequest<TEvKeyValue::TEvExecuteTransaction>(record, tc);
-}
 
 template <bool IsSuccess = true>
 void ExecuteDeleteRange(TTestContext &tc,
@@ -2566,6 +2554,127 @@ Y_UNIT_TEST(TestConcatToLongKey) {
 
         ExecuteWrite(tc, keys, 1, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
         ExecuteConcat<false>(tc, TString{10_KB, '_'}, {"oldKey1", "oldKey2"}, 1, 1);
+    });
+}
+
+Y_UNIT_TEST(TestCleanUpDataOnEmptyTablet) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        ExecuteObtainLock(tc, 1);
+
+        NKikimrKeyValue::CleanUpDataResponse response = SendCleanUpDataRequest(1, tc);
+        UNIT_ASSERT_EQUAL(response.status(), decltype(response)::STATUS_SUCCESS);
+        UNIT_ASSERT_EQUAL(response.generation(), 1);
+
+        
+        NKikimrKeyValue::CleanUpDataResponse responseAlreadyCompleted = SendCleanUpDataRequest(1, tc);
+        UNIT_ASSERT_EQUAL(responseAlreadyCompleted.status(), decltype(responseAlreadyCompleted)::STATUS_ALREADY_COMPLETED);
+        UNIT_ASSERT_EQUAL(responseAlreadyCompleted.generation(), 1);
+
+        NKikimrKeyValue::CleanUpDataResponse response4 = SendCleanUpDataRequest(4, tc);
+        UNIT_ASSERT_EQUAL(response4.status(), decltype(response4)::STATUS_SUCCESS);
+        UNIT_ASSERT_EQUAL(response4.generation(), 4);
+
+        NKikimrKeyValue::CleanUpDataResponse response2 = SendCleanUpDataRequest(2, tc);
+        UNIT_ASSERT_EQUAL(response2.status(), decltype(response2)::STATUS_ALREADY_COMPLETED);
+        UNIT_ASSERT_EQUAL(response2.generation(), 2);
+
+        NKikimrKeyValue::CleanUpDataResponse response3 = SendCleanUpDataRequest(3, tc);
+        UNIT_ASSERT_EQUAL(response3.status(), decltype(response3)::STATUS_ALREADY_COMPLETED);
+        UNIT_ASSERT_EQUAL(response3.generation(), 3);    
+    });
+}
+
+Y_UNIT_TEST(TestCleanUpDataOnEmptyTabletResetGeneration) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare("TestCleanUpDataOnEmptyTabletInflight3", [&](TTestActorRuntime&) {
+        return tc.InitialEventsFilter.Prepare();
+    }, activeZone);
+
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(5), tc);
+    NKikimrKeyValue::CleanUpDataResponse response5 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    UNIT_ASSERT_EQUAL(response5.status(), decltype(response5)::STATUS_SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(response5.generation(), 5);
+    UNIT_ASSERT_VALUES_EQUAL(response5.actual_generation(), 5);
+
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(6), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(6), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(7), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(7), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(1, true), tc);
+    NKikimrKeyValue::CleanUpDataResponse response6 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    UNIT_ASSERT_EQUAL(response6.status(), decltype(response6)::STATUS_ABORTED);
+    UNIT_ASSERT_VALUES_EQUAL(response6.generation(), 6);
+    UNIT_ASSERT_VALUES_EQUAL(response6.actual_generation(), 0);
+    NKikimrKeyValue::CleanUpDataResponse response7 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    UNIT_ASSERT_EQUAL(response7.status(), decltype(response7)::STATUS_ABORTED);
+    UNIT_ASSERT_VALUES_EQUAL(response7.generation(), 7);
+    UNIT_ASSERT_VALUES_EQUAL(response7.actual_generation(), 0);
+    NKikimrKeyValue::CleanUpDataResponse response1 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    UNIT_ASSERT_EQUAL(response1.status(), decltype(response1)::STATUS_SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(response1.generation(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(response1.actual_generation(), 1);
+}
+
+Y_UNIT_TEST(TestCleanUpDataWithMockDisk) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone, true);
+        ExecuteObtainLock(tc, 1);
+
+
+        TStringBuilder marker;
+        for (ui32 i = 0; i < 10; ++i) {
+            marker << "727";
+        }
+
+        ui64 idx = 0;
+        for (ui64 count : {1, 10, 100, 1000}) {
+            TStringBuilder value;
+            for (ui64 i = 0; i < count; ++i) {
+                value << marker;
+            }
+            TString key = TStringBuilder() << "key" << marker << ':' << idx;
+            TDeque<TKeyValuePair> keys;
+            keys.push_back({key, value});
+            ExecuteWrite(tc, keys, 1, (count < 100 ? 1 : 2), NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+            ++idx;
+        }
+
+        bool found = false;
+        for (auto &model : tc.DsProxies) {
+            for (auto &[id, blob] : model->AllMyBlobs()) {
+                TString buffer = blob.Buffer.ConvertToString();
+                TestLog(id, " blob size# ", buffer.size());
+                found = found || buffer.find(marker) != TString::npos;
+            }
+        }
+        UNIT_ASSERT(found);
+
+        ExecuteDeleteRange(tc, "", EBorderKind::Without, "", EBorderKind::Without, 1);
+        NKikimrKeyValue::CleanUpDataResponse response = SendCleanUpDataRequest(1, tc);
+        UNIT_ASSERT_EQUAL(response.status(), decltype(response)::STATUS_SUCCESS);
+        UNIT_ASSERT_EQUAL(response.generation(), 1);
+
+        for (auto &model : tc.DsProxies) {
+            for (auto &[id, blob] : model->AllMyBlobs()) {
+                if (blob.DoNotKeep) {
+                    continue;
+                }
+                TString buffer = blob.Buffer.ConvertToString();
+                TestLog(id, " check blob size# ", buffer.size());
+                UNIT_ASSERT_C(buffer.find(marker) == TString::npos, "buffer size# " << buffer.size());
+            }
+        }
     });
 }
 

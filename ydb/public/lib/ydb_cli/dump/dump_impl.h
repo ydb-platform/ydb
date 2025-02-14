@@ -2,8 +2,7 @@
 
 #include "dump.h"
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 class TDumpClient {
 public:
@@ -21,5 +20,4 @@ private:
 
 }; // TDumpClient
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

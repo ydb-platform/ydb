@@ -21,7 +21,6 @@
 {%- if current_target.custom_runs|length -%}
 {%-     for custom_run in current_target.custom_runs %}
 {%-         set first_arg = custom_run.command|first %}
-{%-         set tail_args = custom_run.command|slice(1, custom_run.command|length - 1) %}
 {%-         if (first_arg == "run_antlr") or (first_arg == "run_antlr4") %}
 {{ first_arg }}(
 {%-             if custom_run.outputs|length %}
@@ -34,14 +33,16 @@
   WORKING_DIRECTORY
   {{ custom_run.cwd }}
 {%-             endif -%}
-{%-             if tail_args|length %}
-  ANTLR_ARGS
-{%-                 for tail_arg in tail_args %}
-  {{ tail_arg }}
+{%-             if custom_run.command|length > 1 %}
+  ANTLER_ARGS
+{%-                 for arg in custom_run.command -%}
+{%-                     if not loop.first %}
+  {{ arg }}
+{%-                     endif -%}
 {%-                 endfor -%}
-{%-             endif -%}
+{%-             endif %}
 )
-{%-         else %}
+{%          else %}
 add_custom_command(
 {%-             if custom_run.outputs|length %}
   OUTPUT

@@ -549,7 +549,15 @@ namespace Tests {
         if (!Settings->AppConfig->HasSharedCacheConfig()) {
             Settings->AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(32_MB);
         }
-        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, &Settings->AppConfig->GetSharedCacheConfig(), Settings->EnableForceFollowers);
+
+        SetupTabletServices(
+            *Runtime,
+            &app,
+            mockDisk,
+            Settings->CustomDiskParams,
+            &Settings->AppConfig->GetSharedCacheConfig(),
+            Settings->EnableForceFollowers,
+            Settings->ProxyDSMocks);
 
         // WARNING: must be careful about modifying app data after actor system starts
 
@@ -2671,6 +2679,9 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> request(new NMsgBusProxy::TBusBlobStorageConfigRequest());
         request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
         request->Record.SetDomain(Domain);
+        if (SecurityToken) {
+            request->Record.SetSecurityToken(SecurityToken);
+        }
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);

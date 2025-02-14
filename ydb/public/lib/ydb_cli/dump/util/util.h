@@ -71,4 +71,9 @@ NCms::TGetDatabaseStatusResult GetDatabaseStatus(
     const std::string& path,
     const NCms::TGetDatabaseStatusSettings& settings = {});
 
-} // namespace NYDB::NDump
+TStatus CreateDatabase(
+    NCms::TCmsClient& cmsClient,
+    const std::string& path,
+    const NCms::TCreateDatabaseSettings& settings = {});
+
+} // NYdb::NDump

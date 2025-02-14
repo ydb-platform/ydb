@@ -40,6 +40,7 @@ class TGRpcConnectionsImpl
     , public IInternalClient
 {
     friend class TDeferredAction;
+    friend class TDriver;
 public:
     TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params);
     ~TGRpcConnectionsImpl();
@@ -689,6 +690,7 @@ private:
     std::mutex ExtensionsLock_;
     ::NMonitoring::TMetricRegistry* MetricRegistryPtr_ = nullptr;
 
+    const size_t ClientThreadsNum_;
     std::unique_ptr<IThreadPool> ResponseQueue_;
 
     const std::string DefaultDiscoveryEndpoint_;
@@ -698,6 +700,7 @@ private:
     TDbDriverStateTracker StateTracker_;
     const EDiscoveryMode DefaultDiscoveryMode_;
     const i64 MaxQueuedRequests_;
+    const i64 MaxQueuedResponses_;
     const bool DrainOnDtors_;
     const TBalancingSettings BalancingSettings_;
     const TDuration GRpcKeepAliveTimeout_;
@@ -708,6 +711,8 @@ private:
     const ui64 MaxMessageSize_;
 
     std::atomic_int64_t QueuedRequests_;
+    const NYdbGrpc::TTcpKeepAliveSettings TcpKeepAliveSettings_;
+    const TDuration SocketIdleTimeout_;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     NYdbGrpc::TChannelPool ChannelPool_;
 #endif
@@ -719,6 +724,7 @@ private:
 
     IDiscoveryMutatorApi::TMutatorCb DiscoveryMutatorCb;
 
+    const size_t NetworkThreadsNum_;
     // Must be the last member (first called destructor)
     NYdbGrpc::TGRpcClientLow GRpcClientLow_;
     TLog Log;

@@ -17,6 +17,7 @@ public:
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
+        const TString databaseName = CanonizePath(context.SS->RootPathElements);
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetModifyACL();
@@ -62,7 +63,7 @@ public:
                 if (static_cast<NACLib::EDiffType>(diffACE.GetDiffType()) == NACLib::EDiffType::Add) {
                     if (!CheckSidExistsOrIsNonYdb(context.SS->LoginProvider.Sids, diffACE.GetACE().GetSID())) {
                         result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                            TStringBuilder() << "SID " << diffACE.GetACE().GetSID() << " not found");
+                            TStringBuilder() << "SID " << diffACE.GetACE().GetSID() << " not found in database `" << databaseName << "`");
                         return result;
                     }
                 } // remove diff type is allowed in any case
@@ -71,7 +72,7 @@ public:
         if (owner && AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
             if (!CheckSidExistsOrIsNonYdb(context.SS->LoginProvider.Sids, owner)) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    TStringBuilder() << "Owner SID " << owner << " not found");
+                    TStringBuilder() << "Owner SID " << owner << " not found in database `" << databaseName << "`");
                 return result;
             }
         }

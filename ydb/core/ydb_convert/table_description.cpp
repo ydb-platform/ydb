@@ -506,6 +506,10 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     return columnType;
 }
 
+void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in) {
+    AddColumn(&out, in);
+}
+
 template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
@@ -1138,7 +1142,7 @@ void FillAttributesImpl(TOutProto& out, const TInProto& in) {
 }
 void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
     const NKikimrSchemeOp::TCdcStreamDescription& in) {
-    
+
     out.set_name(in.GetName());
     out.set_virtual_timestamps(in.GetVirtualTimestamps());
     out.set_aws_region(in.GetAwsRegion());

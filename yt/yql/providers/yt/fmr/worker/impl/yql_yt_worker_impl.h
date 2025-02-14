@@ -1,7 +1,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <yt/yql/providers/yt/fmr/worker/interface/yql_yt_worker.h>
 
-namespace NYql {
+namespace NYql::NFmr {
 
 struct TFmrWorkerSettings {
     ui32 WorkerId;
@@ -11,4 +11,4 @@ struct TFmrWorkerSettings {
 
 IFmrWorker::TPtr MakeFmrWorker(IFmrCoordinator::TPtr coordinator,IFmrJobFactory::TPtr jobFactory, const TFmrWorkerSettings& settings);
 
-} // namspace NYql
+} // namespace NYql::NFmr

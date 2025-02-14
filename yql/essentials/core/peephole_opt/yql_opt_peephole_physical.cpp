@@ -128,42 +128,55 @@ TExprNode::TPtr RebuildArgumentsOnlyLambdaForBlocks(const TExprNode& lambda, TEx
 
 TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
-
-    // Static assert to ensure backward compatible change: if the
-    // constant below is true, both input and output types of
-    // WideToBlocks callable have to be WideStream; otherwise,
-    // both input and output types have to be WideFlow.
-    // FIXME: When all spots using WideToBlocks are adjusted
-    // to work with WideStream, drop the assertion below.
-    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
-
     const auto& input = node->Head();
-    if (input.IsCallable("ToFlow") && input.Head().IsCallable("WideFromBlocks")) {
-        const auto& wideFromBlocks = input.Head();
-        // Technically, the code below rewrites the following sequence
-        // (WideToBlocks (ToFlow (WideFromBlocks (<input>)))))
-        // into (ReplicateScalars (<input>)), but ToFlow/FromFlow
-        // wrappers will be removed when all other nodes in block
-        // pipeline start using WideStream instead of the WideFlow.
-        // Hence, the logging is left intact.
-        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << wideFromBlocks.Content();
+    if (input.IsCallable("WideFromBlocks")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
         // If tail is FromFlow, its input is WideFlow and can be
         // used intact; Otherwise the input is WideStream, so the
         // new input should be converted to WideFlow.
-        const auto tail = wideFromBlocks.HeadPtr();
+        const auto tail = input.HeadPtr();
         const auto flowInput = tail->IsCallable("FromFlow") ? tail->HeadPtr()
                              : ctx.NewCallable(tail->Pos(), "ToFlow", { tail });
-        return ctx.NewCallable(node->Pos(), "ReplicateScalars", { flowInput });
+        return ctx.Builder(node->Pos())
+            .Callable("FromFlow")
+                .Callable(0, "ReplicateScalars")
+                    .Add(0, flowInput)
+                .Seal()
+            .Seal()
+            .Build();
     }
 
-    if (input.IsCallable({"Extend", "OrderedExtend"})) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
+    if (input.IsCallable("FromFlow") && input.Head().IsCallable({"Extend", "OrderedExtend"})) {
+        const auto& extend = input.Head();
+        // Technically, the code below rewrites the following sequence
+        // (WideToBlocks (FromFlow (Extend (<input>))))
+        // into (Extend (WideToBlocks (FromFlow (<input>))), but
+        // the logging is left intact, omitting the FromFlow barrier.
+        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << extend.Content();
         TExprNodeList newChildren;
-        newChildren.reserve(input.ChildrenSize());
-        for (auto& child : input.ChildrenList()) {
-            newChildren.emplace_back(ctx.ChangeChild(*node, 0, std::move(child)));
+        newChildren.reserve(extend.ChildrenSize());
+        for (const auto& child : extend.ChildrenList()) {
+            // Extend callable can handle any sequential type, so
+            // just wrap all its children with (ToStream (...)).
+            // However, its *block* overload works only with WideFlow,
+            // so the new child is wrapped with ToFlow callable.
+            const auto newChild = ctx.Builder(node->Pos())
+                .Callable("ToFlow")
+                    .Callable(0, "WideToBlocks")
+                        .Callable(0, "ToStream")
+                            .Add(0, child)
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+            newChildren.emplace_back(newChild);
         }
-        return ctx.NewCallable(input.Pos(), input.IsCallable("Extend") ? "BlockExtend" : "BlockOrderedExtend", std::move(newChildren));
+        const auto newName = extend.IsCallable("Extend") ? "BlockExtend" : "BlockOrderedExtend";
+        return ctx.Builder(node->Pos())
+            .Callable("FromFlow")
+                .Add(0, ctx.NewCallable(input.Pos(), newName, std::move(newChildren)))
+            .Seal()
+            .Build();
     }
 
     return node;
@@ -171,26 +184,10 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
 
 TExprNode::TPtr OptimizeWideFromBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
-
-    // Static assert to ensure backward compatible change: if the
-    // constant below is true, both input and output types of
-    // WideToBlocks callable have to be WideStream; otherwise,
-    // both input and output types have to be WideFlow.
-    // FIXME: When all spots using WideToBlocks are adjusted
-    // to work with WideStream, drop the assertion below.
-    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
-
     const auto& input = node->Head();
-    if (input.IsCallable("FromFlow") && input.Head().IsCallable("WideToBlocks")) {
-        const auto& wideToBlocks = input.Head();
-        // Technically, the code below rewrites the following sequence
-        // (WideFromBlocks (FromFlow (WideToBlocks (<input>))))
-        // into (FromFlow (<input>)) (to match the ToFlow parent),
-        // but ToFlow/FromFlow wrappers will be removed when all
-        // other nodes in block pipeline start using WideStream
-        // instead of the WideFlow. Hence, the logging is left intact.
-        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << wideToBlocks.Content();
-        return ctx.NewCallable(node->Pos(), "FromFlow", {wideToBlocks.HeadPtr()});
+    if (input.IsCallable("WideToBlocks")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
+        return input.HeadPtr();
     }
 
     if (input.IsCallable("FromFlow") && input.Head().IsCallable("ReplicateScalars")) {
@@ -6268,22 +6265,17 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
 
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to blocks, extra nodes: " << newNodes
                                   << ", extra columns: " << rewritePositions.size();
-
-    // Static assert to ensure backward compatible change: if the
-    // constant below is true, both input and output types of
-    // WideToBlocks callable have to be WideStream; otherwise,
-    // both input and output types have to be WideFlow.
-    // FIXME: When all spots using WideToBlocks are adjusted
-    // to work with WideStream, drop the assertion below.
-    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
-
     auto ret = ctx.Builder(node->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
                 .Callable(0, "FromFlow")
                     .Callable(0, "WideMap")
-                        .Callable(0, "WideToBlocks")
-                            .Add(0, node->HeadPtr())
+                        .Callable(0, "ToFlow")
+                            .Callable(0, "WideToBlocks")
+                                .Callable(0, "FromFlow")
+                                    .Add(0, node->HeadPtr())
+                                .Seal()
+                            .Seal()
                         .Seal()
                         .Add(1, blockLambda)
                     .Seal()
@@ -6318,18 +6310,14 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
         return node;
     }
 
-    // Static assert to ensure backward compatible change: if the
-    // constant below is true, both input and output types of
-    // WideToBlocks callable have to be WideStream; otherwise,
-    // both input and output types have to be WideFlow.
-    // FIXME: When all spots using WideToBlocks are adjusted
-    // to work with WideStream, drop the assertion below.
-    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
-
     auto blockMapped = ctx.Builder(node->Pos())
         .Callable("WideMap")
-            .Callable(0, "WideToBlocks")
-                .Add(0, node->HeadPtr())
+            .Callable(0, "ToFlow")
+                .Callable(0, "WideToBlocks")
+                    .Callable(0, "FromFlow")
+                        .Add(0, node->HeadPtr())
+                    .Seal()
+                .Seal()
             .Seal()
             .Add(1, blockLambda)
         .Seal()
@@ -6446,22 +6434,17 @@ TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprConte
 
     TStringBuf newName = node->Content() == "Skip" ? "WideSkipBlocks" : "WideTakeBlocks";
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
-
-    // Static assert to ensure backward compatible change: if the
-    // constant below is true, both input and output types of
-    // WideToBlocks callable have to be WideStream; otherwise,
-    // both input and output types have to be WideFlow.
-    // FIXME: When all spots using WideToBlocks are adjusted
-    // to work with WideStream, drop the assertion below.
-    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
-
     return ctx.Builder(node->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
                 .Callable(0, "FromFlow")
                     .Callable(0, newName)
-                        .Callable(0, "WideToBlocks")
-                            .Add(0, node->HeadPtr())
+                        .Callable(0, "ToFlow")
+                            .Callable(0, "WideToBlocks")
+                                .Callable(0, "FromFlow")
+                                    .Add(0, node->HeadPtr())
+                                .Seal()
+                            .Seal()
                         .Seal()
                         .Add(1, node->ChildPtr(1))
                     .Seal()
@@ -6504,16 +6487,15 @@ TExprNode::TPtr OptimizeTopOrSortBlocks(const TExprNode::TPtr& node, TExprContex
     TString newName = node->Content() + TString("Blocks");
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
     auto children = node->ChildrenList();
-
-    // Static assert to ensure backward compatible change: if the
-    // constant below is true, both input and output types of
-    // WideToBlocks callable have to be WideStream; otherwise,
-    // both input and output types have to be WideFlow.
-    // FIXME: When all spots using WideToBlocks are adjusted
-    // to work with WideStream, drop the assertion below.
-    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
-
-    children[0] = ctx.NewCallable(node->Pos(), "WideToBlocks", { children[0] });
+    children[0] = ctx.Builder(node->Pos())
+        .Callable("ToFlow")
+            .Callable(0, "WideToBlocks")
+                .Callable(0, "FromFlow")
+                    .Add(0, children[0])
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
     return ctx.Builder(node->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
@@ -6726,27 +6708,46 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Seal()
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
-        } else if (input.IsCallable("WideToBlocks")) {
-            // Static assert to ensure backward compatible change: if the
-            // constant below is true, both input and output types of
-            // WideToBlocks callable have to be WideStream; otherwise,
-            // both input and output types have to be WideFlow.
-            // FIXME: When all spots using WideToBlocks are adjusted
-            // to work with WideStream, drop the assertion below.
-            static_assert(!NYql::NBlockStreamIO::WideToBlocks);
-
+        } else if (input.IsCallable("ToFlow") && input.Head().IsCallable("WideToBlocks")) {
             auto actualUnused = unused;
             if (actualUnused.back() + 1U == node->Tail().Head().ChildrenSize())
                 actualUnused.pop_back();
             if (!actualUnused.empty()) {
-                YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << actualUnused.size() << " unused fields.";
+                const auto& wideToBlocks = input.Head();
+                // WideToBlocks uses WideStream instead of WideFlow,
+                // so it's wrapped with ToFlow/FromFlow. Hence, to drop
+                // unused fields for particular WideToBlocks node,
+                // the optimizer has to rewrite FromFlow child, but
+                // logging is left intact.
+                YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << wideToBlocks.Content() << " with " << actualUnused.size() << " unused fields.";
+                const auto tail = wideToBlocks.HeadPtr();
+                const auto width = tail->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetSize();
+                const auto flowInput = tail->IsCallable("FromFlow") ? tail->HeadPtr()
+                                     : ctx.NewCallable(tail->Pos(), "ToFlow", { tail });
                 return ctx.Builder(node->Pos())
                     .Callable(node->Content())
-                        .Callable(0, input.Content())
-                            .Add(0, MakeWideMapForDropUnused(input.HeadPtr(), actualUnused, ctx))
+                        .Callable(0, "ToFlow")
+                            .Callable(0, "WideToBlocks")
+                                .Callable(0, "FromFlow")
+                                    .Callable(0, "WideMap")
+                                        .Add(0, flowInput)
+                                        .Lambda(1)
+                                            .Params("items", width)
+                                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                                for (auto i = 0U, j = 0U; i < width; ++i) {
+                                                    if (unused.cend() == std::find(unused.cbegin(), unused.cend(), i))
+                                                        parent.Arg(j++, "items", i);
+                                                }
+                                                return parent;
+                                            })
+                                        .Seal()
+                                    .Seal()
+                                .Seal()
+                            .Seal()
                         .Seal()
                         .Add(1, DropUnusedArgs(node->Tail(), actualUnused, ctx))
-                    .Seal().Build();
+                    .Seal()
+                    .Build();
             }
         } else if (input.IsCallable("ToFlow") && input.Head().IsCallable("WideFromBlocks")) {
             const auto& wideFromBlocks = input.Head();

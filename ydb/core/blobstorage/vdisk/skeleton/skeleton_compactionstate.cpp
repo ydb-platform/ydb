@@ -36,18 +36,10 @@ namespace NKikimr {
 
     void TVDiskCompactionState::Setup(const TActorContext &ctx, std::optional<ui64> lsn, TCompactionReq cReq) {
         Y_ABORT_UNLESS(!cReq.AllDone());
-        if (lsn) {
-            Triggered = true;
-            LsnToCommit = *lsn;
-            WaitQueue.push_back(std::move(cReq));
+        if (!lsn && WaitQueue.empty()) {
+            SendLocalCompactCmd(ctx, std::move(cReq));
         } else {
-            if (Triggered) {
-                // wait until commit
-                WaitQueue.push_back(std::move(cReq));
-            } else {
-                // just single request and no need to wait commit to recovery log
-                SendLocalCompactCmd(ctx, std::move(cReq));
-            }
+            WaitQueue.emplace_back(lsn.value_or(0), std::move(cReq));
         }
     }
 
@@ -91,11 +83,11 @@ namespace NKikimr {
             }
         };
 
-        auto traverse = [&] (const std::function<bool(const TCompactionReq &)> &extract) {
-            for (const auto &pair : Requests) {
+        auto traverse = [&](const auto& extract) {
+            for (const auto& pair : Requests) {
                 increment(extract(pair.second), false);
             }
-            for (const auto &req : WaitQueue) {
+            for (const auto& [waitingLsn, req] : WaitQueue) {
                 increment(extract(req), true);
             }
         };

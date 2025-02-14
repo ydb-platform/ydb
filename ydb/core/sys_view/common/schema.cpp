@@ -287,6 +287,8 @@ private:
 
         RegisterPgTablesSystemViews();
 
+        RegisterSystemView<Schema::ResourcePoolClassifiers>(ResourcePoolClassifiersName);
+
         {
             using namespace NAuth;
             RegisterSystemView<Schema::AuthUsers>(UsersName);

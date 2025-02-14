@@ -176,18 +176,18 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
         return ytGateway;
     }
 
-    auto coordinator = MakeFmrCoordinator();
-    auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
+    auto coordinator = NFmr::MakeFmrCoordinator();
+    auto func = [&] (NFmr::TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
         while (!cancelFlag->load()) {
             Sleep(TDuration::Seconds(3));
-            return ETaskStatus::Completed;
+            return NFmr::ETaskStatus::Completed;
         }
-        return ETaskStatus::Aborted;
+        return NFmr::ETaskStatus::Aborted;
     }; // TODO - use function which actually calls Downloader/Uploader based on task params
 
-    TFmrJobFactorySettings settings{.Function=func};
+    NFmr::TFmrJobFactorySettings settings{.Function=func};
     auto jobFactory = MakeFmrJobFactory(settings);
-    TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDefaultRandomProvider(),
+    NFmr::TFmrWorkerSettings workerSettings{.WorkerId = 1, .RandomProvider = CreateDefaultRandomProvider(),
         .TimeToSleepBetweenRequests=TDuration::Seconds(1)};
     FmrWorker_ = MakeFmrWorker(coordinator, jobFactory, workerSettings);
     FmrWorker_->Start();

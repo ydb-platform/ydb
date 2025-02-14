@@ -79,6 +79,7 @@ sql_stmt_core:
   | alter_transfer_stmt
   | drop_transfer_stmt
   | alter_database_stmt
+  | show_create_table_stmt
 ;
 
 expr:
@@ -1097,6 +1098,8 @@ alter_sequence_action:
   | RESTART
   | INCREMENT BY? integer
 ;
+
+show_create_table_stmt: SHOW CREATE TABLE simple_table_ref;
 
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;

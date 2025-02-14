@@ -172,11 +172,13 @@ public:
             responseHandler->HandleError(std::move(error));
             return nullptr;
         }
-        return New<TCallHandler>(
+        auto callHandler = New<TCallHandler>(
             this,
             options,
             std::move(request),
             std::move(responseHandler));
+        callHandler->Initialize();
+        return callHandler;
     }
 
     void Terminate(const TError& error) override
@@ -258,6 +260,9 @@ private:
             , Request_(std::move(request))
             , ResponseHandler_(std::move(responseHandler))
             , GuardedCompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue())
+        { }
+
+        void Initialize()
         {
             YT_LOG_DEBUG("Sending request (RequestId: %v, Method: %v.%v, Timeout: %v)",
                 Request_->GetRequestId(),

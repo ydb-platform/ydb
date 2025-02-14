@@ -234,6 +234,8 @@ class TDataShard
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
     class TTxCleanupUncommitted;
+    class TTxDataCleanup;
+    class TTxCompleteDataCleanup;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -1158,6 +1160,8 @@ class TDataShard
             Sys_InMemoryStateActorId = 45,
             Sys_InMemoryStateGeneration = 46,
 
+            Sys_DataCleanupCompletedGeneration = 47,
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -1777,6 +1781,7 @@ public:
     void SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext, const TActorContext &ctx) override;
     void CompactionComplete(ui32 tableId, const TActorContext &ctx) override;
     void CompletedLoansChanged(const TActorContext &ctx) override;
+    void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext &ctx) override;
 
     void ReplyCompactionWaiters(
         ui32 tableId,
@@ -2972,6 +2977,8 @@ private:
     // from the front
     THashMap<ui32, TCompactionWaiterList> CompactionWaiters;
 
+    TMap<ui64, TActorId> DataCleanupWaiters;
+
     struct TCompactBorrowedWaiter : public TThrRefBase {
         TCompactBorrowedWaiter(TActorId actorId, TLocalPathId requestedTable)
             : ActorId(actorId)
@@ -3021,6 +3028,8 @@ private:
 
     ui32 StatisticsScanTableId = 0;
     ui64 StatisticsScanId = 0;
+
+    ui64 CurrentDataCleanupGeneration = 0;
 
 public:
     auto& GetLockChangeRecords() {

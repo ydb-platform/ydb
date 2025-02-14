@@ -1,4 +1,10 @@
-#include <yql/essentials/public/issue/yql_issue.h>
+#pragma once
+
+#include <util/generic/string.h>
+
+namespace NYql {
+    class TIssues;
+}
 
 namespace NYdb::NDump {
 
@@ -11,4 +17,4 @@ bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool res
     const TString& dbPath, NYql::TIssues& issues
 );
 
-}
+} // NYdb::NDump

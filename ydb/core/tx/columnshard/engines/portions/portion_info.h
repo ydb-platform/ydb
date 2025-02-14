@@ -291,6 +291,16 @@ public:
         return Meta;
     }
 
+    NPortion::EProduced GetProduced() const {
+        if (HasRemoveSnapshot()) {
+            return NPortion::INACTIVE;
+        }
+        if (GetTierNameDef(NBlobOperations::TGlobal::DefaultStorageId) != NBlobOperations::TGlobal::DefaultStorageId) {
+            return NPortion::EVICTED;
+        }
+        return GetMeta().GetProduced();
+    }
+
     bool ValidSnapshotInfo() const {
         return MinSnapshotDeprecated.Valid() && PathId && PortionId;
     }

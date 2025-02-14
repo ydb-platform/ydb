@@ -1095,7 +1095,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             Y_UNUSED(word);
 
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
-                R"(let world (Write! world sink '('('mode 'alterDatabase) '('dbPath '/Root/test) '('owner ''"user1"))))"
+                R"(let world (Write! world sink (Key '('databasePath (String '"/Root/test"))) (Void) '('('mode 'alterDatabase) '('owner '"user1"))))"
             ));
         };
 
@@ -3062,6 +3062,26 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
             UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
         }
+    }
+
+    Y_UNIT_TEST(ShowCreateTable) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            SHOW CREATE TABLE user;
+        )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Read") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("showCreateTable"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Read"), 0}, {TString("showCreateTable"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Read"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["showCreateTable"]);
     }
 
     Y_UNIT_TEST(OptionalAliases) {
@@ -5972,7 +5992,7 @@ Y_UNIT_TEST_SUITE(AnsiIdentsNegative) {
               "*/ select 1;";
         res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, UPDATE, UPSERT, USE, VALUES}\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, UPDATE, UPSERT, USE, VALUES}\n");
         res = SqlToYqlWithAnsiLexer(req);
         UNIT_ASSERT(res.Root);
     }

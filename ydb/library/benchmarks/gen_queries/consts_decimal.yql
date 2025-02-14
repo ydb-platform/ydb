@@ -23,7 +23,7 @@ $z1_12 = cast(1 as decimal(12,2));
 $z0_0100001_12 = cast("0.0100001" as decimal(12,2));
 $z0_06_12 = cast("0.06" as decimal(12,2));
 $z0_2_12 = cast("0.2" as decimal(12,2));
-$round = ($x, $y) -> { return $x; };
+
 $scale_factor = 1;
 
 $round = ($x,$y) -> {return $x;};

@@ -197,4 +197,28 @@ bool IsBuiltEffect(const TExprBase& effect) {
     return false;
 }
 
+bool IsConnectionFromLegacyReadStage(NYql::NNodes::TExprBase node) {
+    if (auto conn = node.Maybe<TDqConnection>()) {
+        node = conn.Cast().Output().Stage().Program().Body();
+    }
+    bool result = false;
+    VisitExpr(node.Ptr(),
+        [&](const TExprNode::TPtr& node) {
+            if (TDqPrecompute::Match(node.Get()) || TDqPhyPrecompute::Match(node.Get())) {
+                return false;
+            }
+            if (TKqpReadTable::Match(node.Get())) {
+                result = true;
+            }
+            if (TKqpReadTableRanges::Match(node.Get())) {
+                result = true;
+            }
+            if (TKqpLookupTable::Match(node.Get())) {
+                result = true;
+            }
+            return true;
+        });
+    return result;
+}
+
 } // namespace NKikimr::NKqp::NOpt

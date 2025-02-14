@@ -58,4 +58,6 @@ bool IsBuiltEffect(const NYql::NNodes::TExprBase& effect);
 bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
     const TMaybe<THashSet<TStringBuf>>& passthroughFields = {});
 
+bool IsConnectionFromLegacyReadStage(NYql::NNodes::TExprBase);
+
 } // namespace NKikimr::NKqp::NOpt

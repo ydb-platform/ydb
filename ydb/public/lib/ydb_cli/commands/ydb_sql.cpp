@@ -188,7 +188,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     std::optional<std::string> stats;
     std::optional<std::string> plan;
     std::optional<std::string> ast;
-    TMaybe<TString> meta;
+    std::optional<std::string> meta;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 

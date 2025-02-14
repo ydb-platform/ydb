@@ -512,15 +512,19 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
-    TMaybe<TString> statsStr;
-    TMaybe<TString> plan;
-    TMaybe<TString> ast;
-    TMaybe<TString> meta;
+    std::optional<std::string> statsStr;
+    std::optional<std::string> plan;
+    std::optional<std::string> ast;
+    std::optional<std::string> meta;
 
     const std::optional<NTable::TQueryStats>& stats = result.GetStats();
     if (stats.has_value()) {
-        meta = stats->GetMeta();
-        plan = stats->GetPlan();
+        if (stats->GetMeta()) {
+            meta = stats->GetMeta();
+        }
+        if (stats->GetPlan()) {
+            plan = stats->GetPlan();
+        }
         ast = stats->GetAst();
         statsStr = stats->ToString();
         Cout << Endl << "Statistics:" << Endl << statsStr;
@@ -771,10 +775,10 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
 
 template <typename TIterator>
 bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
-    TMaybe<TString> stats;
+    std::optional<std::string> stats;
     std::optional<std::string> fullStats;
-    TMaybe<TString> meta;
-    TMaybe<TString> ast;
+    std::optional<std::string> meta;
+    std::optional<std::string> ast;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 

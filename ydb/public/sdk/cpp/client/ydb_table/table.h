@@ -2117,24 +2117,31 @@ public:
     const TQueryStats& GetQueryStats() const { return *QueryStats_; }
     TQueryStats ExtractQueryStats() { return std::move(*QueryStats_); }
 
+    bool HasDiagnostics() const { return Diagnostics_.Defined(); }
+    const TString& GetDiagnostics() const { return *Diagnostics_; }
+    TString&& ExtractDiagnostics() { return std::move(*Diagnostics_); }
+
     TScanQueryPart(TStatus&& status)
         : TStreamPartStatus(std::move(status))
     {}
 
-    TScanQueryPart(TStatus&& status, const TMaybe<TQueryStats>& queryStats)
+    TScanQueryPart(TStatus&& status, const TMaybe<TQueryStats>& queryStats, const TMaybe<TString>& diagnostics)
         : TStreamPartStatus(std::move(status))
         , QueryStats_(queryStats)
+        , Diagnostics_(diagnostics)
     {}
 
-    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const TMaybe<TQueryStats>& queryStats)
+    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const TMaybe<TQueryStats>& queryStats, const TMaybe<TString>& diagnostics)
         : TStreamPartStatus(std::move(status))
         , ResultSet_(std::move(resultSet))
         , QueryStats_(queryStats)
+        , Diagnostics_(diagnostics)
     {}
 
 private:
     TMaybe<TResultSet> ResultSet_;
     TMaybe<TQueryStats> QueryStats_;
+    TMaybe<TString> Diagnostics_;
 };
 
 using TAsyncScanQueryPart = NThreading::TFuture<TScanQueryPart>;

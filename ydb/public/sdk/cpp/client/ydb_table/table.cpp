@@ -2211,14 +2211,6 @@ const TString TDataQueryResult::GetQueryPlan() const {
     }
 }
 
-const TString TDataQueryResult::GetMeta() const {
-    if (QueryStats_.Defined()) {
-        return NYdb::TProtoAccessor::GetProto(*QueryStats_.Get()).query_meta();
-    } else {
-        return "";
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TBeginTransactionResult::TBeginTransactionResult(TStatus&& status, TTransaction transaction)

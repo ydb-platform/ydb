@@ -187,7 +187,7 @@ struct TRspMetadataBroker
     i32 NodeId = 0;
     TString Host;
     i32 Port = 0;
-    TString Rack;
+    std::optional<TString> Rack;
     std::vector<TTaggedField> TagBuffer;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
@@ -225,7 +225,7 @@ struct TRspMetadata
 {
     i32 ThrottleTimeMs = 0;
     std::vector<TRspMetadataBroker> Brokers;
-    i32 ClusterId = 0;
+    std::optional<TString> ClusterId;
     i32 ControllerId = 0;
     std::vector<TRspMetadataTopic> Topics;
     std::vector<TTaggedField> TagBuffer;

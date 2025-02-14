@@ -946,6 +946,10 @@ int TCommandExplain::Run(TConfig& config) {
             settings.Explain(true);
         }
 
+        if (CollectFullDiagnostics) {
+            settings.CollectFullDiagnostics(true);
+        }
+
         auto result = client.StreamExecuteScanQuery(Query, settings).GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
@@ -962,6 +966,13 @@ int TCommandExplain::Run(TConfig& config) {
                 planJson = proto.query_plan();
                 ast = proto.query_ast();
             }
+            if (tablePart.HasDiagnostics()) {
+                diagnostics = tablePart.ExtractDiagnostics();
+            }
+        }
+
+        if (CollectFullDiagnostics) {
+            SaveDiagnosticsToFile(diagnostics);
         }
 
         if (IsInterrupted()) {

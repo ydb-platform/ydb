@@ -32,6 +32,7 @@ extern TStatKey Combine_MaxRowsCount;
 namespace {
 
 bool HasMemoryForProcessing() {
+    return false;
     return !TlsAllocState->IsMemoryYellowZoneEnabled();
 }
 
@@ -295,6 +296,7 @@ public:
         try {
             States->CheckGrow();
         } catch (TMemoryLimitExceededException) {
+            std::cerr << "MISHA State failed to grow exception" << std::endl;
             YQL_LOG(INFO) << "State failed to grow";
             if (IsOutOfMemory || !AllowOutOfMemory) {
                 throw;
@@ -437,6 +439,7 @@ public:
         , AllowSpilling(allowSpilling)
         , Ctx(ctx)
     {
+        std::cerr << "MISHA itemNodesSize: " << itemNodesSize << ", GetElementsCount: " << usedInputItemType->GetElementsCount() << std::endl;
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
         Tongue = InMemoryProcessingState.Tongue;
         Throat = InMemoryProcessingState.Throat;
@@ -501,10 +504,17 @@ public:
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
         if (GetMode() == EOperatingMode::ProcessSpilled) {
+            std::string str = "REFCOUNT (ProcessSpilled): ";
+            for (ui64 i = 0; i < BufferForUsedInputItems.size(); ++i) {
+                 str += std::format("{}, ", BufferForUsedInputItems[i].RefCount());
+            }
+            std::cerr << str << std::endl;
             // while restoration we process buckets one by one starting from the first in a queue
             bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
             Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
+
             BufferForUsedInputItems.resize(0);
+
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
 
@@ -538,8 +548,14 @@ public:
             value = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract());
             if (value) {
                 CounterOutputRows_.Inc();
+                std::string str = "Extracted REFCOUNT: ";
+                for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
+                    str += std::format("{},", value[i].RefCount());
+                }
+            std::cerr << str << std::endl;
             } else {
                 IsEverythingExtracted = true;
+                std::cerr << std::format("Extracted ALL\n");
             }
             return value;
         }
@@ -550,10 +566,17 @@ public:
         value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
         if (value) {
             CounterOutputRows_.Inc();
+
+            std::string str = "Extracted REFCOUNT: ";
+            for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
+                str += std::format("{},", value[i].RefCount());
+            }
+            std::cerr << str << std::endl;
         } else {
-            SpilledBuckets.front().InMemoryProcessingState->ReadMore<false>();
+            // SpilledBuckets.front().InMemoryProcessingState->ReadMore<false>();
             SpilledBuckets.pop_front();
             if (SpilledBuckets.empty()) IsEverythingExtracted = true;
+            std::cerr << std::format("Extracted ALL\n");
         }
 
         return value;
@@ -838,16 +861,27 @@ private:
         if (!bucket.SpilledData->Empty()) {
             RecoverState = false;
             BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
+            std::string str = "REFCOUNT (Before Extract): ";
+            for (ui64 i = 0; i < BufferForUsedInputItems.size(); ++i) {
+                 str += std::format("{}, ", BufferForUsedInputItems[i].RefCount());
+            }
+            std::cerr << str << std::endl;
             AsyncReadOperation = bucket.SpilledData->ExtractWideItem(BufferForUsedInputItems);
             if (AsyncReadOperation) {
                 return EUpdateResult::Yield;
             }
+            str = "REFCOUNT (Extract): ";
+            for (ui64 i = 0; i < BufferForUsedInputItems.size(); ++i) {
+                 str += std::format("{}, ", BufferForUsedInputItems[i].RefCount());
+            }
+            std::cerr << str << std::endl;
 
             Throat = BufferForUsedInputItems.data();
             Tongue = bucket.InMemoryProcessingState->Tongue;
 
             return EUpdateResult::ExtractRawData;
         }
+        std::cerr << std::format("LOADED all data from bucket {}\n", SpilledBucketCount - SpilledBuckets.size());
         bucket.BucketState = TSpilledBucket::EBucketState::InMemory;
         return EUpdateResult::Extract;
     }
@@ -859,11 +893,13 @@ private:
     void SwitchMode(EOperatingMode mode) {
         switch(mode) {
             case EOperatingMode::InMemory: {
+                std::cerr << "SWITCHING TO IN MEMORY" << std::endl;
                 YQL_LOG(INFO) << "switching Memory mode to InMemory";
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::SplittingState: {
+                std::cerr << "SWITCHING TO SPLITTING STATE" << std::endl;
                 YQL_LOG(INFO) << "switching Memory mode to SplittingState";
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
@@ -876,6 +912,7 @@ private:
                 break;
             }
             case EOperatingMode::Spilling: {
+                std::cerr << "SWITCHING TO SPILLING" << std::endl;
                 YQL_LOG(INFO) << "switching Memory mode to Spilling";
                 MKQL_ENSURE(EOperatingMode::SplittingState == Mode || EOperatingMode::InMemory == Mode, "Internal logic error");
 
@@ -883,6 +920,7 @@ private:
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
+                std::cerr << "SWITCHING TO PROCESS SPILLED" << std::endl;
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
@@ -1490,6 +1528,7 @@ public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (state.IsInvalid()) {
             MakeState(ctx, state);
+            std::cerr << "NON-LLVM combiner\n";
         }
 
         if (const auto ptr = static_cast<TSpillingSupportState*>(state.AsBoxed().Get())) {
@@ -1500,6 +1539,12 @@ public:
                     case TSpillingSupportState::EUpdateResult::ReadInput: {
                         for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
                             fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
+                        for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
+                            if (Nodes.GetUsedInputItemNodePtrOrNull(ctx, i) == nullptr) {
+                                std::cerr << "MISHA NULL\n";
+                            }
+                        }
+                        
                         switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
                             case EFetchResult::One:
                                 break;
@@ -1545,6 +1590,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
+        DIScopeAnnotator annotate(ctx.Annotator);
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
@@ -1998,15 +2044,18 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
 }
 
 IComputationNode* WrapWideCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    std::cerr << "MISHA WIDE COMBINE" << std::endl;
     return WrapWideCombinerT<false>(callable, ctx, false);
 }
 
 IComputationNode* WrapWideLastCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     YQL_LOG(INFO) << "Found non-serializable type, spilling is disabled";
+    std::cerr << "MISHA WIDE LAST COMBINE NO SPILLING" << std::endl;
     return WrapWideCombinerT<true>(callable, ctx, false);
 }
 
 IComputationNode* WrapWideLastCombinerWithSpilling(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    std::cerr << "MISHA WIDE LAST COMBINE WITH SPILLING" << std::endl;
     return WrapWideCombinerT<true>(callable, ctx, true);
 }
 

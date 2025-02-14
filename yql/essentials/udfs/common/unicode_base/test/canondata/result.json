@@ -29,9 +29,39 @@
             "uri": "file://test.test_BlockStrip_/results.txt"
         }
     ],
+    "test.test[BlockToUint64F0]": [
+        {
+            "uri": "file://test.test_BlockToUint64F0_/extracted"
+        }
+    ],
+    "test.test[BlockToUint64F1]": [
+        {
+            "uri": "file://test.test_BlockToUint64F1_/extracted"
+        }
+    ],
+    "test.test[BlockToUint64F2]": [
+        {
+            "uri": "file://test.test_BlockToUint64F2_/extracted"
+        }
+    ],
+    "test.test[BlockToUint64F3]": [
+        {
+            "uri": "file://test.test_BlockToUint64F3_/extracted"
+        }
+    ],
+    "test.test[BlockToUint64]": [
+        {
+            "uri": "file://test.test_BlockToUint64_/results.txt"
+        }
+    ],
     "test.test[BlockTo]": [
         {
             "uri": "file://test.test_BlockTo_/results.txt"
+        }
+    ],
+    "test.test[BlockTryToUint64]": [
+        {
+            "uri": "file://test.test_BlockTryToUint64_/results.txt"
         }
     ],
     "test.test[BlockUnicode]": [

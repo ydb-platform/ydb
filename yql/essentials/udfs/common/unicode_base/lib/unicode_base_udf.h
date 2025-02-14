@@ -16,6 +16,7 @@
 #include <util/string/subst.h>
 #include <util/charset/wide.h>
 #include <util/charset/utf8.h>
+#include <util/generic/scope.h>
 #include <util/string/strip.h>
 #include <util/string/ascii.h>
 #include <util/charset/unidata.h>
@@ -25,6 +26,10 @@ using namespace NUdf;
 using namespace NUnicode;
 
 namespace {
+#define DISABLE_IMPICT_ARGUMENT_CAST \
+    template <typename... Args>      \
+    static auto Execute(Args&&... args) = delete;
+
     inline constexpr bool IsAscii(wchar32 c) noexcept {
         return ::IsAscii(c);
     }
@@ -54,9 +59,23 @@ namespace {
         }
 
         static TUnboxedValue DoExecute(const IValueBuilder* builder, const TUnboxedValuePod* args)
+            requires requires { TDerived::Execute(TMaybe<TStringRef>(TStringRef())); }
+        {
+            auto executeResult = TDerived::Execute(args[0] ? TMaybe<TStringRef>(args[0].AsStringRef()) : Nothing());
+            return ProcessResult(builder, std::move(executeResult), args);
+        }
+
+        static TUnboxedValue DoExecute(const IValueBuilder* builder, const TUnboxedValuePod* args)
             requires requires { TDerived::Execute(TStringRef(), TStringRef()); }
         {
             auto executeResult = TDerived::Execute(args[0].AsStringRef(), args[1].AsStringRef());
+            return ProcessResult(builder, std::move(executeResult), args);
+        }
+
+        static TUnboxedValue DoExecute(const IValueBuilder* builder, const TUnboxedValuePod* args)
+            requires requires { TDerived::Execute(TStringRef(), TMaybe<ui16>()); }
+        {
+            auto executeResult = TDerived::Execute(args[0].AsStringRef(), args[1] ? TMaybe<ui16>(args[1].Get<ui16>()) : Nothing());
             return ProcessResult(builder, std::move(executeResult), args);
         }
 
@@ -74,8 +93,21 @@ namespace {
             return ProcessResult(builder, std::move(executeResult), args);
         }
 
+        static TUnboxedValue DoExecute(const IValueBuilder* builder, const TUnboxedValuePod* args)
+            requires requires { TDerived::Execute(TStringRef(), TMaybe<ui64>(), TMaybe<ui64>()); }
+        {
+            auto executeResult = TDerived::Execute(args[0].AsStringRef(),
+                                                   args[1] ? TMaybe<ui64>(args[1].Get<ui64>()) : Nothing(),
+                                                   args[2] ? TMaybe<ui64>(args[2].Get<ui64>()) : Nothing());
+            return ProcessResult(builder, std::move(executeResult), args);
+        }
+
     private:
         static TUnboxedValue ProcessResult(const IValueBuilder* builder, const TString& newString, const TUnboxedValuePod*) {
+            return builder->NewString(newString);
+        }
+
+        static TUnboxedValue ProcessResult(const IValueBuilder* builder, const TStringBuf newString, const TUnboxedValuePod*) {
             return builder->NewString(newString);
         }
 
@@ -117,11 +149,29 @@ namespace {
         }
 
         template <typename TSink>
+        static void BlockDoExecute(const TBlockItem arg, const TSink& sink)
+            requires requires { TDerived::Execute(TMaybe<TStringRef>(TStringRef())); }
+        {
+            auto executeResult = TDerived::Execute(arg ? TMaybe<TStringRef>(arg.AsStringRef()) : Nothing());
+            TBlockItem boxedValue = ProcessResult(executeResult, arg);
+            sink(boxedValue);
+        }
+
+        template <typename TSink>
         static void BlockDoExecute(const TBlockItem arg1, const TBlockItem arg2, const TSink& sink)
             requires requires { TDerived::Execute(TStringRef(), TStringRef()); }
         {
             auto executeResult = TDerived::Execute(arg1.AsStringRef(),
                                                    arg2.AsStringRef());
+            TBlockItem boxedValue = ProcessResult(executeResult, arg1);
+            sink(boxedValue);
+        }
+
+        template <typename TSink>
+        static void BlockDoExecute(const TBlockItem arg1, const TBlockItem arg2, const TSink& sink)
+            requires requires { TDerived::Execute(TStringRef(), TMaybe<ui16>()); }
+        {
+            auto executeResult = TDerived::Execute(arg1.AsStringRef(), arg2 ? TMaybe<ui16>(arg2.Get<ui16>()) : Nothing());
             TBlockItem boxedValue = ProcessResult(executeResult, arg1);
             sink(boxedValue);
         }
@@ -148,8 +198,24 @@ namespace {
             sink(boxedValue);
         }
 
+        template <typename TSink>
+        static void BlockDoExecute(const TBlockItem args, const TSink& sink)
+            requires(requires { TDerived::Execute(TStringRef(), TMaybe<ui64>(0ULL), TMaybe<ui64>(0ULL)); })
+        {
+            auto executeResult = TDerived::Execute(args.GetElement(0).AsStringRef(),
+                                                   (args.GetElement(1) ? TMaybe<ui64>(args.GetElement(1).Get<ui64>()) : Nothing()),
+                                                   (args.GetElement(2) ? TMaybe<ui64>(args.GetElement(2).Get<ui64>()) : Nothing()));
+            TBlockItem boxedValue = ProcessResult(executeResult, args.GetElement(0));
+            sink(boxedValue);
+        }
+
     private:
         static TBlockItem ProcessResult(const TString& newString, const TBlockItem arg) {
+            Y_UNUSED(arg);
+            return TBlockItem(newString);
+        }
+
+        static TBlockItem ProcessResult(const TStringBuf newString, const TBlockItem arg) {
             Y_UNUSED(arg);
             return TBlockItem(newString);
         }
@@ -188,6 +254,7 @@ namespace {
             const TUtf16String& input = UTF8ToWide(arg.Data(), arg.Size());
             return WideToUTF8(Normalize<mode>(input));
         }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     template <bool (*Function)(wchar32)>
@@ -205,6 +272,7 @@ namespace {
             }
             return true;
         }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     template <bool (*Function)(TUtf16String&, size_t pos, size_t count)>
@@ -217,6 +285,7 @@ namespace {
                 return TNoChangesTag{};
             }
         }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TLengthGetter: public TOperationMixin<TLengthGetter> {
@@ -225,6 +294,7 @@ namespace {
             GetNumberOfUTF8Chars(inputRef.Data(), inputRef.Size(), result);
             return static_cast<ui64>(result);
         }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TReverser: public TOperationMixin<TReverser> {
@@ -233,6 +303,7 @@ namespace {
             ReverseInPlace(wide);
             return WideToUTF8(wide);
         }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TStripper: public TOperationMixin<TStripper> {
@@ -241,6 +312,7 @@ namespace {
             const auto& result = StripString(input, IsUnicodeSpaceAdapter(input.begin()));
             return WideToUTF8(result);
         }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TAllRemover: public TOperationMixin<TAllRemover> {
@@ -260,6 +332,7 @@ namespace {
             }
             return TNoChangesTag{};
         }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TFirstRemover: public TOperationMixin<TFirstRemover> {
@@ -275,6 +348,7 @@ namespace {
             }
             return TNoChangesTag{};
         }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TUnicodeSetMatcher: public TOperationMixin<TUnicodeSetMatcher> {
@@ -298,6 +372,7 @@ namespace {
             }
             return true;
         }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TLevensteinDistanceFinder: public TOperationMixin<TLevensteinDistanceFinder> {
@@ -308,6 +383,7 @@ namespace {
             const auto& rightUtf32 = UTF8ToUTF32<true>(right);
             return NLevenshtein::Distance(leftUtf32, rightUtf32);
         }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TLastRemoval: public TOperationMixin<TLastRemoval> {
@@ -323,6 +399,7 @@ namespace {
             }
             return TNoChangesTag{};
         }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TAllReplacer: public TOperationMixin<TAllReplacer> {
@@ -333,9 +410,7 @@ namespace {
                 return TNoChangesTag{};
             }
         }
-        // Disable implict casts for arguments.
-        template <typename... Args>
-        static auto Execute(Args&&... args) = delete;
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TFirstReplacer: public TOperationMixin<TFirstReplacer> {
@@ -348,9 +423,7 @@ namespace {
             }
             return TNoChangesTag{};
         }
-        // Disable implict casts for arguments.
-        template <typename... Args>
-        static auto Execute(Args&&... args) = delete;
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TLastReplacer: public TOperationMixin<TLastReplacer> {
@@ -363,9 +436,7 @@ namespace {
             }
             return TNoChangesTag{};
         }
-        // Disable implict casts for arguments.
-        template <typename... Args>
-        static auto Execute(Args&&... args) = delete;
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TFinder: public TOperationMixin<TFinder> {
@@ -389,9 +460,7 @@ namespace {
             }
             return Nothing();
         }
-        // Disable implict casts for arguments.
-        template <typename... Args>
-        static auto Execute(Args&&... args) = delete;
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
     struct TRFinder: public TOperationMixin<TRFinder> {
@@ -416,9 +485,65 @@ namespace {
             }
             return Nothing();
         }
-        // Disable implict casts for arguments.
-        template <typename... Args>
-        static auto Execute(Args&&... args) = delete;
+        DISABLE_IMPICT_ARGUMENT_CAST;
+    };
+
+    template <bool strict>
+    struct TToUint64Converter: public TOperationMixin<TToUint64Converter<strict>> {
+        static TNothing Terminate(const char* message) {
+            if constexpr (strict) {
+                return Nothing();
+            } else {
+                UdfTerminate(message);
+            }
+        };
+
+        static TMaybe<ui64> Execute(TStringRef inputRef, TMaybe<ui16> inputBase) {
+            const TString inputStr(inputRef);
+            const char* input = inputStr.data();
+            const int base = inputBase.GetOrElse(0);
+            char* pos = nullptr;
+            auto prevErrno = errno;
+            errno = 0;
+            Y_DEFER {
+                errno = prevErrno;
+            };
+            unsigned long long res = std::strtoull(input, &pos, base);
+            if (!res && errno == EINVAL) {
+                return Terminate("Incorrect base");
+            }
+
+            ui64 ret = static_cast<ui64>(res);
+            if (!res && pos == input) {
+                return Terminate("Input string is not a number");
+            } else if ((res == ULLONG_MAX && errno == ERANGE) || ret != res) {
+                return Terminate("Converted value falls out of Uint64 range");
+            } else if (*pos) {
+                return Terminate("Input string contains junk after the number");
+            }
+            return ret;
+        }
+        DISABLE_IMPICT_ARGUMENT_CAST;
+    };
+
+    struct TUtf8Checker: public TOperationMixin<TUtf8Checker> {
+        static bool Execute(TMaybe<TStringRef> inputRef) {
+            if (!inputRef.Defined()) {
+                return false;
+            }
+            return IsUtf8(*inputRef);
+        }
+        DISABLE_IMPICT_ARGUMENT_CAST;
+    };
+
+    struct TSubstringGetter: public TOperationMixin<TSubstringGetter> {
+        static TStringBuf Execute(TStringRef inputRef Y_LIFETIME_BOUND, TMaybe<ui64> inputFrom, TMaybe<ui64> inputLen) {
+            const TStringBuf input(inputRef);
+            size_t from = inputFrom.GetOrElse(0);
+            size_t len = inputLen.GetOrElse(TStringBuf::npos);
+            return SubstrUTF8(input, from, len);
+        }
+        DISABLE_IMPICT_ARGUMENT_CAST;
     };
 
 #define DEFINE_UTF8_OPERATION_STRICT(udfName, Executor, signature, optArgs)                                 \
@@ -475,6 +600,8 @@ namespace {
                                                                                                      \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
+    DEFINE_UTF8_OPERATION_STRICT(IsUtf, TUtf8Checker, bool(TOptional<char*>), /*optArgs=*/1);
+
     DEFINE_UTF8_OPERATION_STRICT(Normalize, TNormalizeUTF8<NFC>, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
     DEFINE_UTF8_OPERATION_STRICT(NormalizeNFD, TNormalizeUTF8<NFD>, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
     DEFINE_UTF8_OPERATION_STRICT(NormalizeNFC, TNormalizeUTF8<NFC>, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
@@ -498,6 +625,7 @@ namespace {
 
     DEFINE_UTF8_OPERATION_STRICT(Reverse, TReverser, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
     DEFINE_UTF8_OPERATION_STRICT(Strip, TStripper, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
+    DEFINE_UTF8_OPERATION_MANY_STRICT(Substring, TSubstringGetter, TUtf8(TAutoMap<TUtf8>, TOptional<ui64>, TOptional<ui64>), /*argsCount=*/3, /*optArgs=*/1);
 
     DEFINE_UTF8_OPERATION_BIN_STRICT(RemoveAll, TAllRemover, TUtf8(TAutoMap<TUtf8>, TUtf8), /*optArgs=*/0);
     DEFINE_UTF8_OPERATION_BIN_STRICT(RemoveFirst, TFirstRemover, TUtf8(TAutoMap<TUtf8>, TUtf8), /*optArgs=*/0);
@@ -512,69 +640,8 @@ namespace {
     DEFINE_UTF8_OPERATION_MANY_STRICT(Find, TFinder, TOptional<ui64>(TAutoMap<TUtf8>, TUtf8, TOptional<ui64>), /*argsCount=*/3, /*optionalArgs=*/1);
     DEFINE_UTF8_OPERATION_MANY_STRICT(RFind, TRFinder, TOptional<ui64>(TAutoMap<TUtf8>, TUtf8, TOptional<ui64>), /*argsCount=*/3, /*optionalArgs=*/1);
 
-    SIMPLE_UDF(TIsUtf, bool(TOptional<char*>)) {
-        Y_UNUSED(valueBuilder);
-        if (args[0]) {
-            return TUnboxedValuePod(IsUtf8(args[0].AsStringRef()));
-        } else {
-            return TUnboxedValuePod(false);
-        }
-    }
-
-    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TToUint64, ui64(TAutoMap<TUtf8>, TOptional<ui16>), 1) {
-        Y_UNUSED(valueBuilder);
-        const TString inputStr(args[0].AsStringRef());
-        const char* input = inputStr.data();
-        const int base = static_cast<int>(args[1].GetOrDefault<ui16>(0));
-        char* pos = nullptr;
-        errno = 0;
-        unsigned long long res = std::strtoull(input, &pos, base);
-        if (!res && errno == EINVAL) {
-            UdfTerminate("Incorrect base");
-        }
-
-        ui64 ret = static_cast<ui64>(res);
-        if (!res && pos == input) {
-            UdfTerminate("Input string is not a number");
-        } else if ((res == ULLONG_MAX && errno == ERANGE) || ret != res) {
-            UdfTerminate("Converted value falls out of Uint64 range");
-        } else if (*pos) {
-            UdfTerminate("Input string contains junk after the number");
-        }
-        return TUnboxedValuePod(ret);
-    }
-
-    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TTryToUint64, TOptional<ui64>(TAutoMap<TUtf8>, TOptional<ui16>), 1) {
-        Y_UNUSED(valueBuilder);
-        const TString inputStr(args[0].AsStringRef());
-        const char* input = inputStr.data();
-        const int base = static_cast<int>(args[1].GetOrDefault<ui16>(0));
-        char* pos = nullptr;
-        errno = 0;
-        unsigned long long res = std::strtoull(input, &pos, base);
-        if (!res && errno == EINVAL) {
-            return TUnboxedValuePod();
-        }
-
-        ui64 ret = static_cast<ui64>(res);
-        if (!res && pos == input) {
-            return TUnboxedValuePod();
-        }
-        if ((res == ULLONG_MAX && errno == ERANGE) || ret != res) {
-            return TUnboxedValuePod();
-        }
-        if (*pos) {
-            return TUnboxedValuePod();
-        }
-        return TUnboxedValuePod(ret);
-    }
-
-    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSubstring, TUtf8(TAutoMap<TUtf8>, TOptional<ui64>, TOptional<ui64>), 1) {
-        const TStringBuf input(args[0].AsStringRef());
-        size_t from = args[1].GetOrDefault<ui64>(0);
-        size_t len = !args[2] ? TStringBuf::npos : size_t(args[2].Get<ui64>());
-        return valueBuilder->NewString(SubstrUTF8(input, from, len));
-    }
+    DEFINE_UTF8_OPERATION_BIN_NOT_STRICT(ToUint64, TToUint64Converter</*strict=*/false>, ui64(TAutoMap<TUtf8>, TOptional<ui16>), /*optionalArgs=*/1);
+    DEFINE_UTF8_OPERATION_BIN_STRICT(TryToUint64, TToUint64Converter</*strict=*/true>, TOptional<ui64>(TAutoMap<TUtf8>, TOptional<ui16>), /*optionalArgs=*/1);
 
     using TTmpVector = TSmallVec<TUnboxedValue, TUnboxedValue::TAllocator>;
 

@@ -600,7 +600,7 @@ void TRowDispatcher::UpdateMetrics() {
                 if (partionIt == consumer->Partitions.end()) {
                     continue;
                 }
-                const auto& partition = partionIt->second;
+                auto& partition = partionIt->second;
                 auto& stat = AggrStats.LastQueryStats[TQueryStatKey{consumer->QueryId, key.ReadGroup}];
                 if (!stat) {
                     stat = TAggQueryStat();
@@ -725,7 +725,7 @@ TString TRowDispatcher::GetInternalState() {
                 }
                 const auto& partition = consumer->Partitions[key.PartitionId];
                 const auto& stat = partition.Stat;
-                str << "    " << consumer->QueryId << " " << LeftPad(readActorId, 32) << " unread bytes "
+                str << "    " << consumer->QueryId << " " << LeftPad(readActorId, 33) << " unread bytes "
                     << toHuman(stat.QueuedBytes) << " (" << leftPad(stat.QueuedRows) << " rows) "
                     << " offset " << leftPad(stat.Offset) << " init offset " << leftPad(stat.InitialOffset)
                     << " get " << leftPad(consumer->Counters.GetNextBatch)

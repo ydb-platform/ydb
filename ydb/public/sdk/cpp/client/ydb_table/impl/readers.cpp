@@ -88,6 +88,8 @@ TAsyncScanQueryPart TScanQueryPartIterator::TReaderImpl::ReadNext(std::shared_pt
                 queryStats = TQueryStats(self->Response_.result().query_stats());
             }
 
+            diagnostics = self->Response_.result().query_full_diagnostics();
+
             if (self->Response_.result().has_result_set()) {
                 promise.SetValue({std::move(status),
                     TResultSet(std::move(*self->Response_.mutable_result()->mutable_result_set())), queryStats, diagnostics});

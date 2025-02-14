@@ -11,6 +11,7 @@ PY3_LIBRARY()
     PEERDIR(
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
+        contrib/python/PyYAML
         contrib/python/pytz
         contrib/python/requests
         library/python/testing/yatest_common

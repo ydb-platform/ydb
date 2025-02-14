@@ -206,12 +206,13 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
                 const auto& queryStats = *streamPart.GetStats();
                 stats = queryStats.ToString();
                 ast = queryStats.GetAst();
-                meta = queryStats.GetMeta();
 
                 if (queryStats.GetPlan()) {
                     plan = queryStats.GetPlan();
                 }
-                meta = queryStats.GetMeta();
+                if (queryStats.GetMeta()) {
+                    meta = queryStats.GetMeta();
+                }
             }
         }
     } // TResultSetPrinter destructor should be called before printing stats
@@ -269,7 +270,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             metaJson.InsertValue("query_text", EscapeC(Query));
             diagnosticsJson.InsertValue("meta", metaJson);
         }
-        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
+        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), true);
     }
 
     if (IsInterrupted()) {

@@ -1107,18 +1107,48 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
             // Check admin restrictions and special cases
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterLogin) {
-                // User management allowed to any user or (if configured so) to admins only
-                if (checkAdmin && !isAdmin) {
+                auto makeError = [&]() -> bool {
                     const auto errString = MakeAccessDeniedError(ctx, "attempt to manage user");
                     auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                     ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                     return false;
+                };
+
+                const auto& alter = modifyScheme.GetAlterLogin();
+
+                bool isDbAdminManagesUser = 
+                    checkAdmin
+                    &&
+                    IsDatabaseAdministrator
+                    &&
+                    (
+                        alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser
+                        ||
+                        alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kRemoveUser
+                    )
+                ;
+
+                if (isDbAdminManagesUser) {
+                    const auto& targetUser = (alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser ? 
+                                                alter.GetModifyUser().GetUser() : 
+                                                alter.GetRemoveUser().GetUser()
+                                             );
+                    const auto& sids = AppData()->AdministrationAllowedSIDs;
+                    bool isTargetClusterAdministrator = (std::find(sids.begin(), sids.end(), targetUser) != sids.end());
+
+                    if (isTargetClusterAdministrator) {
+                        return makeError();
+                    }
+                }
+
+                // User management allowed to any user or (if configured so) to admins only
+                if (checkAdmin && !isAdmin) {
+                    return makeError();
                 }
                 allowACLBypass = checkAdmin && isAdmin;
 
                 // Any user can change their own password (but nothing else)
-                auto isUserChangesOwnPassword = [](const auto& modifyScheme, const NACLib::TSID& subjectSid) {
-                    const auto& alter = modifyScheme.GetAlterLogin();
+                auto isUserChangesOwnPassword = [&alter](const NACLib::TSID& subjectSid) {
                     if (alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser) {
                         const auto& targetUser = alter.GetModifyUser();
                         if (targetUser.HasPassword() && !targetUser.HasCanLogin()) {
@@ -1127,8 +1157,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     }
                     return false;
                 };
-                allowACLBypass = allowACLBypass || isUserChangesOwnPassword(modifyScheme, UserToken->GetUserSID());
-
+                allowACLBypass = allowACLBypass || isUserChangesOwnPassword(UserToken->GetUserSID());
             } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpModifyACL) {
                 // Only the owner of the schema object (path) can transfer their ownership away.
                 // Or admins (if configured so).

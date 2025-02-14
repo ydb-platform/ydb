@@ -268,6 +268,11 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
         return arg ? "true" : "false";
     }
 
+    struct TPrecreateTargetParams {
+        EAccessLevel AccessLevel = EAccessLevel::User;
+        TString Name = "targetuser";
+    };
+
     // dimensions:
     // + EnforceUserTokenRequirement: true or false
     // + EnableStrictUserManagement: true or false
@@ -284,7 +289,7 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
 
     struct TAlterLoginTestCase {
         TString Tag;
-        bool PrecreateTarget = false;
+        std::optional<TPrecreateTargetParams> PrecreateTarget;
         TString SqlStatement;
         bool EnforceUserTokenRequirement = false;
         EAccessLevel SubjectLevel;
@@ -314,6 +319,7 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
         // Create local user for the subject and obtain auth token, if requested
         TString subjectSid;
         TString subjectToken;
+
         if (params.LocalSid) {
             subjectSid = LocalSubjectSid(params.SubjectLevel);
             CreateLocalUser(env, env.RootPath, subjectSid);
@@ -331,8 +337,25 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
         SetPermissions(env, env.RootPath, subjectSid, params.SubjectPermissions);
 
         // Precreate target user, if requested
-        if (params.PrecreateTarget) {
-            CreateLocalUser(env, env.RootPath, "targetuser");
+        if (params.PrecreateTarget.has_value()) {
+            auto targetSid = params.PrecreateTarget.value().Name;
+            const auto level = params.PrecreateTarget.value().AccessLevel;
+
+            CreateLocalUser(env, env.RootPath, targetSid);
+
+            switch (level) {
+                case EAccessLevel::User: {
+                    break;
+                }
+                case EAccessLevel::DatabaseAdmin: {
+                    ChangeOwner(env, env.RootPath, targetSid);
+                    break;
+                }
+                case EAccessLevel::ClusterAdmin: {
+                    env.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back(targetSid);
+                    break;
+                }
+            }
         }
 
         // Make subject a proper database admin (by transfer the database ownership to them), if requested
@@ -469,210 +492,269 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
 
         // ModifyUser
         // Cluster admin can always administer users, but require the same schema permissions as ordinary user (but why?).
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = false
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
         // Database admin can administer users if EnableStrictUserManagement and EnableDatabaseAdmin are true.
         // If not, database admin still can administer users as the owner of the database.
         // In both cases it require no schema permissions except ydb.database.connect (why?).
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
         // Ordinary user can create users only if EnableStrictUserManagement is false
         // and ydb.granular.alter_schema is granted (besides ydb.database.connect).
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = false
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = false
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "ModifyUser", .PrecreateTarget = true, .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
+        { .Tag = "ModifyUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "ALTER USER targetuser PASSWORD 'passwd'",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = false
         },
 
         // DropUser
         // Cluster admin can always administer users, but require the same schema permissions as ordinary user (but why?).
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = false
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::ClusterAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
         // Database admin can administer users if EnableStrictUserManagement and EnableDatabaseAdmin are true.
         // If not, database admin still can administer users as the owner of the database.
         // In both cases it require no schema permissions except ydb.database.connect (why?).
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::DatabaseAdmin, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
         // Ordinary user can create users only if EnableStrictUserManagement is false
         // and ydb.granular.alter_schema is granted (besides ydb.database.connect).
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = true
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect", "ydb.granular.alter_schema"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = false
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = false, .EnableDatabaseAdmin = true, .ExpectedResult = false
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = false, .ExpectedResult = false
         },
-        { .Tag = "DropUser", .PrecreateTarget = true, .SqlStatement = "DROP USER targetuser",
+        { .Tag = "DropUser", .PrecreateTarget = TPrecreateTargetParams(), .SqlStatement = "DROP USER targetuser",
             .SubjectLevel = EAccessLevel::User, .SubjectPermissions = {"ydb.database.connect"},
             .EnableStrictUserManagement = true, .EnableDatabaseAdmin = true, .ExpectedResult = false
+        },
+
+        // We should be sure that database admin can't management cluster admin ...
+        {
+            .Tag = "ModifyUser",
+
+            .PrecreateTarget = TPrecreateTargetParams({ .AccessLevel = EAccessLevel::ClusterAdmin, .Name = "root"}),
+
+            .SqlStatement = "ALTER USER root NOLOGIN",
+
+            .SubjectLevel = EAccessLevel::DatabaseAdmin,
+            .SubjectPermissions = {"ydb.database.connect"},
+
+            .EnableStrictUserManagement = true,
+            .EnableDatabaseAdmin = true,
+            .ExpectedResult = false
+        },
+        {
+            .Tag = "DropUser",
+
+            .PrecreateTarget = TPrecreateTargetParams({ .AccessLevel = EAccessLevel::ClusterAdmin, .Name = "root"}),
+
+            .SqlStatement = "DROP USER root",
+
+            .SubjectLevel = EAccessLevel::DatabaseAdmin,
+            .SubjectPermissions = {"ydb.database.connect"},
+
+            .EnableStrictUserManagement = true,
+            .EnableDatabaseAdmin = true,
+            .ExpectedResult = false
+        },
+        // ... But cluster admin can management other cluster admin
+        {
+            .Tag = "ModifyUser",
+
+            .PrecreateTarget = TPrecreateTargetParams({ .AccessLevel = EAccessLevel::ClusterAdmin, .Name = "root"}),
+
+            .SqlStatement = "ALTER USER root NOLOGIN",
+
+            .SubjectLevel = EAccessLevel::ClusterAdmin,
+            .SubjectPermissions = {"ydb.database.connect"},
+
+            .EnableStrictUserManagement = true,
+            .EnableDatabaseAdmin = true,
+            .ExpectedResult = true
+        },
+        {
+            .Tag = "DropUser",
+
+            .PrecreateTarget = TPrecreateTargetParams({ .AccessLevel = EAccessLevel::ClusterAdmin, .Name = "root"}),
+
+            .SqlStatement = "DROP USER root",
+
+            .SubjectLevel = EAccessLevel::ClusterAdmin,
+            .SubjectPermissions = {"ydb.database.connect"},
+
+            .EnableStrictUserManagement = true,
+            .EnableDatabaseAdmin = true,
+            .ExpectedResult = true
         },
     };
     struct TTestRegistration_AlterLoginProtect_RootDB {

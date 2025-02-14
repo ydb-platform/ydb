@@ -1,13 +1,13 @@
-#include <ydb/core/base/subdomain.h>
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-#include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/schemeshard/olap/column_family/column_family.h>
-#include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
-#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
+#include <ydb/core/tx/schemeshard/olap/column_family/column_family.h>
+
+#include <ydb/core/base/subdomain.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/sharding/sharding.h>
+#include <ydb/core/mind/hive/hive.h>
 
 #include <util/random/shuffle.h>
 
@@ -22,10 +22,8 @@ public:
 private:
     TString Name;
     std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> TtlSettings;
-
 protected:
     ui32 ShardsCount = 0;
-
 public:
     bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, const TOperationContext& context, IErrorCollector& errors) {
         Name = description.GetName();
@@ -44,8 +42,7 @@ public:
         return true;
     }
 
-    TColumnTableInfo::TPtr BuildTableInfo(
-        const NKikimrSchemeOp::TColumnTableDescription& description, const TOperationContext& context, IErrorCollector& errors) {
+    TColumnTableInfo::TPtr BuildTableInfo(const NKikimrSchemeOp::TColumnTableDescription& description, const TOperationContext& context, IErrorCollector& errors) {
         TColumnTableInfo::TPtr tableInfo = std::make_shared<TColumnTableInfo>();
         if (!description.HasSharding()) {
             *tableInfo->Description.MutableSharding() = NKikimrSchemeOp::TColumnTableSharding();
@@ -94,23 +91,22 @@ private:
 
     static void FillDefaultSharding(NKikimrSchemeOp::TColumnTableSharding& info) {
         if (info.HasRandomSharding()) {
+
         } else if (!info.HasHashSharding() || !info.GetHashSharding().HasFunction()) {
             info.MutableHashSharding()->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
         }
     }
 };
 
-class TOlapPresetConstructor: public TTableConstructorBase {
+class TOlapPresetConstructor : public TTableConstructorBase {
     ui32 PresetId = 0;
     TString PresetName = "default";
     const TOlapStoreInfo& StoreInfo;
     mutable bool NeedUpdateObject = false;
-
 public:
     TOlapPresetConstructor(const TOlapStoreInfo& storeInfo)
         : StoreInfo(storeInfo)
-    {
-    }
+    {}
 
     bool GetNeedUpdateObject() const {
         return NeedUpdateObject;
@@ -157,8 +153,7 @@ private:
         description.SetSchemaPresetName(PresetName);
 
         auto layoutPolicy = StoreInfo.GetTablesLayoutPolicy();
-        auto currentLayout =
-            context.SS->ColumnTables.GetTablesLayout(TColumnTablesLayout::ShardIdxToTabletId(StoreInfo.GetColumnShards(), *context.SS));
+        auto currentLayout = context.SS->ColumnTables.GetTablesLayout(TColumnTablesLayout::ShardIdxToTabletId(StoreInfo.GetColumnShards(), *context.SS));
         auto layoutConclusion = layoutPolicy->Layout(currentLayout, ShardsCount);
         if (layoutConclusion.IsFail()) {
             return layoutConclusion;
@@ -179,10 +174,9 @@ private:
     };
 };
 
-class TOlapTableConstructor: public TTableConstructorBase {
+class TOlapTableConstructor : public TTableConstructorBase {
     TOlapSchema TableSchema;
     ui32 ChannelsCount = 64;
-
 private:
     bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
         if (description.HasSchemaPresetName() || description.HasSchemaPresetId()) {
@@ -223,20 +217,22 @@ private:
     };
 };
 
+
 class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder() << "TCreateColumnTable TConfigureParts"
-                                << " operationId# " << OperationId;
+        return TStringBuilder()
+                << "TCreateColumnTable TConfigureParts"
+                << " operationId# " << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), { TEvHive::TEvCreateTabletReply::EventType });
+        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
@@ -247,8 +243,8 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " ProgressState"
-                        << " at tabletId# " << ssId);
+                   DebugHint() << " ProgressState"
+                   << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateColumnTable);
 
@@ -296,8 +292,8 @@ public:
                 auto storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
 
                 const ui32 presetId = tableInfo->Description.GetSchemaPresetId();
-                Y_ABORT_UNLESS(
-                    storeInfo->SchemaPresets.contains(presetId), "Failed to find schema preset %" PRIu32 " in a tablestore", presetId);
+                Y_ABORT_UNLESS(storeInfo->SchemaPresets.contains(presetId),
+                    "Failed to find schema preset %" PRIu32 " in a tablestore", presetId);
                 auto& preset = storeInfo->SchemaPresets.at(presetId);
                 preset.Serialize(*create->MutableSchemaPreset());
             }
@@ -316,8 +312,12 @@ public:
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
             if (shard.TabletType == ETabletType::ColumnShard) {
-                auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(NKikimrTxColumnShard::TX_KIND_SCHEMA,
-                    context.SS->TabletID(), context.Ctx.SelfID, ui64(OperationId.GetTxId()), columnShardTxBody, seqNo,
+                auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                    NKikimrTxColumnShard::TX_KIND_SCHEMA,
+                    context.SS->TabletID(),
+                    context.Ctx.SelfID,
+                    ui64(OperationId.GetTxId()),
+                    columnShardTxBody, seqNo,
                     context.SS->SelectProcessingParams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
@@ -326,9 +326,9 @@ public:
             }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " ProgressState"
-                            << " Propose modify scheme on shard"
-                            << " tabletId: " << tabletId);
+                        DebugHint() << " ProgressState"
+                                    << " Propose modify scheme on shard"
+                                    << " tabletId: " << tabletId);
         }
 
         txState->UpdateShardsInProgress();
@@ -342,15 +342,18 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder() << "TCreateColumnTable TPropose"
-                                << " operationId# " << OperationId;
+        return TStringBuilder()
+                << "TCreateColumnTable TPropose"
+                << " operationId# " << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), { TEvHive::TEvCreateTabletReply::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType });
+        IgnoreMessages(DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -358,8 +361,9 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " HandleReply TEvOperationPlan"
-                        << " at tablet: " << ssId << ", stepId: " << step);
+                     DebugHint() << " HandleReply TEvOperationPlan"
+                     << " at tablet: " << ssId
+                     << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTable);
@@ -401,8 +405,8 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " HandleReply ProgressState"
-                        << " at tablet: " << ssId);
+                     DebugHint() << " HandleReply ProgressState"
+                     << " at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -425,16 +429,19 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder() << "TCreateColumnTable TProposedWaitParts"
-                                << " operationId# " << OperationId;
+        return TStringBuilder()
+                << "TCreateColumnTable TProposedWaitParts"
+                << " operationId# " << OperationId;
     }
 
 public:
     TProposedWaitParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), { TEvHive::TEvCreateTabletReply::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType,
-                                        TEvPrivate::TEvOperationPlan::EventType });
+        IgnoreMessages(DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvColumnShard::TEvProposeTransactionResult::EventType,
+             TEvPrivate::TEvOperationPlan::EventType});
     }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
@@ -458,8 +465,8 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " ProgressState"
-                        << " at tablet: " << ssId);
+                     DebugHint() << " ProgressState"
+                     << " at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -483,9 +490,9 @@ public:
             }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " ProgressState"
-                            << " wait for NotifyTxCompletionResult"
-                            << " tabletId: " << tabletId);
+                        DebugHint() << " ProgressState"
+                                    << " wait for NotifyTxCompletionResult"
+                                    << " tabletId: " << tabletId);
         }
 
         if (txState->NeedUpdateObject) {
@@ -516,17 +523,17 @@ class TCreateColumnTable: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-            case TTxState::Waiting:
-            case TTxState::CreateParts:
-                return TTxState::ConfigureParts;
-            case TTxState::ConfigureParts:
-                return TTxState::Propose;
-            case TTxState::Propose:
-                return TTxState::ProposedWaitParts;
-            case TTxState::ProposedWaitParts:
-                return TTxState::Done;
-            default:
-                return TTxState::Invalid;
+        case TTxState::Waiting:
+        case TTxState::CreateParts:
+            return TTxState::ConfigureParts;
+        case TTxState::ConfigureParts:
+            return TTxState::Propose;
+        case TTxState::Propose:
+            return TTxState::ProposedWaitParts;
+        case TTxState::ProposedWaitParts:
+            return TTxState::Done;
+        default:
+            return TTxState::Invalid;
         }
     }
 
@@ -534,19 +541,19 @@ class TCreateColumnTable: public TSubOperation {
         using TPtr = TSubOperationState::TPtr;
 
         switch (state) {
-            case TTxState::Waiting:
-            case TTxState::CreateParts:
-                return TPtr(new TCreateParts(OperationId));
-            case TTxState::ConfigureParts:
-                return TPtr(new TConfigureParts(OperationId));
-            case TTxState::Propose:
-                return TPtr(new TPropose(OperationId));
-            case TTxState::ProposedWaitParts:
-                return TPtr(new TProposedWaitParts(OperationId));
-            case TTxState::Done:
-                return TPtr(new TDone(OperationId));
-            default:
-                return nullptr;
+        case TTxState::Waiting:
+        case TTxState::CreateParts:
+            return TPtr(new TCreateParts(OperationId));
+        case TTxState::ConfigureParts:
+            return TPtr(new TConfigureParts(OperationId));
+        case TTxState::Propose:
+            return TPtr(new TPropose(OperationId));
+        case TTxState::ProposedWaitParts:
+            return TPtr(new TProposedWaitParts(OperationId));
+        case TTxState::Done:
+            return TPtr(new TDone(OperationId));
+        default:
+            return nullptr;
         }
     }
 
@@ -563,6 +570,7 @@ public:
 
         auto mutableSchema = createDescription.MutableSchema();
         *mutableSchema->AddColumnFamilies() = TColumnFamily::GetDefaultColumnFamily();
+
 
         for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
             if (!schema.GetColumns(i).HasColumnFamilyName() || !schema.GetColumns(i).HasColumnFamilyId()) {
@@ -588,19 +596,23 @@ public:
         auto opTxId = OperationId.GetTxId();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TCreateColumnTable Propose"
-                << ", path: " << parentPathStr << "/" << name << ", opId: " << OperationId << ", at schemeshard: " << ssId);
+                     "TCreateColumnTable Propose"
+                        << ", path: " << parentPathStr << "/" << name
+                        << ", opId: " << OperationId
+                        << ", at schemeshard: " << ssId);
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
 
         if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->ColumnTables.empty()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "OLAP schema operations are not supported");
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "OLAP schema operations are not supported");
             return result;
         }
 
         if (createDescription.GetSharding().GetColumnShards().size()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Incoming tx message has initialized shard ids");
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Incoming tx message has initialized shard ids");
             return result;
         }
 
@@ -608,7 +620,8 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks.NotUnderDomainUpgrade()
+            checks
+                .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -626,7 +639,8 @@ public:
                 Y_ABORT_UNLESS(storeInfo, "Unexpected failure to find an tablestore info");
 
                 NSchemeShard::TPath::TChecker storeChecks = olapStorePath.Check();
-                storeChecks.NotUnderDomainUpgrade()
+                storeChecks
+                    .NotUnderDomainUpgrade()
                     .IsAtLocalSchemeShard()
                     .IsResolved()
                     .NotDeleted()
@@ -648,13 +662,19 @@ public:
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks.IsResolved().NotUnderDeleting().FailOnExist(TPathElement::EPathType::EPathTypeColumnTable, acceptExisted);
+                checks
+                    .IsResolved()
+                    .NotUnderDeleting()
+                    .FailOnExist(TPathElement::EPathType::EPathTypeColumnTable, acceptExisted);
             } else {
-                checks.NotEmpty().NotResolved();
+                checks
+                    .NotEmpty()
+                    .NotResolved();
             }
 
             if (checks) {
-                checks.IsValidLeafName()
+                checks
+                    .IsValidLeafName()
                     .DepthLimit()
                     .PathsLimit()
                     .ShardsLimit(storeInfo ? 0 : shardsCount)
@@ -693,8 +713,10 @@ public:
         } else {
             ui64 columnCount = createDescription.schema().columns().size();
             if (columnCount > limits.MaxColumnTableColumns) {
-                TString errStr = TStringBuilder() << "Too many columns"
-                                                  << ". new: " << columnCount << ". Limit: " << limits.MaxColumnTableColumns;
+                TString errStr = TStringBuilder()
+                    << "Too many columns"
+                    << ". new: " << columnCount
+                    << ". Limit: " << limits.MaxColumnTableColumns;
                 result->SetError(NKikimrScheme::StatusSchemeError, errStr);
                 return result;
             }
@@ -750,7 +772,8 @@ public:
             context.SS->IncrementPathDbRefCount(pathId);
 
             if (parentPath.Base()->HasActiveChanges()) {
-                TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+                TTxId parentTxId = parentPath.Base()->PlannedToCreate()
+                    ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
                 context.OnComplete.Dependence(parentTxId, opTxId);
             }
 
@@ -803,7 +826,8 @@ public:
             context.SS->IncrementPathDbRefCount(pathId);
 
             if (parentPath.Base()->HasActiveChanges()) {
-                TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+                TTxId parentTxId = parentPath.Base()->PlannedToCreate()
+                    ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
                 context.OnComplete.Dependence(parentTxId, opTxId);
             }
         }
@@ -841,7 +865,7 @@ public:
             dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
             dstPath.Base()->IncShardsInside(tableInfo->GetOwnedColumnShardsVerified().size());
         }
-        IncAliveChildrenDirect(OperationId, parentPath, context);  // for correct discard of ChildrenExist prop
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState(!!storeInfo));
         return result;
@@ -853,33 +877,40 @@ public:
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TCreateColumnTable AbortUnsafe"
-                << ", opId: " << OperationId << ", forceDropId: " << forceDropTxId << ", at schemeshard: " << context.SS->TabletID());
+                     "TCreateColumnTable AbortUnsafe"
+                         << ", opId: " << OperationId
+                         << ", forceDropId: " << forceDropTxId
+                         << ", at schemeshard: " << context.SS->TabletID());
 
         context.OnComplete.DoneOperation(OperationId);
     }
 };
 
-}  // namespace
+}
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable>;
 
 namespace NOperation {
 
 template <>
-std::optional<TString> GetTargetName<TTag>(TTag, const TTxTransaction& tx)
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
 {
     return tx.GetCreateColumnTable().GetName();
 }
 
 template <>
-bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name)
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
 {
     tx.MutableCreateColumnTable()->SetName(name);
     return true;
 }
 
-}  // namespace NOperation
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewColumnTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateColumnTable>(id, tx);
@@ -890,4 +921,4 @@ ISubOperation::TPtr CreateNewColumnTable(TOperationId id, TTxState::ETxState sta
     return MakeSubOperation<TCreateColumnTable>(id, state);
 }
 
-}  // namespace NKikimr::NSchemeShard
+}

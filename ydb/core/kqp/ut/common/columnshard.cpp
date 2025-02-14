@@ -6,260 +6,251 @@
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 
-#include <ydb/library/formats/arrow/protos/accessor.pb.h>
-
 extern "C" {
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
 }
 
 namespace NKikimr {
 namespace NKqp {
-using namespace NYdb;
+    using namespace NYdb;
 
-TTestHelper::TTestHelper(const TKikimrSettings& settings) {
-    TKikimrSettings kikimrSettings(settings);
-    if (!kikimrSettings.FeatureFlags.HasEnableTieringInColumnShard()) {
-        kikimrSettings.SetEnableTieringInColumnShard(true);
+    TTestHelper::TTestHelper(const TKikimrSettings& settings) {
+        TKikimrSettings kikimrSettings(settings);
+        if (!kikimrSettings.FeatureFlags.HasEnableTieringInColumnShard()) {
+            kikimrSettings.SetEnableTieringInColumnShard(true);
+        }
+        if (!kikimrSettings.FeatureFlags.HasEnableExternalDataSources()) {
+            kikimrSettings.SetEnableExternalDataSources(true);
+        }
+
+        Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
+        TableClient =
+            std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));
+        Session = std::make_unique<NYdb::NTable::TSession>(TableClient->CreateSession().GetValueSync().GetSession());
+
+        NOlap::TSchemaCachesManager::DropCaches();
     }
-    if (!kikimrSettings.FeatureFlags.HasEnableExternalDataSources()) {
-        kikimrSettings.SetEnableExternalDataSources(true);
+
+    NKikimr::NKqp::TKikimrRunner& TTestHelper::GetKikimr() {
+        return *Kikimr;
     }
 
-    Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
-    TableClient =
-        std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));
-    Session = std::make_unique<NYdb::NTable::TSession>(TableClient->CreateSession().GetValueSync().GetSession());
+    TTestActorRuntime& TTestHelper::GetRuntime() {
+        return *Kikimr->GetTestServer().GetRuntime();
+    }
 
-    NOlap::TSchemaCachesManager::DropCaches();
-}
+    NYdb::NTable::TSession& TTestHelper::GetSession() {
+        return *Session;
+    }
 
-NKikimr::NKqp::TKikimrRunner& TTestHelper::GetKikimr() {
-    return *Kikimr;
-}
+    void TTestHelper::CreateTable(const TColumnTableBase& table, const EStatus expectedStatus) {
+        std::cerr << (table.BuildQuery()) << std::endl;
+        auto result = GetSession().ExecuteSchemeQuery(table.BuildQuery()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
+    }
 
-TTestActorRuntime& TTestHelper::GetRuntime() {
-    return *Kikimr->GetTestServer().GetRuntime();
-}
-
-NYdb::NTable::TSession& TTestHelper::GetSession() {
-    return *Session;
-}
-
-void TTestHelper::CreateTable(const TColumnTableBase& table, const EStatus expectedStatus) {
-    std::cerr << (table.BuildQuery()) << std::endl;
-    auto result = GetSession().ExecuteSchemeQuery(table.BuildQuery()).GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
-}
-
-void TTestHelper::CreateTier(const TString& tierName) {
-    auto result = GetSession()
-                      .ExecuteSchemeQuery(R"(
+    void TTestHelper::CreateTier(const TString& tierName) {
+        auto result = GetSession().ExecuteSchemeQuery(R"(
             UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);
             UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
-            CREATE EXTERNAL DATA SOURCE `)" +
-                                          tierName + R"(` WITH (
+            CREATE EXTERNAL DATA SOURCE `)" + tierName + R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
-                LOCATION="http://fake.fake/olap-)" +
-                                          tierName + R"(",
+                LOCATION="http://fake.fake/olap-)" + tierName + R"(",
                 AUTH_METHOD="AWS",
                 AWS_ACCESS_KEY_ID_SECRET_NAME="accessKey",
                 AWS_SECRET_ACCESS_KEY_SECRET_NAME="secretKey",
                 AWS_REGION="ru-central1"
         );
-        )")
-                      .GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-}
-
-void TTestHelper::SetTiering(const TString& tableName, const TString& tierName, const TString& columnName) {
-    auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName << "` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << tierName
-                                       << "` ON `" << columnName << "`;";
-    auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-}
-
-void TTestHelper::ResetTiering(const TString& tableName) {
-    auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName << "` RESET (TTL)";
-    auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-}
-
-void TTestHelper::DropTable(const TString& tableName) {
-    auto result = GetSession().DropTable(tableName).GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-}
-
-void TTestHelper::BulkUpsert(
-    const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
-    Y_UNUSED(opStatus);
-    NKikimr::Tests::NCS::THelper helper(GetKikimr().GetTestServer());
-    auto batch = updates.BuildArrow();
-    helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
-}
-
-void TTestHelper::BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch,
-    const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
-    Y_UNUSED(opStatus);
-    NKikimr::Tests::NCS::THelper helper(GetKikimr().GetTestServer());
-    helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
-}
-
-void TTestHelper::ReadData(const TString& query, const TString& expected, const EStatus opStatus /*= EStatus::SUCCESS*/) const {
-    auto it = TableClient->StreamExecuteScanQuery(query).GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());  // Means stream successfully get
-    TString result = StreamResultToYson(it, false, opStatus);
-    if (opStatus == EStatus::SUCCESS) {
-        UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
-}
 
-void TTestHelper::RebootTablets(const TString& tableName) {
-    auto runtime = GetKikimr().GetTestServer().GetRuntime();
-    TActorId sender = runtime->AllocateEdgeActor();
-    TVector<ui64> shards;
-    {
-        auto describeResult = DescribeTable(&GetKikimr().GetTestServer(), sender, tableName);
-        for (auto shard : describeResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards()) {
-            shards.push_back(shard);
+    void TTestHelper::SetTiering(const TString& tableName, const TString& tierName, const TString& columnName) {
+        auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << tierName << "` ON `" << columnName << "`;";
+        auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    void TTestHelper::ResetTiering(const TString& tableName) {
+        auto alterQuery = TStringBuilder() << "ALTER TABLE `" << tableName <<  "` RESET (TTL)";
+        auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    void TTestHelper::DropTable(const TString& tableName) {
+        auto result = GetSession().DropTable(tableName).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    void TTestHelper::BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
+        Y_UNUSED(opStatus);
+        NKikimr::Tests::NCS::THelper helper(GetKikimr().GetTestServer());
+        auto batch = updates.BuildArrow();
+        helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
+    }
+
+    void TTestHelper::BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
+        Y_UNUSED(opStatus);
+        NKikimr::Tests::NCS::THelper helper(GetKikimr().GetTestServer());
+        helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
+    }
+
+    void TTestHelper::ReadData(const TString& query, const TString& expected, const EStatus opStatus /*= EStatus::SUCCESS*/) const {
+        auto it = TableClient->StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
+        TString result = StreamResultToYson(it, false, opStatus);
+        if (opStatus == EStatus::SUCCESS) {
+            UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
         }
     }
-    for (auto shard : shards) {
-        GetKikimr().GetTestServer().GetRuntime()->Send(
-            MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), shard, false));
-    }
-}
 
-void TTestHelper::WaitTabletDeletionInHive(ui64 tabletId, TDuration duration) {
-    auto deadline = TInstant::Now() + duration;
-    while (GetKikimr().GetTestClient().TabletExistsInHive(&GetRuntime(), tabletId) && TInstant::Now() <= deadline) {
-        Cerr << "WaitTabletDeletionInHive: wait until " << tabletId << " is deleted" << Endl;
-        Sleep(TDuration::Seconds(1));
+    void TTestHelper::RebootTablets(const TString& tableName) {
+        auto runtime = GetKikimr().GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        TVector<ui64> shards;
+        {
+            auto describeResult = DescribeTable(&GetKikimr().GetTestServer(), sender, tableName);
+            for (auto shard : describeResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards()) {
+                shards.push_back(shard);
+            }
+        }
+        for (auto shard : shards) {
+            GetKikimr().GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                    new TEvents::TEvPoisonPill(), shard, false));
+        }
     }
-}
 
-void TTestHelper::SetCompression(
-    const TColumnTableBase& columnTable, const TString& columnName, const TCompression& compression, const NYdb::EStatus expectedStatus) {
-    auto alterQuery = columnTable.BuildAlterCompressionQuery(columnName, compression);
-    auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
-}
-
-bool TTestHelper::TCompression::DeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer) {
-    if (!serializer.GetClassName()) {
-        return false;
+    void TTestHelper::WaitTabletDeletionInHive(ui64 tabletId, TDuration duration) {
+        auto deadline = TInstant::Now() + duration;
+        while (GetKikimr().GetTestClient().TabletExistsInHive(&GetRuntime(), tabletId) && TInstant::Now() <= deadline) {
+            Cerr << "WaitTabletDeletionInHive: wait until " << tabletId << " is deleted" << Endl;
+            Sleep(TDuration::Seconds(1));
+        }
     }
-    if (serializer.GetClassName() == NArrow::NSerialization::TNativeSerializer::GetClassNameStatic()) {
-        SerializerClassName = serializer.GetClassName();
-        if (!serializer.HasArrowCompression() || !serializer.GetArrowCompression().HasCodec()) {
+
+    void TTestHelper::SetCompression(
+        const TColumnTableBase& columnTable, const TString& columnName, const TCompression& compression, const NYdb::EStatus expectedStatus) {
+        auto alterQuery = columnTable.BuildAlterCompressionQuery(columnName, compression);
+        auto result = GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
+    }
+
+    bool TTestHelper::TCompression::DeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer) {
+        if (!serializer.GetClassName()) {
             return false;
         }
-        CompressionType = serializer.GetArrowCompression().GetCodec();
-        if (serializer.GetArrowCompression().HasLevel()) {
-            CompressionLevel = serializer.GetArrowCompression().GetLevel();
+        if (serializer.GetClassName() == NArrow::NSerialization::TNativeSerializer::GetClassNameStatic()) {
+            SerializerClassName = serializer.GetClassName();
+            if (!serializer.HasArrowCompression() || !serializer.GetArrowCompression().HasCodec()) {
+                return false;
+            }
+            CompressionType = serializer.GetArrowCompression().GetCodec();
+            if (serializer.GetArrowCompression().HasLevel()) {
+                CompressionLevel = serializer.GetArrowCompression().GetLevel();
+            }
+        } else {
+            return false;
         }
-    } else {
-        return false;
+
+        return true;
     }
 
-    return true;
-}
-
-TString TTestHelper::TCompression::BuildQuery() const {
-    TStringBuilder str;
-    if (CompressionType.has_value()) {
-        str << "COMPRESSION=\"" << NArrow::CompressionToString(CompressionType.value()) << "\"";
-    }
-    if (CompressionLevel.has_value()) {
-        str << ", COMPRESSION_LEVEL=" << CompressionLevel.value();
-    }
-    return str;
-}
-
-TConclusionStatus TTestHelper::TCompression::IsEqual(const TCompression& rhs) const {
-    if (SerializerClassName != rhs.GetSerializerClassName()) {
-        return TConclusionStatus::Fail(TStringBuilder() << "different serializer class name: in left value `" << SerializerClassName
-                                                        << "` and in right value `" << rhs.GetSerializerClassName() << "`");
-    }
-    if (CompressionType.has_value() && rhs.HasCompressionType() && CompressionType.value() != rhs.GetCompressionTypeUnsafe()) {
-        return TConclusionStatus::Fail(TStringBuilder()
-                                       << "different compression type: in left value `" << NArrow::CompressionToString(CompressionType.value())
-                                       << "` and in right value `" << NArrow::CompressionToString(rhs.GetCompressionTypeUnsafe()) << "`");
-    } else if (CompressionType.has_value() && !rhs.HasCompressionType()) {
-        return TConclusionStatus::Fail(TStringBuilder() << "compression type is set in left value, but not set in right value");
-    } else if (!CompressionType.has_value() && rhs.HasCompressionType()) {
-        return TConclusionStatus::Fail(TStringBuilder() << "compression type is not set in left value, but set in right value");
-    }
-    if (CompressionLevel.has_value() && rhs.GetCompressionLevel().has_value() && CompressionLevel.value() != rhs.GetCompressionLevel().value()) {
-        return TConclusionStatus::Fail(TStringBuilder() << "different compression level: in left value `" << CompressionLevel.value()
-                                                        << "` and in right value `" << rhs.GetCompressionLevel().value() << "`");
-    } else if (CompressionLevel.has_value() && !rhs.GetCompressionLevel().has_value()) {
-        return TConclusionStatus::Fail("compression level is set in left value, but not set in right value");
-    } else if (!CompressionLevel.has_value() && rhs.GetCompressionLevel().has_value()) {
-        return TConclusionStatus::Fail("compression level not set in left value, but set in right");
+    TString TTestHelper::TCompression::BuildQuery() const {
+        TStringBuilder str;
+        if (CompressionType.has_value()) {
+            str << "COMPRESSION=\"" << NArrow::CompressionToString(CompressionType.value()) << "\"";
+        }
+        if (CompressionLevel.has_value()) {
+            str << ", COMPRESSION_LEVEL=" << CompressionLevel.value();
+        }
+        return str;
     }
 
-    return TConclusionStatus::Success();
-}
+    TConclusionStatus TTestHelper::TCompression::IsEqual(const TCompression& rhs) const {
+        if (SerializerClassName != rhs.GetSerializerClassName()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "different serializer class name: in left value `" << SerializerClassName
+                                                            << "` and in right value `" << rhs.GetSerializerClassName() << "`");
+        }
+        if (CompressionType.has_value() && rhs.HasCompressionType() && CompressionType.value() != rhs.GetCompressionTypeUnsafe()) {
+            return TConclusionStatus::Fail(TStringBuilder()
+                                        << "different compression type: in left value `" << NArrow::CompressionToString(CompressionType.value())
+                                        << "` and in right value `" << NArrow::CompressionToString(rhs.GetCompressionTypeUnsafe()) << "`");
+        } else if (CompressionType.has_value() && !rhs.HasCompressionType()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "compression type is set in left value, but not set in right value");
+        } else if (!CompressionType.has_value() && rhs.HasCompressionType()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "compression type is not set in left value, but set in right value");
+        }
+        if (CompressionLevel.has_value() && rhs.GetCompressionLevel().has_value() && CompressionLevel.value() != rhs.GetCompressionLevel().value()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "different compression level: in left value `" << CompressionLevel.value()
+                                                            << "` and in right value `" << rhs.GetCompressionLevel().value() << "`");
+        } else if (CompressionLevel.has_value() && !rhs.GetCompressionLevel().has_value()) {
+            return TConclusionStatus::Fail("compression level is set in left value, but not set in right value");
+        } else if (!CompressionLevel.has_value() && rhs.GetCompressionLevel().has_value()) {
+            return TConclusionStatus::Fail("compression level not set in left value, but set in right");
+        }
 
-TString TTestHelper::TCompression::ToString() const {
-    return BuildQuery();
-}
-
-bool TTestHelper::TColumnFamily::DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& family) {
-    if (!family.HasId() || !family.HasName() || (!family.HasColumnCodec() && family.HasColumnCodecLevel())) {
-        return false;
-    }
-    Id = family.GetId();
-    FamilyName = family.GetName();
-    Compression = TTestHelper::TCompression();
-    if (family.HasColumnCodec()) {
-        Compression.SetCompressionType(family.GetColumnCodec());
-    }
-    if (family.HasColumnCodecLevel()) {
-        Compression.SetCompressionLevel(family.GetColumnCodecLevel());
-    }
-    if (family.HasDataAccessorConstructor()) {
-        DataAccessor = family.GetDataAccessorConstructor().GetClassName();
-    }
-    return true;
-}
-
-TString TTestHelper::TColumnFamily::BuildQuery() const {
-    TStringBuilder str;
-    str << "FAMILY " << FamilyName << " (";
-    if (!Data.empty()) {
-        str << "DATA=\"" << Data << "\", ";
-    }
-    str << Compression.BuildQuery() << ")";
-    return str;
-}
-
-TConclusionStatus TTestHelper::TColumnFamily::IsEqual(const TColumnFamily& rhs) const {
-    if (Id != rhs.GetId()) {
-        return TConclusionStatus::Fail(
-            TStringBuilder() << "different family id: in left value `" << Id << "` and in right value `" << rhs.GetId() << "`");
-    }
-    if (FamilyName != rhs.GetFamilyName()) {
-        return TConclusionStatus::Fail(TStringBuilder() << "different family name: in left value `" << FamilyName << "` and in right value `"
-                                                        << rhs.GetFamilyName() << "`");
+        return TConclusionStatus::Success();
     }
 
-    if (DataAccessor != rhs.GetDataAccessor()) {
-        return TConclusionStatus::Fail(TStringBuilder() << "different data accessor: in left value `" << DataAccessor << "` and in right value `"
-                                                        << rhs.GetDataAccessor() << "`");
+    TString TTestHelper::TCompression::ToString() const {
+        return BuildQuery();
     }
 
-    return Compression.IsEqual(rhs.GetCompression());
-}
+    bool TTestHelper::TColumnFamily::DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& family) {
+        if (!family.HasId() || !family.HasName() || (!family.HasColumnCodec() && family.HasColumnCodecLevel())) {
+            return false;
+        }
+        Id = family.GetId();
+        FamilyName = family.GetName();
+        Compression = TTestHelper::TCompression();
+        if (family.HasColumnCodec()) {
+            Compression.SetCompressionType(family.GetColumnCodec());
+        }
+        if (family.HasColumnCodecLevel()) {
+            Compression.SetCompressionLevel(family.GetColumnCodecLevel());
+        }
+        if (family.HasDataAccessorConstructor()) {
+            DataAccessor = family.GetDataAccessorConstructor().GetClassName();
+        }
+        return true;
+    }
 
-TString TTestHelper::TColumnFamily::ToString() const {
-    return BuildQuery();
-}
+    TString TTestHelper::TColumnFamily::BuildQuery() const {
+        TStringBuilder str;
+        str << "FAMILY " << FamilyName << " (";
+        if (!Data.empty()) {
+            str << "DATA=\"" << Data << "\", ";
+        }
+        str << Compression.BuildQuery() << ")";
+        return str;
+    }
 
-TString TTestHelper::TColumnSchema::BuildQuery() const {
-    TStringBuilder str;
-    str << Name << ' ';
-    switch (TypeInfo.GetTypeId()) {
+    TConclusionStatus TTestHelper::TColumnFamily::IsEqual(const TColumnFamily& rhs) const {
+        if (Id != rhs.GetId()) {
+            return TConclusionStatus::Fail(
+                TStringBuilder() << "different family id: in left value `" << Id << "` and in right value `" << rhs.GetId() << "`");
+        }
+        if (FamilyName != rhs.GetFamilyName()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "different family name: in left value `" << FamilyName << "` and in right value `"
+                                                            << rhs.GetFamilyName() << "`");
+        }
+
+        if (DataAccessor != rhs.GetDataAccessor()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "different data accessor: in left value `" << DataAccessor << "` and in right value `"
+                                                            << rhs.GetDataAccessor() << "`");
+        }
+
+        return Compression.IsEqual(rhs.GetCompression());
+    }
+
+    TString TTestHelper::TColumnFamily::ToString() const {
+        return BuildQuery();
+    }
+
+    TString TTestHelper::TColumnSchema::BuildQuery() const {
+        TStringBuilder str;
+        str << Name << ' ';
+        switch (TypeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Pg:
             str << NPg::PgTypeNameFromTypeDesc(TypeInfo.GetPgTypeDesc());
             break;
@@ -271,79 +262,79 @@ TString TTestHelper::TColumnSchema::BuildQuery() const {
         }
         default:
             str << NScheme::GetTypeName(TypeInfo.GetTypeId());
-    }
-    if (!ColumnFamilyName.empty()) {
-        str << " FAMILY " << ColumnFamilyName;
-    }
-    if (!NullableFlag) {
-        str << " NOT NULL";
-    }
-    return str;
-}
-
-TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetType(const NScheme::TTypeInfo& typeInfo) {
-    TypeInfo = typeInfo;
-    return *this;
-}
-
-TString TTestHelper::TColumnTableBase::BuildQuery() const {
-    auto str = TStringBuilder() << "CREATE " << GetObjectType() << " `" << Name << "`";
-    str << " (" << BuildColumnsStr(Schema) << ", PRIMARY KEY (" << JoinStrings(PrimaryKey, ", ") << ")";
-    if (!ColumnFamilies.empty()) {
-        TVector<TString> families;
-        families.reserve(ColumnFamilies.size());
-        for (const auto& family : ColumnFamilies) {
-            families.push_back(family.BuildQuery());
         }
-        str << ", " << JoinStrings(families, ", ");
+        if (!ColumnFamilyName.empty()) {
+        str << " FAMILY " << ColumnFamilyName;
+        }
+        if (!NullableFlag) {
+            str << " NOT NULL";
+        }
+        return str;
     }
-    str << ")";
-    if (!Sharding.empty()) {
-        str << " PARTITION BY HASH(" << JoinStrings(Sharding, ", ") << ")";
-    }
-    str << " WITH (STORE = COLUMN";
-    str << ", AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << MinPartitionsCount;
-    if (TTLConf) {
-        str << ", TTL = " << TTLConf->second << " ON " << TTLConf->first;
-    }
-    str << ");";
-    return str;
-}
 
-TString TTestHelper::TColumnTableBase::BuildAlterCompressionQuery(const TString& columnName, const TCompression& compression) const {
-    auto str = TStringBuilder() << "ALTER OBJECT `" << Name << "` (TYPE " << GetObjectType() << ") SET";
-    str << " (ACTION=ALTER_COLUMN, NAME=" << columnName << ", `SERIALIZER.CLASS_NAME`=`" << compression.GetSerializerClassName() << "`,";
-    if (compression.HasCompressionType()) {
-        auto codec = NArrow::CompressionFromProto(compression.GetCompressionTypeUnsafe());
-        Y_VERIFY(codec.has_value());
-        str << " `COMPRESSION.TYPE`=`" << NArrow::CompressionToString(codec.value()) << "`";
+    TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetType(const NScheme::TTypeInfo& typeInfo) {
+        TypeInfo = typeInfo;
+        return *this;
     }
-    if (compression.GetCompressionLevel().has_value()) {
-        str << "`COMPRESSION.LEVEL`=" << compression.GetCompressionLevel().value();
-    }
-    str << ");";
-    return str;
-}
 
-std::shared_ptr<arrow::Schema> TTestHelper::TColumnTableBase::GetArrowSchema(const TVector<TColumnSchema>& columns) {
-    std::vector<std::shared_ptr<arrow::Field>> result;
-    for (auto&& col : columns) {
-        result.push_back(BuildField(col.GetName(), col.GetTypeInfo(), col.IsNullable()));
+    TString TTestHelper::TColumnTableBase::BuildQuery() const {
+        auto str = TStringBuilder() << "CREATE " << GetObjectType() << " `" << Name << "`";
+        str << " (" << BuildColumnsStr(Schema) << ", PRIMARY KEY (" << JoinStrings(PrimaryKey, ", ") << ")";
+        if (!ColumnFamilies.empty()) {
+            TVector<TString> families;
+            families.reserve(ColumnFamilies.size());
+            for (const auto& family : ColumnFamilies) {
+                families.push_back(family.BuildQuery());
+            }
+            str << ", " << JoinStrings(families, ", ");
+        }
+        str << ")";
+        if (!Sharding.empty()) {
+            str << " PARTITION BY HASH(" << JoinStrings(Sharding, ", ") << ")";
+        }
+        str << " WITH (STORE = COLUMN";
+        str << ", AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << MinPartitionsCount;
+        if (TTLConf) {
+            str << ", TTL = " << TTLConf->second << " ON " << TTLConf->first;
+        }
+        str << ");";
+        return str;
     }
-    return std::make_shared<arrow::Schema>(result);
-}
 
-TString TTestHelper::TColumnTableBase::BuildColumnsStr(const TVector<TColumnSchema>& clumns) const {
-    TVector<TString> columnStr;
-    for (auto&& c : clumns) {
-        columnStr.push_back(c.BuildQuery());
+    TString TTestHelper::TColumnTableBase::BuildAlterCompressionQuery(const TString& columnName, const TCompression& compression) const {
+        auto str = TStringBuilder() << "ALTER OBJECT `" << Name << "` (TYPE " << GetObjectType() << ") SET";
+        str << " (ACTION=ALTER_COLUMN, NAME=" << columnName << ", `SERIALIZER.CLASS_NAME`=`" << compression.GetSerializerClassName() << "`,";
+        if (compression.HasCompressionType()) {
+            auto codec = NArrow::CompressionFromProto(compression.GetCompressionTypeUnsafe());
+            Y_VERIFY(codec.has_value());
+            str << " `COMPRESSION.TYPE`=`" << NArrow::CompressionToString(codec.value()) << "`";
+        }
+        if (compression.GetCompressionLevel().has_value()) {
+            str << "`COMPRESSION.LEVEL`=" << compression.GetCompressionLevel().value();
+        }
+        str << ");";
+        return str;
     }
-    return JoinStrings(columnStr, ", ");
-}
 
-std::shared_ptr<arrow::Field> TTestHelper::TColumnTableBase::BuildField(
-    const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const {
-    switch (typeInfo.GetTypeId()) {
+    std::shared_ptr<arrow::Schema> TTestHelper::TColumnTableBase::GetArrowSchema(const TVector<TColumnSchema>& columns) {
+        std::vector<std::shared_ptr<arrow::Field>> result;
+        for (auto&& col : columns) {
+            result.push_back(BuildField(col.GetName(), col.GetTypeInfo(), col.IsNullable()));
+        }
+        return std::make_shared<arrow::Schema>(result);
+    }
+
+
+    TString TTestHelper::TColumnTableBase::BuildColumnsStr(const TVector<TColumnSchema>& clumns) const {
+        TVector<TString> columnStr;
+        for (auto&& c : clumns) {
+            columnStr.push_back(c.BuildQuery());
+        }
+        return JoinStrings(columnStr, ", ");
+    }
+
+    std::shared_ptr<arrow::Field> TTestHelper::TColumnTableBase::BuildField(const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const {
+        switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
             return arrow::field(name, arrow::boolean(), nullable);
         case NScheme::NTypeIds::Int8:
@@ -411,17 +402,18 @@ std::shared_ptr<arrow::Field> TTestHelper::TColumnTableBase::BuildField(
                 default:
                     Y_FAIL("TODO: support pg");
             }
+        }
+        return nullptr;
     }
-    return nullptr;
-}
 
-TString TTestHelper::TColumnTable::GetObjectType() const {
-    return "TABLE";
-}
+    TString TTestHelper::TColumnTable::GetObjectType() const {
+        return "TABLE";
+    }
 
-TString TTestHelper::TColumnTableStore::GetObjectType() const {
-    return "TABLESTORE";
-}
 
-}  // namespace NKqp
-}  // namespace NKikimr
+    TString TTestHelper::TColumnTableStore::GetObjectType() const {
+        return "TABLESTORE";
+    }
+
+}
+}

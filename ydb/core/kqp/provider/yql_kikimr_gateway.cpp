@@ -1,21 +1,18 @@
 #include "yql_kikimr_gateway.h"
 
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/replication.pb.h>
 
-#include <ydb/library/formats/arrow/accessor/common/const.h>
-#include <ydb/library/formats/arrow/protos/accessor.pb.h>
-
 #include <util/string/split.h>
 #include <util/string/strip.h>
-#include <yql/essentials/minikql/mkql_node.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql {
 
@@ -98,6 +95,7 @@ TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString
 
     return pathPromise.GetFuture();
 }
+
 
 bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error) {
     using namespace NNodes;

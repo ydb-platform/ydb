@@ -530,7 +530,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(
-            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo));
+            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }
@@ -615,7 +615,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(
-            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo));
+            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
         engine.RegisterTable(pathId);
         engine.TestingLoad(db);
 
@@ -716,7 +716,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(
-            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo));
+            0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
         engine.RegisterTable(pathId);
         engine.TestingLoad(db);
 
@@ -742,7 +742,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {   // check it's overloaded after reload
             TColumnEngineForLogs tmpEngine(
-                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
             tmpEngine.RegisterTable(pathId);
             tmpEngine.TestingLoad(db);
         }
@@ -774,7 +774,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {   // check it's not overloaded after reload
             TColumnEngineForLogs tmpEngine(
-                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, TSnapshot::Zero(), 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
             tmpEngine.RegisterTable(pathId);
             tmpEngine.TestingLoad(db);
         }
@@ -795,7 +795,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TSnapshot indexSnapshot(1, 1);
         {
             TColumnEngineForLogs engine(
-                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
             engine.RegisterTable(pathId);
             engine.TestingLoad(db);
 
@@ -874,7 +874,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         {
             // load
             TColumnEngineForLogs engine(
-                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo));
+                0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(), CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
             engine.RegisterTable(pathId);
             engine.TestingLoad(db);
 

@@ -87,7 +87,7 @@ namespace NKikimr::NStorage {
 
         std::optional<ui64> ShredGenerationIssued;
         std::variant<std::monostate, ui64, TString> ShredState; // not issued, finished with generation, aborted
-        THashSet<ui64> ShredCookies;
+        THashMap<ui64, ui64> ShredCookies;
 
         TPDiskRecord(NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk record)
             : Record(std::move(record))

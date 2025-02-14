@@ -770,7 +770,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
                 auto issueShredRequestToPDisk = [&] {
                     const ui64 cookie = ++LastShredCookie;
                     ShredInFlight.emplace(cookie, key);
-                    pdisk.ShredCookies.insert(cookie);
+                    pdisk.ShredCookies.emplace(cookie, generation);
 
                     const TActorId actorId = SelfId();
                     auto ev = std::make_unique<NPDisk::TEvShredPDisk>(generation);

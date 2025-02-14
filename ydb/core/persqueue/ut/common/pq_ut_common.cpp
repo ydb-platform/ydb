@@ -139,6 +139,8 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
     PQTabletPrepare(parameters, users, *context.Runtime, context.TabletId, context.Edge);
 }
 
+// Allows you to create a topic with the required set of keys. The keys and values are taken from the resource file.
+// The values are expected to be BZIP2 compressed and BASE64 encoded.
 void PQTabletPrepareFromResource(const TTabletPreparationParameters& parameters,
                                  const TVector<std::pair<TString, bool>>& users,
                                  const TString& resourceName,
@@ -354,7 +356,6 @@ void PQTabletRestart(TTestActorRuntime& runtime, ui64 tabletId, TActorId edge) {
     rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
     runtime.DispatchEvents(rebootOptions);
 }
- 
 TActorId SetOwner(const ui32 partition, TTestContext& tc, const TString& owner, bool force) {
     return SetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition, owner, force);
 }

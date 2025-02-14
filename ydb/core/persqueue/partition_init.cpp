@@ -457,6 +457,7 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     }
 
     if (WaitForDeleteAndRename) {
+        // The tablet deleted and renamed the blobs
         PoisonPill(ctx);
         return;
     }
@@ -502,6 +503,7 @@ enum EKeyPosition {
     LhsContainsRhs
 };
 
+// Calculates the location of keys relative to each other
 static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
 {
     Y_ABORT_UNLESS(lhs.GetOffset() <= rhs.GetOffset(),
@@ -522,6 +524,7 @@ static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
     }
 
     // case lhs.GetOffset() < rhs.GetOffset()
+
     if (ui64 nextOffset = lhs.GetOffset() + lhs.GetCount(); nextOffset > rhs.GetOffset()) {
         return LhsContainsRhs;
     } else if (nextOffset == rhs.GetOffset()) {
@@ -548,29 +551,32 @@ static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueRespo
     TDeque<TString> filtered;
     TKey lastKey;
 
-    for (size_t i = 0; i < keys.size(); ++i) {
+    for (auto& key : keys) {
         if (filtered.empty()) {
-            filtered.push_back(keys[i]);
+            filtered.push_back(std::move(key));
             lastKey = MakeKeyFromString(filtered.back(), partitionId);
             continue;
         }
 
-        auto candidate = MakeKeyFromString(keys[i], partitionId);
+        auto candidate = MakeKeyFromString(key, partitionId);
 
         switch (KeyPosition(lastKey, candidate)) {
         case RhsContainsLhs:
-            filtered.back() = keys[i];
+            // We found a key that is wider than the previous key
+            filtered.back() = std::move(key);
             lastKey = MakeKeyFromString(filtered.back(), partitionId);
             break;
         case RhsAfterLhs:
-            filtered.push_back(keys[i]);
+            // The new key is adjacent to the previous key.
+            filtered.push_back(std::move(key));
             lastKey = MakeKeyFromString(filtered.back(), partitionId);
             break;
         case LhsContainsRhs:
+            // The current key already contains this key
             break;
         default:
             Y_ABORT("A strange key %s, last key %s",
-                    keys[i].data(), filtered.back().data());
+                    key.data(), filtered.back().data());
         }
     }
 
@@ -606,10 +612,9 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     auto& gapSize = Partition()->GapSize;
     auto& bodySize = Partition()->BodySize;
 
-    Y_ABORT_UNLESS(!CompatibilityRequest);
-
     const auto actualKeys = FilterBlobsMetaData(range, PartitionId());
     const TString firstHeadKey = FindFirstHeadKey(actualKeys);
+
     CompatibilityRequest = MakeHolder<TEvKeyValue::TEvRequest>();
 
     for (ui32 i = 0; i < range.PairSize(); ++i) {
@@ -617,6 +622,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
 
         if (!actualKeys.contains(pair.GetKey())) {
+            // It is necessary to remove the extra blob
             auto* cmd = CompatibilityRequest->Record.AddCmdDeleteRange();
             auto* range = cmd->MutableRange();
             range->SetFrom(pair.GetKey());
@@ -626,6 +632,8 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
             continue;
         }
         if (pair.GetKey().back() == '?') {
+            // We need to rename the new keys. At the same time, the location relative to the "head" must be
+            // taken into account
             TString newKey = pair.GetKey();
             if (newKey < firstHeadKey) {
                 newKey.resize(newKey.size() - 1);
@@ -669,6 +677,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     }
 
     if ((CompatibilityRequest->Record.CmdDeleteRangeSize() == 0) && (CompatibilityRequest->Record.CmdRenameSize() == 0)) {
+        // All the keys are correct. We don't need to delete or rename anything
         CompatibilityRequest = nullptr;
     }
 

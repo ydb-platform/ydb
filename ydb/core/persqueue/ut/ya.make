@@ -17,7 +17,6 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
-    library/cpp/resource
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils

@@ -892,39 +892,30 @@ public:
             if (status.Level != TStatus::Ok) {
                 return SyncStatus(status);
             }
-            auto asyncResult = Gateway->ExecuteLiteral(program, resultType, SessionCtx->Query().QueryData->GetAllocState());
 
-            return std::make_pair(IGraphTransformer::TStatus::Async, asyncResult.Apply(
-                [this](const NThreading::TFuture<IKikimrGateway::TExecuteLiteralResult>& future) {
-                    return TAsyncTransformCallback(
-                        [future, this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            auto literalResult = Gateway->ExecuteLiteralInstant(program, resultType, SessionCtx->Query().QueryData->GetAllocState());
 
-                            const auto& literalResult = future.GetValueSync();
+            if (!literalResult.Success()) {
+                for (const auto& issue : literalResult.Issues()) {
+                    ctx.AddError(issue);
+                }
+                input->SetState(TExprNode::EState::Error);
+                return SyncError();
+            }
 
-                            if (!literalResult.Success()) {
-                                for (const auto& issue : literalResult.Issues()) {
-                                    ctx.AddError(issue);
-                                }
-                                input->SetState(TExprNode::EState::Error);
-                                return IGraphTransformer::TStatus::Error;
-                            }
+            bool truncated = false;
+            auto yson = EncodeResultToYson(literalResult.Result, truncated);
+            if (truncated) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "EvaluteExpr result is too big and was truncated"));
+                input->SetState(TExprNode::EState::Error);
+                return SyncError();
+            }
 
-                            bool truncated = false;
-                            auto yson = this->EncodeResultToYson(literalResult.Result, truncated);
-                            if (truncated) {
-                                input->SetState(TExprNode::EState::Error);
-                                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "EvaluteExpr result is too big and was truncated"));
-                                return IGraphTransformer::TStatus::Error;
-                            }
-
-                            output = input;
-                            input->SetState(TExprNode::EState::ExecutionComplete);
-                            input->SetResult(ctx.NewAtom(input->Pos(), yson));
-                            return IGraphTransformer::TStatus::Ok;
-                        });
-                }));
+            output = input;
+            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetResult(ctx.NewAtom(input->Pos(), yson));
+            return SyncOk();
         }
-
         if (input->Content() == ConfigureName) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {

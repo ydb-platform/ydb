@@ -163,6 +163,10 @@ public:
         GetEventQueue(topic)->Push(std::move(e), size);
      }
 
+     virtual NYdb::NTopic::TTopicClientSettings GetCommonTopicClientSettings() override {
+        return NYdb::NTopic::TTopicClientSettings();
+     }
+
 private:
     std::unordered_map<TString, std::shared_ptr<TQueue>> Queues;
     NActors::TTestActorRuntime& Runtime;

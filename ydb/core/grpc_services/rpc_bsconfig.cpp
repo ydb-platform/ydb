@@ -117,15 +117,33 @@ public:
         auto opt = [&](auto&& has, auto&& get) {
             return std::invoke(has, request) ? std::make_optional(std::invoke(get, request)) : std::nullopt;
         };
+
+        std::optional<bool> switch_dedicated_storage_section;
+        bool dedicated_config_mode = false;
+        switch (request->action_case()) {
+            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceEnableDedicatedStorageSection:
+                switch_dedicated_storage_section = true;
+                dedicated_config_mode = true;
+            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
+                switch_dedicated_storage_section = false;
+            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
+                dedicated_config_mode = true;
+                [[fallthrough]];
+            case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
+                break;
+            case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
+                break; // TODO: handle as error?
+        }
+
         using T = std::decay_t<decltype(*request)>;
         return std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigRequest>(
             opt(&T::has_main_config, &T::main_config),
             opt(&T::has_storage_config, &T::storage_config),
-            opt(&T::has_switch_dedicated_storage_section, &T::switch_dedicated_storage_section),
-            request->dedicated_config_mode(),
-            request->allow_unknown_fields(),
-            request->allow_incorrect_version(),
-            request->allow_incorrect_cluster());
+            switch_dedicated_storage_section,
+            dedicated_config_mode,
+            request->allow_unknown_fields() || request->bypass_checks(),
+            request->bypass_checks(),
+            request->bypass_checks());
     }
 };
 

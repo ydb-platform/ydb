@@ -285,10 +285,12 @@ protected:
             TResultRecord result;
             const auto& record = ev->Get()->Record;
             if (record.HasClusterYaml()) {
-                result.set_main_config(ev->Get()->Record.GetClusterYaml());
+                // FIXME: fill identity
+                result.add_config()->set_config(ev->Get()->Record.GetClusterYaml());
             }
             if (record.HasStorageYaml()) {
-                result.set_storage_config(ev->Get()->Record.GetStorageYaml());
+                // FIXME: fill identity
+                result.add_config()->set_config(ev->Get()->Record.GetStorageYaml());
             }
             self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
         } else {

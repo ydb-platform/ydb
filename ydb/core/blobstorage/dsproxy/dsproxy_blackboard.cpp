@@ -240,7 +240,7 @@ TString TBlobState::SituationToString(ESituation situation) {
         case ESituation::Sent:
             return "ESituation::Sent";
     }
-    Y_ABORT_UNLESS(false, "Unexpected situation# %" PRIu64, ui64(situation));
+    Y_DEBUG_ABORT("Unexpected situation# %" PRIu64, ui64(situation));
     return "";
 }
 
@@ -259,7 +259,7 @@ TString TBlobState::SituationToShortString(ESituation situation) {
         case ESituation::Sent:
             return "S";
     }
-    Y_ABORT_UNLESS(false, "Unexpected situation# %" PRIu64, ui64(situation));
+    Y_DEBUG_ABORT("Unexpected situation# %" PRIu64, ui64(situation));
     return "";
 }
 

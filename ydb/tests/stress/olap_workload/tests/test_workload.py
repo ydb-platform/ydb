@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-import yatest
-
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.stress.common.common import YdbClient
+from ydb.tests.stress.olap_workload.workload import WorkloadRunner
 
 
 class TestYdbWorkload(object):
@@ -22,14 +22,7 @@ class TestYdbWorkload(object):
         cls.cluster.stop()
 
     def test(self):
-        workload_path = yatest.common.build_path("ydb/tests/stress/olap_workload/olap_workload")
-        yatest.common.execute(
-            [
-                workload_path,
-                "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
-                "--database=/Root",
-                "--duration", "120",
-                "--allow-nullables-in-pk", "1",
-            ],
-            wait=True
-        )
+        client = YdbClient(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root', True)
+        client.wait_connection()
+        with WorkloadRunner(client, 'olap_workload', 120, True) as runner:
+            runner.run()

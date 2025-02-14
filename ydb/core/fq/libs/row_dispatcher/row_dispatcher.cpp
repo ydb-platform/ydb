@@ -133,7 +133,7 @@ struct TAggQueryStat {
 };
 
 ui64 UpdateMetricsPeriodSec = 60;
-ui64 PrintStateToLogPeriodSec = 6;
+ui64 PrintStateToLogPeriodSec = 600;
 ui64 PrintStateToLogSplitSize = 64000;
 ui64 MaxSessionBufferSizeBytes = 16000000;
 
@@ -600,14 +600,13 @@ void TRowDispatcher::UpdateMetrics() {
                 if (partionIt == consumer->Partitions.end()) {
                     continue;
                 }
-                const auto& partitionStat = partionIt->second.Stat;
-
+                const auto& partition = partionIt->second;
                 auto& stat = AggrStats.LastQueryStats[TQueryStatKey{consumer->QueryId, key.ReadGroup}];
                 if (!stat) {
                     stat = TAggQueryStat();
                 }
-                stat->Add(partitionStat, partionIt->second.FilteredBytes);
-                partionIt->second.FilteredBytes = 0;
+                stat->Add(partition.Stat, partition.FilteredBytes);
+                partition.FilteredBytes = 0;
             }
         }
     }

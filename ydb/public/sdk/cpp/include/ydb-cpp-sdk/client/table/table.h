@@ -1163,8 +1163,10 @@ struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQue
 
     // Collect runtime statistics with a given detalization mode
     FLUENT_SETTING_DEFAULT(ECollectQueryStatsMode, CollectQueryStats, ECollectQueryStatsMode::None);
-    // // Collect full query compilation diagnostics
-    // FLUENT_SETTING_DEFAULT_DEPRECATED(bool, CollectFullDiagnostics, false);
+
+    //Deprecated. Use CollectQueryStats >= ECollectQueryStatsMode::Full to get QueryMeta in QueryStats
+    // Collect full query compilation diagnostics
+    FLUENT_SETTING_DEFAULT(bool, CollectFullDiagnostics, false);
 };
 
 enum class EDataFormat {
@@ -2036,8 +2038,6 @@ public:
 
     const std::string GetQueryPlan() const;
 
-    const std::string GetMeta() const;
-
 private:
     std::optional<TTransaction> Transaction_;
     std::vector<TResultSet> ResultSets_;
@@ -2110,6 +2110,11 @@ public:
     const TQueryStats& GetQueryStats() const { return *QueryStats_; }
     TQueryStats ExtractQueryStats() { return std::move(*QueryStats_); }
 
+    // Deprecated. Use GetMeta() of TQueryStats
+    bool HasDiagnostics() const { return FakeDiagnostics_.has_value(); }
+    const std::string& GetDiagnostics() const { return *FakeDiagnostics_; }
+    std::string&& ExtractDiagnostics() { return std::move(*FakeDiagnostics_); }
+
     TScanQueryPart(TStatus&& status)
         : TStreamPartStatus(std::move(status))
     {}
@@ -2128,6 +2133,7 @@ public:
 private:
     std::optional<TResultSet> ResultSet_;
     std::optional<TQueryStats> QueryStats_;
+    std::optional<std::string> FakeDiagnostics_;
 };
 
 using TAsyncScanQueryPart = NThreading::TFuture<TScanQueryPart>;

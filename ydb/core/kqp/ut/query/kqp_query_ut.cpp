@@ -211,10 +211,13 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(!result.GetMeta().empty(), "Query result meta is empty");
+                auto stats = result.GetStats();
+                UNIT_ASSERT(stats.has_value());
+
+                UNIT_ASSERT_C(stats->GetMeta().has_value(), "Query result meta is empty");
 
                 TStringStream in;
-                in << result.GetMeta();
+                in << stats->GetMeta().value();
                 NJson::TJsonValue value;
                 ReadJsonTree(&in, &value);
 
@@ -234,12 +237,16 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
             {
                 auto settings = TExecDataQuerySettings();
+                settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(result.GetMeta().empty(), "Query result meta should be empty, but it's not");
+                auto stats = result.GetStats();
+                UNIT_ASSERT(stats.has_value());
+
+                UNIT_ASSERT_C(!stats->GetMeta().has_value(),  "Query result meta should be empty, but it's not");
             }
         }
     }

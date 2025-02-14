@@ -32,7 +32,6 @@ extern TStatKey Combine_MaxRowsCount;
 namespace {
 
 bool HasMemoryForProcessing() {
-    return false;
     return !TlsAllocState->IsMemoryYellowZoneEnabled();
 }
 
@@ -505,7 +504,6 @@ public:
             // while restoration we process buckets one by one starting from the first in a queue
             bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
             Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
-            BufferForUsedInputItems.resize(0);
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
 

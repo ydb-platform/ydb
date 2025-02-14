@@ -275,7 +275,6 @@ namespace {
             result.CreationQuery = typedScheme.Scheme;
             break;
         case EPathTypeCdcStream:
-            Cerr << "EPathTypeCdcStream23434" << Endl;
             result.Changefeed = {typedScheme.Scheme, typedScheme.Attributes.GetTopicDescription()};
             break;
         default:

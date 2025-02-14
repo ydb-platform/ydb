@@ -25,7 +25,9 @@ using namespace NActors;
 using namespace Ydb;
 
 bool CopyToConfigRequest(const Ydb::Config::ReplaceConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to) {
-    to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(from.main_config()));
+    Y_UNUSED(to, from);
+    // FIXME
+    // to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(from.main_config()));
     return true;
 }
 
@@ -77,7 +79,9 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
         }
     }
     storageConfig.set_item_config_generation(itemConfigGeneration);
-    to->set_main_config(NYaml::ParseProtoToYaml(storageConfig));
+    Y_UNUSED(to);
+    // FIXME:
+    // to->set_main_config(NYaml::ParseProtoToYaml(storageConfig));
 }
 
 class TReplaceStorageConfigRequest : public TBSConfigRequestGrpc<TReplaceStorageConfigRequest, TEvReplaceStorageConfigRequest,
@@ -95,7 +99,9 @@ public:
 
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) {
         auto *cmd = ev.Record.MutableReplaceStorageConfig();
-        cmd->SetYAML(GetProtoRequest()->main_config());
+        Y_UNUSED(cmd);
+        // FIXME
+        // cmd->SetYAML(GetProtoRequest()->main_config());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -105,7 +111,8 @@ public:
     bool IsDistconfEnableQuery() const {
         NKikimrConfig::TAppConfig newConfig;
         try {
-            newConfig = NYaml::Parse(GetProtoRequest()->main_config());
+            // FIXME:
+            // newConfig = NYaml::Parse(GetProtoRequest()->main_config());
         } catch (const std::exception&) {
             return false; // assuming no distconf enabled in this config
         }
@@ -114,31 +121,42 @@ public:
 
     std::unique_ptr<IEventBase> ProcessControllerQuery() override {
         auto *request = GetProtoRequest();
-        auto opt = [&](auto&& has, auto&& get) {
-            return std::invoke(has, request) ? std::make_optional(std::invoke(get, request)) : std::nullopt;
-        };
 
         std::optional<bool> switch_dedicated_storage_section;
+        std::optional<TString> mainConfig;
+        std::optional<TString> storageConfig;
         bool dedicated_config_mode = false;
+
+        auto fillConfigs = [&](const auto& configBundle) {
+            for (const auto& config : configBundle.config()) {
+                Y_UNUSED(config);
+            }
+        };
+
         switch (request->action_case()) {
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceEnableDedicatedStorageSection:
                 switch_dedicated_storage_section = true;
                 dedicated_config_mode = true;
+                fillConfigs(request->replace_enable_dedicated_storage_section());
+                break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
                 switch_dedicated_storage_section = false;
+                fillConfigs(request->replace_enable_dedicated_storage_section());
+                break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
                 dedicated_config_mode = true;
+                fillConfigs(request->replace_enable_dedicated_storage_section());
                 [[fallthrough]];
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
+                fillConfigs(request->replace_enable_dedicated_storage_section());
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
                 break; // TODO: handle as error?
         }
 
-        using T = std::decay_t<decltype(*request)>;
         return std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigRequest>(
-            opt(&T::has_main_config, &T::main_config),
-            opt(&T::has_storage_config, &T::storage_config),
+            mainConfig,
+            storageConfig,
             switch_dedicated_storage_section,
             dedicated_config_mode,
             request->allow_unknown_fields() || request->bypass_checks(),
@@ -166,7 +184,9 @@ public:
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record,
             Ydb::Config::FetchConfigResult& result) {
-        result.set_main_config(record.GetFetchStorageConfig().GetYAML());
+        Y_UNUSED(record, result);
+        // FIXME:
+        // result.set_main_config(record.GetFetchStorageConfig().GetYAML());
     }
 
     bool IsDistconfEnableQuery() const {
@@ -174,12 +194,15 @@ public:
     }
 
     std::unique_ptr<IEventBase> ProcessControllerQuery() override {
-        auto& request = *GetProtoRequest();
-        auto ev = std::make_unique<TEvBlobStorage::TEvControllerFetchConfigRequest>();
-        auto& record = ev->Record;
-        record.SetDedicatedStorageSection(request.dedicated_storage_section());
-        record.SetDedicatedClusterSection(request.dedicated_cluster_section());
-        return ev;
+        // FIXME:
+        // auto& request = *GetProtoRequest();
+        // auto ev = std::make_unique<TEvBlobStorage::TEvControllerFetchConfigRequest>();
+        // auto& record = ev->Record;
+
+        // record.SetDedicatedStorageSection(request.dedicated_storage_section());
+        // record.SetDedicatedClusterSection(request.dedicated_cluster_section());
+        // return ev;
+        return nullptr; // FIXME: remove
     }
 };
 

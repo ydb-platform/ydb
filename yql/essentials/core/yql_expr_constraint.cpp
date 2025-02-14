@@ -201,6 +201,7 @@ public:
         Functions["Visit"] = &TCallableConstraintTransformer::VisitWrap;
         Functions["VariantItem"] = &TCallableConstraintTransformer::VariantItemWrap;
         Functions["Variant"] = &TCallableConstraintTransformer::VariantWrap;
+        Functions["DynamicVariant"] = &TCallableConstraintTransformer::DynamicVariantWrap;
         Functions["Guess"] = &TCallableConstraintTransformer::GuessWrap;
         Functions["Mux"] = &TCallableConstraintTransformer::MuxWrap;
         Functions["Nth"] = &TCallableConstraintTransformer::NthWrap;
@@ -668,6 +669,43 @@ private:
         FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfUniqueConstraintNode>(input, filterForUnique, ctx);
         FilterFromHead<TPartOfDistinctConstraintNode>(input, filterForDistinct, ctx);
+
+        const auto unwrapedOutItemType = RemoveOptionalType(outItemType);
+        const auto unwrapedInItemType = RemoveOptionalType(inItemType);
+        if (unwrapedInItemType->GetKind() == ETypeAnnotationKind::Variant && unwrapedOutItemType->GetKind() == ETypeAnnotationKind::Variant
+            && unwrapedOutItemType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+
+            const auto tupleUnderInType = unwrapedInItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
+            const auto tupleUnderOutType = unwrapedOutItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
+            if (auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) {
+                if (tupleUnderOutType->GetSize() < tupleUnderInType->GetSize()) {
+                    TMultiConstraintNode::TMapType multiItems;
+                    std::copy_if(multi->GetItems().cbegin(), multi->GetItems().cend(),
+                        std::back_inserter(multiItems),
+                        [&](const auto& item) { return item.first < tupleUnderOutType->GetSize(); }
+                    );
+                    if (!multiItems.empty()) {
+                        input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
+                    }
+                } else {
+                    input->AddConstraint(multi);
+                }
+            }
+            if (auto varItem = input->Head().GetConstraint<TVarIndexConstraintNode>()) {
+                if (tupleUnderOutType->GetSize() < tupleUnderInType->GetSize()) {
+                    TVarIndexConstraintNode::TMapType filteredItems;
+                    std::copy_if(varItem->GetIndexMapping().cbegin(), varItem->GetIndexMapping().cend(),
+                        std::back_inserter(filteredItems),
+                        [&](const auto& item) { return item.second < tupleUnderOutType->GetSize(); }
+                    );
+                    if (!filteredItems.empty()) {
+                        input->AddConstraint(ctx.MakeConstraint<TVarIndexConstraintNode>(std::move(filteredItems)));
+                    }
+                } else {
+                    input->AddConstraint(varItem);
+                }
+            }
+        }
         return TStatus::Ok;
     }
 
@@ -1978,6 +2016,28 @@ private:
                 TVarIndexConstraintNode::TMapType filteredItems;
                 for (auto& item: varIndex->GetIndexMapping()) {
                     filteredItems.push_back(std::make_pair(index, item.second));
+                }
+                input->AddConstraint(ctx.MakeConstraint<TVarIndexConstraintNode>(std::move(filteredItems)));
+            }
+        }
+        return TStatus::Ok;
+    }
+
+    TStatus DynamicVariantWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        if (auto underlyingType = RemoveOptionalType(input->GetTypeAnn())->Cast<TVariantExprType>()->GetUnderlyingType(); underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
+            TConstraintSet target;
+            CopyExcept(target, input->Head().GetConstraintSet(), TVarIndexConstraintNode::Name());
+            TMultiConstraintNode::TMapType items;
+            for (ui32 i = 0; i < underlyingType->Cast<TTupleExprType>()->GetSize(); ++i) {
+                items.emplace_back(i, target);
+            }
+            input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(items)));
+            if (auto varIndex = input->Head().GetConstraint<TVarIndexConstraintNode>()) {
+                TVarIndexConstraintNode::TMapType filteredItems;
+                for (ui32 i = 0; i < underlyingType->Cast<TTupleExprType>()->GetSize(); ++i) {
+                    for (auto& item: varIndex->GetIndexMapping()) {
+                        filteredItems.push_back(std::make_pair(i, item.second));
+                    }
                 }
                 input->AddConstraint(ctx.MakeConstraint<TVarIndexConstraintNode>(std::move(filteredItems)));
             }

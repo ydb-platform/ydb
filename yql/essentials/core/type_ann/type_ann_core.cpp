@@ -8786,6 +8786,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
                 TStringBuilder() << "Mismatch item type, expected: " << *firstType << ", got: " << *input->Child(0)->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
+        } else if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
+            return convertStatus;
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(variantType));

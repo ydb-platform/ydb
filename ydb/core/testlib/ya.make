@@ -88,6 +88,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/actors_factory
     yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/comp_nodes/dq/llvm14
     yql/essentials/public/udf/service/exception_policy
     ydb/public/api/protos
     ydb/public/lib/base

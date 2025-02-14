@@ -23,5 +23,17 @@ private:
     TString FilePath;
 };
 
+class TCommandDatabaseRestore : public TYdbCommand {
+public:
+    TCommandDatabaseRestore();
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    TString FilePath;
+    TDuration WaitNodesDuration;
+};
+
 }
 }

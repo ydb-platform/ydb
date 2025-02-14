@@ -90,6 +90,13 @@ void THelpers::DbEraseCollect(ISimpleDb &db) {
     db.Erase(key);
 }
 
+void THelpers::DbUpdateCleanUpGeneration(ui64 generation, ISimpleDb &db) {
+    TString key = THelpers::GenerateKeyFor(EIT_CLEAN_UP_GENERATION, nullptr, 0);
+    TString value = TString::Uninitialized(sizeof(generation));
+    memcpy(const_cast<char*>(value.data()), &generation, sizeof(generation));
+    db.Update(key, value);
+}
+
 THelpers::TGenerationStep THelpers::GenerationStep(const TLogoBlobID &id) {
     return std::make_tuple(id.Generation(), id.Step());
 }

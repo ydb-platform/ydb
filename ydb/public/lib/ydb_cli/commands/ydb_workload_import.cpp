@@ -64,13 +64,12 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
         const auto start = Now();
         Cout << "Fill table " << dataGen->GetName() << "..."  << Endl;
         Bar = MakeHolder<TProgressBar>(dataGen->GetSize());
-        TVector<NThreading::TFuture<void>> sendings;
         for (ui32 t = 0; t < UploadParams.Threads; ++t) {
-            sendings.push_back(NThreading::Async([this, dataGen] () {
+            pool.SafeAddFunc([this, dataGen] () {
                 ProcessDataGenerator(dataGen);
-            }, pool));
+            });
         }
-        NThreading::WaitAll(sendings).Wait();
+        pool.Stop();
         const bool wereErrors = AtomicGet(ErrorsCount);
         with_lock(Lock) {
             Cout << "Fill table " << dataGen->GetName()  << " "<< (wereErrors ? "Failed" : "OK" ) << " " << Bar->GetCurProgress() << " / " << Bar->GetCapacity() << " (" << (Now() - start) << ")" << Endl;
@@ -79,6 +78,7 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
             break;
         }
     }
+    TableClient->Stop();
     return AtomicGet(ErrorsCount) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 class TWorkloadCommandImport::TUploadCommand::TDbWriter: public IWriter {

@@ -9,13 +9,14 @@ logger = logging.getLogger(__name__)
 
 
 class Nodes(object):
-    def __init__(self, nodes, dry_run=False, ssh_user=None, queue_size=0):
+    def __init__(self, nodes, dry_run=False, ssh_user=None, queue_size=0, ssh_key_path=None):
         assert isinstance(nodes, list)
         assert len(nodes) > 0
         assert isinstance(nodes[0], str)
         self._nodes = nodes
         self._dry_run = bool(dry_run)
         self._ssh_user = ssh_user
+        self._ssh_key_path = ssh_key_path
         self._logger = logger.getChild(self.__class__.__name__)
         self._queue = queue.Queue(queue_size)
         self._qsize = queue_size
@@ -24,11 +25,14 @@ class Nodes(object):
     def nodes_list(self):
         return self._nodes
 
-    def _get_ssh_command_prefix(self):
+    def _get_ssh_command_prefix(self, remote=False):
         command = []
         command.extend(['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-A'])
         if (self._ssh_user):
             command.extend(['-l', self._ssh_user])
+
+        if not remote and self._ssh_key_path:
+            command.extend(['-i', self._ssh_key_path])
 
         return command
 
@@ -144,9 +148,9 @@ class Nodes(object):
             if self._dry_run:
                 continue
             cmd = self._get_ssh_command_prefix() + [dst]
-            rsh = " ".join(self._get_ssh_command_prefix())
+            rsh = " ".join(self._get_ssh_command_prefix(remote=True))
             cmd.extend([
-                "sudo", "SSH_AUTH_SOCK=$SSH_AUTH_SOCK", "rsync", "-avqW", "--del", "--no-o", "--no-g",
+                "sudo", "--preserve-env=SSH_AUTH_SOCK", "rsync", "-avqW", "--del", "--no-o", "--no-g",
                 "--rsh='{}'".format(rsh),
                 src, remote_path
             ])

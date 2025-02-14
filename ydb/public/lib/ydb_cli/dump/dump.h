@@ -112,6 +112,20 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
 
 }; // TRestoreSettings
 
+struct TRestoreClusterSettings {
+    using TSelf = TRestoreClusterSettings;
+
+    FLUENT_SETTING_DEFAULT(TDuration, WaitNodesDuration, TDuration::Minutes(1));
+}; // TRestoreClusterSettings
+
+struct TRestoreDatabaseSettings {
+    using TSelf = TRestoreDatabaseSettings;
+
+    FLUENT_SETTING_DEFAULT(TDuration, WaitNodesDuration, TDuration::Minutes(1));
+    FLUENT_SETTING_OPTIONAL(TString, Database);
+    FLUENT_SETTING_DEFAULT(bool, WithContent, true);
+}; // TRestoreDatabaseSettings
+
 class TRestoreResult: public TStatus {
 public:
     TRestoreResult(TStatus&& status);
@@ -131,9 +145,11 @@ public:
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings = {});
 
     TDumpResult DumpCluster(const TString& fsPath);
+    TRestoreResult RestoreCluster(const TString& fsPath, const TRestoreClusterSettings& settings = {});
 
     TDumpResult DumpDatabase(const TString& database, const TString& fsPath);
-    
+    TRestoreResult RestoreDatabase(const TString& fsPath, const TRestoreDatabaseSettings& settings = {});
+
 private:
     std::shared_ptr<TImpl> Impl_;
 

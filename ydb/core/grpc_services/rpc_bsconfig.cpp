@@ -1,6 +1,7 @@
 #include "service_keyvalue.h"
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/library/yaml_config/tools/util/defaults.h>
+#include <ydb/library/yaml_config/public/yaml_config.h>
 #include "rpc_bsconfig_base.h"
 
 #include <ydb/core/base/path.h>
@@ -79,9 +80,14 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
         }
     }
     storageConfig.set_item_config_generation(itemConfigGeneration);
-    Y_UNUSED(to);
-    // FIXME:
-    // to->set_main_config(NYaml::ParseProtoToYaml(storageConfig));
+    auto& config = *to->add_config();
+    auto& identity = *config.mutable_identity();
+    identity.set_version(itemConfigGeneration);
+    identity.set_cluster(AppData()->ClusterName);
+    identity.mutable_storage();
+    // TODO: !imp fill metadata ?
+    // are we sure that it is storage config?
+    config.set_config(NYaml::ParseProtoToYaml(storageConfig));
 }
 
 class TReplaceStorageConfigRequest : public TBSConfigRequestGrpc<TReplaceStorageConfigRequest, TEvReplaceStorageConfigRequest,
@@ -129,7 +135,13 @@ public:
 
         auto fillConfigs = [&](const auto& configBundle) {
             for (const auto& config : configBundle.config()) {
-                Y_UNUSED(config);
+                if (NYamlConfig::IsMainConfig(config)) {
+                    mainConfig = config;
+                }
+
+                if (NYamlConfig::IsStorageConfig(config)) {
+                    storageConfig = config;
+                }
             }
         };
 
@@ -184,9 +196,15 @@ public:
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record,
             Ydb::Config::FetchConfigResult& result) {
-        Y_UNUSED(record, result);
-        // FIXME:
-        // result.set_main_config(record.GetFetchStorageConfig().GetYAML());
+        auto conf = record.GetFetchStorageConfig().GetYAML();
+        auto metadata = NYamlConfig::GetMainMetadata(conf);
+        // TODO: !imp error if empty
+        auto& config = *result.add_config();
+        auto& identity = *config.mutable_identity();
+        identity.set_version(*metadata.Version);
+        identity.set_cluster(AppData()->ClusterName);
+        identity.mutable_main(); // TODO: is it really main ?
+        config.set_config(conf);
     }
 
     bool IsDistconfEnableQuery() const {
@@ -194,15 +212,25 @@ public:
     }
 
     std::unique_ptr<IEventBase> ProcessControllerQuery() override {
-        // FIXME:
-        // auto& request = *GetProtoRequest();
-        // auto ev = std::make_unique<TEvBlobStorage::TEvControllerFetchConfigRequest>();
-        // auto& record = ev->Record;
+        auto& request = *GetProtoRequest();
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerFetchConfigRequest>();
+        auto& record = ev->Record;
 
-        // record.SetDedicatedStorageSection(request.dedicated_storage_section());
-        // record.SetDedicatedClusterSection(request.dedicated_cluster_section());
-        // return ev;
-        return nullptr; // FIXME: remove
+        switch (request.mode_case()) {
+            case Ydb::Config::FetchConfigRequest::ModeCase::kAll:
+                if (request.all().config_transform_case() == Ydb::Config::FetchModeAll::ConfigTransformCase::kDetachStorageConfigSection) {
+                    record.SetDedicatedStorageSection(true);
+                    record.SetDedicatedClusterSection(true);
+                }
+                break;
+            case Ydb::Config::FetchConfigRequest::ModeCase::kTarget:
+                // FIXME: error
+                break;
+            case Ydb::Config::FetchConfigRequest::ModeCase::MODE_NOT_SET:
+                break; // TODO: maybe error
+        }
+
+        return ev;
     }
 };
 

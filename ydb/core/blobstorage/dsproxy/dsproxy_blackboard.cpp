@@ -339,7 +339,7 @@ TString TBlobState::ReportProblems(const TBlobStorageGroupInfo& info) const {
         for (const TDiskPart& part : disk.DiskParts) {
             str << SituationToShortString(part.Situation);
         }
-        str << "} ";
+        str << " } ";
     }
     str << "] ";
 

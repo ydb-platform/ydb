@@ -9,9 +9,6 @@ LICENSE(
     BSD-4-Clause-UC AND
     Custom-clarified-artistic-proofread AND
     FSFAP AND
-    GPL-2.0-only AND
-    LicenseRef-scancode-other-permissive AND
-    LicenseRef-scancode-unknown-license-reference AND
     MIT AND
     MIT WITH Musl-Exception AND
     MIT-Nagy AND

@@ -1256,31 +1256,6 @@ public:
     }
 };
 
-class TMarkDirty : public TRequestBase {
-public:
-    TStackVec<TChunkIdx, 1> ChunksToMarkDirty;
-
-    TMarkDirty(NPDisk::TEvMarkDirty& ev, TActorId sender, TAtomicBase reqIdx)
-        : TRequestBase(sender, TReqId(TReqId::MarkDirty, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
-        , ChunksToMarkDirty(ev.ChunksToMarkDirty)
-    {}
-
-    ERequestType GetType() const override {
-        return ERequestType::RequestMarkDirty;
-    }
-
-    TString ToString() const {
-        TStringStream str;
-        str << "TMarkDirty {";
-        str << " Owner# " << Owner;
-        str << " OwnerRound# " << OwnerRound;
-        str << " ChunksToMarkDirty# ";
-        FormatList(str, ChunksToMarkDirty);
-        str << "}";
-        return str.Str();
-    }
-};
-
 class TContinueShred : public TRequestBase {
 public:
     TContinueShred(NPDisk::TEvContinueShred& ev, TActorId sender, TAtomicBase reqIdx)

@@ -1101,6 +1101,26 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
         ++ChunkState[chunkIdx].CommitsInProgress;
     }
     bool isDirtyMarked = false;
+    bool isLogged = false;
+    for (ui32 chunkIdx : logWrite.CommitRecord.DirtyChunks) {
+        if (chunkIdx >= ChunkState.size()) {
+            if (!isLogged) {
+                isLogged = true;
+                LOG_CRIT_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                    "Commit DirtyChunk contains invalid chunkIdx# " << chunkIdx << " for PDisk# " << PCtx->PDiskId
+                    << " ShredGeneration# " << ShredGeneration);
+            }
+        } else {
+            if (!ChunkState[chunkIdx].IsDirty) {
+                ChunkState[chunkIdx].IsDirty = true;
+                isDirtyMarked = true;
+                LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                    "PDisk# " << PCtx->PDiskId << " marked chunkIdx# " << chunkIdx << " as dirty"
+                    << " chunk.ShredGeneration# " << ChunkState[chunkIdx].ShredGeneration
+                    << " ShredGeneration# " << ShredGeneration);
+            }
+        }
+    }
     if (logWrite.CommitRecord.DeleteToDecommitted) {
         for (ui32 chunkIdx : logWrite.CommitRecord.DeleteChunks) {
             TChunkState& state = ChunkState[chunkIdx];

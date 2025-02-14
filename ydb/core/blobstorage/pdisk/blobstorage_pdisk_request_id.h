@@ -164,7 +164,6 @@ enum class ERequestType {
     RequestShredPDisk,
     RequestPreShredCompactVDiskResult,
     RequestShredVDiskResult,
-    RequestMarkDirty,
     RequestChunkShredResult,
     RequestContinueShred,
 };

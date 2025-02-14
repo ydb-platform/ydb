@@ -414,7 +414,6 @@ public:
     void ProcessShredPDisk(TShredPDisk& request);
     void ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& request);
     void ProcessShredVDiskResult(TShredVDiskResult& request);
-    void ProcessMarkDirty(TMarkDirty& request);
     void ProcessChunkShredResult(TChunkShredResult& request);
     void ProcessContinueShred(TContinueShred& request);
 

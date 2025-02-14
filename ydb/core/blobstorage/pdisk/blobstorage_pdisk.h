@@ -1673,30 +1673,6 @@ struct TEvShredVDiskResult : TEventLocal<TEvShredVDiskResult, TEvBlobStorage::Ev
     }
 };
 
-// VDisk sends this message to PDisk to mark a single chunk as dirty
-// No response is expected from PDisk as the operation has very high priority and always succeeds
-struct TEvMarkDirty : TEventLocal<TEvMarkDirty, TEvBlobStorage::EvMarkDirty> {
-    TOwner Owner;
-    TOwnerRound OwnerRound;
-    TStackVec<TChunkIdx, 1> ChunksToMarkDirty;
-
-    TEvMarkDirty(TOwner owner, TOwnerRound ownerRound, TStackVec<TChunkIdx, 1> chunksToMarkDirty)
-        : Owner(owner)
-        , OwnerRound(ownerRound)
-        , ChunksToMarkDirty(chunksToMarkDirty)
-    {}
-
-    TString ToString() const {
-        TStringStream str;
-        str << "{EvMarkDirty OwnerId# " << (ui32)Owner
-            << " OwnerRound# " << OwnerRound
-            << " ChunkToMarkDirty# ";
-        FormatList(str, ChunksToMarkDirty);
-        str << "}";
-        return str.Str();
-    }
-};
-
 // PDisk sends this message to itself
 struct TEvContinueShred : TEventLocal<TEvContinueShred, TEvBlobStorage::EvContinueShred> {
     TEvContinueShred()

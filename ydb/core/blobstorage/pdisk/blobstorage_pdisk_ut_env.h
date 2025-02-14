@@ -300,11 +300,11 @@ struct TVDiskMock {
     void MarkCommitedChunksDirty() {
         auto& commited = Chunks[EChunkState::COMMITTED];
         TStackVec<TChunkIdx, 1> chunksToMark;
+        NPDisk::TCommitRecord rec;
         for (auto it = commited.begin(); it != commited.end(); ++it) {
-            chunksToMark.push_back(*it);
+            rec.DirtyChunks.push_back(*it);
         }
-        auto evMark = MakeHolder<NPDisk::TEvMarkDirty>(PDiskParams->Owner, PDiskParams->OwnerRound, chunksToMark);
-        TestCtx->Send(evMark.Release());
+        SendEvLogImpl(1, rec);
     }
 
     void DeleteCommitedChunks() {

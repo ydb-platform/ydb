@@ -2584,9 +2584,6 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestShredVDiskResult:
                 ProcessShredVDiskResult(static_cast<TShredVDiskResult&>(*req));
                 break;
-            case ERequestType::RequestMarkDirty:
-                ProcessMarkDirty(static_cast<TMarkDirty&>(*req));
-                break;
             case ERequestType::RequestChunkShredResult:
                 ProcessChunkShredResult(static_cast<TChunkShredResult&>(*req));
                 break;
@@ -3205,7 +3202,6 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestShredPDisk:
         case ERequestType::RequestPreShredCompactVDiskResult:
         case ERequestType::RequestShredVDiskResult:
-        case ERequestType::RequestMarkDirty:
         case ERequestType::RequestChunkShredResult:
         case ERequestType::RequestContinueShred:
             break;
@@ -3907,7 +3903,6 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestShredPDisk:
         case ERequestType::RequestPreShredCompactVDiskResult:
         case ERequestType::RequestShredVDiskResult:
-        case ERequestType::RequestMarkDirty:
         case ERequestType::RequestChunkShredResult:
         case ERequestType::RequestContinueShred:
             // These requests don't require response.
@@ -4408,43 +4403,6 @@ void TPDisk::ProcessShredVDiskResult(TShredVDiskResult& request) {
     }
     OwnerData[request.Owner].ShredState = TOwnerData::VDISK_SHRED_STATE_COMPACT_FINISHED;
     ProgressShredState();
-}
-
-void TPDisk::ProcessMarkDirty(TMarkDirty& request) {
-    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
-        "ProcessMarkDirty at PDisk# " << PCtx->PDiskId
-        << " ShredGeneration# " << ShredGeneration
-        << " request# " << request.ToString());
-    {
-        bool isLogged = false;
-        ui64 markedDirty = 0;
-        TGuard<TMutex> guard(StateMutex);
-        for (auto chunkIdx : request.ChunksToMarkDirty) {
-            if (chunkIdx >= ChunkState.size()) {
-                if (!isLogged) {
-                    isLogged = true;
-                    LOG_CRIT_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
-                        "MarkDirty contains invalid chunkIdx# " << chunkIdx << " for PDisk# " << PCtx->PDiskId
-                        << " ShredGeneration# " << ShredGeneration << " request# " << request.ToString());
-                }
-            } else {
-                if (!ChunkState[chunkIdx].IsDirty) {
-                    ChunkState[chunkIdx].IsDirty = true;
-                    markedDirty++;
-                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
-                        "PDisk# " << PCtx->PDiskId << " marked chunkIdx# " << chunkIdx << " as dirty"
-                        << " chunk.ShredGeneration# " << ChunkState[chunkIdx].ShredGeneration
-                        << " ShredGeneration# " << ShredGeneration);
-                }
-            }
-        }
-        if (markedDirty > 0) {
-            WriteSysLogRestorePoint(nullptr, TReqId(TReqId::MarkDirtySysLog, 0), {});
-        }
-        if (request.Owner == OwnerUnallocated) {
-            ProgressShredState();
-        }
-    }
 }
 
 void TPDisk::ProcessChunkShredResult(TChunkShredResult& request) {

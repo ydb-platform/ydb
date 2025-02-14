@@ -150,7 +150,7 @@ message TFeatureFlags {
     optional bool EnableGraphShard = 125 [default = false];
     optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
-    optional bool EnableTableDatetime64 = 128 [default = true];
+    optional bool EnableTableDatetime64 = 128 [default = false];
     optional bool EnableResourcePools = 129 [default = true];
     optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
@@ -167,12 +167,12 @@ message TFeatureFlags {
     optional bool EnableOlapCompression = 142 [default = false];
     optional bool EnableExternalDataSourcesOnServerless = 143 [default = true];
     optional bool EnableSparsedColumns = 144 [default = false];
-    optional bool EnableParameterizedDecimal = 145 [default = true];
+    optional bool EnableParameterizedDecimal = 145 [default = false];
     optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = true];
     optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
     optional bool EnableTopicAutopartitioningForCDC = 148 [default = false];
     optional bool EnableWritePortionsOnInsert = 149 [default = false];
-    optional bool EnableFollowerStats = 150 [default = true];
+    optional bool EnableFollowerStats = 150 [default = false];
     optional bool EnableTopicAutopartitioningForReplication = 151 [default = false];
     optional bool EnableDriveSerialsDiscovery = 152 [default = false];
     optional bool EnableSeparateDiskSpaceQuotas = 153 [default = false];

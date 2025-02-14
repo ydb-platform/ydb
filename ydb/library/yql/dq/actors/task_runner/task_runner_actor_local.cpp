@@ -83,7 +83,7 @@ public:
                 /*flags=*/0,
                 ev->Cookie);
         }
-        ActorElapsedTicks += std::max(NActors::TlsActivationContext->GetCurrentEventTicks(), (i64)0);
+        ActorElapsedTicks += NActors::TlsActivationContext->GetCurrentEventTicks();
     }
 
 private:

@@ -174,7 +174,9 @@ namespace NActors {
     }
 
     i64 TActivationContext::GetCurrentEventTicks() {
-        return GetCycleCountFast() - TlsActivationContext->EventStart;
+        NHPTimer::STime startCycles = TlsActivationContext->EventStart;
+        NHPTimer::STime currentCycles = GetCycleCountFast();
+        return std::max(currentCycles, startCycles) - startCycles;
     }
 
     double TActivationContext::GetCurrentEventTicksAsSeconds() {

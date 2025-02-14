@@ -12,7 +12,7 @@ protected:
     virtual void Config(TConfig& config) override;
 };
 
-class TCommandDatabaseDump : public TYdbCommand {
+class TCommandDatabaseDump : public TYdbReadOnlyCommand {
 public:
     TCommandDatabaseDump();
     void Config(TConfig& config) override;

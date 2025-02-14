@@ -35,7 +35,7 @@ public:
 };
 
 TCommandDatabaseDump::TCommandDatabaseDump() 
-    : TYdbCommand("dump", {}, "Dump database into local directory") 
+    : TYdbReadOnlyCommand("dump", {}, "Dump database into local directory") 
 {}
 
 void TCommandDatabaseDump::Config(TConfig& config) {

@@ -8,6 +8,7 @@ import time
 import threading
 import queue
 
+from .base import BaseQueryTxMode
 from .base import QueryClientSettings
 from .session import (
     QuerySession,
@@ -20,6 +21,7 @@ from .. import issues
 from .. import convert
 from ..settings import BaseRequestSettings
 from .._grpc.grpcwrapper import common_utils
+from .._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
 
 logger = logging.getLogger(__name__)
@@ -135,6 +137,39 @@ class QuerySessionPool:
         def wrapped_callee():
             with self.checkout(timeout=retry_settings.max_session_acquire_timeout) as session:
                 return callee(session, *args, **kwargs)
+
+        return retry_operation_sync(wrapped_callee, retry_settings)
+
+    def retry_tx_sync(
+        self,
+        callee: Callable,
+        tx_mode: Optional[BaseQueryTxMode] = None,
+        retry_settings: Optional[RetrySettings] = None,
+        *args,
+        **kwargs,
+    ):
+        """Special interface to execute a bunch of commands with transaction in a safe, retriable way.
+
+        :param callee: A function, that works with session.
+        :param tx_mode: Transaction mode, which is a one from the following choises:
+          1) QuerySerializableReadWrite() which is default mode;
+          2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
+          3) QuerySnapshotReadOnly();
+          4) QueryStaleReadOnly().
+        :param retry_settings: RetrySettings object.
+
+        :return: Result sets or exception in case of execution errors.
+        """
+
+        tx_mode = tx_mode if tx_mode else _ydb_query_public.QuerySerializableReadWrite()
+        retry_settings = RetrySettings() if retry_settings is None else retry_settings
+
+        def wrapped_callee():
+            with self.checkout(timeout=retry_settings.max_session_acquire_timeout) as session:
+                with session.transaction(tx_mode=tx_mode) as tx:
+                    result = callee(tx, *args, **kwargs)
+                    tx.commit()
+                return result
 
         return retry_operation_sync(wrapped_callee, retry_settings)
 

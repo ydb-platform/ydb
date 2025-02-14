@@ -501,7 +501,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode,
-        .UserToken = UserToken
+        .UserToken = UserToken,
+        .Database = Database
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {

@@ -16,7 +16,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 VERSION(2022.07.12)
 
 PEERDIR(
-    contrib/libs/breakpad/src/third_party/libdisasm
+    contrib/libs/breakpad/src
 )
 
 ADDINCL(
@@ -36,36 +36,7 @@ SRCDIR(contrib/libs/breakpad/src)
 
 SRCS(
     common/path_helper.cc
-    processor/basic_code_modules.cc
-    processor/basic_source_line_resolver.cc
-    processor/call_stack.cc
-    processor/cfi_frame_info.cc
-    processor/convert_old_arm64_context.cc
-    processor/disassembler_x86.cc
-    processor/dump_context.cc
-    processor/dump_object.cc
-    processor/logging.cc
-    processor/microdump.cc
-    processor/microdump_processor.cc
     processor/microdump_stackwalk.cc
-    processor/pathname_stripper.cc
-    processor/process_state.cc
-    processor/simple_symbol_supplier.cc
-    processor/source_line_resolver_base.cc
-    processor/stack_frame_cpu.cc
-    processor/stack_frame_symbolizer.cc
-    processor/stackwalk_common.cc
-    processor/stackwalker.cc
-    processor/stackwalker_address_list.cc
-    processor/stackwalker_amd64.cc
-    processor/stackwalker_arm.cc
-    processor/stackwalker_arm64.cc
-    processor/stackwalker_mips.cc
-    processor/stackwalker_ppc.cc
-    processor/stackwalker_ppc64.cc
-    processor/stackwalker_sparc.cc
-    processor/stackwalker_x86.cc
-    processor/tokenize.cc
 )
 
 END()

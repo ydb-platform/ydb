@@ -42,6 +42,8 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Table.StreamExecuteScanQuery", ERequestType::TABLE_STREAMEXECUTESCANQUERY},
     {"Table.StreamReadTable", ERequestType::TABLE_STREAMREADTABLE},
     {"Table.ReadRows", ERequestType::TABLE_READROWS},
+    {"Table.DescribeExternalDataSource", ERequestType::TABLE_DESCRIBEEXTERNALDATASOURCE},
+    {"Table.DescribeExternalTable", ERequestType::TABLE_DESCRIBEEXTERNALTABLE},
 
     {"Query.ExecuteQuery", ERequestType::QUERY_EXECUTEQUERY},
     {"Query.ExecuteScript", ERequestType::QUERY_EXECUTESCRIPT},

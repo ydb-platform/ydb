@@ -1,8 +1,8 @@
 <tmp_path>/program.sql:<main>: Error: Execution
 
-    <tmp_path>/program.sql:<main>:2:1: Error: Execution of node: Result
+    <tmp_path>/program.sql:<main>:4:1: Error: Execution of node: YtMap!
     	SELECT
 	^
-        <tmp_path>/program.sql:<main>:2:1: Error: Input string is not a number
+        <tmp_path>/program.sql:<main>:4:1: Error: Input string is not a number
         	SELECT
 	^

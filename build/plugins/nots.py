@@ -2,6 +2,7 @@ import os
 from enum import auto, StrEnum
 from typing import Any, Literal, TYPE_CHECKING
 
+
 # noinspection PyUnresolvedReferences
 import ymake
 

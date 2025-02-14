@@ -222,6 +222,10 @@ public:
 
     }
 
+    virtual ~TDataAccessorsRequest() {
+        Subscriber = nullptr;
+    }
+
     ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
         ui64 result = 0;
         for (auto&& i : PathIdStatus) {

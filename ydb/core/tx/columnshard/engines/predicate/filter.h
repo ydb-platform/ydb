@@ -10,6 +10,7 @@ namespace NKikimr::NOlap {
 
 class TPKRangesFilter {
 private:
+    bool FakeRanges = true;
     std::deque<TPKRangeFilter> SortedRanges;
     bool ReverseFlag = false;
 
@@ -34,7 +35,7 @@ public:
     TString SerializeToString(const std::shared_ptr<arrow::Schema>& pkSchema) const;
 
     bool IsEmpty() const {
-        return SortedRanges.empty();
+        return SortedRanges.empty() || FakeRanges;
     }
 
     bool IsReverse() const {

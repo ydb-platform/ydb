@@ -34,7 +34,7 @@ TConclusionStatus TPKRangesFilter::Add(
             "from", toContainerConclusion.GetErrorMessage());
         return toContainerConclusion;
     }
-    if (SortedRanges.size()) {
+    if (SortedRanges.size() && !FakeRanges) {
         if (ReverseFlag) {
             if (fromContainerConclusion->CrossRanges(SortedRanges.front().GetPredicateTo())) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not sorted sequence");
@@ -50,6 +50,10 @@ TConclusionStatus TPKRangesFilter::Add(
     auto pkRangeFilterConclusion = TPKRangeFilter::Build(fromContainerConclusion.DetachResult(), toContainerConclusion.DetachResult());
     if (pkRangeFilterConclusion.IsFail()) {
         return pkRangeFilterConclusion;
+    }
+    if (FakeRanges) {
+        FakeRanges = false;
+        SortedRanges.clear();
     }
     if (ReverseFlag) {
         SortedRanges.emplace_front(pkRangeFilterConclusion.DetachResult());
@@ -109,6 +113,9 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TReplac
 
 TPKRangesFilter::TPKRangesFilter(const bool reverse)
     : ReverseFlag(reverse) {
+    auto range = TPKRangeFilter::Build(TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo());
+    Y_ABORT_UNLESS(range);
+    SortedRanges.emplace_back(*range);
 }
 
 std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {

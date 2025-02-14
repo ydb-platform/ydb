@@ -67,7 +67,6 @@ namespace NYql {
                         .InitFrom(read.Cast())
                         .Columns(extract.Members())
                     .Build()
-                    .DataSource(input.Cast<TDqSourceWrap>().DataSource())
                     .RowType(ExpandType(node.Pos(), GetSeqItemType(*extract.Ref().GetTypeAnn()), ctx))
                     .Done();
                 // clang-format on

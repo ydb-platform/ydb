@@ -2,7 +2,6 @@
 
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query67.tpl and seed 1819994127
-
 select  *
 from (select i_category
             ,i_class
@@ -22,7 +21,7 @@ from (select i_category
                   ,date_dim.d_qoy d_qoy
                   ,date_dim.d_moy d_moy
                   ,store.s_store_id s_store_id
-                  ,sum(coalesce($todecimal(ss_sales_price, 7, 2)*ss_quantity, $todecimal(0,7,2))) sumsales
+                  ,$round(sum(coalesce($todecimal(ss_sales_price, 7, 2)*ss_quantity, $todecimal(0,7,2))), -2) sumsales
             from {{store_sales}} as store_sales
                 cross join {{date_dim}} as date_dim
                 cross join {{store}} as store

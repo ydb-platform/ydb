@@ -140,7 +140,6 @@ namespace {
     };
 
     struct TImportChangefeed {
-        TString ChangefeedName;
         TString Changefeed;
         TString Topic;
     };
@@ -151,7 +150,7 @@ namespace {
         TString Scheme;
         TString CreationQuery;
         TString Permissions;
-        TVector<TImportChangefeed> Changefeeds;
+        TImportChangefeed Changefeed;
         TVector<TTestData> Data;
 
         TTestDataWithScheme() = default;
@@ -258,14 +257,12 @@ namespace {
         const TTypedScheme& typedScheme,
         const TVector<std::pair<TString, ui64>>& shardsConfig = {{"a", 1}},
         const TString& permissions = "",
-        const TString& metadata = "",
-        TVector<TImportChangefeed>&& changefeeds = {}
+        const TString& metadata = ""
     ) {
         TTestDataWithScheme result;
         result.Type = typedScheme.Type;
         result.Permissions = permissions;
         result.Metadata = metadata;
-        result.Changefeeds = std::move(changefeeds);
 
         switch (typedScheme.Type) {
         case EPathTypeTable:
@@ -276,6 +273,10 @@ namespace {
             break;
         case EPathTypeView:
             result.CreationQuery = typedScheme.Scheme;
+            break;
+        case EPathTypeCdcStream:
+            Cerr << "EPathTypeCdcStream23434" << Endl;
+            result.Changefeed = {typedScheme.Scheme, typedScheme.Attributes.GetTopicDescription()};
             break;
         default:
             UNIT_FAIL("cannot create sample test data for the scheme object type: " << typedScheme.Type);
@@ -296,6 +297,10 @@ namespace {
             case EPathTypeView:
                 result.emplace(prefix + "/create_view.sql", item.CreationQuery);
                 break;
+            case EPathTypeCdcStream: 
+                result.emplace(prefix +  "/changefeed_description.pb", item.Changefeed.Changefeed);
+                result.emplace(prefix +  "/topic_description.pb", item.Changefeed.Topic);
+                break;
             default:
                 UNIT_FAIL("cannot determine key for the scheme object type: " << item.Type);
                 return {};
@@ -311,21 +316,10 @@ namespace {
                 result.emplace(prefix + "/permissions.pb", item.Permissions);
             }
 
-            for (const auto& importChangefeed : item.Changefeeds) {
-                const TString newPrefix = TStringBuilder() << prefix << "/" << importChangefeed.ChangefeedName;
-                result.emplace(newPrefix +  "/changefeed_description.pb", importChangefeed.Changefeed);
-                result.emplace(newPrefix +  "/topic_description.pb", importChangefeed.Topic);
-            }
-
             for (ui32 i = 0; i < item.Data.size(); ++i) {
                 const auto& data = item.Data.at(i);
                 result.emplace(Sprintf("%s/data_%02d%s", prefix.data(), i, data.Ext().c_str()), data.Data);
             }
-
-            // for (const auto& x : result) {
-            //     Cerr << "key: " << x.first << Endl << "value: " << x.second << Endl;
-            // }
-
         }
 
         return result;
@@ -5134,17 +5128,21 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(Changefeeds) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
+    struct GeneratedChangefeed {
+        std::pair<TString, TTestDataWithScheme> Changefeed;
+        std::function<void(TTestBasicRuntime&)> Checker;
+    };
 
-        const auto changefeedDesc = R"(
-            name: "updates_feed1"
+    GeneratedChangefeed GenChangefeed(ui64 num = 1) {
+        const TString changefeedName = TStringBuilder() << "updates_feed" << num;
+        const auto changefeedPath = TStringBuilder() << "/" << changefeedName;
+
+        const auto changefeedDesc = Sprintf(R"(
+            name: "%s"
             mode: MODE_UPDATES
             format: FORMAT_JSON
             state: STATE_ENABLED
-        )";
+        )", changefeedName.c_str());
 
         const auto topicDesc = R"(
             partitioning_settings {
@@ -5196,6 +5194,42 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
         )";
 
+        NAttr::TAttributes attr;
+        attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
+        return {
+                {changefeedPath, GenerateTestData(
+                {
+                    EPathTypeCdcStream,
+                    changefeedDesc,
+                    std::move(attr)
+                }
+            )},
+            [changefeedPath = TString(changefeedPath)](TTestBasicRuntime& runtime){
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath, false, false, true), {
+                    NLs::PathExist
+                });
+            }
+        };
+    }
+
+    TVector<std::function<void(TTestBasicRuntime&)> > GenChangefeeds(THashMap<TString, TTestDataWithScheme>& bucketContent, ui64 count = 1) {
+        TVector<std::function<void(TTestBasicRuntime&)>> checkers;
+        checkers.reserve(count);
+        for (ui64 i = 1; i <= count; ++i) {
+            auto genChangefeed = GenChangefeed(i);
+            bucketContent.emplace(genChangefeed.Changefeed);
+            checkers.push_back(genChangefeed.Checker);
+        }
+        return checkers;
+    }
+
+    void TestImportChangefeeds(ui64 countChangefeed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+
         const auto data = GenerateTestData(R"(
             columns {
               name: "key"
@@ -5206,12 +5240,16 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
               type { optional_type { item { type_id: UTF8 } } }
             }
             primary_key: "key"
-        )", {{"a", 1}}, "", "", {{"updates_feed1", changefeedDesc, topicDesc}});
+        )");
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(countChangefeed + 1);
+        bucketContent.emplace("", data);
+        auto checkers = GenChangefeeds(bucketContent, countChangefeed);
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -5227,10 +5265,18 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::PathExist,
+            NLs::PathExist
         });
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/updates_feed1"), {
-            NLs::PathExist,
-        });
+        for (const auto& checker : checkers) {
+            checker(runtime);
+        }
+    }
+
+    Y_UNIT_TEST(Changefeed) {
+        TestImportChangefeeds(1);
+    }
+
+    Y_UNIT_TEST(Changefeeds) {
+        TestImportChangefeeds(3);
     }
 }

@@ -111,7 +111,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             << ", result# " << result);
 
         if (NoObjectFound(result.GetError().GetErrorType())) {
-            Reply(); // permissions are optional
+            StartDownloadingChangefeeds(); // permissions are optional
             return;
         } else if (!CheckResult(result, "HeadObject")) {
             return;

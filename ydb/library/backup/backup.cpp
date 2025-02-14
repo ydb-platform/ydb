@@ -890,11 +890,10 @@ std::string ColumnToString(const Ydb::Table::ColumnMeta& column) {
 
 TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableResult& description) {
     return std::format(
-        "CREATE EXTERNAL TABLE IF NOT EXISTS `{}` (\n{}\n) WITH (\n{},\n{},\n{}{}\n);",
+        "CREATE EXTERNAL TABLE IF NOT EXISTS `{}` (\n{}\n) WITH (\n{},\n{}{}\n);",
         description.self().name().c_str(),
         JoinSeq(",\n", std::views::transform(description.columns(), ColumnToString)).c_str(),
-        ToString("SOURCE_TYPE", description.source_type()),
-        ToString("DATA_SOURCE_PATH", description.data_source_path()),
+        ToString("DATA_SOURCE", description.data_source_path()),
         ToString("LOCATION", description.location()),
         description.content().empty()
             ? ""

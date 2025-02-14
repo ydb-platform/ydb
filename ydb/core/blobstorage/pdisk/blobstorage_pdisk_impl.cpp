@@ -622,7 +622,8 @@ void TPDisk::SendCutLog(TAskForCutLog &request) {
     }
 }
 
-void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
+ui32 TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
+    ui32 requestsSent = 0;
     TGuard<TMutex> guard(StateMutex);
     size_t logChunkCount = LogChunks.size();
 
@@ -664,7 +665,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                         if (logChunkNumber <= logChunkCount - cutThreshold) {
                             cutLogInfo.Lsn = ownerLsnRange[chunkOwner].LastLsn;
                             cutLogInfo.ChunksToCut++;
-                        } else if (ownerFilter != OwnerSystem) {
+                        } else if (ownerFilter != OwnerSystem || doForce) {
                             // Prevent cuts with lsn = 0.
                             if (cutLogInfo.Lsn == 0) {
                                 cutLogInfo.Lsn = ownerLsnRange[chunkOwner].LastLsn;
@@ -718,6 +719,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                         data.AskedToCutLogAt = now;
                         data.AskedLogChunkToCut = cutLogInfo.ChunksToCut;
                         data.LogChunkCountBeforeCut = ownedLogChunks;
+                        ++requestsSent;
                         // ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(data.OperationLog, "System owner asked to cut log, OwnerId# " << chunkOwner);
                     } else {
                         P_LOG(PRI_INFO, BPD14, "Can't send CutLog",
@@ -733,7 +735,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
 
                 if (cutLogInfo.Lsn == 0) {
                     // Prevent cuts with lsn = 0.
-                    return;
+                    return requestsSent;
                 }
 
                 ui64 lsn = cutLogInfo.Lsn + 1;
@@ -784,6 +786,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
             }
         }
     }
+    return requestsSent;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1953,6 +1956,11 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});
+
+    if (ContinueShredsInFlight == 0) {
+        ContinueShredsInFlight++;
+        PCtx->ActorSystem->Send(new IEventHandle(PCtx->PDiskActor, PCtx->PDiskActor, new TEvContinueShred(), 0, 0));
+    }
 }
 
 // Scheduler weight configuration
@@ -2436,6 +2444,8 @@ void TPDisk::ClearQuarantineChunks() {
         }
         QuarantineOwners.erase(it, QuarantineOwners.end());
         *Mon.QuarantineOwners = QuarantineOwners.size();
+
+        ProgressShredState();
     }
 
     if (haveChunksToRelease) {
@@ -2579,6 +2589,9 @@ void TPDisk::ProcessFastOperationsQueue() {
                 break;
             case ERequestType::RequestChunkShredResult:
                 ProcessChunkShredResult(static_cast<TChunkShredResult&>(*req));
+                break;
+            case ERequestType::RequestContinueShred:
+                ProcessContinueShred(static_cast<TContinueShred&>(*req));
                 break;
             default:
                 Y_FAIL_S("Unexpected request type# " << TypeName(*req));
@@ -2825,6 +2838,9 @@ NKikimrProto::EReplyStatus TPDisk::CheckOwnerAndRound(TRequestBase* req, TString
     const auto& ownerData = OwnerData[req->Owner];
 
     if (!IsOwnerUser(req->Owner)) {
+        if (req->Owner == OwnerUnallocated && req->OwnerRound == 0) {
+            return NKikimrProto::OK; 
+        }
         err << "  ownerId# " << req->Owner << " < Begin# " << (ui32)OwnerBeginUser
             << " or >= End# " << (ui32)OwnerEndUser << " Marker# BPD72";
         return NKikimrProto::ERROR;
@@ -3191,6 +3207,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestMarkDirty:
         case ERequestType::RequestChunkShredResult:
+        case ERequestType::RequestContinueShred:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();
@@ -3273,13 +3290,17 @@ void TPDisk::AddJobToScheduler(TRequestBase *request, NSchLab::EJobKind jobKind)
     // Forseti part
     NSchLab::TCbs *cbs = ForsetiScheduler.GetCbs(request->Owner, request->GateId);
     if (!cbs) {
-        P_LOG(PRI_ERROR, BPD44, "PushRequestToScheduler Can't push to Forseti! Trying system log gate",
-                    (ReqId, request->ReqId),
-                    (Cost, request->Cost),
-                    (JobKind, (ui64)request->JobKind),
-                    (ownerId, request->Owner),
-                    (GateId, (ui64)request->GateId));
-        Mon.ForsetiCbsNotFound->Inc();
+        if (request->Owner == OwnerUnallocated && request->OwnerRound == 0) {
+            // it's ok
+        } else {
+            P_LOG(PRI_ERROR, BPD44, "PushRequestToScheduler Can't push to Forseti! Trying system log gate",
+                        (ReqId, request->ReqId),
+                        (Cost, request->Cost),
+                        (JobKind, (ui64)request->JobKind),
+                        (ownerId, request->Owner),
+                        (GateId, (ui64)request->GateId));
+            Mon.ForsetiCbsNotFound->Inc();
+        }
         ui8 originalGateId = request->GateId;
         request->GateId = GateLog;
         cbs = ForsetiScheduler.GetCbs(OwnerSystem, request->GateId);
@@ -3888,6 +3909,7 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestMarkDirty:
         case ERequestType::RequestChunkShredResult:
+        case ERequestType::RequestContinueShred:
             // These requests don't require response.
             return true;
     }
@@ -3942,17 +3964,26 @@ TChunkIdx TPDisk::GetUnshreddedFreeChunk() {
 }
 
 void TPDisk::ProgressShredState() {
+    TGuard<TMutex> guard(StateMutex);
     LOG_TRACE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
         "ProgressShredState at PDisk# " << PCtx->PDiskId
         << " ShredGeneration# " << ShredGeneration
         << " ShredState# " << (ui32)ShredState);
-    TGuard<TMutex> guard(StateMutex);
+    if (ShredState == EShredStateFinished || ShredState == EShredStateDefault || ShredState == EShredStateFailed) {
+        // It's a terminal state
+        return;
+    }
     if (ShredState == EShredStateSendPreShredCompactVDisk) {
         ui32 finishedCount = 0;
         for (ui32 ownerId = 0; ownerId < OwnerData.size(); ++ownerId) {
             TOwnerData &data = OwnerData[ownerId];
             if (data.VDiskId != TVDiskID::InvalidId) {
                 if (data.Status == TOwnerData::VDISK_STATUS_DEFAULT || data.Status == TOwnerData::VDISK_STATUS_HASNT_COME) {
+                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "PDisk# " << PCtx->PDiskId
+                        << " can't send compact request to VDisk# " << data.VDiskId
+                        << " ownerId# " << ownerId
+                        << " as owner.Status# " << data.Status);
                     data.ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
                 } else {
                     if (data.LastShredGeneration < ShredGeneration) {
@@ -3976,7 +4007,7 @@ void TPDisk::ProgressShredState() {
                         << " before finishing pre-shred compact"
                         << " VDiskId# " << data.VDiskId
                         << " VDiskStatus# " << data.GetStringStatus()
-                        << " ShredState# " << data.GetStringShredState());
+                        << " ShredState# \"" << data.GetStringShredState() << "\"");
                     return;
                 }
                 ++finishedCount;
@@ -3997,6 +4028,7 @@ void TPDisk::ProgressShredState() {
             }
         }
         ShredState = EShredStateSendShredVDisk;
+        WriteSysLogRestorePoint(nullptr, TReqId(TReqId::MarkDirtySysLog, 0), {});
     }
     if (ShredState == EShredStateSendShredVDisk) {
         // Shred free space while possible
@@ -4102,13 +4134,90 @@ void TPDisk::ProgressShredState() {
                         << " ShredGeneration# " << ShredGeneration
                         << " is waiting for ownerId# " << ownerId
                         << " VDiskId# " << data.VDiskId
-                        << " ShredState# " << data.GetStringShredState()
-                        << " before finishing shred");
+                        << " ShredState# \"" << data.GetStringShredState()
+                        << "\" before finishing shred");
                     return;
                 }
                 ++finishedCount;
             }
         }
+        // Check if there are log chunks that require shredding
+        bool isLogDirty = false;
+        for (const TLogChunkInfo &info : LogChunks) {
+            TChunkState &state = ChunkState[info.ChunkIdx];
+            if (state.IsDirty && state.ShredGeneration < ShredGeneration) {
+                isLogDirty = true;
+            }
+        }
+        if (isLogDirty) {
+            bool isLogPaddingNeeded = false;
+            TChunkState &state = ChunkState[LogChunks.back().ChunkIdx];
+            if (state.IsDirty && state.ShredGeneration < ShredGeneration) {
+                isLogPaddingNeeded = true;
+            }
+            if (isLogPaddingNeeded) {
+                while (ShredLogPaddingInFlight < 2) {
+                    TRcBuf data = TRcBuf::Uninitialized(2<<20);
+                    memset(data.GetDataMut(), 0, data.Size());
+                    TEvLog evLog(OwnerUnallocated, 0, {}, data, {}, 0);
+                    double burstMs;
+                    TLogWrite* request = ReqCreator.CreateLogWrite(evLog, PCtx->PDiskActor, burstMs, {});
+                    request->Orbit = std::move(evLog.Orbit);
+                    InputRequest(request);
+                    ++ShredLogPaddingInFlight;
+
+                    LOG_TRACE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "PDisk# " << PCtx->PDiskId
+                        << " delivered itself a TEvLog to pad the common log"
+                        << " ShredGeneration# " << ShredGeneration
+                        << " ShredState# " << (ui32)ShredState);
+                }
+                LOG_TRACE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                    "PDisk# " << PCtx->PDiskId
+                    << " is waiting for ShredLogPaddingInFlight# " << ShredLogPaddingInFlight.load()
+                    << " ShredGeneration# " << ShredGeneration
+                    << " ShredState# " << (ui32)ShredState);
+                return;
+            }
+             
+            LOG_TRACE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                "PDisk# " << PCtx->PDiskId
+                << " Needs vdisks to cut their logs "
+                << " ShredGeneration# " << ShredGeneration
+                << " ShredState# " << (ui32)ShredState);
+            ui32 requestsSent = AskVDisksToCutLogs(OwnerSystem, true);
+            if (requestsSent == 0) {
+                LOG_WARN_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                    "PDisk# " << PCtx->PDiskId
+                    << " needs VDisks to cut log, but could not AskVDisksToCutLogs, 0 requests sent"
+                    << " ShredGeneration# " << ShredGeneration
+                    << " ShredState# " << (ui32)ShredState);
+                // Send/schedule a request to retry
+                THolder<TCompletionEventSender> completion(new TCompletionEventSender(this, PCtx->PDiskActor, new NPDisk::TEvContinueShred())); 
+                if (ReleaseUnusedLogChunks(completion.Get())) {
+                    ContinueShredsInFlight++;
+                    WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::ShredPDisk, 0), {});
+                } else {
+                    // No unused chunks released, try to continue
+                    if (ContinueShredsInFlight == 0) {
+                        ContinueShredsInFlight++;
+                        PCtx->ActorSystem->Send(new IEventHandle(PCtx->PDiskActor, PCtx->PDiskActor, new TEvContinueShred(), 0, 0));
+                    }
+                }
+                return;
+            } else {
+                if (!ShredIsWaitingForCutLog) {
+                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "PDisk# " << PCtx->PDiskId
+                        << " Is now waiting for VDisks to cut their log, requestsSent# " << requestsSent
+                        << " ShredGeneration# " << ShredGeneration);
+                    ShredIsWaitingForCutLog = 1;
+                }
+                return;
+            }
+        }
+        ShredIsWaitingForCutLog = 0;
+
         LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
             "PDisk# " << PCtx->PDiskId
             << " has finished all shred requests"
@@ -4144,10 +4253,25 @@ void TPDisk::ProcessShredPDisk(TShredPDisk& request) {
         return;
     }
     if (request.ShredGeneration == ShredGeneration) {
-        // Do nothing, since we already have a shred request with the same generation.
-        // Just add the sender to the list of requesters.
-        ShredRequesters.emplace_back(request.Sender, request.Cookie);
-        return;
+        if (ShredState != EShredStateFailed) {
+            if (ShredState == EShredStateFinished) {
+                PCtx->ActorSystem->Send(new IEventHandle(request.Sender, PCtx->PDiskActor, new TEvShredPDiskResult(
+                    NKikimrProto::OK, request.ShredGeneration, "A shred request with this generation is already complete"), 0,
+                    request.Cookie));
+            }
+            // Do nothing, since we already have a shred request with the same generation.
+            // Just add the sender to the list of requesters.
+            LOG_NOTICE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                "Registered one more shred requester at PDisk# " << PCtx->PDiskId
+                << " ShredGeneration# " << ShredGeneration
+                << " request# " << request.ToString());
+            ShredRequesters.emplace_back(request.Sender, request.Cookie);
+            return;
+        }
+        LOG_NOTICE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "Retrying a failed shred at PDisk# " << PCtx->PDiskId
+            << " ShredGeneration# " << ShredGeneration
+            << " request# " << request.ToString());
     }
     // ShredGeneration > request.ShredGeneration
     if (ShredRequesters.size() > 0) {
@@ -4161,6 +4285,10 @@ void TPDisk::ProcessShredPDisk(TShredPDisk& request) {
     ShredGeneration = request.ShredGeneration;
     ShredRequesters.emplace_back(request.Sender, request.Cookie);
     ShredState = EShredStateSendPreShredCompactVDisk;
+    for (ui32 owner = 0; owner < OwnerData.size(); ++owner) {
+        OwnerData[owner].ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
+        OwnerData[owner].LastShredGeneration = 0;
+    }
     ProgressShredState();
 }
 
@@ -4225,7 +4353,7 @@ void TPDisk::ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& requ
 
 void TPDisk::ProcessShredVDiskResult(TShredVDiskResult& request) {
     LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
-        "ProcessShredPDisk at PDisk# " << PCtx->PDiskId
+        "ProcessShredVDiskResult at PDisk# " << PCtx->PDiskId
         << " ShredGeneration# " << ShredGeneration
         << " request# " << request.ToString());
     TGuard<TMutex> guard(StateMutex);
@@ -4311,7 +4439,10 @@ void TPDisk::ProcessMarkDirty(TMarkDirty& request) {
             }
         }
         if (markedDirty > 0) {
-            // TODO(cthulhu): save dirty chunks to syslog
+            WriteSysLogRestorePoint(nullptr, TReqId(TReqId::MarkDirtySysLog, 0), {});
+        }
+        if (request.Owner == OwnerUnallocated) {
+            ProgressShredState();
         }
     }
 }
@@ -4323,6 +4454,28 @@ void TPDisk::ProcessChunkShredResult(TChunkShredResult& request) {
         << " request# " << request.ToString());
     Y_ABORT_UNLESS(ChunkBeingShreddedInFlight > 0);
     --ChunkBeingShreddedInFlight;
+    ProgressShredState();
+}
+
+void TPDisk::ProcessContinueShred(TContinueShred& request) {
+    if (ContinueShredsInFlight > 0) {
+        if (ContinueShredsInFlight > 1) {
+          ContinueShredsInFlight--;
+          return;
+        }
+        ContinueShredsInFlight--;
+    } else {
+        LOG_CRIT_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "ProcessContinueShred at PDisk# " << PCtx->PDiskId
+            << " ContinueShredInFlight miscalculation, ShredGeneration# " << ShredGeneration
+            << " ContinueShredsInFlight# " << ContinueShredsInFlight.load()
+            << " request# " << request.ToString());
+    }
+    LOG_TRACE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+        "ProcessContinueShred at PDisk# " << PCtx->PDiskId
+        << " ShredGeneration# " << ShredGeneration
+        << " ContinueShredsInFlight# " << ContinueShredsInFlight.load()
+        << " request# " << request.ToString());
     ProgressShredState();
 }
 

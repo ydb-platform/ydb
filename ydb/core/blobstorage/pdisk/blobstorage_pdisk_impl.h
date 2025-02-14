@@ -148,6 +148,7 @@ public:
     ui64 InsaneLogChunks = 0;  // Set when pdisk sees insanely large log, to give vdisks a chance to cut it
     ui32 FirstLogChunkToParseCommits = 0;
 
+    // DO NOT CHANGE STATE NUMBERS, NUMBERS ARE USED TO ENCODE THE STATE IN A FUTURE-PROOF WAY
     enum EShredState {
         EShredStateDefault = 0,
         EShredStateSendPreShredCompactVDisk = 1,
@@ -164,6 +165,9 @@ public:
     std::atomic<ui64> ChunkBeingShreddedInFlight = 0;
     std::deque<std::tuple<TActorId, ui64>> ShredRequesters;
     THolder<TAlignedData> ShredPayload[2];
+    std::atomic<ui64> ShredLogPaddingInFlight = 0;
+    std::atomic<ui64> ShredIsWaitingForCutLog = 0;
+    std::atomic<ui64> ContinueShredsInFlight = 0;
 
     // Chunks that are owned by killed owner, but have operations InFlight
     TVector<TChunkIdx> QuarantineChunks;
@@ -279,7 +283,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Generic log writing
     void LogFlush(TCompletionAction *action, TVector<ui32> *logChunksToCommit, TReqId reqId, NWilson::TTraceId *traceId);
-    void AskVDisksToCutLogs(TOwner ownerFilter, bool doForce);
+    ui32 AskVDisksToCutLogs(TOwner ownerFilter, bool doForce);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // SysLog writing
     void WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NWilson::TTraceId *traceId);
@@ -412,6 +416,7 @@ public:
     void ProcessShredVDiskResult(TShredVDiskResult& request);
     void ProcessMarkDirty(TMarkDirty& request);
     void ProcessChunkShredResult(TChunkShredResult& request);
+    void ProcessContinueShred(TContinueShred& request);
 
     void DropAllMetadataRequests();
 

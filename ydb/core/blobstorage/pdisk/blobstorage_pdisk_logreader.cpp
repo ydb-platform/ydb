@@ -1281,6 +1281,7 @@ void TLogReader::UpdateNewChunkInfo(ui32 currChunk, const TMaybe<ui32> prevChunk
     TGuard<TMutex> guard(PDisk->StateMutex);
     if (prevChunkIdx) {
         PDisk->ChunkState[*prevChunkIdx].CommitState = TChunkState::LOG_COMMITTED;
+        PDisk->ChunkState[*prevChunkIdx].IsDirty = true;
     }
 
     TChunkState& state = PDisk->ChunkState[currChunk];
@@ -1289,6 +1290,7 @@ void TLogReader::UpdateNewChunkInfo(ui32 currChunk, const TMaybe<ui32> prevChunk
                 (ChunkState, state.ToString()));
     }
     state.CommitState = TChunkState::LOG_RESERVED;
+    state.IsDirty = true;
     P_LOG(PRI_INFO, BPD01, SelfInfo() << " chunk is the next log chunk",
             (prevOwnerId, ui32(state.OwnerId)),
             (newOwnerId, ui32(OwnerSystem)));

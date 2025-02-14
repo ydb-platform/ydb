@@ -1697,6 +1697,20 @@ struct TEvMarkDirty : TEventLocal<TEvMarkDirty, TEvBlobStorage::EvMarkDirty> {
     }
 };
 
+// PDisk sends this message to itself
+struct TEvContinueShred : TEventLocal<TEvContinueShred, TEvBlobStorage::EvContinueShred> {
+    TEvContinueShred()
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{EvContinueShred ";
+        str << "}";
+        return str.Str();
+    }
+};
+
+
 /*
  * One common context in the PDisk's world.
  * It should only contain things that are used in each of the PDisk's component.

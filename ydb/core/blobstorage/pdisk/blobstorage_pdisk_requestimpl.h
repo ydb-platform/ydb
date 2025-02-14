@@ -1281,5 +1281,25 @@ public:
     }
 };
 
+class TContinueShred : public TRequestBase {
+public:
+    TContinueShred(NPDisk::TEvContinueShred& ev, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ContinueShred, reqIdx), OwnerUnallocated, 0, NPriInternal::Other)
+    {
+        Y_UNUSED(ev);
+    }
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestContinueShred;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TContinueShred {";
+        str << "}";
+        return str.Str();
+    }
+};
+
 } // NPDisk
 } // NKikimr

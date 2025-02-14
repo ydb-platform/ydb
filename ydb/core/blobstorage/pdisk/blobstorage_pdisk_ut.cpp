@@ -1448,7 +1448,46 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         vdisk.SendEvLogSync();
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToCutLog();
         THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
+        UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
+    }
+    Y_UNIT_TEST(SimpleShredRepeat) {
+        ui64 shredGeneration = 1;
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToCutLog();
+        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
+        UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
+
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
+    }
+    Y_UNIT_TEST(SimpleShredRepeatAfterPDiskRestart) {
+        ui64 shredGeneration = 1;
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToCutLog();
+        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
+        UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
+
+        testCtx.RestartPDiskSync();
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
     }
@@ -1464,6 +1503,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToCutLog();
         THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
@@ -1528,6 +1568,8 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         vdisk2.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
         vdisk2.RespondToShred(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToCutLog();
+        vdisk2.RespondToCutLog();
         THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
@@ -1548,6 +1590,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         vdisk.SendEvLogSync();
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToCutLog();
         THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
@@ -1568,9 +1611,78 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         vdisk.InitFull();
         vdisk.SendEvLogSync();
         vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToCutLog();
         THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
+    }
+    Y_UNIT_TEST(RetryPreShredCompactError) {
+        ui64 shredGeneration = 1;
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        vdisk.MarkCommitedChunksDirty();
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::ERROR, "");
+        THolder<NPDisk::TEvShredPDiskResult> res1 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(res1->ShredGeneration, shredGeneration);
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToCutLog();
+        THolder<NPDisk::TEvShredPDiskResult> res2 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res2->ErrorReason, "");
+        UNIT_ASSERT_VALUES_EQUAL(res2->ShredGeneration, shredGeneration);
+    }
+    Y_UNIT_TEST(RetryShredError) {
+        ui64 shredGeneration = 1;
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        vdisk.MarkCommitedChunksDirty();
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToShred(shredGeneration, NKikimrProto::ERROR, "");
+        THolder<NPDisk::TEvShredPDiskResult> res1 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(res1->ShredGeneration, shredGeneration);
+
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToCutLog();
+        THolder<NPDisk::TEvShredPDiskResult> res2 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res2->ErrorReason, "");
+        UNIT_ASSERT_VALUES_EQUAL(res2->ShredGeneration, shredGeneration);
+    }
+    Y_UNIT_TEST(RetryShredErrorAfterPDiskRestart) {
+        ui64 shredGeneration = 1;
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        vdisk.MarkCommitedChunksDirty();
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToShred(shredGeneration, NKikimrProto::ERROR, "");
+        THolder<NPDisk::TEvShredPDiskResult> res1 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(res1->ShredGeneration, shredGeneration);
+        testCtx.RestartPDiskSync();
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
+        vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
+        vdisk.RespondToCutLog();
+        THolder<NPDisk::TEvShredPDiskResult> res2 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res2->ErrorReason, "");
+        UNIT_ASSERT_VALUES_EQUAL(res2->ShredGeneration, shredGeneration);
     }
 }
 

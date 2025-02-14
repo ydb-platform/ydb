@@ -449,12 +449,36 @@ struct TMetadataFormatSector {
 #pragma pack(pop)
 
 struct TChunkInfo {
-    ui8 Version;
+    ui8 VersionDirty; // 5 bit of version info, 3 bit of encoded dirtyness info
     TOwner OwnerId;
     ui64 Nonce;
 
+    ui32 GetVersion() const {
+        return VersionDirty & 0x1f;
+    }
+
+    bool IsDirty() const {
+        return VersionDirty & 0x80;
+    }
+
+    bool IsCurrentShredGeneration() const {
+        return VersionDirty & 0x40;
+    }
+
+    bool IsGenerationBitSet() const {
+        return VersionDirty & 0x20;
+    }
+
+    void SetDirty(bool isDirty, bool isCurrentShredGeneration) {
+        VersionDirty = (VersionDirty & 0x3f) | (isDirty ? 0x80 : 0) | (isCurrentShredGeneration ? 0x40 : 0);
+    }
+
+    void SetGenerationBit(bool isSet) {
+        VersionDirty = (VersionDirty & ~0x20) | (isSet ? 0x20 : 0);
+    }
+
     TChunkInfo()
-        : Version(PDISK_DATA_VERSION)
+        : VersionDirty(PDISK_DATA_VERSION)
         , OwnerId(0)
         , Nonce(0)
     {}

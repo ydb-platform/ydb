@@ -249,7 +249,7 @@ private:
             nullptr
         );
 
-        ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req) || req->Getcollect_full_diagnostics());
+        ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req));
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;
@@ -312,7 +312,7 @@ private:
 
             bool reportStats = NeedReportStats(*Request_->GetProtoRequest());
             bool reportPlan = reportStats && NeedReportPlan(*Request_->GetProtoRequest());
-            bool collectDiagnostics = NeedCollectDiagnostics(*Request_->GetProtoRequest()) || Request_->GetProtoRequest()->Getcollect_full_diagnostics();
+            bool collectDiagnostics = NeedCollectDiagnostics(*Request_->GetProtoRequest());
 
             if (reportStats) {
                 if (kqpResponse.HasQueryStats()) {

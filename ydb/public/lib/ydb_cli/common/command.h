@@ -85,12 +85,13 @@ public:
 
         enum EVerbosityLevel : ui32 {
             NONE = 0,
-            WARN = 1,
-            INFO = 2,
-            DEBUG = 3,
+            V = 1,
+            VV = 2,
+            VVV = 3,
         };
 
         static ELogPriority VerbosityLevelToELogPriority(EVerbosityLevel lvl);
+        static ELogPriority VerbosityLevelToELogPriorityChatty(EVerbosityLevel lvl);
 
         int ArgC;
         char** ArgV;

@@ -334,7 +334,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
 void TClientCommandRootCommon::Parse(TConfig& config) {
     TClientCommandRootBase::Parse(config);
-    config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
+    config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::VVV);
 }
 
 void TClientCommandRootCommon::ExtractParams(TConfig& config) {

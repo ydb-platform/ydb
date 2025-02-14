@@ -12,8 +12,6 @@ private:
     using TBase = TSharedBlobsCollectionActor<TGarbageCollectionActor>;
     const NActors::TActorId TabletActorId;
     std::shared_ptr<TGCTask> GCTask;
-    size_t PendingGroupReplies = 0;
-    size_t AbandonedGroups = 0;
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);
     void CheckFinished();
@@ -46,7 +44,6 @@ public:
             auto request = GCTask->BuildRequest(i.first);
             AFL_VERIFY(request); // Cannot fail on the first time
             SendToBSProxy(ctx, i.first.GetGroupId(), request.release(), i.first.GetGroupId());
-            PendingGroupReplies++;
         }
         TBase::Bootstrap(ctx);
         Become(&TGarbageCollectionActor::StateWork);

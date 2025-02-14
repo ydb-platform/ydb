@@ -45,7 +45,9 @@ TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, con
 }
 
 void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
-    AFL_VERIFY(ev->Get()->Status == NKikimrProto::OK)("status", ev->Get()->Status)("details", ev->Get()->ToString())("action_id", GetActionGuid());
+    if (ev->Get()->Status != NKikimrProto::OK) {
+        Failures++;
+    }
     TBlobAddress bAddress(ev->Cookie, ev->Get()->Channel);
     auto itGroup = ListsByGroupId.find(bAddress);
     AFL_VERIFY(itGroup != ListsByGroupId.end())("address", bAddress.DebugString());

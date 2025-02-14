@@ -30,3 +30,4 @@ $round = ($x, $y) -> { return Math::Round($x, $y); };
 $upscale = ($x) -> { return $x; };
 
 $todecimal = ($x, $p, $s) -> { return cast($x as double); };
+$round = ($x, $y) -> { return Math::Round($x, $y); };

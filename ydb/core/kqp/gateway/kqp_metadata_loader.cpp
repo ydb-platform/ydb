@@ -401,15 +401,14 @@ TString GetDebugString(const std::pair<NKikimr::TIndexId, TString>& id) {
     return TStringBuilder() << " Path: " << id.second  << " TableId: " << id.first;
 }
 
-void UpdateMetadataIfSuccess(NYql::TKikimrTableMetadataPtr& implTable, TTableMetadataResult& value) {
+void UpdateMetadataIfSuccess(NYql::TKikimrTableMetadataPtr* implTable, TTableMetadataResult& value) {
+    YQL_ENSURE(implTable);
     YQL_ENSURE(value.Success());
-    if (!implTable) {
-        implTable = std::move(value.Metadata);
-        return;
+    while (*implTable) {
+        YQL_ENSURE((*implTable)->Name < value.Metadata->Name);
+        implTable = &(*implTable)->Next;
     }
-    YQL_ENSURE(!implTable->Next);
-    YQL_ENSURE(implTable->Name < value.Metadata->Name);
-    implTable->Next = std::move(value.Metadata);
+    *implTable = std::move(value.Metadata);
 }
 
 void SetError(TTableMetadataResult& externalDataSourceMetadata, const TString& error) {
@@ -630,7 +629,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
 
     for (size_t i = 0; i < indexesCount; i++) {
         const auto& index = tableMetadata->Indexes[i];
-        const auto implTablePaths = NSchemeHelpers::CreateIndexTablePath(tableName, index.Type, index.Name);
+        const auto implTablePaths = NSchemeHelpers::CreateIndexTablePath(tableName, index);
         for (const auto& implTablePath : implTablePaths) {
             if (!index.SchemaVersion) {
                 LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata without schema version check index: " << index.Name);
@@ -664,13 +663,12 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
             result.Metadata->ImplTables.resize(indexesCount);
             auto it = children.begin();
             for (size_t i = 0; i < indexesCount; i++) {
-                for (const auto& _ : NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(
-                        result.Metadata->Indexes[i].Type))) {
+                for (const auto& _ : result.Metadata->Indexes[i].GetImplTables()) {
                     YQL_ENSURE(it != children.end());
                     auto value = it++->ExtractValue();
                     result.AddIssues(value.Issues());
                     if (loadOk && (loadOk = value.Success())) {
-                        UpdateMetadataIfSuccess(result.Metadata->ImplTables[i], value);
+                        UpdateMetadataIfSuccess(&result.Metadata->ImplTables[i], value);
                     }
                 }
             }

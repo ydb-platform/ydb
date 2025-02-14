@@ -1940,7 +1940,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct DataErasureScheduler : Table<115> {
+    struct DataErasureStarts : Table<115> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<2, NScheme::NTypeIds::Uint32> {};
         struct StartTime : Column<3, NScheme::NTypeIds::Timestamp> {};
@@ -1966,7 +1966,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct TenantDataErasure : Table<117> {
+    struct TenantDataErasureStarts : Table<117> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<2, NScheme::NTypeIds::Uint32> {};
 
@@ -2103,10 +2103,9 @@ struct Schema : NIceDb::Schema {
         BackupCollection,
         KMeansTreeProgress,
         KMeansTreeSample
-        DataErasure
-        DataErasureScheduler
+        DataErasureStarts,
         ActiveDataErasureTenants,
-        TenantDataErasure,
+        TenantDataErasureStarts,
         ActiveDataErasureShards
     >;
 

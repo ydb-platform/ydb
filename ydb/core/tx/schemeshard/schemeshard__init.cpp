@@ -1871,7 +1871,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         {
             if (Self->IsDomainSchemeShard) {
                 {
-                    auto rowset = db.Table<Schema::DataErasureScheduler>().Range().Select();
+                    auto rowset = db.Table<Schema::DataErasureStarts>().Range().Select();
                     if (!rowset.IsReady()) {
                         return false;
                     }
@@ -1882,15 +1882,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         TInstant startTime;
                         TDataErasureScheduler::EStatus status = TDataErasureScheduler::EStatus::COMPLETED;
                         while (!rowset.EndOfSet()) {
-                            ui64 generation = rowset.GetValue<Schema::DataErasureScheduler::Generation>();
+                            ui64 generation = rowset.GetValue<Schema::DataErasureStarts::Generation>();
                             if (generation >= currentGeneration) {
                                 currentGeneration = generation;
-                                startTime = TInstant::FromValue(rowset.GetValue<Schema::DataErasureScheduler::StartTime>());
-                                ui32 statusValue = rowset.GetValue<Schema::DataErasureScheduler::Status>();
+                                startTime = TInstant::FromValue(rowset.GetValue<Schema::DataErasureStarts::StartTime>());
+                                ui32 statusValue = rowset.GetValue<Schema::DataErasureStarts::Status>();
                                 if (statusValue >= static_cast<ui32>(TDataErasureScheduler::EStatus::UNSPECIFIED) &&
                                     statusValue <= static_cast<ui32>(TDataErasureScheduler::EStatus::IN_PROGRESS_BSC)) {
                                         status = static_cast<TDataErasureScheduler::EStatus>(statusValue);
                                 }
+                            }
+
+                            if (!rowset.Next()) {
+                                return false;
                             }
                         }
                         Self->DataErasureScheduler->Restore({.IsInitialized = true,
@@ -1923,25 +1927,33 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         }
 
                         Self->ActiveDataErasureTenants[pathId] = status;
+
+                        if (!rowset.Next()) {
+                            return false;
+                        }
                     }
                 }
             } else {
                 {
-                    auto rowset = db.Table<Schema::TenantDataErasure>().Range().Select();
+                    auto rowset = db.Table<Schema::TenantDataErasureStarts>().Range().Select();
                     if (!rowset.IsReady()) {
                         return false;
                     }
                     while (!rowset.EndOfSet()) {
-                        ui64 generation = rowset.GetValue<Schema::TenantDataErasure::Generation>();
+                        ui64 generation = rowset.GetValue<Schema::TenantDataErasureStarts::Generation>();
                         if (generation > Self->DataErasureGeneration) {
                             Self->DataErasureGeneration = generation;
-                            ui32 statusValue = rowset.GetValue<Schema::TenantDataErasure::Status>();
+                            ui32 statusValue = rowset.GetValue<Schema::TenantDataErasureStarts::Status>();
                             EDataErasureStatus status = TSchemeShard::EDataErasureStatus::COMPLETED;
                             if (statusValue >= static_cast<ui32>(TSchemeShard::EDataErasureStatus::UNSPECIFIED) &&
                                 statusValue <= static_cast<ui32>(TSchemeShard::EDataErasureStatus::IN_PROGRESS)) {
                                     status = static_cast<TSchemeShard::EDataErasureStatus>(statusValue);
                             }
                             Self->DataErasureStatus = status;
+                        }
+
+                        if (!rowset.Next()) {
+                            return false;
                         }
                     }
                 }
@@ -1963,6 +1975,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                 status = static_cast<TSchemeShard::EDataErasureStatus>(statusValue);
                         }
                         Self->ActiveDataErasureShards[shardId] = status;
+
+                        if (!rowset.Next()) {
+                            return false;
+                        }
                     }
                 }
             }

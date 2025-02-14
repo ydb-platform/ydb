@@ -236,8 +236,8 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
                 }
                 Self->DataErasureQueue->Enqueue(pathId);
                 Self->ActiveDataErasureTenants[pathId] = EDataErasureStatus::IN_PROGRESS;
-                db.Table<Schema::DataErasureScheduler>().Key(Self->DataErasureGeneration).Update<Schema::DataErasureScheduler::Status,
-                                                                                                 Schema::DataErasureScheduler::StartTime>(static_cast<ui32>(Self->DataErasureScheduler->GetStatus()),
+                db.Table<Schema::DataErasureStarts>().Key(Self->DataErasureGeneration).Update<Schema::DataErasureStarts::Status,
+                                                                                                 Schema::DataErasureStarts::StartTime>(static_cast<ui32>(Self->DataErasureScheduler->GetStatus()),
                                                                                                                                           StartTime.MicroSeconds());
                 db.Table<Schema::ActiveDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::ActiveDataErasureTenants::Status>(static_cast<ui32>(Self->ActiveDataErasureTenants[pathId]));
             }
@@ -303,8 +303,8 @@ struct TSchemeShard::TTxDataErasureSchedulerInit : public TSchemeShard::TRwTxBas
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxDataErasureSchedulerInit Execute at schemeshard: " << Self->TabletID());
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::DataErasureScheduler>().Key(0).Update<Schema::DataErasureScheduler::Status,
-                                                               Schema::DataErasureScheduler::StartTime>(static_cast<ui32>(TDataErasureScheduler::EStatus::COMPLETED), AppData(ctx)->TimeProvider->Now().MicroSeconds());
+        db.Table<Schema::DataErasureStarts>().Key(0).Update<Schema::DataErasureStarts::Status,
+                                                               Schema::DataErasureStarts::StartTime>(static_cast<ui32>(TDataErasureScheduler::EStatus::COMPLETED), AppData(ctx)->TimeProvider->Now().MicroSeconds());
     }
 
     void DoComplete(const TActorContext& ctx) override {

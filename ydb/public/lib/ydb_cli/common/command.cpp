@@ -36,11 +36,11 @@ ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientComman
     switch (lvl) {
         case TClientCommand::TConfig::EVerbosityLevel::NONE:
             return ELogPriority::TLOG_EMERG;
-        case TClientCommand::TConfig::EVerbosityLevel::VVV:
+        case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
             return ELogPriority::TLOG_DEBUG;
-        case TClientCommand::TConfig::EVerbosityLevel::VV:
+        case TClientCommand::TConfig::EVerbosityLevel::INFO:
             return ELogPriority::TLOG_INFO;
-        case TClientCommand::TConfig::EVerbosityLevel::V:
+        case TClientCommand::TConfig::EVerbosityLevel::WARN:
             return ELogPriority::TLOG_WARNING;
         default:
             return ELogPriority::TLOG_ERR;
@@ -51,9 +51,9 @@ ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriorityChatty(TClient
     switch (lvl) {
         case TClientCommand::TConfig::EVerbosityLevel::NONE:
             return ELogPriority::TLOG_INFO;
-        case TClientCommand::TConfig::EVerbosityLevel::VVV:
-        case TClientCommand::TConfig::EVerbosityLevel::VV:
-        case TClientCommand::TConfig::EVerbosityLevel::V:
+        case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
+        case TClientCommand::TConfig::EVerbosityLevel::INFO:
+        case TClientCommand::TConfig::EVerbosityLevel::WARN:
             return ELogPriority::TLOG_DEBUG;
     }
     return ELogPriority::TLOG_INFO;

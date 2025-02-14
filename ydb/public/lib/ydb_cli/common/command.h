@@ -85,9 +85,9 @@ public:
 
         enum EVerbosityLevel : ui32 {
             NONE = 0,
-            V = 1,
-            VV = 2,
-            VVV = 3,
+            WARN = 1,
+            INFO = 2,
+            DEBUG = 3,
         };
 
         static ELogPriority VerbosityLevelToELogPriority(EVerbosityLevel lvl);

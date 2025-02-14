@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(24.3.1)
+VERSION(25.0)
 
 LICENSE(MIT)
 
@@ -143,7 +143,6 @@ PY_SRCS(
     pip/_internal/utils/deprecation.py
     pip/_internal/utils/direct_url_helpers.py
     pip/_internal/utils/egg_link.py
-    pip/_internal/utils/encoding.py
     pip/_internal/utils/entrypoints.py
     pip/_internal/utils/filesystem.py
     pip/_internal/utils/filetypes.py
@@ -218,6 +217,8 @@ PY_SRCS(
     pip/_vendor/packaging/_parser.py
     pip/_vendor/packaging/_structures.py
     pip/_vendor/packaging/_tokenizer.py
+    pip/_vendor/packaging/licenses/__init__.py
+    pip/_vendor/packaging/licenses/_spdx.py
     pip/_vendor/packaging/markers.py
     pip/_vendor/packaging/metadata.py
     pip/_vendor/packaging/requirements.py
@@ -271,7 +272,6 @@ PY_SRCS(
     pip/_vendor/pygments/unistring.py
     pip/_vendor/pygments/util.py
     pip/_vendor/pyproject_hooks/__init__.py
-    pip/_vendor/pyproject_hooks/_compat.py
     pip/_vendor/pyproject_hooks/_impl.py
     pip/_vendor/pyproject_hooks/_in_process/__init__.py
     pip/_vendor/pyproject_hooks/_in_process/_in_process.py
@@ -441,6 +441,7 @@ RESOURCE_FILES(
     pip/_vendor/idna/py.typed
     pip/_vendor/packaging/py.typed
     pip/_vendor/platformdirs/py.typed
+    pip/_vendor/pyproject_hooks/py.typed
     pip/_vendor/resolvelib/py.typed
     pip/_vendor/rich/py.typed
     pip/_vendor/tomli/py.typed

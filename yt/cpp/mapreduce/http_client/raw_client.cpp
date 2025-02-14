@@ -4,6 +4,7 @@
 #include "rpc_parameters_serialization.h"
 
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/common/retry_lib.h>
 
 #include <yt/cpp/mapreduce/http/helpers.h>
 #include <yt/cpp/mapreduce/http/http.h>
@@ -18,6 +19,8 @@
 #include <yt/cpp/mapreduce/io/helpers.h>
 
 #include <library/cpp/yson/node/node_io.h>
+
+#include <library/cpp/yt/yson_string/string.h>
 
 namespace NYT::NDetail {
 
@@ -931,6 +934,11 @@ ui64 THttpRawClient::GenerateTimestamp()
 IRawBatchRequestPtr THttpRawClient::CreateRawBatchRequest()
 {
     return MakeIntrusive<NRawClient::THttpRawBatchRequest>(Context_, /*retryPolicy*/ nullptr);
+}
+
+IRawClientPtr THttpRawClient::Clone()
+{
+    return ::MakeIntrusive<THttpRawClient>(Context_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

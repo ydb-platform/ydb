@@ -163,6 +163,7 @@ public:
         , ExecutionUnitsLimit(config.GetComputeActorsCount())
         , SpillingPercent(config.GetSpillingPercent())
         , TotalMemoryResource(MakeIntrusive<TMemoryResource>(config.GetQueryMemoryLimit(), (double)100, config.GetSpillingPercent()))
+        , ResourceSnapshotState(std::make_shared<TResourceSnapshotState>())
     {
         SetConfigValues(config);
     }
@@ -195,7 +196,6 @@ public:
 
     void CreateResourceInfoExchanger(
             const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
-        ResourceSnapshotState = std::make_shared<TResourceSnapshotState>();
         auto exchanger = CreateKqpResourceInfoExchangerActor(
             Counters, ResourceSnapshotState, settings);
         ResourceInfoExchanger = ActorSystem->Register(exchanger);

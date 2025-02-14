@@ -1057,6 +1057,11 @@ void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
     for (const auto& a : allocConfig.GetParam()) {
         NMalloc::MallocInfo().SetParam(a.first.c_str(), a.second.c_str());
     }
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    if (allocConfig.GetEnableDefaultAllocator()) {
+        NKikimr::UseDefaultAllocator();
+    }
+#endif
 }
 
 void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)

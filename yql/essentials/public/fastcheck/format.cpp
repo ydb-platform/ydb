@@ -54,9 +54,8 @@ private:
         settings.AnsiLexer = request.IsAnsiLexer;
 
         auto formatter = NSQLFormat::MakeSqlFormatter(settings);
-        NYql::TIssues issues;
         TString formattedQuery;
-        res.Success = formatter->Format(request.Program, formattedQuery, issues);
+        res.Success = formatter->Format(request.Program, formattedQuery, res.Issues);
         if (res.Success && formattedQuery != request.Program) {
             res.Success = false;
             TPosition origPos(0, 1, request.File);

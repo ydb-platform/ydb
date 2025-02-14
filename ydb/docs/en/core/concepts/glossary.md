@@ -465,6 +465,10 @@ A **Hive** is a system tablet responsible for launching and managing other table
 
 The **cluster management system** or **CMS** is a system tablet responsible for managing the information about the current [{{ ydb-short-name }} cluster](#cluster) state. This information is used to perform cluster rolling restarts without affecting user workloads, maintenance, cluster re-configuration, etc.
 
+#### Node Broker {#node-broker}
+
+The **Node Broker** is a system tablet that registers [dynamic nodes](#dynamic-node) in the cluster.
+
 ### Slot {#slot}
 
 A **slot** in {{ ydb-short-name }} can be used in two contexts:

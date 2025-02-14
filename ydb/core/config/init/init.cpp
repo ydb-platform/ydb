@@ -40,11 +40,6 @@ class TDefaultProtoConfigFileProvider
 private:
     TMap<TString, TSimpleSharedPtr<TFileConfigOptions>> Opts;
 
-    static bool IsFileExists(const fs::path& p) {
-        std::error_code ec;
-        return fs::exists(p, ec) && !ec;
-    }
-
     static bool IsFileReadable(const fs::path& p) {
         std::error_code ec; // For noexcept overload usage.
         auto perms = fs::status(p, ec).permissions();
@@ -600,6 +595,12 @@ void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, NKi
     if (appConfig.GetSelfManagementConfig().GetEnabled()) {
         // fill in InitialConfigYaml only when self-management through distconf is enabled
         appConfig.MutableSelfManagementConfig()->SetInitialConfigYaml(mainYamlConfigString);
+    }
+
+    if (appConfig.GetConfigLoadedFromStore()) {
+        auto* yamlConfig = appConfig.MutableStoredConfigYaml();
+        yamlConfig->SetYAML(mainYamlConfigString);
+        yamlConfig->SetConfigVersion(NYamlConfig::GetVersion(mainYamlConfigString));
     }
 
     /*

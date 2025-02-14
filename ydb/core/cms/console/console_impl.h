@@ -181,6 +181,8 @@ public:
 
     bool HasTenant(const TString& path) const;
 
+    TString GetDomainName() const;
+
 private:
     TDeque<TAutoPtr<IEventHandle>> InitQueue;
     NKikimrConsole::TConfig Config;

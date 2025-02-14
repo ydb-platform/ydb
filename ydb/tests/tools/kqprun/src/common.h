@@ -2,12 +2,11 @@
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
-
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/services/services.pb.h>
-
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
+#include <ydb/tests/tools/kqprun/runlib/settings.h>
 
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
 
@@ -21,6 +20,7 @@ namespace NKqpRun {
 
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 constexpr ui64 DEFAULT_STORAGE_SIZE = 32_GB;
+constexpr TDuration TENANT_CREATION_TIMEOUT = TDuration::Seconds(30);
 
 struct TAsyncQueriesSettings {
     enum class EVerbose {
@@ -32,7 +32,7 @@ struct TAsyncQueriesSettings {
     EVerbose Verbose = EVerbose::EachQuery;
 };
 
-struct TYdbSetupSettings {
+struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
     enum class EVerbose {
         None,
         Info,
@@ -44,12 +44,12 @@ struct TYdbSetupSettings {
     enum class EHealthCheck {
         None,
         NodesCount,
+        FetchDatabase,
         ScriptRequest,
         Max
     };
 
     ui32 NodeCount = 1;
-    TString DomainName = "Root";
     std::map<TString, TStorageMeta::TTenant> Tenants;
     TDuration HealthCheckTimeout = TDuration::Seconds(10);
     EHealthCheck HealthCheckLevel = EHealthCheck::NodesCount;
@@ -60,14 +60,7 @@ struct TYdbSetupSettings {
     std::optional<TString> PDisksPath;
     std::optional<ui64> DiskSize;
 
-    bool MonitoringEnabled = false;
-    ui16 MonitoringPortOffset = 0;
-
-    bool GrpcEnabled = false;
-    ui16 GrpcPort = 0;
-
     bool TraceOptEnabled = false;
-    TString LogOutputFile;
     EVerbose VerboseLevel = EVerbose::Info;
 
     TString YqlToken;
@@ -87,12 +80,6 @@ struct TRunnerOptions {
         All,
     };
 
-    enum class EResultOutputFormat {
-        RowsJson,  // Rows in json format
-        FullJson,  // Columns, rows and types in json format
-        FullProto,  // Columns, rows and types in proto string format
-    };
-
     IOutputStream* ResultOutput = nullptr;
     IOutputStream* SchemeQueryAstOutput = nullptr;
     std::vector<IOutputStream*> ScriptQueryAstOutputs;
@@ -100,7 +87,7 @@ struct TRunnerOptions {
     std::vector<TString> ScriptQueryTimelineFiles;
     std::vector<TString> InProgressStatisticsOutputFiles;
 
-    EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
+    NKikimrRun::EResultOutputFormat ResultOutputFormat = NKikimrRun::EResultOutputFormat::RowsJson;
     NYdb::NConsoleClient::EDataFormat PlanOutputFormat = NYdb::NConsoleClient::EDataFormat::Default;
     ETraceOptType TraceOptType = ETraceOptType::Disabled;
     std::optional<size_t> TraceOptScriptId;
@@ -129,8 +116,5 @@ TValue GetValue(size_t index, const std::vector<TValue>& values, TValue defaultV
     }
     return values[std::min(index, values.size() - 1)];
 }
-
-NKikimrServices::EServiceKikimr GetLogService(const TString& serviceName);
-void ModifyLogPriorities(std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> logPriorities, NKikimrConfig::TLogConfig& logConfig);
 
 }  // namespace NKqpRun

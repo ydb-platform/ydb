@@ -120,6 +120,13 @@ struct TRecord
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TReqBase
+{
+    int ApiVersion = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TReqApiVersions
 {
     static constexpr ERequestType RequestType = ERequestType::ApiVersions;
@@ -504,6 +511,7 @@ struct TRspFetch
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TReqSaslHandshake
+    : public TReqBase
 {
     static constexpr ERequestType RequestType = ERequestType::SaslHandshake;
 

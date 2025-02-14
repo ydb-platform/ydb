@@ -144,6 +144,14 @@ Y_UNIT_TEST(AlterSequence) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(ShowCreateTable) {
+    TCases cases = {
+        {"use plato;show create table user;","USE plato;\n\nSHOW CREATE TABLE user;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
 
 Y_UNIT_TEST(Use) {
     TCases cases = {

@@ -159,6 +159,8 @@ class KikimrConfigGenerator(object):
             kafka_api_port=None,
             metadata_section=None,
             column_shard_config=None,
+            use_config_store=False,
+            separate_node_configs=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -448,6 +450,9 @@ class KikimrConfigGenerator(object):
             self.full_config["config"] = self.yaml_config
         else:
             self.full_config = self.yaml_config
+
+        self.use_config_store = use_config_store
+        self.separate_node_configs = separate_node_configs
 
     @property
     def pdisks_info(self):

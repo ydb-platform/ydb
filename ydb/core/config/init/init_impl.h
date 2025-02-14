@@ -1070,10 +1070,11 @@ public:
         TString yamlConfigFile = CommonAppOptions.YamlConfigFile;
         if (!CommonAppOptions.ConfigStorePath.empty()) {
             AppConfig.SetConfigStorePath(CommonAppOptions.ConfigStorePath);
-           
+
             const TString autoConfigPath = TStringBuilder() << CommonAppOptions.ConfigStorePath << "/" << CONFIG_NAME;
             fs::path path(autoConfigPath.c_str());
             if (IsFileExists(path)) {
+                AppConfig.SetConfigLoadedFromStore(true);
                 yamlConfigFile = autoConfigPath;
             }
         }
@@ -1099,7 +1100,7 @@ public:
             InitDynamicNode();
         }
 
-        LoadMainYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig);
+        LoadMainYamlConfig(refs, yamlConfigFile, AppConfig);
 
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{});
 

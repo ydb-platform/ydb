@@ -1101,11 +1101,22 @@ message TEvControllerRegisterNode {
     }
 
     repeated TShredStatus ShredStatus = 9;
+    optional uint64 ConfigVersion = 10;
+    optional uint64 ConfigHash = 11;
 }
 
 message TEvControllerUpdateNodeDrives {
     optional uint32 NodeId = 1;
     repeated TDriveData DrivesData = 2;
+}
+
+message TYamlConfig {
+    optional string YAML = 1;
+    optional string DedicatedStorageYAML = 2;
+    optional string DedicatedClusterYAML = 3;
+    optional uint64 ConfigVersion = 4;
+    optional uint64 StorageConfigVersion = 5;
+    optional uint64 ClusterConfigVersion = 6;
 }
 
 message TEvControllerNodeServiceSetUpdate {
@@ -1120,9 +1131,7 @@ message TEvControllerNodeServiceSetUpdate {
     }
 
     message TSaveConfigRequest {
-        optional string YAML = 1;
-        optional string DedicatedStorageYAML = 2;
-        optional string DedicatedClusterYAML = 3;
+        optional TYamlConfig YamlConfig = 1;
     }
 
     optional NKikimrProto.EReplyStatus Status = 1;
@@ -1134,6 +1143,7 @@ message TEvControllerNodeServiceSetUpdate {
     optional uint64 AvailDomain = 7; // availability domain of the controller
     optional TShredRequest ShredRequest = 8;
     optional TSaveConfigRequest SaveConfigRequest = 9;
+    optional TYamlConfig YamlConfig = 10;
 }
 
 message TEvControllerConfigRequest {

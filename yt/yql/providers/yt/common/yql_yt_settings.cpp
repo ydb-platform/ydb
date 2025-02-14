@@ -199,8 +199,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, ScriptCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, PythonCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, JavascriptCpu).Lower(1.0).GlobalOnly();
-    REGISTER_SETTING(*this, ErasureCodecCpu).Lower(1.0);
-    REGISTER_SETTING(*this, ErasureCodecCpuForDq).Lower(1.0);
+    REGISTER_SETTING(*this, ErasureCodecCpu).Lower(0.1);
+    REGISTER_SETTING(*this, ErasureCodecCpuForDq).Lower(0.1);
 
     REGISTER_SETTING(*this, Owners)
         .NonEmpty()

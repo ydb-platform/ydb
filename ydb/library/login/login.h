@@ -86,6 +86,7 @@ public:
     struct TValidateTokenResponse : TBasicResponse {
         bool TokenUnrecognized = false;
         bool ErrorRetryable = false;
+        bool WrongAudience = false;
         TString User;
         std::optional<std::vector<TString>> Groups;
         std::chrono::system_clock::time_point ExpiresAt;

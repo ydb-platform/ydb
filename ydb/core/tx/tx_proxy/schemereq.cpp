@@ -1001,7 +1001,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         if (resolveTask.ModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterUserAttributes) {
             // ESchemeOpAlterUserAttributes applies on GSS when path is DB
-            // but on GSS in other cases
+            // but on TSS in other cases
             if (IsDB(resolveResult)) {
                 return resolveResult.DomainInfo->DomainKey.OwnerId;
             } else {
@@ -1018,7 +1018,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     TString MakeAccessDeniedError(const TActorContext& ctx, const TVector<TString>& path, const TString& part) {
         const TString msg = TStringBuilder() << "Access denied for " << GetUserSID(UserToken)
-            << " on path " << JoinPath(path)
+            << " on path " << CanonizePath(JoinPath(path))
         ;
         LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << ", " << msg << ", " << part
@@ -1150,6 +1150,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                         return false;
                     }
+                }
+
+                // Admins can always change ACLs
+                if (!modifyScheme.GetModifyACL().GetDiffACL().empty()) {
+                    allowACLBypass = isAdmin;
                 }
             }
 
@@ -1520,7 +1525,7 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     if (!workingDir || workingDir->size() >= parts.size()) {
         const TString errText = TStringBuilder()
             << "Cannot resolve working dir"
-            << " workingDir# " << (workingDir ? JoinPath(*workingDir) : "null")
+            << " workingDir# " << (workingDir ? CanonizePath(JoinPath(*workingDir)) : "null")
             << " path# " << JoinPath(parts);
         LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << ", " << errText

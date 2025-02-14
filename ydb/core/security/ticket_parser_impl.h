@@ -28,6 +28,8 @@
 #include <util/stream/file.h>
 #include <util/string/vector.h>
 
+#include <util/string/join.h>
+
 namespace NKikimr {
 
 inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
@@ -723,52 +725,97 @@ private:
     }
 
     template <typename TTokenRecord>
+    const TVector<TString> GetLookupDatabases(const TTokenRecord& record) {
+        TVector<TString> result;
+        result.push_back(DomainName);
+        if (!Config.GetDomainLoginOnly() && !record.Database.empty() && record.Database != DomainName) {
+            result.push_back(record.Database);
+        }
+        std::reverse(result.begin(), result.end());
+        return result;
+    }
+
+    template <typename TTokenRecord>
     bool CanInitLoginToken(const TString& key, TTokenRecord& record) {
         if (UseLoginProvider && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Login)) {
-            TString database = (Config.GetDomainLoginOnly() || record.Database.empty()) ? DomainName : record.Database;
-            auto itLoginProvider = LoginProviders.find(database);
-            if (itLoginProvider != LoginProviders.end()) {
-                NLogin::TLoginProvider& loginProvider(itLoginProvider->second);
-                auto response = loginProvider.ValidateToken({.Token = record.Ticket});
-                if (response.Error) {
-                    if (!response.TokenUnrecognized || record.TokenType != TDerived::ETokenType::Unknown) {
+            // Lookup the token in the login provider for the target database, with fallback to the root (domain) database.
+            //
+            // Target database could be unspecified (some anonymous or backward-compatible mode).
+            // Target database may be the same as the root database.
+            // In a special case, when DomainLoginOnly = false and a user from the root database
+            // attempts to access a tenant database, the token must be looked up in the login providers
+            // for both databases: tenant's first and then, if that fails, the root's second.
+            const auto& lookupDatabases = GetLookupDatabases(record);
+            BLOG_TRACE("CanInitLoginToken, DomainLoginOnly " << Config.GetDomainLoginOnly() << ", domain " << DomainName << ", request db " << record.Database);
+            BLOG_TRACE("CanInitLoginToken, Lookup token in databases(" << lookupDatabases.size() << "): " << JoinSeq(", ", lookupDatabases));
+            TEvTicketParser::TError wrongAudienceError;
+            bool noLoginStateError = false;
+            for (const auto& database : lookupDatabases) {
+                auto itLoginProvider = LoginProviders.find(database);
+                if (itLoginProvider != LoginProviders.end()) {
+                    NLogin::TLoginProvider& loginProvider(itLoginProvider->second);
+                    auto response = loginProvider.ValidateToken({.Token = record.Ticket});
+                    if (response.Error) {
+                        if (!response.TokenUnrecognized || record.TokenType != TDerived::ETokenType::Unknown) {
+                            record.TokenType = TDerived::ETokenType::Login;
+                            if (response.WrongAudience) {
+                                wrongAudienceError = {.Message = response.Error, .Retryable = response.ErrorRetryable};
+                                BLOG_TRACE("CanInitLoginToken, database " << database << ", A1 error " << response.Error);
+                            } else {
+                                SetError(key, record, {.Message = response.Error, .Retryable = response.ErrorRetryable});
+                                CounterTicketsLogin->Inc();
+                                BLOG_TRACE("CanInitLoginToken, database " << database << ", A2 error " << response.Error);
+                                return true;
+                            }
+                        }
+                    } else {
                         record.TokenType = TDerived::ETokenType::Login;
-                        SetError(key, record, {.Message = response.Error, .Retryable = response.ErrorRetryable});
+                        record.ExpireTime = ToInstant(response.ExpiresAt);
                         CounterTicketsLogin->Inc();
+                        if (response.ExternalAuth) {
+                            record.EnableExternalAuth(response);
+                            HandleExternalAuthentication(key, record, response);
+                            return true;
+                        }
+                        TVector<NACLib::TSID> groups;
+                        if (response.Groups.has_value()) {
+                            const std::vector<TString>& tokenGroups = response.Groups.value();
+                            groups.assign(tokenGroups.begin(), tokenGroups.end());
+                        } else {
+                            const std::vector<TString> providerGroups = loginProvider.GetGroupsMembership(response.User);
+                            groups.assign(providerGroups.begin(), providerGroups.end());
+                        }
+                        SetToken(key, record, new NACLib::TUserToken({
+                            .OriginalUserToken = record.Ticket,
+                            .UserSID = response.User,
+                            .GroupSIDs = groups,
+                            .AuthType = record.GetAuthType()
+                        }));
+                        BLOG_TRACE("CanInitLoginToken, database " << database << ", A4 success");
                         return true;
                     }
                 } else {
-                    record.TokenType = TDerived::ETokenType::Login;
-                    record.ExpireTime = ToInstant(response.ExpiresAt);
-                    CounterTicketsLogin->Inc();
-                    if (response.ExternalAuth) {
-                        record.EnableExternalAuth(response);
-                        HandleExternalAuthentication(key, record, response);
-                        return true;
-                    }
-                    TVector<NACLib::TSID> groups;
-                    if (response.Groups.has_value()) {
-                        const std::vector<TString>& tokenGroups = response.Groups.value();
-                        groups.assign(tokenGroups.begin(), tokenGroups.end());
+                    if (record.TokenType == TDerived::ETokenType::Login) {
+                        noLoginStateError = true;
+                        BLOG_TRACE("CanInitLoginToken, database " << database << ", A5 error");
                     } else {
-                        const std::vector<TString> providerGroups = loginProvider.GetGroupsMembership(response.User);
-                        groups.assign(providerGroups.begin(), providerGroups.end());
+                        BLOG_TRACE("CanInitLoginToken, database " << database << ", A6 error");
                     }
-                    SetToken(key, record, new NACLib::TUserToken({
-                        .OriginalUserToken = record.Ticket,
-                        .UserSID = response.User,
-                        .GroupSIDs = groups,
-                        .AuthType = record.GetAuthType()
-                    }));
-                    return true;
-                }
-            } else {
-                if (record.TokenType == TDerived::ETokenType::Login) {
-                    SetError(key, record, {.Message = "Login state is not available yet", .Retryable = false});
-                    CounterTicketsLogin->Inc();
-                    return true;
                 }
             }
+            if (wrongAudienceError) {
+                SetError(key, record, wrongAudienceError);
+                CounterTicketsLogin->Inc();
+                BLOG_TRACE("CanInitLoginToken, database " << lookupDatabases.back() << ", A7 error " << wrongAudienceError.Message);
+                return true;
+            }
+            if (noLoginStateError) {
+                SetError(key, record, {.Message = "Login state is not available yet", .Retryable = false});
+                CounterTicketsLogin->Inc();
+                BLOG_TRACE("CanInitLoginToken, A8 error");
+                return true;
+            }
+            BLOG_TRACE("CanInitLoginToken, A9 error");
         }
         return false;
     }
@@ -1870,23 +1917,36 @@ protected:
         if (record.IsExternalAuthEnabled()) {
             return RefreshTicketViaExternalAuthProvider(key, record);
         }
-        const TString& database = (Config.GetDomainLoginOnly() || record.Database.empty()) ? DomainName : record.Database;
-        auto itLoginProvider = LoginProviders.find(database);
-        if (itLoginProvider == LoginProviders.end()) {
-            return false;
+        bool noLoginStateError = false;
+        bool userNotFoundError = false;
+        const auto& lookupDatabases = GetLookupDatabases(record);
+        for (const auto& database : lookupDatabases) {
+            auto itLoginProvider = LoginProviders.find(database);
+            if (itLoginProvider != LoginProviders.end()) {
+                NLogin::TLoginProvider& loginProvider(itLoginProvider->second);
+                if (loginProvider.CheckUserExists(userSID)) {
+                    const std::vector<TString> providerGroups = loginProvider.GetGroupsMembership(userSID);
+                    const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
+                    SetToken(key, record, new NACLib::TUserToken({
+                                            .OriginalUserToken = record.Ticket,
+                                            .UserSID = userSID,
+                                            .GroupSIDs = groups,
+                                            .AuthType = record.GetAuthType()
+                                        }));
+                    return true;
+                } else {
+                    userNotFoundError = true;
+                }
+            } else {
+                noLoginStateError = true;
+            }
         }
-        NLogin::TLoginProvider& loginProvider(itLoginProvider->second);
-        if (loginProvider.CheckUserExists(userSID)) {
-            const std::vector<TString> providerGroups = loginProvider.GetGroupsMembership(userSID);
-            const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
-            SetToken(key, record, new NACLib::TUserToken({
-                                    .OriginalUserToken = record.Ticket,
-                                    .UserSID = userSID,
-                                    .GroupSIDs = groups,
-                                    .AuthType = record.GetAuthType()
-                                }));
-        } else {
+        if (userNotFoundError) {
             SetError(key, record, {.Message = "User not found", .Retryable = false});
+            return true;
+        }
+        if (noLoginStateError) {
+            return false;
         }
         return true;
     }

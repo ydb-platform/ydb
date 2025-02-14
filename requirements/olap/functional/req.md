@@ -72,3 +72,11 @@ This document outlines the detailed functional and non-functional requirements f
   - **Cases**:
     - Case 3.1: [LogBench Operations](path/to/test/23) - Validate reading, aggregating, and processing JSON types through LogBench tests, focused on smaller datasets.
     - Case 3.2: [TPC-H S1 Execution](path/to/test/24) - Confirm successful execution and performance of TPC-H S1 queries.
+
+## Federated Queries Support
+
+- **REQ-FEDQ-001**: Allow and manage federated query execution.
+  - **Description**: Enable and validate operations involving federated query execution, taking advantage of diverse data sources.
+  - **Cases**:
+    - Case 10.1: [Cross-Source Federated Queries](path/to/test/40) - Test execution of queries spanning multiple federated data sources.
+    - Case 10.2: [Federated Source Data Insertions](path/to/test/41) - Validate data insertions deriving from federated sources.

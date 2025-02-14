@@ -7,6 +7,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/blob_refcounter.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -42,6 +43,8 @@ struct TReadInfo {
     ui64 RealReadOffset = 0;
     ui64 LastOffset = 0;
     bool Error = false;
+
+    TBlobKeyTokens BlobKeyTokens;
 
     TReadInfo() = delete;
     TReadInfo(

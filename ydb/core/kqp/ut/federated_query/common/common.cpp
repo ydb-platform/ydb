@@ -41,7 +41,6 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (!appConfig) {
             appConfig.emplace();
         }
-        appConfig->MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
         auto settings = TKikimrSettings();
 
@@ -58,6 +57,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig->GetQueryServiceConfig().GetS3(),
             appConfig->GetQueryServiceConfig().GetGeneric(),
             appConfig->GetQueryServiceConfig().GetYt(),
+            nullptr,
+            appConfig->GetQueryServiceConfig().GetSolomon(),
             nullptr,
             nullptr);
 

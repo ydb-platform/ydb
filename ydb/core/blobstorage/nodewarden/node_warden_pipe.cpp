@@ -1,4 +1,8 @@
 #include "node_warden_impl.h"
+#include "node_warden.h"
+#include <util/system/fs.h>
+#include <ydb/library/yaml_config/yaml_config.h>
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -96,6 +100,11 @@ void TNodeWarden::SendRegisterNode() {
                 [item](const TString& aborted) { item->SetShredAborted(aborted); }
             }, pdisk.ShredState);
         }
+    }
+
+    if (!Cfg->ConfigStorePath.empty() && YamlConfig) {
+        ev->Record.SetConfigVersion(YamlConfig->GetConfigVersion());
+        ev->Record.SetConfigHash(NKikimr::NYaml::GetConfigHash(YamlConfig->GetYAML()));
     }
 
     SendToController(std::move(ev));

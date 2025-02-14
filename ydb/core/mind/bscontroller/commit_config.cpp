@@ -60,6 +60,17 @@ namespace NKikimr::NBsController {
             }
             if (YamlConfig) {
                 Self->YamlConfig = std::move(YamlConfig);
+                const auto& configVersion = GetVersion(*Self->YamlConfig);
+                const auto& compressedConfig = CompressSingleConfig(*Self->YamlConfig);
+                for (auto& node: Self->Nodes) {
+                    if (node.second.ConnectedServerId) {
+                        auto configPersistEv = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+                        auto* yamlConfig = configPersistEv->Record.MutableYamlConfig();
+                        yamlConfig->SetYAML(compressedConfig);
+                        yamlConfig->SetConfigVersion(configVersion);
+                        Self->SendToWarden(node.first, std::move(configPersistEv), 0);
+                    }
+                }
             }
             if (StorageYamlConfig) {
                 Self->StorageYamlConfig = std::move(*StorageYamlConfig);

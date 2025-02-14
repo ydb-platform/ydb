@@ -76,7 +76,7 @@ public:
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto tid = MakeBSControllerID();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, tid, pipeConfig);
-        BSControllerPipe = ctx.ExecutorThread.RegisterActor(pipe);
+        BSControllerPipe = ctx.Register(pipe);
     }
 
     void OnPipeDestroyed(const TActorContext &ctx)
@@ -713,7 +713,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, TabletId, pipeConfig);
-        Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        Pipe = ctx.Register(pipe);
     }
 
     void SendNotifyRequest(const TActorContext &ctx)
@@ -1134,7 +1134,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, HiveId, pipeConfig);
-        HivePipe = ctx.ExecutorThread.RegisterActor(pipe);
+        HivePipe = ctx.Register(pipe);
     }
 
     void Finish() {
@@ -1627,7 +1627,7 @@ TTenantsManager::TTenant::TPtr TTenantsManager::FindComputationalUnitKindUsage(c
     return nullptr;
 }
 
-TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TString &name)
+TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TString &name) const
 {
     auto it = Tenants.find(name);
     if (it != Tenants.end())
@@ -1635,7 +1635,7 @@ TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TString &name)
     return nullptr;
 }
 
-TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TDomainId &domainId)
+TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TDomainId &domainId) const
 {
     auto it = TenantIdToName.find(domainId);
     if (it != TenantIdToName.end())
@@ -1979,7 +1979,7 @@ void TTenantsManager::OpenTenantSlotBrokerPipe(const TActorContext &ctx)
     pipeConfig.RetryPolicy = FastConnectRetryPolicy();
     auto aid = MakeTenantSlotBrokerID();
     auto pipe = NTabletPipe::CreateClient(ctx.SelfID, aid, pipeConfig);
-    TenantSlotBrokerPipe = ctx.ExecutorThread.RegisterActor(pipe);
+    TenantSlotBrokerPipe = ctx.Register(pipe);
 }
 
 void TTenantsManager::OnTenantSlotBrokerPipeDestroyed(const TActorContext &ctx)

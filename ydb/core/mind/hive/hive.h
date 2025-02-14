@@ -145,12 +145,12 @@ struct TCompleteNotifications {
         return Notifications.size();
     }
 
-    void Send(const TActorContext& ctx) {
+    void Send(const TActorContext&) {
         for (auto& [notification, duration] : Notifications) {
             if (duration) {
-                ctx.ExecutorThread.Schedule(duration, notification.Release());
+                TActivationContext::Schedule(duration, std::move(notification));
             } else {
-                ctx.ExecutorThread.Send(notification.Release());
+                TActivationContext::Send(std::move(notification));
             }
         }
         Notifications.clear();

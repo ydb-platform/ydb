@@ -83,7 +83,7 @@ namespace NKikimr::NStorage {
                     zstd.LoadOrFail(StorageConfigFetchYaml.Detach(), StorageConfigFetchYaml.size());
 
                     // extract _current_ config version
-                    auto metadata = NYamlConfig::GetMetadata(StorageConfigYaml);
+                    auto metadata = NYamlConfig::GetMainMetadata(StorageConfigYaml);
                     Y_DEBUG_ABORT_UNLESS(metadata.Version.has_value());
                     StorageConfigYamlVersion = metadata.Version.value_or(0);
 

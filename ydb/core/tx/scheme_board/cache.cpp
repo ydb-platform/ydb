@@ -1007,11 +1007,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             schema.reserve(pqConfig.PartitionKeySchemaSize());
             for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
-                if (keySchema.GetTypeId() == NScheme::NTypeIds::Pg) {
-                    schema.push_back(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(keySchema.GetTypeInfo().GetPgTypeId())));
-                } else {
-                    schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
-                }
+                auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(keySchema.GetTypeId(),
+                    keySchema.HasTypeInfo() ? &keySchema.GetTypeInfo() : nullptr);
+                schema.push_back(NScheme::TTypeInfo(typeInfoMod.TypeInfo));
             }
 
             partitioning.reserve(pqDesc.PartitionsSize());

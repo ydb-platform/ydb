@@ -1,4 +1,5 @@
 #include "log.h"
+#include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/resource/resource.h>
 #include <util/datetime/base.h>
@@ -70,20 +71,6 @@ std::string TLogGenerator::GetDDLQueries() const {
     ss << ")";
     return ss.str();
 }
-
-TQueryInfoList TLogGenerator::GetWorkload(int type) {
-    switch (static_cast<EType>(type)) {
-        case EType::Insert:
-            return Insert(GenerateRandomRows());
-        case EType::Upsert:
-            return Upsert(GenerateRandomRows());
-        case EType::BulkUpsert:
-            return BulkUpsert(GenerateRandomRows());
-        case EType::Select:
-            return Select();
-    }
-}
-
 
 TVector<IWorkloadQueryGenerator::TWorkloadType> TLogGenerator::GetSupportedWorkloadTypes() const {
     TVector<TWorkloadType> result;
@@ -242,115 +229,135 @@ TQueryInfoList TLogGenerator::GetInitialData() {
 TVector<std::string> TLogGenerator::GetCleanPaths() const {
     return { Params.TableName };
 }
+class TRandomLogGenerator {
+    const TLogWorkloadParams& Params;
 
-std::string TLogGenerator::RandomWord(bool canBeEmpty) const {
-    if (canBeEmpty && !RandomIsNotNull()) {
-        return {};
-    }
-    size_t len = RandomNumber<size_t>(Params.StringLen);
-    std::stringstream ss;
-    for (size_t i = 0; i < len; ++i) {
-        ss << 'a' + RandomNumber<char>(26);
-    }
-    return ss.str();
-}
-
-std::string TLogGenerator::RandomPhrase(ui32 maxLen, ui32 minLen) const {
-    std::stringstream result;
-    for (ui32 len = RandomNumber<ui32>(maxLen - minLen) + minLen; len > 0; --len) {
-        static const std::string delimiters = " .,=;-+:";
-        result << RandomWord(false) << delimiters[RandomNumber<size_t>(delimiters.length() - 1)];
-    }
-    return result.str();
-}
-
-TInstant TLogGenerator::RandomInstant() const {
-    auto result = TInstant::Now();
-    i64 millisecondsDiff = 60 * 1000 * NormalRandom<double>(0., Params.TimestampStandardDeviationMinutes);
-    if (millisecondsDiff >= 0) { // TDuration::MilliSeconds can't be negative for some reason...
-        result += TDuration::MilliSeconds(millisecondsDiff);
-    } else {
-        result -= TDuration::MilliSeconds(-millisecondsDiff);
-    }
-    return result;
-}
-
-bool TLogGenerator::RandomIsNotNull() const {
-    return RandomNumber<ui32>(100) >= Params.NullPercent;
-}
-
-TVector<TRow> TLogGenerator::GenerateRandomRows() const {
-    TVector<TRow> result;
-    result.reserve(Params.RowsCnt);
-
-    for (size_t row = 0; row < Params.RowsCnt; ++row) {
-        result.emplace_back();
-        result.back().LogId = CreateGuidAsString().c_str();
-        result.back().Ts = RandomInstant();
-        result.back().Level = RandomNumber<ui32>(10);
-        result.back().ServiceName = RandomWord(false);
-        result.back().Component = RandomWord(true);
-        result.back().Message += RandomPhrase(100);
-
-        if (RandomIsNotNull()) {
-            NJson::TJsonValue json(NJson::JSON_MAP);
-            if (RandomIsNotNull()) {
-                json["adv_engine_id"] = ToString(RandomNumber<ui32>(10));
-            }
-            if (RandomIsNotNull()) {
-                json["client_ip"] = RandomNumber<ui64>();
-            }
-            if (RandomIsNotNull()) {
-                json["dont_count"] = RandomNumber<bool>();
-            }
-            if (RandomIsNotNull()) {
-                json["is_download"] = RandomNumber<bool>();
-            }
-            if (RandomIsNotNull()) {
-                json["is_link"] = RandomNumber<bool>();
-            }
-            if (RandomIsNotNull()) {
-                json["is_refresh"] = RandomNumber<bool>();
-            }
-            if (RandomIsNotNull()) {
-                json["referer"] = ToString(RandomNumber<ui32>(10));
-                json["referer_hash"] = ToString(RandomNumber<ui64>());
-            }
-            if (RandomIsNotNull()) {
-                json["response_time"] = RandomNumber<double>();
-            }
-            if (RandomIsNotNull()) {
-                json["search_engine_id"] = ToString(RandomNumber<ui32>(10));
-            }
-            if (RandomIsNotNull()) {
-                json["title"] = RandomPhrase(100);
-            }
-            if (RandomIsNotNull()) {
-                json["traffic_source_id"] = ToString(RandomNumber<ui32>(10));
-            }
-            if (RandomIsNotNull()) {
-                json["url"] = TStringBuilder() << (RandomNumber<bool>() ? "api:" : "http:") << RandomNumber<ui64>();
-                json["url_hash"] = ToString(RandomNumber<ui64>());
-            }
-            if (RandomIsNotNull()) {
-                json["window_client_height"] = RandomNumber<ui32>();
-            }
-            if (RandomIsNotNull()) {
-                json["window_client_width"] = RandomNumber<ui32>();
-            }
-            result.back().Metadata = json.GetStringRobust().c_str();
+    std::string RandomWord(bool canBeEmpty) const {
+        if (canBeEmpty && !RandomIsNotNull()) {
+            return {};
         }
-        result.back().IngestedAt = RandomIsNotNull() ? RandomInstant() : TInstant::Zero();
-        for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
-            if (i < Params.IntColumnsCnt) {
-                result.back().Ints.emplace_back(i < Params.KeyColumnsCnt || RandomIsNotNull() ? RandomNumber<ui64>(Max<ui64>() - 1) + 1 : 0);
-            } else {
-                result.back().Strings.emplace_back(RandomWord(i >= Params.KeyColumnsCnt));
-            }
+        std::string result(1 + RandomNumber<size_t>(Params.StringLen), 'a');
+        for (auto& c: result) {
+            c += RandomNumber<char>(26);
         }
+        return result;
     }
 
-    return result;
+    std::string RandomPhrase(ui32 maxLen, ui32 minLen = 1) const {
+        std::stringstream result;
+        for (ui32 len = RandomNumber<ui32>(maxLen - minLen) + minLen; len > 0; --len) {
+            static const std::string delimiters = " .,=;-+:";
+            result << RandomWord(false) << delimiters[RandomNumber<size_t>(delimiters.length() - 1)];
+        }
+        return result.str();
+    }
+
+    TInstant RandomInstant() const {
+        auto result = TInstant::Now();
+        i64 millisecondsDiff = 60 * 1000 * NormalRandom<double>(0., Params.TimestampStandardDeviationMinutes);
+        if (millisecondsDiff >= 0) { // TDuration::MilliSeconds can't be negative for some reason...
+            result += TDuration::MilliSeconds(millisecondsDiff);
+        } else {
+            result -= TDuration::MilliSeconds(-millisecondsDiff);
+        }
+        return result;
+    }
+
+    bool RandomIsNotNull() const {
+        return RandomNumber<ui32>(100) >= Params.NullPercent;
+    }
+
+public:
+    explicit TRandomLogGenerator(const TLogWorkloadParams& params)
+        : Params(params)
+    {}
+
+    TVector<TRow> GenerateRandomRows(ui64 count) const {
+        TVector<TRow> result;
+        result.reserve(count);
+
+        for (size_t row = 0; row < count; ++row) {
+            result.emplace_back();
+            result.back().LogId = CreateGuidAsString().c_str();
+            result.back().Ts = RandomInstant();
+            result.back().Level = RandomNumber<ui32>(10);
+            result.back().ServiceName = RandomWord(false);
+            result.back().Component = RandomWord(true);
+            result.back().Message += RandomPhrase(100);
+
+            if (RandomIsNotNull()) {
+                NJson::TJsonValue json(NJson::JSON_MAP);
+                if (RandomIsNotNull()) {
+                    json["adv_engine_id"] = ToString(RandomNumber<ui32>(10));
+                }
+                if (RandomIsNotNull()) {
+                    json["client_ip"] = RandomNumber<ui64>();
+                }
+                if (RandomIsNotNull()) {
+                    json["dont_count"] = RandomNumber<bool>();
+                }
+                if (RandomIsNotNull()) {
+                    json["is_download"] = RandomNumber<bool>();
+                }
+                if (RandomIsNotNull()) {
+                    json["is_link"] = RandomNumber<bool>();
+                }
+                if (RandomIsNotNull()) {
+                    json["is_refresh"] = RandomNumber<bool>();
+                }
+                if (RandomIsNotNull()) {
+                    json["referer"] = ToString(RandomNumber<ui32>(10));
+                    json["referer_hash"] = ToString(RandomNumber<ui64>());
+                }
+                if (RandomIsNotNull()) {
+                    json["response_time"] = RandomNumber<double>();
+                }
+                if (RandomIsNotNull()) {
+                    json["search_engine_id"] = ToString(RandomNumber<ui32>(10));
+                }
+                if (RandomIsNotNull()) {
+                    json["title"] = RandomPhrase(100);
+                }
+                if (RandomIsNotNull()) {
+                    json["traffic_source_id"] = ToString(RandomNumber<ui32>(10));
+                }
+                if (RandomIsNotNull()) {
+                    json["url"] = TStringBuilder() << (RandomNumber<bool>() ? "api:" : "http:") << RandomNumber<ui64>();
+                    json["url_hash"] = ToString(RandomNumber<ui64>());
+                }
+                if (RandomIsNotNull()) {
+                    json["window_client_height"] = RandomNumber<ui32>();
+                }
+                if (RandomIsNotNull()) {
+                    json["window_client_width"] = RandomNumber<ui32>();
+                }
+                result.back().Metadata = json.GetStringRobust().c_str();
+            }
+            result.back().IngestedAt = RandomIsNotNull() ? RandomInstant() : TInstant::Zero();
+            for (ui32 i = 0; i < Params.IntColumnsCnt + Params.StrColumnsCnt; ++i) {
+                if (i < Params.IntColumnsCnt) {
+                    result.back().Ints.emplace_back(i < Params.KeyColumnsCnt || RandomIsNotNull() ? RandomNumber<ui64>(Max<ui64>() - 1) + 1 : 0);
+                } else {
+                    result.back().Strings.emplace_back(RandomWord(i >= Params.KeyColumnsCnt));
+                }
+            }
+        }
+
+        return result;
+    }
+};
+
+TQueryInfoList TLogGenerator::GetWorkload(int type) {
+    switch (static_cast<EType>(type)) {
+        case EType::Insert:
+            return Insert(TRandomLogGenerator(Params).GenerateRandomRows(Params.RowsCnt));
+        case EType::Upsert:
+            return Upsert(TRandomLogGenerator(Params).GenerateRandomRows(Params.RowsCnt));
+        case EType::BulkUpsert:
+            return BulkUpsert(TRandomLogGenerator(Params).GenerateRandomRows(Params.RowsCnt));
+        case EType::Select:
+            return Select();
+    }
 }
 
 void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
@@ -420,6 +427,22 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
         break;
         }
         break;
+    case TWorkloadParams::ECommandType::Import:
+        opts.AddLongOption("len", "String len")
+            .DefaultValue(StringLen).StoreResult(&StringLen);
+        opts.AddLongOption("int-cols", "Number of int columns")
+            .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
+        opts.AddLongOption("str-cols", "Number of string columns")
+            .DefaultValue(StrColumnsCnt).StoreResult(&StrColumnsCnt);
+        opts.AddLongOption("key-cols", "Number of key columns")
+            .DefaultValue(KeyColumnsCnt).StoreResult(&KeyColumnsCnt);
+        opts.AddLongOption("rows", "Number of rows to upsert")
+            .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
+        opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
+            .DefaultValue(TimestampStandardDeviationMinutes).StoreResult(&TimestampStandardDeviationMinutes);
+        opts.AddLongOption("null-percent", "Percent of nulls in generated data")
+            .DefaultValue(NullPercent).StoreResult(&NullPercent);
+        break;
     default:
         break;
     }
@@ -431,6 +454,93 @@ THolder<IWorkloadQueryGenerator> TLogWorkloadParams::CreateGenerator() const {
 
 TString TLogWorkloadParams::GetWorkloadName() const {
     return "Log";
+}
+class TLogWorkloadDataInitializerGenerator: public TWorkloadDataInitializer {
+public:
+    explicit TLogWorkloadDataInitializerGenerator(const TLogWorkloadParams& params)
+        : TWorkloadDataInitializer("generator", "Random logs generator")
+        , Params(params)
+    {}
+
+    void ConfigureOpts(NLastGetopt::TOpts& /*opts*/) override {}
+
+protected:
+    TBulkDataGeneratorList GetBulkInitialData() override {
+        return {std::make_shared<TDataGenerartor>(*this)};
+    }
+
+private:
+    class TDataGenerartor final: public IBulkDataGenerator {
+    public:
+        explicit TDataGenerartor(const TLogWorkloadDataInitializerGenerator& owner)
+            : IBulkDataGenerator(owner.Params.TableName, owner.Params.RowsCnt)
+            , Owner(owner)
+            , RandLogGenerator(owner.Params)
+        {}
+
+        TDataPortions GenerateDataPortion() override {
+            ui64 count = 0;
+            with_lock(Lock) {
+                count = std::min(Owner.Params.RowsCnt - Generated, Owner.Params.BulkSize);
+                Generated += count;
+            }
+            if (!count) {
+                return {};
+            }
+            const auto rows = RandLogGenerator.GenerateRandomRows(count);
+            TStringBuilder csv;
+            csv << "log_id|timestamp|level|service_name|component|message|request_id|metadata|ingested_at";
+            for (ui32 i = 0; i < Owner.Params.IntColumnsCnt + Owner.Params.StrColumnsCnt; ++i) {
+                csv << "|c" << i;
+            }
+            csv << Endl;
+            for(const auto& row: rows) {
+                csv << row.LogId;
+                csv << "|" << row.Ts.ToStringUpToSeconds();
+                csv << "|" << row.Level;
+                csv << "|" << row.ServiceName;
+                csv << "|" << row.Component;
+                csv << "|" << row.Message;
+                csv << "|" << row.RequestId;
+                csv << "|" << row.Metadata;
+                csv << "|";
+                if (row.IngestedAt != TInstant::Zero()) {
+                    csv << row.IngestedAt.ToStringUpToSeconds();
+                }
+                for (const auto& i: row.Ints) {
+                    csv << "|";
+                    if (i) {
+                        csv << i;
+                    }
+                }
+                for (const auto& s: row.Strings) {
+                    csv << "|" << s;
+                }
+                csv << Endl;
+            }
+            const TString tablePath = Owner.Params.DbPath + "/" + Owner.Params.TableName;
+            static const TString PsvFormatString = [] () {
+                Ydb::Formats::CsvSettings settings;
+                settings.set_delimiter("|");
+                settings.set_header(true);
+                settings.mutable_quoting()->set_disabled(true);
+                return settings.SerializeAsString();
+            } ();
+
+            return {MakeIntrusive<TDataPortion>(tablePath, TDataPortion::TCsv(std::move(csv), PsvFormatString), count)};
+        }
+
+    private:
+        const TLogWorkloadDataInitializerGenerator& Owner;
+        TAdaptiveLock Lock;
+        ui64 Generated = 0;
+        TRandomLogGenerator RandLogGenerator;
+    };
+    const TLogWorkloadParams& Params;
+};
+
+TWorkloadDataInitializer::TList TLogWorkloadParams::CreateDataInitializers() const {
+    return {std::make_shared<TLogWorkloadDataInitializerGenerator>(*this)};
 }
 
 } // namespace NLog

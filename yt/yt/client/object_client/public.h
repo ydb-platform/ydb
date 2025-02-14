@@ -146,6 +146,7 @@ DEFINE_ENUM(EObjectType,
     ((ChunkMap)                                     (402))
     ((LostChunkMap)                                 (403))
     ((LostVitalChunkMap)                            (413))
+    ((LostVitalChunksSampleMap)                     (464))
     ((PrecariousChunkMap)                           (410))
     ((PrecariousVitalChunkMap)                      (411))
     ((OverreplicatedChunkMap)                       (404))

@@ -61,6 +61,14 @@ public:
         return out << e.Status_;
     }
 
+    const TStatus& GetStatus() const {
+        return Status_;
+    }
+
+    TStatus&& ExtractStatus() {
+        return std::move(Status_);
+    }
+
 private:
     TStatus Status_;
 };

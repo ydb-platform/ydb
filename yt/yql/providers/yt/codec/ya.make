@@ -33,6 +33,7 @@ PEERDIR(
     yt/yql/providers/yt/common
     yt/yql/providers/yt/lib/mkql_helpers
     yt/yql/providers/yt/lib/skiff
+    yt/yt/library/decimal
     yql/essentials/providers/common/codec/yt_arrow_converter_interface
 )
 

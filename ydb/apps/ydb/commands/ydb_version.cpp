@@ -1,8 +1,6 @@
 #include "ydb_version.h"
 
-#ifndef DISABLE_UPDATE
-    #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
-#endif
+#include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 
 #include <library/cpp/resource/resource.h>
 #include <util/string/strip.h>
@@ -24,8 +22,11 @@ void TCommandVersion::Config(TConfig& config) {
 
     config.Opts->AddLongOption("semantic", "Print semantic version only")
         .StoreTrue(&Semantic);
+    
+    if (!config.StorageUrl.has_value()) {
+        return;
+    }
 
-#ifndef DISABLE_UPDATE
     config.Opts->AddLongOption("check", "Force to check latest version available")
         .StoreTrue(&config.ForceVersionCheck);
     config.Opts->AddLongOption("disable-checks", "Disable version checks. CLI will not check whether there is a newer version available")
@@ -39,8 +40,6 @@ void TCommandVersion::Config(TConfig& config) {
     config.Opts->MutuallyExclusive("enable-checks", "semantic");
     config.Opts->MutuallyExclusive("enable-checks", "check");
     config.Opts->MutuallyExclusive("check", "semantic");
-#endif
-
 }
 
 void TCommandVersion::Parse(TConfig& config) {
@@ -52,20 +51,20 @@ void TCommandVersion::Parse(TConfig& config) {
 int TCommandVersion::Run(TConfig& config) {
     Y_UNUSED(config);
 
-#ifndef DISABLE_UPDATE
-    if (EnableChecks) {
-        TYdbUpdater updater;
-        updater.SetCheckVersion(true);
-        Cout << "Latest version checks enabled" << Endl;
-        return EXIT_SUCCESS;
+    if (config.StorageUrl.has_value()) {
+        if (EnableChecks) {
+            TYdbUpdater updater(config.StorageUrl.value());
+            updater.SetCheckVersion(true);
+            Cout << "Latest version checks enabled" << Endl;
+            return EXIT_SUCCESS;
+        }
+        if (DisableChecks) {
+            TYdbUpdater updater(config.StorageUrl.value());
+            updater.SetCheckVersion(false);
+            Cout << "Latest version checks disabled" << Endl;
+            return EXIT_SUCCESS;
+        }
     }
-    if (DisableChecks) {
-        TYdbUpdater updater;
-        updater.SetCheckVersion(false);
-        Cout << "Latest version checks disabled" << Endl;
-        return EXIT_SUCCESS;
-    }
-#endif
 
     if (!Semantic) {
         Cout << "YDB CLI ";

@@ -76,7 +76,7 @@ struct TEnvironmentSetup {
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
-            ctx.ExecutorThread.ActorSystem->RegisterLocalService(serviceId, actorId);
+            ctx.ActorSystem()->RegisterLocalService(serviceId, actorId);
             Env.PDiskActors.push_back(actorId);
         }
     };

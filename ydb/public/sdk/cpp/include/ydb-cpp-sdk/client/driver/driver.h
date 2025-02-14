@@ -142,6 +142,7 @@ public:
     template<typename TExtension>
     void AddExtension(typename TExtension::TParams params = typename TExtension::TParams());
 
+    TDriverConfig GetConfig() const;
 private:
     std::shared_ptr<TGRpcConnectionsImpl> Impl_;
 };

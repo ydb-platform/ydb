@@ -51,7 +51,7 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "lease", "Dynamic node lease status",
-                                   false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+                                   false, ctx.ActorSystem(), ctx.SelfID);
         }
 
         Become(&TThis::StatePing);

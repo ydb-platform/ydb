@@ -179,8 +179,8 @@ private:
     std::shared_ptr<TFetchingScript> Script;
 
     void FinishInitialization(std::shared_ptr<TFetchingScript>&& script) {
-        AFL_VERIFY(AtomicCas(&InitializationDetector, 1, 2));
         Script = std::move(script);
+        AFL_VERIFY(AtomicCas(&InitializationDetector, 1, 2));
     }
 
 public:

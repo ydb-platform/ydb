@@ -285,6 +285,9 @@ void PQTabletRestart(
     ui64 tabletId,
     TActorId edge);
 
+THashSet<TString> GetTabletKeys(TTestActorRuntime& runtime,
+                                ui64 tabletId,
+                                const TActorId& edge);
 
 /*
 ** TTestContext requiring functions
@@ -305,6 +308,8 @@ void PQBalancerPrepare(
     const THashSet<TString>& xtraConsumers = {});
 
 void PQTabletRestart(TTestContext& context);
+
+THashSet<TString> GetTabletKeys(TTestContext& context);
 
 TActorId RegisterReadSession(
    const TString& session,
@@ -518,6 +523,9 @@ void CmdRead(
 void CmdRead(
     const TPQCmdReadSettings& settings,
     TTestContext& tc);
+
+void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc);
+bool EndCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc);
 
 void CmdPublishRead(const TCmdDirectReadSettings& settings, TTestContext& tc);
 void CmdForgetRead(const TCmdDirectReadSettings& settings, TTestContext& tc);

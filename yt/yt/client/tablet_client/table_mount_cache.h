@@ -51,7 +51,7 @@ DEFINE_REFCOUNTED_TYPE(TTabletInfo)
 struct TTableReplicaInfo final
 {
     TTableReplicaId ReplicaId;
-    TString ClusterName;
+    std::string ClusterName;
     NYPath::TYPath ReplicaPath;
     ETableReplicaMode Mode;
 };
@@ -132,6 +132,8 @@ struct TTableMountInfo final
     NHydra::TRevision SecondaryRevision;
 
     bool EnableDetailedProfiling = false;
+
+    NTableClient::ETabletTransactionSerializationType SerializationType = NTableClient::ETabletTransactionSerializationType::Coarse;
 
     bool IsSorted() const;
     bool IsOrdered() const;

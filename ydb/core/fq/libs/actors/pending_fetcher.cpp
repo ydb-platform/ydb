@@ -481,9 +481,7 @@ private:
                 : Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 
         RunActorMap[runActorId] = TRunActorInfo { .QueryId = queryId, .QueryName = task.query_name() };
-        if (!task.automatic()) {
-            CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
-        }
+        CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
     }
 
     NActors::IActor* CreateYdbRunActor(TRunActorParams&& params, const ::NYql::NCommon::TServiceCounters& queryCounters) const {

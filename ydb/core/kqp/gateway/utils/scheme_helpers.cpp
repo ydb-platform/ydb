@@ -46,12 +46,12 @@ bool SplitTablePath(const TString& tableName, const TString& database, std::pair
     }
 }
 
-TVector<TString> CreateIndexTablePath(const TString& tableName, NYql::TIndexDescription::EType indexType, const TString& indexName) {
-    auto implTables = NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(indexType));
+TVector<TString> CreateIndexTablePath(const TString& tableName, const NYql::TIndexDescription& index) {
+    const auto implTables = index.GetImplTables();
     TVector<TString> paths;
     paths.reserve(implTables.size());
     for (const auto& implTable : implTables) {
-        paths.emplace_back(TStringBuilder() << tableName << "/" << indexName << "/" << implTable);
+        paths.emplace_back(TStringBuilder() << tableName << "/" << index.Name << "/" << implTable);
     }
     return paths;
 }

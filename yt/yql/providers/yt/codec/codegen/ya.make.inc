@@ -15,6 +15,7 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils
     yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/codec
 )
 
 IF (NOT MKQL_DISABLE_CODEGEN)

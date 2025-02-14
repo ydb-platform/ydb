@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index a7d7799..e78d8e9 100644
+index 1bb99ee..465d784 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -1091,10 +1091,12 @@ typedef __char32_t char32_t;
+@@ -1081,10 +1081,12 @@ typedef __char32_t char32_t;
  #  ifndef _LIBCPP_HAS_NO_ASAN
  extern "C" _LIBCPP_EXPORTED_FROM_ABI void
  __sanitizer_annotate_contiguous_container(const void*, const void*, const void*, const void*);

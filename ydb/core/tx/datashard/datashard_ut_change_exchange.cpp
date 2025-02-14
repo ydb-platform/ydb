@@ -2067,6 +2067,23 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(DecimalKey) {
+        const auto table = TShardedTableOptions()
+            .Columns({
+                {"decimal1_key", "Decimal(1, 0)", true, false},
+                {"decimal35_key", "Decimal(35, 10)", true, false},
+                {"decimal_value", "Decimal", false , false},
+            });
+        TopicRunner::Read(table, Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {
+            R"(
+                UPSERT INTO `/Root/Table` (decimal1_key, decimal35_key, decimal_value)
+                VALUES (CAST("5.0" AS Decimal(1, 0)), CAST("355555555555555.321" AS Decimal(35, 10)), CAST("4.321" AS Decimal(22, 9)));
+            )",
+        }, {
+            R"({"update":{"decimal_value":"4.321"},"key":["5","355555555555555.321"]})",
+        });
+    }
+
     // Schema snapshots
     using TActionFunc = std::function<ui64(TServer::TPtr)>;
 

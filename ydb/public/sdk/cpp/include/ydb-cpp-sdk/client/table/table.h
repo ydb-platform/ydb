@@ -22,6 +22,8 @@ class ColumnFamily;
 class CreateTableRequest;
 class Changefeed;
 class ChangefeedDescription;
+class DescribeExternalDataSourceResult;
+class DescribeExternalTableResult;
 class DescribeTableResult;
 class ExplicitPartitions;
 class GlobalIndexSettings;
@@ -1068,11 +1070,16 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TDescribeExternalDataSourceResult;
+class TDescribeExternalTableResult;
+
 using TAsyncCreateSessionResult = NThreading::TFuture<TCreateSessionResult>;
 using TAsyncDataQueryResult = NThreading::TFuture<TDataQueryResult>;
 using TAsyncPrepareQueryResult = NThreading::TFuture<TPrepareQueryResult>;
 using TAsyncExplainDataQueryResult = NThreading::TFuture<TExplainQueryResult>;
 using TAsyncDescribeTableResult = NThreading::TFuture<TDescribeTableResult>;
+using TAsyncDescribeExternalDataSourceResult = NThreading::TFuture<TDescribeExternalDataSourceResult>;
+using TAsyncDescribeExternalTableResult = NThreading::TFuture<TDescribeExternalTableResult>;
 using TAsyncBeginTransactionResult = NThreading::TFuture<TBeginTransactionResult>;
 using TAsyncCommitTransactionResult = NThreading::TFuture<TCommitTransactionResult>;
 using TAsyncTablePartIterator = NThreading::TFuture<TTablePartIterator>;
@@ -1694,6 +1701,10 @@ struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableS
     FLUENT_SETTING_DEFAULT(bool, WithShardNodesInfo, false);
 };
 
+struct TDescribeExternalDataSourceSettings : public TOperationRequestSettings<TDescribeExternalDataSourceSettings> {};
+
+struct TDescribeExternalTableSettings : public TOperationRequestSettings<TDescribeExternalTableSettings> {};
+
 struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {
     FLUENT_SETTING_DEFAULT(bool, WithCollectFullDiagnostics, false);
 };
@@ -1777,6 +1788,12 @@ public:
 
     TAsyncDescribeTableResult DescribeTable(const std::string& path,
         const TDescribeTableSettings& settings = TDescribeTableSettings());
+
+    TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const std::string& path,
+        const TDescribeExternalDataSourceSettings& settings = {});
+
+    TAsyncDescribeExternalTableResult DescribeExternalTable(const std::string& path,
+        const TDescribeExternalTableSettings& settings = {});
 
     TAsyncBeginTransactionResult BeginTransaction(const TTxSettings& txSettings = TTxSettings(),
         const TBeginTxSettings& settings = TBeginTxSettings());
@@ -2192,6 +2209,58 @@ class TReadRowsResult : public TStatus {
     TResultSet GetResultSet() {
         return std::move(ResultSet);
     }
+};
+
+class TExternalDataSourceDescription {
+public:
+    TExternalDataSourceDescription(Ydb::Table::DescribeExternalDataSourceResult&& description);
+
+private:
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+
+    friend class NYdb::V3::TProtoAccessor;
+    const Ydb::Table::DescribeExternalDataSourceResult& GetProto() const;
+};
+
+//! Represents the result of a DescribeExternalDataSource call.
+class TDescribeExternalDataSourceResult : public NScheme::TDescribePathResult {
+public:
+    TDescribeExternalDataSourceResult(
+        TStatus&& status,
+        Ydb::Table::DescribeExternalDataSourceResult&& description
+    );
+
+    TExternalDataSourceDescription GetExternalDataSourceDescription() const;
+
+private:
+    TExternalDataSourceDescription ExternalDataSourceDescription_;
+};
+
+class TExternalTableDescription {
+public:
+    TExternalTableDescription(Ydb::Table::DescribeExternalTableResult&& description);
+
+private:
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+
+    friend class NYdb::V3::TProtoAccessor;
+    const Ydb::Table::DescribeExternalTableResult& GetProto() const;
+};
+
+//! Represents the result of a DescribeExternalTable call.
+class TDescribeExternalTableResult : public NScheme::TDescribePathResult {
+public:
+    TDescribeExternalTableResult(
+        TStatus&& status,
+        Ydb::Table::DescribeExternalTableResult&& description
+    );
+
+    TExternalTableDescription GetExternalTableDescription() const;
+
+private:
+    TExternalTableDescription ExternalTableDescription_;
 };
 
 } // namespace NTable

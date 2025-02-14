@@ -28,6 +28,14 @@ namespace {
     const TString SessionsDirectoryName = "sessions";
 }
 
+TString GetTmpDirPath(const TString& database) {
+    return CanonizePath(JoinPath({database, TmpDirectoryName}));
+}
+
+TString GetSessionDirName() {
+    return SessionsDirectoryName;
+}
+
 TString GetSessionDirsBasePath(const TString& database) {
     return CanonizePath(JoinPath({database, TmpDirectoryName, SessionsDirectoryName}));
 }

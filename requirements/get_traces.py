@@ -72,7 +72,7 @@ def generate_traceability_matrix(requirements, output_path):
             file.write("|---------|------|-------------|-------|------------------|\n")
             
             for case in req['cases']:
-                file.write(f"| {case['case_id']} | {case['description']} | {case['issue']} | {case['status']} |\n")
+                file.write(f"| {case['case_id']} | {case['name']} | {case['description']} | {case['issue']} | {case['status']} |\n")
             
             file.write("\n")
 

@@ -1164,7 +1164,7 @@ struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQue
     // Collect runtime statistics with a given detalization mode
     FLUENT_SETTING_DEFAULT(ECollectQueryStatsMode, CollectQueryStats, ECollectQueryStatsMode::None);
 
-    //Deprecated. Use CollectQueryStats >= ECollectQueryStatsMode::Full to get QueryMeta in QueryStats
+    // Deprecated. Use CollectQueryStats >= ECollectQueryStatsMode::Full to get QueryMeta in QueryStats
     // Collect full query compilation diagnostics
     FLUENT_SETTING_DEFAULT(bool, CollectFullDiagnostics, false);
 };

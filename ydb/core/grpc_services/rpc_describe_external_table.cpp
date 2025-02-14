@@ -1,13 +1,83 @@
 #include "rpc_scheme_base.h"
 #include "service_table.h"
 
+#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/writer/json_value.h>
 
 namespace NKikimr::NGRpcService {
 
 using namespace NActors;
+using namespace NJson;
+using namespace NKikimrSchemeOp;
 using namespace NYql;
+
+namespace {
+
+bool Convert(const TColumnDescription& in, Ydb::Table::ColumnMeta& out, TIssues& issues) {
+    try {
+        FillColumnDescription(out, in);
+    } catch (const std::exception& ex) {
+        issues.AddIssue(TStringBuilder() << "Unable to fill the column description, error: " << ex.what());
+        return false;
+    }
+    return true;
+}
+
+bool ConvertContent(
+    const TString& sourceType,
+    const TString& in,
+    google::protobuf::Map<TProtoStringType, TProtoStringType>& out,
+    TIssues& issues
+) {
+    const auto externalSourceFactory = NExternalSource::CreateExternalSourceFactory({});
+    try {
+        const auto source = externalSourceFactory->GetOrCreate(sourceType);
+        for (const auto& [key, items] : source->GetParameters(in)) {
+            TJsonValue json(EJsonValueType::JSON_ARRAY);
+            for (const auto& item : items) {
+                json.AppendValue(item);
+            }
+            out[key] = WriteJson(json, false);
+        }
+    } catch (...) {
+        issues.AddIssue(TStringBuilder() << "Cannot unpack the content of an external table of type: " << sourceType
+            << ", error: " << CurrentExceptionMessage()
+        );
+        return false;
+    }
+    return true;
+}
+
+std::optional<Ydb::Table::DescribeExternalTableResult> Convert(
+    const TDirEntry& inSelf,
+    const TExternalTableDescription& inDesc,
+    TIssues& issues
+) {
+    Ydb::Table::DescribeExternalTableResult out;
+    ConvertDirectoryEntry(inSelf, out.mutable_self(), true);
+
+    out.set_source_type(inDesc.GetSourceType());
+    out.set_data_source_path(inDesc.GetDataSourcePath());
+    out.set_location(inDesc.GetLocation());
+    for (const auto& column : inDesc.GetColumns()) {
+        if (!Convert(column, *out.add_columns(), issues)) {
+            return std::nullopt;
+        }
+    }
+    if (!ConvertContent(inDesc.GetSourceType(), inDesc.GetContent(), *out.mutable_content(), issues)) {
+        return std::nullopt;
+    }
+    return out;
+}
+
+}
 
 using TEvDescribeExternalTableRequest = TGrpcRequestOperationCall<
     Ydb::Table::DescribeExternalTableRequest,
@@ -62,9 +132,15 @@ private:
                     return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
                 }
 
+                TIssues issues;
+                const auto description = Convert(pathDescription.GetSelf(), pathDescription.GetExternalTableDescription(), issues);
+                if (!description) {
+                    Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+                    return;
+                }
                 return ReplyWithResult(
                     Ydb::StatusIds::SUCCESS,
-                    Ydb::Table::DescribeExternalTableResult(), // to do: convert private proto to public
+                    *description,
                     ctx
                 );
             }

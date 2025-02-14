@@ -761,6 +761,7 @@ TRestoreResult TRestoreClient::RestoreDatabases(const TFsPath& fsPath, const TRe
     if (IsFileExists(fsPath.Child(NFiles::Database().FileName))) {
         TRestoreDatabaseSettings dbSettings = {
             .WaitNodesDuration_ = settings.WaitNodesDuration_,
+            .Database_ = std::nullopt,
             .WithContent_ = false
         };
 

@@ -201,6 +201,8 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
                 GetTotalTimeMs(record.GetTimestamps()),
                 GetVDiskTimeMs(record.GetTimestamps()),
                 GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
+                record.GetMsgQoS().GetExecTimeStats().GetInSenderQueue() / 1000.0,
+                record.GetMsgQoS().GetExecTimeStats().GetInQueue() / 1000.0,
                 NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass()),
                 NKikimrProto::EReplyStatus_Name(record.GetStatus()));
         if (RootCauseTrack.IsOn && record.HasCookie()) {
@@ -284,6 +286,8 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
                 GetTotalTimeMs(record.GetTimestamps()),
                 GetVDiskTimeMs(record.GetTimestamps()),
                 GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
+                record.GetMsgQoS().GetExecTimeStats().GetInSenderQueue() / 1000.0,
+                record.GetMsgQoS().GetExecTimeStats().GetInQueue() / 1000.0,
                 NKikimrBlobStorage::EPutHandleClass_Name(GetImpl.GetPutHandleClass()),
                 NKikimrProto::EReplyStatus_Name(status));
 

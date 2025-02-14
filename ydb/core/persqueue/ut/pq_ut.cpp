@@ -2443,6 +2443,7 @@ Y_UNIT_TEST(Test_The_Partition_And_Blob_Created_By_The_New_Version)
     TestHowDoesABatchDownloadBlobsFromANewVersion("new_version_topic.dat");
     TestHowDoesABatchDownloadBlobsFromANewVersion("new_version_topic_many_parts_1.dat");
     TestHowDoesABatchDownloadBlobsFromANewVersion("new_version_topic_many_parts_2.dat");
+    TestHowDoesABatchDownloadBlobsFromANewVersion("new_version_topic_many_parts_3.dat");
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

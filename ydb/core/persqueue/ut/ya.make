@@ -61,6 +61,7 @@ RESOURCE(
     ydb/core/persqueue/ut/resources/new_version_topic.dat new_version_topic.dat
     ydb/core/persqueue/ut/resources/new_version_topic_many_parts_1.dat new_version_topic_many_parts_1.dat
     ydb/core/persqueue/ut/resources/new_version_topic_many_parts_2.dat new_version_topic_many_parts_2.dat
+    ydb/core/persqueue/ut/resources/new_version_topic_many_parts_3.dat new_version_topic_many_parts_3.dat
 )
 
 END()

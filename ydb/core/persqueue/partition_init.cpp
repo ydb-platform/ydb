@@ -456,6 +456,11 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
         return;
     }
 
+    if (WaitForDeleteAndRename) {
+        PoisonPill(ctx);
+        return;
+    }
+
     auto& response = ev->Get()->Record;
     Y_ABORT_UNLESS(response.ReadRangeResultSize() == 1);
 
@@ -465,8 +470,13 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     switch(range.GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
-
             FillBlobsMetaData(range, ctx);
+
+            if (CompatibilityRequest) {
+                ctx.Send(Partition()->Tablet, CompatibilityRequest.Release());
+                WaitForDeleteAndRename = true;
+                return;
+            }
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
                 Y_ABORT_UNLESS(range.PairSize());
@@ -571,6 +581,26 @@ static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueRespo
     return {filtered.begin(), filtered.end()};
 }
 
+TString FindFirstHeadKey(const THashSet<TString>& keys)
+{
+    TString key;
+
+    for (const auto& k : keys) {
+        if (k.back() != '|') {
+            continue;
+        }
+        if (key.empty()) {
+            key = k;
+            continue;
+        }
+        if (k < key) {
+            key = k;
+        }
+    }
+
+    return key;
+}
+
 void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx) {
     auto& endOffset = Partition()->EndOffset;
     auto& startOffset = Partition()->StartOffset;
@@ -580,14 +610,38 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     auto& gapSize = Partition()->GapSize;
     auto& bodySize = Partition()->BodySize;
 
+    Y_ABORT_UNLESS(!CompatibilityRequest);
+
     const auto actualKeys = FilterBlobsMetaData(range, PartitionId());
+    const TString firstHeadKey = FindFirstHeadKey(actualKeys);
+    CompatibilityRequest = MakeHolder<TEvKeyValue::TEvRequest>();
 
     for (ui32 i = 0; i < range.PairSize(); ++i) {
-        auto pair = range.GetPair(i);
+        const auto& pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+
         if (!actualKeys.contains(pair.GetKey())) {
+            auto* cmd = CompatibilityRequest->Record.AddCmdDeleteRange();
+            auto* range = cmd->MutableRange();
+            range->SetFrom(pair.GetKey());
+            range->SetIncludeFrom(true);
+            range->SetTo(pair.GetKey());
+            range->SetIncludeTo(true);
             continue;
         }
+        if (pair.GetKey().back() == '?') {
+            TString newKey = pair.GetKey();
+            if (newKey < firstHeadKey) {
+                newKey.resize(newKey.size() - 1);
+            } else {
+                newKey.back() = '|';
+            }
+            auto* cmd = CompatibilityRequest->Record.AddCmdRename();
+            cmd->SetOldKey(pair.GetKey());
+            cmd->SetNewKey(newKey);
+            continue;
+        }
+
         TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
         if (dataKeysBody.empty()) { //no data - this is first pair of first range
             head.Offset = endOffset = startOffset = k.GetOffset();
@@ -616,6 +670,10 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
         dataKeysBody.push_back({k, pair.GetValueSize(),
                         TInstant::Seconds(pair.GetCreationUnixTime()),
                         dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size});
+    }
+
+    if ((CompatibilityRequest->Record.CmdDeleteRangeSize() == 0) && (CompatibilityRequest->Record.CmdRenameSize() == 0)) {
+        CompatibilityRequest = nullptr;
     }
 
     Y_ABORT_UNLESS(endOffset >= startOffset);

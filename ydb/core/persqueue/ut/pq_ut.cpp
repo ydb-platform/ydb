@@ -2429,21 +2429,33 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
     });
 }
 
-void TestHowDoesABatchDownloadBlobsFromANewVersion(const TString& resourceName)
+Y_UNIT_TEST(Test_The_Partition_And_Blob_Created_By_The_New_Version_1)
 {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();
 
-    PQTabletPrepareFromResource({.partitions = 1}, {}, resourceName, tc);
+    // This file contains all the combinations of neighboring keys. There are blobs in it 
+    // if you write messages in the topic in this order
+    // * 15 420Kb
+    // * 1 9Mb
+    // * 1 2Mb
+    // * 1 4Mb
+    // * 1 5Mb
+    // * 5 100Kb
+    PQTabletPrepareFromResource({.partitions = 1}, {}, "new_version_topic.dat", tc);
 }
 
-Y_UNIT_TEST(Test_The_Partition_And_Blob_Created_By_The_New_Version)
+Y_UNIT_TEST(Test_The_Partition_And_Blob_Created_By_The_New_Version_2)
 {
-    TestHowDoesABatchDownloadBlobsFromANewVersion("new_version_topic.dat");
-    TestHowDoesABatchDownloadBlobsFromANewVersion("new_version_topic_many_parts_1.dat");
-    TestHowDoesABatchDownloadBlobsFromANewVersion("new_version_topic_many_parts_2.dat");
-    TestHowDoesABatchDownloadBlobsFromANewVersion("new_version_topic_many_parts_3.dat");
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    // This test checks the situation when the user recorded several messages, but they did not have
+    // time to repackage them. Their keys end in `?`. It is expected that after restarting the partition,
+    // the keys will end in `|`.
+    PQTabletPrepareFromResource({.partitions = 1}, {}, "new_version_topic_only_user_writes.dat", tc);
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

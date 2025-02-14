@@ -528,9 +528,6 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
         ast = stats->GetAst();
         statsStr = stats->ToString();
         Cout << Endl << "Statistics:" << Endl << statsStr;
-        if (meta) {
-            Cout << Endl << "Meta:" << Endl << NJson::PrettifyJson(*meta, true) << Endl;
-        }
         PrintFlameGraph(plan);
     }
 
@@ -553,6 +550,7 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
         if (meta) {
             NJson::TJsonValue metaJson;
             NJson::ReadJsonTree(*meta, &metaJson, true);
+            metaJson.InsertValue("query_text", EscapeC(Query));
             diagnosticsJson.InsertValue("meta", metaJson);
         }
         file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
@@ -816,10 +814,6 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
 
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
         queryPlanPrinter.Print(TString{*fullStats});
-    }
-
-    if (meta) {
-        Cout << Endl << "Meta:" << Endl << NJson::PrettifyJson(*meta, true) << Endl;;
     }
 
     if (!DiagnosticsFile.empty()) {

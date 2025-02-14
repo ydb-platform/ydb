@@ -231,10 +231,6 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
         Cout << Endl << "Statistics:" << Endl << *stats;
     }
 
-    if (meta) {
-        Cout << Endl << "Meta:" << Endl << NJson::PrettifyJson(*meta, true) << Endl;;
-    }
-
     if (plan) {
         if (!ExplainMode && !ExplainAnalyzeMode
                 && (OutputFormat == EDataFormat::Default || OutputFormat == EDataFormat::Pretty)) {

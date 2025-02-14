@@ -932,7 +932,7 @@ public:
             threadCount = Min<size_t>(partitionCount, NSystemInfo::CachedNumberOfCpus());
         }
 
-        TasksQueue->Start(threadCount, threadCount + 1);
+        TasksQueue->Start(threadCount);
     }
 
     bool Push(NPrivate::TBatch&& data) override {

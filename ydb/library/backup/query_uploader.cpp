@@ -21,7 +21,7 @@ TUploader::TUploader(const TUploader::TOptions &opts, NYdb::NTable::TTableClient
     , Client(client)
 {
     TasksQueue = MakeSimpleShared<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
-    TasksQueue->Start(opts.InFly, opts.InFly + 1);
+    TasksQueue->Start(opts.InFly);
 }
 
 bool TUploader::Push(const TString& path, TValue&& value) {

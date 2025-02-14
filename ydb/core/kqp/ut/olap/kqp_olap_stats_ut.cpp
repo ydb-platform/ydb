@@ -203,11 +203,11 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         {
             auto selectQuery = TString(R"(
                 SELECT
-                    SUM(BlobBytes) AS BlobBytes,
-                    SUM(RawBytes) AS RawBytes,
+                    SUM(ColumnBlobBytes) AS BlobBytes,
+                    SUM(ColumnRawBytes) AS RawBytes,
                     SUM(Rows) AS Rows,
                     COUNT(*) AS Portions
-                FROM `/Root/olapStore/.sys/store_primary_index_portion_stats`
+                FROM `/Root/TableStoreTest/.sys/store_primary_index_portion_stats`
             )");
 
             auto client = testHelper.GetKikimr().GetTableClient();

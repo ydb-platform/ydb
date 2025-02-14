@@ -143,9 +143,6 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
         return false;
     }
     Orbit = std::move(ev->Orbit);
-    if (ev->ReplayMessage) {
-        ReplayMessage = *ev->ReplayMessage;
-    }
 
     return true;
 }
@@ -158,6 +155,10 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr comp
 
     if (CompileResult->Status != Ydb::StatusIds::SUCCESS) {
         return false;
+    }
+
+    if (compileResult->ReplayMessageUserView && GetCollectDiagnostics()) {
+        ReplayMessage = *compileResult->ReplayMessageUserView;
     }
 
     YQL_ENSURE(CompileResult->PreparedQuery);
@@ -300,6 +301,8 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
     }
 
+    bool isQueryActionPrepare = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;
+
     TMaybe<TQueryAst> statementAst;
     if (!Statements.empty()) {
         YQL_ENSURE(CurrentStatementId < Statements.size());
@@ -307,7 +310,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), keepInCache,
-        GetAction(), perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
+        isQueryActionPrepare, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst);
 }
 
@@ -342,11 +345,12 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     }
 
     auto compileDeadline = QueryDeadlines.TimeoutAt;
+    bool isQueryActionPrepare = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;
     if (QueryDeadlines.CancelAt) {
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
     }
 
-    return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, ClientAddress, CompileResult->Uid, query, GetAction(),
+    return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, ClientAddress, CompileResult->Uid, query, isQueryActionPrepare,
         compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState,
         CompileResult->QueryAst);
 }
@@ -389,7 +393,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
-        NKikimrKqp::QUERY_ACTION_EXECUTE, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
+        false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
         false, SplittedCtx.get(), SplittedExprs.at(NextSplittedExpr));
 }

@@ -2220,6 +2220,14 @@ const std::string TDataQueryResult::GetQueryPlan() const {
     }
 }
 
+const std::string TDataQueryResult::GetMeta() const {
+    if (QueryStats_.has_value()) {
+        return NYdb::TProtoAccessor::GetProto(*QueryStats_).query_meta();
+    } else {
+        return "";
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TBeginTransactionResult::TBeginTransactionResult(TStatus&& status, TTransaction transaction)

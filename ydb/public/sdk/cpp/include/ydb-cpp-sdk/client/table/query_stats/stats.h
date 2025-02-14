@@ -30,7 +30,7 @@ namespace NTable {
 enum class ECollectQueryStatsMode {
     None = 0,  // Stats collection is disabled
     Basic = 1, // Aggregated stats of reads, updates and deletes per table
-    Full = 2,   // Add per-stage execution profile and query plan on top of Basic mode
+    Full = 2,   // Add per-stage execution profile, query plan and query meta on top of Basic mode
     Profile = 3   // Detailed execution stats including stats for individual tasks and channels
 };
 

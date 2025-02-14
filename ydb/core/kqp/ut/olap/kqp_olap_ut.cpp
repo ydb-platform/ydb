@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(AlterObjectDisabled) {
         auto settings = TKikimrSettings()
              .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);        
+        TKikimrRunner kikimr(settings);
         TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
 
         {
@@ -426,6 +426,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(jsonMeta.IsMap(), "Incorrect Meta");
             UNIT_ASSERT_C(jsonMeta.Has("query_id"), "Incorrect Meta");
             UNIT_ASSERT_C(jsonMeta.Has("version"), "Incorrect Meta");
+            UNIT_ASSERT_C(!jsonMeta.Has("query_text"), "Incorrect Meta");
             UNIT_ASSERT_C(jsonMeta.Has("query_parameter_types"), "Incorrect Meta");
             UNIT_ASSERT_C(jsonMeta.Has("table_metadata"), "Incorrect Meta");
             UNIT_ASSERT_C(jsonMeta.Has("created_at"), "Incorrect Meta");
@@ -2820,7 +2821,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             auto alterQuery =
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                  {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 1, "portions_count_available" : 3}, 
+                  {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 1, "portions_count_available" : 3},
                                {"class_name" : "Zero"}]}`);
                 )";
             auto result = session.ExecuteQuery(alterQuery, NQuery::TTxControl::NoTx()).GetValueSync();

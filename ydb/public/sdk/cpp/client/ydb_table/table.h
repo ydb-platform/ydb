@@ -2045,8 +2045,6 @@ public:
 
     const TString GetQueryPlan() const;
 
-    const TString GetMeta() const;
-
 private:
     TMaybe<TTransaction> Transaction_;
     TVector<TResultSet> ResultSets_;

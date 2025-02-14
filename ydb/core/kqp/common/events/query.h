@@ -282,7 +282,7 @@ public:
     }
 
     bool GetCollectDiagnostics() const {
-        return Record.MutableRequest()->GetCollectDiagnostics();
+        return Record.GetRequest().GetCollectDiagnostics();
     }
 
     ui32 CalculateSerializedSize() const override {

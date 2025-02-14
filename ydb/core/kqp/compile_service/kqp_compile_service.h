@@ -166,7 +166,6 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings, const TMaybe<TString>& applicationName,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, NWilson::TTraceId traceId = {},
     TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
-    NKikimrKqp::EQueryAction queryAction = NKikimrKqp::QUERY_ACTION_EXECUTE,
     ECompileActorAction compileAction = ECompileActorAction::COMPILE,
     TMaybe<TQueryAst> queryAst = {},
     bool collectFullDiagnostics = false,

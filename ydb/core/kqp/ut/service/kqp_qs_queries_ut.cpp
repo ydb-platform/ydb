@@ -673,6 +673,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             UNIT_ASSERT_C(value.IsMap(), "Incorrect Meta");
             UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_text"), "Incorrect Meta");
             UNIT_ASSERT_C(value.Has("version"), "Incorrect Meta");
             UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Meta");
             UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Meta");
@@ -698,6 +699,42 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             UNIT_ASSERT_C(stats.query_meta().empty(), "Query result Meta should be empty, but it's not");
         }
+
+        {
+            TExecuteQuerySettings settings;
+            settings.ExecMode(EExecMode::Explain);
+
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+
+            UNIT_ASSERT(result.GetStats().has_value());
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_C(!stats.query_ast().empty(), "Query result ast is empty");
+            UNIT_ASSERT_C(!stats.query_meta().empty(), "Query result meta is empty");
+
+            TStringStream in;
+            in << stats.query_meta();
+            NJson::TJsonValue value;
+            ReadJsonTree(&in, &value);
+
+            UNIT_ASSERT_C(value.IsMap(), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("version"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_text"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Meta");
+            UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Meta: table_metadata type should be an array");
+            UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Meta");
+        }
     }
 
     Y_UNIT_TEST(StreamExecuteCollectMeta) {
@@ -722,7 +759,52 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 }
 
                 const auto& execStats = streamPart.GetStats();
-                if (execStats.Defined()) {
+                if (execStats) {
+                    auto& stats = NYdb::TProtoAccessor::GetProto(*execStats);
+                    statsString = stats.query_meta();
+                }
+            }
+
+            UNIT_ASSERT_C(!statsString.empty(), "Query result meta is empty");
+
+            TStringStream in;
+            in << statsString;
+            NJson::TJsonValue value;
+            ReadJsonTree(&in, &value);
+
+            UNIT_ASSERT_C(value.IsMap(), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_text"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("version"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Meta");
+            UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Meta: table_metadata type should be an array");
+            UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Meta");
+        }
+
+        {
+            auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+
+            auto it = db.StreamExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+            TString statsString;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                const auto& execStats = streamPart.GetStats();
+                if (execStats) {
                     auto& stats = NYdb::TProtoAccessor::GetProto(*execStats);
                     statsString = stats.query_meta();
                 }
@@ -738,6 +820,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(value.IsMap(), "Incorrect Meta");
             UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Meta");
             UNIT_ASSERT_C(value.Has("version"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_text"), "Incorrect Meta");
             UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Meta");
             UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Meta");
             UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Meta: table_metadata type should be an array");
@@ -767,7 +850,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 }
 
                 const auto& execStats = streamPart.GetStats();
-                if (execStats.Defined()) {
+                if (execStats) {
                     auto& stats = NYdb::TProtoAccessor::GetProto(*execStats);
                     statsString = stats.query_meta();
                 }

@@ -31,6 +31,7 @@ std::string TExecStats::ToString(bool withPlan) const {
     if (!withPlan) {
         proto.clear_query_plan();
         proto.clear_query_ast();
+        proto.clear_query_meta();
     }
 
     TStringType res;
@@ -56,6 +57,16 @@ std::optional<std::string> TExecStats::GetAst() const {
     }
 
     return proto.query_ast();
+}
+
+std::optional<std::string> TExecStats::GetMeta() const {
+    auto proto = Impl_->Proto;
+
+    if (proto.query_meta().empty()) {
+        return {};
+    }
+
+    return proto.query_meta();
 }
 
 TDuration TExecStats::GetTotalDuration() const {

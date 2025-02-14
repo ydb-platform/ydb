@@ -136,6 +136,7 @@ class TRestoreClient {
     TRestoreResult RestoreDependentResources(const TFsPath& fsPath, const TString& dbPath);
     TRestoreResult RestoreRateLimiter(const TFsPath& fsPath, const TString& coordinationNodePath, const TString& resourcePath);
     TRestoreResult RestoreExternalDataSource(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
+    TRestoreResult RestoreExternalTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
 
     TRestoreResult CheckSchema(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc, ui32 partitionCount);
@@ -148,6 +149,7 @@ class TRestoreClient {
     TRestoreResult ReplaceClusterRoot(TString& outPath);
     TRestoreResult WaitForAvailableNodes(const TString& database, TDuration waitDuration);
     TRestoreResult RetryViewRestoration();
+    TRestoreResult RestoreExternalTables();
 
     TRestoreResult RestoreClusterRoot(const TFsPath& fsPath);
     TRestoreResult RestoreDatabases(const TFsPath& fsPath, const TRestoreClusterSettings& settings);
@@ -197,6 +199,16 @@ private:
     // If the dependency is not created yet, then the view restoration will fail.
     // We retry failed view creation attempts until either all views are created, or the errors are persistent.
     TVector<TRestoreViewCall> ViewRestorationCalls;
+
+    struct TRestoreExternalTableCall {
+        TFsPath FsPath;
+        TString DbPath;
+        TRestoreSettings Settings;
+        bool IsAlreadyExisting;
+    };
+    // External Tables depend on External Data Sources and need to be restored after them.
+    TVector<TRestoreExternalTableCall> ExternalTableRestorationCalls;
+
     TString ClusterRootPath;
 }; // TRestoreClient
 

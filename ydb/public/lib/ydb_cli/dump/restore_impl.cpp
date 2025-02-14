@@ -73,6 +73,10 @@ TString ReadExternalDataSourceQuery(const TFsPath& fsDirPath, const TLog* log) {
     return ReadFromFile(fsDirPath, log, NFiles::CreateExternalDataSource());
 }
 
+TString ReadExternalTableQuery(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadFromFile(fsDirPath, log, NFiles::CreateExternalTable());
+}
+
 template <typename TProtoType>
 TProtoType ReadProtoFromFile(const TFsPath& fsDirPath, const TLog* log, const NFiles::TFileInfo& fileInfo) {
     TProtoType proto;
@@ -344,6 +348,16 @@ TRestoreResult TRestoreClient::RetryViewRestoration() {
     return result;
 }
 
+TRestoreResult TRestoreClient::RestoreExternalTables() {
+    for (const auto& [fsPath, dbPath, settings, isAlreadyExisting] : ExternalTableRestorationCalls) {
+        auto result = RestoreExternalTable(fsPath, dbPath, settings, isAlreadyExisting);
+        if (!result.IsSuccess()) {
+            return result;
+        }
+    }
+    return Result<TRestoreResult>();
+}
+
 TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
     LOG_I("Restore " << fsPath.Quote() << " to " << dbPath.Quote());
 
@@ -380,8 +394,11 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
     // restore
     auto restoreResult = RestoreFolder(fsPath, dbPath, "", settings, oldEntries);
-    if (auto retryViewResult = RetryViewRestoration(); !retryViewResult.IsSuccess()) {
-        restoreResult = retryViewResult;
+    if (auto result = RetryViewRestoration(); !result.IsSuccess()) {
+        restoreResult = result;
+    }
+    if (auto result = RestoreExternalTables(); !result.IsSuccess()) {
+        restoreResult = result;
     }
 
     if (restoreResult.IsSuccess()) {
@@ -403,7 +420,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         return restoreResult;
     }
 
-    TVector<std::reference_wrapper<TSchemeEntry>> entriesToDropInSecondPass;
+    TVector<const TSchemeEntry*> entriesToDropInSecondPass;
 
     for (const auto& entry : newDirectoryList.Entries) {
         if (oldEntries.contains(entry.Name)) {
@@ -440,8 +457,14 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
                 });
                 break;
             case ESchemeEntryType::ExternalDataSource:
-                entriesToDropInSecondPass.emplace_back(entry);
+                entriesToDropInSecondPass.emplace_back(&entry);
                 continue;
+            case ESchemeEntryType::ExternalTable:
+                result = QueryClient.RetryQuerySync([&path = fullPath](NQuery::TSession session) {
+                    return session.ExecuteQuery(std::format("DROP EXTERNAL TABLE `{}`;", path),
+                        NQuery::TTxControl::NoTx()).ExtractValueSync();
+                });
+                break;
             default:
                 break;
         }
@@ -456,11 +479,11 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         }
     }
 
-    for (const auto& entry : entriesToDropInSecondPass) {
+    for (const auto* entry : entriesToDropInSecondPass) {
         TMaybe<TStatus> result;
-        switch (entry.get().Type) {
+        switch (entry->Type) {
             case ESchemeEntryType::ExternalDataSource:
-                result = QueryClient.RetryQuerySync([&path = entry.get().Name](NQuery::TSession session) {
+                result = QueryClient.RetryQuerySync([&path = entry->Name](NQuery::TSession session) {
                     return session.ExecuteQuery(std::format("DROP EXTERNAL DATA SOURCE `{}`;", path),
                         NQuery::TTxControl::NoTx()).ExtractValueSync();
                 });
@@ -470,7 +493,8 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         }
         Y_ENSURE(result, "Unexpected entry to drop in the second pass");
         if (!result->IsSuccess()) {
-            LOG_E("Error removing: " << std::quoted(entry.get().Name) << ", issues: " << result->GetIssues().ToOneLineString());
+            LOG_E("Error removing " << entry->Type << ": " << TString{entry->Name}.Quote()
+                << ", issues: " << result->GetIssues().ToOneLineString());
             return restoreResult;
         }
     }
@@ -751,8 +775,11 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
 
     if (settings.WithContent_) {
         auto restoreResult = RestoreFolder(fsPath, dbPath, "", {}, {});
-        if (auto retryViewResult = RetryViewRestoration(); !retryViewResult.IsSuccess()) {
-            restoreResult = retryViewResult;
+        if (auto result = RetryViewRestoration(); !result.IsSuccess()) {
+            restoreResult = result;
+        }
+        if (auto result = RestoreExternalTables(); !result.IsSuccess()) {
+            restoreResult = result;
         }
         return restoreResult;
     } else {
@@ -899,6 +926,12 @@ TRestoreResult TRestoreClient::RestoreFolder(
         return RestoreExternalDataSource(fsPath, objectDbPath, settings, oldEntries.contains(objectDbPath));
     }
 
+    if (IsFileExists(fsPath.Child(NFiles::CreateExternalTable().FileName))) {
+        // delay external table restoration
+        ExternalTableRestorationCalls.emplace_back(fsPath, objectDbPath, settings, oldEntries.contains(objectDbPath));
+        return Result<TRestoreResult>();
+    }
+
     if (IsFileExists(fsPath.Child(NFiles::Empty().FileName))) {
         return RestoreEmptyDir(fsPath, objectDbPath, settings, oldEntries.contains(objectDbPath));
     }
@@ -924,6 +957,9 @@ TRestoreResult TRestoreClient::RestoreFolder(
             result = RestoreReplication(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries.contains(childDbPath));
         } else if (IsFileExists(child.Child(NFiles::CreateExternalDataSource().FileName))) {
             result = RestoreExternalDataSource(child, childDbPath, settings, oldEntries.contains(childDbPath));
+        } else if (IsFileExists(child.Child(NFiles::CreateExternalTable().FileName))) {
+            // delay external table restoration
+            ExternalTableRestorationCalls.emplace_back(child, childDbPath, settings, oldEntries.contains(childDbPath));
         } else if (child.IsDirectory()) {
             result = RestoreFolder(child, dbRestoreRoot, Join('/', dbPathRelativeToRestoreRoot, child.GetName()), settings, oldEntries);
         }
@@ -935,7 +971,7 @@ TRestoreResult TRestoreClient::RestoreFolder(
 
     const bool dbPathExists = oldEntries.contains(dbPath);
     if (!result.Defined() && !dbPathExists) {
-        // This situation occurs when all the children of the folder are views.
+        // This situation occurs when all the children of the folder are views or external tables.
         return RestoreEmptyDir(fsPath, dbPath, settings, dbPathExists);
     }
 
@@ -1175,6 +1211,44 @@ TRestoreResult TRestoreClient::RestoreExternalDataSource(
 
     NYql::TIssues issues;
     if (!RewriteCreateQuery(query, "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}`", dbPath, issues)) {
+        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+    }
+
+    auto result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
+        return session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    });
+
+    if (result.IsSuccess()) {
+        LOG_D("Created " << dbPath.Quote());
+        return RestorePermissions(fsPath, dbPath, settings, isAlreadyExisting);
+    }
+
+    LOG_E("Failed to create " << dbPath.Quote());
+    return Result<TRestoreResult>(dbPath, std::move(result));
+}
+
+TRestoreResult TRestoreClient::RestoreExternalTable(
+    const TFsPath& fsPath,
+    const TString& dbPath,
+    const TRestoreSettings& settings,
+    bool isAlreadyExisting)
+{
+    LOG_D("Process " << fsPath.GetPath().Quote());
+
+    if (auto error = ErrorOnIncomplete(fsPath)) {
+        return *error;
+    }
+
+    LOG_I("Restore external table " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
+
+    if (settings.DryRun_) {
+        return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::ExternalTable);
+    }
+
+    TString query = ReadExternalTableQuery(fsPath, Log.get());
+
+    NYql::TIssues issues;
+    if (!RewriteCreateQuery(query, "CREATE EXTERNAL TABLE IF NOT EXISTS `{}`", dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 

@@ -419,7 +419,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
                 break;
             case ESchemeEntryType::View:
                 result = QueryClient.RetryQuerySync([&path = fullPath](NQuery::TSession session) {
-                    return session.ExecuteQuery(std::format("DROP VIEW IF EXISTS `{}`;", path),
+                    return session.ExecuteQuery(std::format("DROP VIEW `{}`;", path),
                         NQuery::TTxControl::NoTx()).ExtractValueSync();
                 });
                 break;

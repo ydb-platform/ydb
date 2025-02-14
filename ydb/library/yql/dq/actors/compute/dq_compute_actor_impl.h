@@ -271,7 +271,7 @@ protected:
 
     void ReportEventElapsedTime() {
         if (RuntimeSettings.CollectBasic()) {
-            ComputeActorElapsedTicks += NActors::TlsActivationContext->GetCurrentEventTicks();
+            ComputeActorElapsedTicks += std::max(NActors::TlsActivationContext->GetCurrentEventTicks(), (i64)0);
         }
     }
 

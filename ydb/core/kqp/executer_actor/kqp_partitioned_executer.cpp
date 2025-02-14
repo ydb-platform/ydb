@@ -224,26 +224,43 @@ public:
     }
 
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
-        auto exIt = std::find(Executers.cbegin(), Executers.cend(), ev->Sender);
-        if (exIt == Executers.cend()) {
-            return;
-        }
-
-        auto exIdx = exIt - Executers.cbegin();
         auto* response = ev->Get()->Record.MutableResponse();
+        switch (response->GetStatus()) {
+            case Ydb::StatusIds::SUCCESS:
+                OnSuccessResponse(GetExecuterIdx(ev->Sender));
+                break;
+            case Ydb::StatusIds::STATUS_CODE_UNSPECIFIED:
+            case Ydb::StatusIds::ABORTED:
+            case Ydb::StatusIds::UNAVAILABLE:
+            case Ydb::StatusIds::OVERLOADED:
+                RetryPartExecution(GetExecuterIdx(ev->Sender), /* fromBuffer */ false);
+                break;
+            default:
+                RuntimeError(
+                    Ydb::StatusIds::INTERNAL_ERROR,
+                    NYql::TIssues({NYql::TIssue("RuntimeError: ExecuteState.")}));
+        }
+    }
 
-        if (response->GetStatus() == Ydb::StatusIds::SUCCESS) {
-            ExecutersResponses[exIdx] = EExecuterResponse::SUCCESS;
-            if (CheckExecutersAreSuccess()) {
-                SendSuccessToSessionActor();
-            }
+    void OnSuccessResponse(size_t exId) {
+        if (exId == Executers.size()) {
             return;
         }
 
-        ExecutersResponses[exIdx] = EExecuterResponse::ERROR;
-        if (CheckExecutersAreFailed()) {
-            SendFailedToSessionActor();
+        ExecutersResponses[exId] = EExecuterResponse::SUCCESS;
+        if (!CheckExecutersAreSuccess()) {
+            return;
         }
+
+        for (size_t i = 0; i < BufferActors.size(); ++i) {
+            Send(BufferActors[i], new TEvKqpBuffer::TEvTerminate{});
+        }
+
+        auto& response = *ResponseEv->Record.MutableResponse();
+        response.SetStatus(Ydb::StatusIds::SUCCESS);
+
+        Send(SessionActorId, ResponseEv.release());
+        PassAway();
     }
 
     void HandleExecute(TEvKqpBuffer::TEvError::TPtr& ev) {
@@ -253,20 +270,62 @@ public:
 
         switch (msg.StatusCode) {
             case NYql::NDqProto::StatusIds::SUCCESS:
-                return;
+                break;
             case NYql::NDqProto::StatusIds::UNSPECIFIED:
             case NYql::NDqProto::StatusIds::ABORTED:
             case NYql::NDqProto::StatusIds::UNAVAILABLE:
             case NYql::NDqProto::StatusIds::OVERLOADED:
-                return;
+                RetryPartExecution(GetBufferIdx(ev->Sender), /* fromBuffer */ true);
+                break;
             default:
-                Abort();
+                RuntimeError(
+                    Ydb::StatusIds::INTERNAL_ERROR,
+                    NYql::TIssues({NYql::TIssue("RuntimeError: ExecuteState.")}));
         }
     }
 
-    // void RetryPartExecution(size_t partitionIdx) {
+    void RetryPartExecution(size_t partitionIdx, bool fromBuffer) {
+        if (partitionIdx == Executers.size()) {
+            return;
+        }
 
-    // }
+        if (fromBuffer) {
+            auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Aborted by Partitioned Executer");
+            Send(Executers[partitionIdx], abortEv.Release());
+        } else {
+            Send(BufferActors[partitionIdx], new TEvKqpBuffer::TEvTerminate{});
+        }
+
+        ExecutersResponses[partitionIdx] = EExecuterResponse::NONE;
+
+        IKqpGateway::TExecPhysicalRequest newRequest(Request.TxAlloc);
+        FillRequestWithParams(newRequest, partitionIdx);
+
+        auto txManager = CreateKqpTransactionManager();
+
+        TKqpBufferWriterSettings settings {
+            .SessionActorId = SelfId(),
+            .TxManager = txManager,
+            .TraceId = Request.TraceId.GetTraceId(),
+            .Counters = Counters,
+            .TxProxyMon = RequestCounters->TxProxyMon,
+        };
+        auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
+        auto bufferActorId = RegisterWithSameMailbox(bufferActor);
+        BufferActors[partitionIdx] = bufferActorId;
+
+        auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, RequestCounters,
+            TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
+            FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId);
+
+        auto exId = RegisterWithSameMailbox(executerActor);
+        Executers[partitionIdx] = exId;
+
+        LOG_D("Retry with new KQP executer from Partitioned: " << exId);
+
+        auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
+        Send(MakeTxProxyID(), ev.release());
+    }
 
     STFUNC(AbortState) {
         try {
@@ -310,6 +369,11 @@ private:
     size_t GetExecuterIdx(const TActorId exId) const {
         auto end = std::find(Executers.begin(), Executers.end(), exId);
         return std::distance(Executers.begin(), end);
+    }
+
+    size_t GetBufferIdx(const TActorId buferId) const {
+        auto end = std::find(BufferActors.begin(), BufferActors.end(), buferId);
+        return std::distance(BufferActors.begin(), end);
     }
 
     void FillTableMetaInfo(const NKqpProto::TKqpSink& sink) {
@@ -429,14 +493,6 @@ private:
             [](const auto& resp) { return resp == EExecuterResponse::ERROR; });
     }
 
-    void SendSuccessToSessionActor() {
-        Send(SessionActorId, ResponseEv.release());
-    }
-
-    void SendFailedToSessionActor() {
-        // todo
-    }
-
     void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         if (this->CurrentStateFunc() != &TKqpPartitionedExecuter::AbortState) {
             Abort();
@@ -475,8 +531,8 @@ private:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     IKqpGateway::TExecPhysicalRequest Request;
     const TActorId SessionActorId;
-    TVector<const TActorId> Executers;
-    TVector<const TActorId> BufferActors;
+    TVector<TActorId> Executers;
+    TVector<TActorId> BufferActors;
     TVector<EExecuterResponse> ExecutersResponses;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;

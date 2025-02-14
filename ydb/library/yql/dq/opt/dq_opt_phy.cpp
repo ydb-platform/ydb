@@ -2696,7 +2696,7 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
 
 
 TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationContext& optCtx,
-                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin, bool shuffleMapJoin, bool useGraceCoreForMap)
+                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin, bool shuffleMapJoin, bool useGraceCoreForMap, bool buildCollectStage)
 {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -2746,7 +2746,7 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     // separate stage to receive data from both sides of join.
     // TODO: We can push MapJoin to existing stage for data query, if it doesn't have table reads. This
     //       requires some additional knowledge, probably with use of constraints.
-    return DqBuildPhyJoin(join, pushLeftStage, ctx, optCtx, useGraceCoreForMap);
+    return DqBuildPhyJoin(join, pushLeftStage, ctx, optCtx, useGraceCoreForMap, buildCollectStage);
 }
 
 TExprBase DqPrecomputeToInput(const TExprBase& node, TExprContext& ctx) {

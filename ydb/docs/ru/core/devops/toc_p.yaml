@@ -1,6 +1,9 @@
 items:
-- name: Системные требования
-  href: system-requirements.md
+- name: Концепции
+  href: concepts/index.md
+  include:
+    mode: link
+    path: concepts/toc_p.yaml
 - name: Способы развёртывания
   href: deployment-options/index.md
   include:
@@ -18,8 +21,3 @@ items:
     path: observability/toc_p.yaml
 - name: Резервное копирование и восстановление
   href: backup-and-recovery.md
-- name: Обслуживание кластера
-  href: maintenance/index.md
-  include:
-    mode: link
-    path: maintenance/toc_p.yaml

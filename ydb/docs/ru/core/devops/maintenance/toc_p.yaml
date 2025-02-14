@@ -1,5 +1,0 @@
-items:
-- name: Обслуживание без потери доступности
-  href: maintenance-without-downtime.md
-- name: Обновление
-  href: upgrade.md

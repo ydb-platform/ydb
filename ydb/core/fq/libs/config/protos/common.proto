@@ -11,8 +11,6 @@ message TYdbDriverConfig {
     uint64 ClientThreadsNum = 2; // default: 0 that means adaptive thread pool
     uint64 GrpcMemoryQuota = 3; // default: 0 (unlimited)
     uint32 MonitoringPort = 4; // default: 0 (disabled)
-    uint32 TopicClientHandlersExecutorThreadsNum = 5; // default: 0 that means use default from TopicClientSettings (1))
-    uint32 TopicClientCompressionExecutorThreadsNum = 6; // default: 0 that means use default from TopicClientSettings (2)
 }
 
 message TCommonConfig {

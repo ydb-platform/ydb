@@ -311,7 +311,7 @@ private:
     }
 
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() {
-        return NYdb::NTopic::TTopicClientSettings()
+        return PqGateway->GetCommonTopicClientSettings()
             .Database(SinkParams.GetDatabase())
             .DiscoveryEndpoint(SinkParams.GetEndpoint())
             .SslCredentials(NYdb::TSslCredentials(SinkParams.GetUseSsl()))

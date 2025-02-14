@@ -55,7 +55,7 @@ void TSimplePortionsGroupInfo::RemovePortion(const TPortionInfo& p) {
         auto findChannel = BytesByChannel.find(blob.Channel());
         AFL_VERIFY(!findChannel.IsEnd())("blob", blob.ToStringLegacy());
         findChannel->second -= blob.BlobSize();
-        AFL_VERIFY(findChannel->second);
+        AFL_VERIFY(findChannel->second >= 0);
         if (!findChannel->second) {
             BytesByChannel.erase(findChannel);
         }

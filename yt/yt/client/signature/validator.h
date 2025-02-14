@@ -10,20 +10,20 @@ namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSignatureValidatorBase
+class ISignatureValidator
     : public TRefCounted
 {
 public:
     virtual TFuture<bool> Validate(const TSignaturePtr& signature) = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(TSignatureValidatorBase)
+DEFINE_REFCOUNTED_TYPE(ISignatureValidator)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignatureValidatorBasePtr CreateDummySignatureValidator();
+ISignatureValidatorPtr CreateDummySignatureValidator();
 
-TSignatureValidatorBasePtr CreateAlwaysThrowingSignatureValidator();
+ISignatureValidatorPtr CreateAlwaysThrowingSignatureValidator();
 
 ////////////////////////////////////////////////////////////////////////////////
 

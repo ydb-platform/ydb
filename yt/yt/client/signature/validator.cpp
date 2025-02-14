@@ -9,7 +9,7 @@ namespace NYT::NSignature {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDummySignatureValidator
-    : public TSignatureValidatorBase
+    : public ISignatureValidator
 {
 public:
     TFuture<bool> Validate(const TSignaturePtr& signature) override
@@ -19,7 +19,7 @@ public:
     }
 };
 
-TSignatureValidatorBasePtr CreateDummySignatureValidator()
+ISignatureValidatorPtr CreateDummySignatureValidator()
 {
     return New<TDummySignatureValidator>();
 }
@@ -27,7 +27,7 @@ TSignatureValidatorBasePtr CreateDummySignatureValidator()
 ////////////////////////////////////////////////////////////////////////////////
 
 class TAlwaysThrowingSignatureValidator
-    : public TSignatureValidatorBase
+    : public ISignatureValidator
 {
 public:
     TFuture<bool> Validate(const TSignaturePtr& /*signature*/) override
@@ -36,7 +36,7 @@ public:
     }
 };
 
-TSignatureValidatorBasePtr CreateAlwaysThrowingSignatureValidator()
+ISignatureValidatorPtr CreateAlwaysThrowingSignatureValidator()
 {
     return New<TAlwaysThrowingSignatureValidator>();
 }

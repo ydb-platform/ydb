@@ -7,6 +7,9 @@ __all__ = [
     "TopicCodec",
     "TopicConsumer",
     "TopicAlterConsumer",
+    "TopicAlterAutoPartitioningSettings",
+    "TopicAutoPartitioningSettings",
+    "TopicAutoPartitioningStrategy",
     "TopicDescription",
     "TopicError",
     "TopicMeteringMode",
@@ -80,6 +83,9 @@ from ._grpc.grpcwrapper.ydb_topic_public_types import (  # noqa: F401
     PublicConsumer as TopicConsumer,
     PublicAlterConsumer as TopicAlterConsumer,
     PublicMeteringMode as TopicMeteringMode,
+    PublicAutoPartitioningStrategy as TopicAutoPartitioningStrategy,
+    PublicAutoPartitioningSettings as TopicAutoPartitioningSettings,
+    PublicAlterAutoPartitioningSettings as TopicAlterAutoPartitioningSettings,
 )
 
 
@@ -108,6 +114,7 @@ class TopicClientAsyncIO:
         self,
         path: str,
         min_active_partitions: Optional[int] = None,
+        max_active_partitions: Optional[int] = None,
         partition_count_limit: Optional[int] = None,
         retention_period: Optional[datetime.timedelta] = None,
         retention_storage_mb: Optional[int] = None,
@@ -117,6 +124,7 @@ class TopicClientAsyncIO:
         attributes: Optional[Dict[str, str]] = None,
         consumers: Optional[List[Union[TopicConsumer, str]]] = None,
         metering_mode: Optional[TopicMeteringMode] = None,
+        auto_partitioning_settings: Optional[TopicAutoPartitioningSettings] = None,
     ):
         """
         create topic command
@@ -151,6 +159,7 @@ class TopicClientAsyncIO:
         self,
         path: str,
         set_min_active_partitions: Optional[int] = None,
+        set_max_active_partitions: Optional[int] = None,
         set_partition_count_limit: Optional[int] = None,
         add_consumers: Optional[List[Union[TopicConsumer, str]]] = None,
         alter_consumers: Optional[List[Union[TopicAlterConsumer, str]]] = None,
@@ -162,6 +171,7 @@ class TopicClientAsyncIO:
         set_retention_period: Optional[datetime.timedelta] = None,
         set_retention_storage_mb: Optional[int] = None,
         set_supported_codecs: Optional[List[Union[TopicCodec, int]]] = None,
+        alter_auto_partitioning_settings: Optional[TopicAlterAutoPartitioningSettings] = None,
     ):
         """
         alter topic command
@@ -226,6 +236,7 @@ class TopicClientAsyncIO:
         # custom decoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # if max_worker in the executor is 1 - then decoders will be called from the thread without parallel
         decoder_executor: Optional[concurrent.futures.Executor] = None,
+        auto_partitioning_support: Optional[bool] = True,  # Auto partitioning feature flag. Default - True.
     ) -> TopicReaderAsyncIO:
 
         if not decoder_executor:
@@ -305,6 +316,7 @@ class TopicClient:
         self,
         path: str,
         min_active_partitions: Optional[int] = None,
+        max_active_partitions: Optional[int] = None,
         partition_count_limit: Optional[int] = None,
         retention_period: Optional[datetime.timedelta] = None,
         retention_storage_mb: Optional[int] = None,
@@ -314,6 +326,7 @@ class TopicClient:
         attributes: Optional[Dict[str, str]] = None,
         consumers: Optional[List[Union[TopicConsumer, str]]] = None,
         metering_mode: Optional[TopicMeteringMode] = None,
+        auto_partitioning_settings: Optional[TopicAutoPartitioningSettings] = None,
     ):
         """
         create topic command
@@ -350,6 +363,7 @@ class TopicClient:
         self,
         path: str,
         set_min_active_partitions: Optional[int] = None,
+        set_max_active_partitions: Optional[int] = None,
         set_partition_count_limit: Optional[int] = None,
         add_consumers: Optional[List[Union[TopicConsumer, str]]] = None,
         alter_consumers: Optional[List[Union[TopicAlterConsumer, str]]] = None,
@@ -361,6 +375,7 @@ class TopicClient:
         set_retention_period: Optional[datetime.timedelta] = None,
         set_retention_storage_mb: Optional[int] = None,
         set_supported_codecs: Optional[List[Union[TopicCodec, int]]] = None,
+        alter_auto_partitioning_settings: Optional[TopicAlterAutoPartitioningSettings] = None,
     ):
         """
         alter topic command
@@ -431,6 +446,7 @@ class TopicClient:
         # custom decoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # if max_worker in the executor is 1 - then decoders will be called from the thread without parallel
         decoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+        auto_partitioning_support: Optional[bool] = True,  # Auto partitioning feature flag. Default - True.
     ) -> TopicReader:
         if not decoder_executor:
             decoder_executor = self._executor

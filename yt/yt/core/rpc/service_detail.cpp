@@ -1654,8 +1654,6 @@ TServiceBase::TServiceBase(
     Profiler_.AddFuncGauge("/authentication_queue_size", MakeStrong(this), [this] {
         return AuthenticationQueueSize_.load(std::memory_order::relaxed);
     });
-
-    ServiceLivenessChecker_->Start();
 }
 
 const TServiceId& TServiceBase::GetServiceId() const
@@ -2431,6 +2429,25 @@ void TServiceBase::DecrementActiveRequestCount()
 void TServiceBase::InitContext(IServiceContext* /*context*/)
 { }
 
+void TServiceBase::StartServiceLivenessChecker()
+{
+    // Fast path.
+    if (ServiceLivenessCheckerStarted_.load(std::memory_order::relaxed)) {
+        return;
+    }
+    if (ServiceLivenessCheckerStarted_.exchange(true)) {
+        return;
+    }
+
+    if (auto checker = ServiceLivenessChecker_.Acquire()) {
+        checker->Start();
+        // There may be concurrent ServiceLivenessChecker_.Exchange() call in Stop().
+        if (!ServiceLivenessChecker_.Acquire()) {
+            YT_UNUSED_FUTURE(checker->Stop());
+        }
+    }
+}
+
 void TServiceBase::RegisterDiscoverRequest(const TCtxDiscoverPtr& context)
 {
     auto payload = GetDiscoverRequestPayload(context);
@@ -2440,6 +2457,7 @@ void TServiceBase::RegisterDiscoverRequest(const TCtxDiscoverPtr& context)
     auto it = DiscoverRequestsByPayload_.find(payload);
     if (it == DiscoverRequestsByPayload_.end()) {
         readerGuard.Release();
+        StartServiceLivenessChecker();
         auto writerGuard = WriterGuard(DiscoverRequestsByPayloadLock_);
         DiscoverRequestsByPayload_[payload].Insert(context, 0);
     } else {
@@ -2706,8 +2724,9 @@ TFuture<void> TServiceBase::Stop()
         }
     }
 
-    YT_UNUSED_FUTURE(ServiceLivenessChecker_->Stop());
-
+    if (auto checker = ServiceLivenessChecker_.Exchange(nullptr)) {
+        YT_UNUSED_FUTURE(checker->Stop());
+    }
     return StopResult_.ToFuture();
 }
 

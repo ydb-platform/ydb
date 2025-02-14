@@ -75,23 +75,21 @@ namespace NYql::NConnector {
     using IReadSplitsStreamIterator = IStreamIterator<NApi::TReadSplitsResponse>;
 
     template <class TResponse>
-    class IStreamIteratorDrainer {
+    class IStreamIteratorDrainer: public std::enable_shared_from_this<IStreamIteratorDrainer<TResponse>> {
     public:
         using TPtr = std::shared_ptr<IStreamIteratorDrainer<TResponse>>;
 
-        struct TResult {
+        struct TBuffer {
             TVector<TResponse> Responses;
             TIssues Issues;
         };
 
-        IStreamIteratorDrainer(IStreamIterator<TResponse>::TPtr iterator)
-            : Iterator_(iterator)
-            , Responses_({})
-            , Issues_({}) {
+        IStreamIteratorDrainer(IStreamIterator<TResponse>::TPtr&& iterator)
+            : Iterator_(iterator) {
         }
 
-        NThreading::TFuture<TResult> Run() {
-            auto promise = NThreading::NewPromise<TResult>();
+        NThreading::TFuture<TBuffer> Run() {
+            auto promise = NThreading::NewPromise<TBuffer>();
             Next(promise);
             return promise.GetFuture();
         }
@@ -105,11 +103,11 @@ namespace NYql::NConnector {
         TVector<TResponse> Responses_;
         TIssues Issues_;
 
-        void Next(NThreading::TPromise<TResult> promise) {
-            TPtr self(this);
+        void Next(NThreading::TPromise<TBuffer> promise) {
+            TPtr self = this->shared_from_this();
 
-            Iterator_ = Iterator_->ReadNext().Subscribe([self, promise](const TAsyncResult<TResponse> f1) {
-                TAsyncResult<TResponse> f2 = f1;
+            Iterator_->ReadNext().Subscribe([self, promise](const TAsyncResult<TResponse>& f1) mutable {
+                TAsyncResult<TResponse> f2(f1);
                 auto result = f2.ExtractValue();
 
                 // Check transport error
@@ -119,17 +117,24 @@ namespace NYql::NConnector {
                         self->Issues_.AddIssue(result.Status.ToDebugString());
                     }
 
-                    promise.SetValue({std::move(self->Responses_), std::move(self->Issues_)});
+                    promise.SetValue(TBuffer{std::move(self->Responses_), std::move(self->Issues_)});
                     return;
                 }
 
                 Y_ENSURE(result.Response);
 
-                self->Responses_.emplace_back(std::move(*result.Response));
+                self->Responses_.push_back({});
+                self->Responses_.push_back(std::move(*result.Response));
                 self->Next(promise);
             });
         };
     };
+
+    using TListSplitsStreamIteratorDrainer = IStreamIteratorDrainer<NApi::TListSplitsResponse>;
+    using TReadSplitsStreamIteratorDrainer = IStreamIteratorDrainer<NApi::TReadSplitsResponse>;
+
+    TListSplitsStreamIteratorDrainer::TPtr MakeListSplitsStreamIteratorDrainer(IListSplitsStreamIterator::TPtr&& iterator);
+    TReadSplitsStreamIteratorDrainer::TPtr MakeReadSplitsStreamIteratorDrainer(IReadSplitsStreamIterator::TPtr&& iterator);
 
     template <class TIterator>
     struct TIteratorResult {

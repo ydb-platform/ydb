@@ -127,7 +127,7 @@ namespace NYql {
             desc->DataSourceInstance = request.data_source_instance();
 
             Y_ENSURE(State_->GenericClient);
-            State_->GenericClient->DescribeTable(request).Apply(
+            State_->GenericClient->DescribeTable(request).Subscribe(
                 [desc, tableAddress, promise, client = State_->GenericClient](
                     const NConnector::TDescribeTableAsyncResult& f1) mutable {
                     NConnector::TDescribeTableAsyncResult f2(f1);
@@ -159,56 +159,64 @@ namespace NYql {
                     select->mutable_data_source_instance()->CopyFrom(desc->DataSourceInstance); 
                     select->mutable_from()->set_table(tableAddress.TableName);
 
-                    client->ListSplits(request).Apply(
+                    client->ListSplits(request).Subscribe(
                         [desc, promise, tableAddress](const NConnector::TListSplitsStreamIteratorAsyncResult f3) mutable {
                             NConnector::TListSplitsStreamIteratorAsyncResult f4(f3);
                             auto streamIterResult = f4.ExtractValueSync();
 
                             // Check transport error
                             if (!streamIterResult.Status.Ok()) {
-                                desc->Issues.AddIssue(streamIterResult.Status.ToDebugString());
+                                desc->Issues.AddIssue(
+                                    TStringBuilder() << "Call ListSplits for table "<< tableAddress.String() << ": " <<
+                                    streamIterResult.Status.ToDebugString()
+                                );
                                 promise.SetValue();
                                 return; 
                             } 
 
                             Y_ENSURE(streamIterResult.Iterator);
 
-                            auto& iterator = streamIterResult.Iterator;
-                            while(true) {
-                                auto result = iterator->ReadNext().GetValueSync();
+                            auto drainer = NConnector::MakeListSplitsStreamIteratorDrainer(std::move(streamIterResult.Iterator));
 
-                                // Check transport error
-                                if (!result.Status.Ok()) {
-                                    // It could be either EOF (== success), or unexpected error  
-                                    if (!NConnector::GrpcStatusEndOfStream(result.Status)) {
-                                        desc->Issues.AddIssue(
-                                            TStringBuilder() << "Call ListSplits for table " << tableAddress.String() << ": " << result.Status.ToDebugString());
-                                    }
+                            drainer->Run().Subscribe([
+                                desc, 
+                                promise, 
+                                tableAddress, 
+                                drainer // pass drainer to the callback because we want him to stay alive until the callback is called
+                            ](
+                                const NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer>& f5) mutable {
+                                NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer> f6(f5);
+                                auto drainerResult = f6.ExtractValueSync();
 
-                                    promise.SetValue();
-                                    return; 
-                                }
-
-                                Y_ENSURE(result.Response);
-
-                                if (!NConnector::IsSuccess(*result.Response)) {
-                                    desc->Issues.AddIssues(
-                                        NConnector::ErrorToIssues(
-                                            result.Response->error(),
-                                            TStringBuilder() << "Call ListSplits for table "<< tableAddress.String() << ": "
-                                        )
-                                    );
+                                if (drainerResult.Issues) {
+                                    desc->Issues.AddIssues(drainerResult.Issues);
                                     promise.SetValue();
                                     return;
                                 }
 
-                                std::transform(
-                                    std::make_move_iterator(result.Response->splits().begin()),
-                                    std::make_move_iterator(result.Response->splits().end()),
-                                    std::back_inserter(desc->Splits),
-                                    [](auto&& split) { return std::move(split); }
-                                );
-                            }
+                                for (auto&& response : drainerResult.Responses) {
+                                    if (!NConnector::IsSuccess(response)) {
+                                        desc->Issues.AddIssues(
+                                            NConnector::ErrorToIssues(
+                                                response.error(),
+                                                TStringBuilder() << "Call ListSplits for table "<< tableAddress.String() << ": "
+                                            )
+                                        );
+                                        promise.SetValue();
+                                        return;
+                                    }
+
+                                    // collect all the splits from every response into a single vector
+                                    std::transform(
+                                        std::make_move_iterator(response.mutable_splits()->begin()),
+                                        std::make_move_iterator(response.mutable_splits()->end()),
+                                        std::back_inserter(desc->Splits),
+                                        [](auto&& split) { return std::move(split); }
+                                    );
+                                }
+
+                                promise.SetValue();
+                            });
                         }
                     );
                 }

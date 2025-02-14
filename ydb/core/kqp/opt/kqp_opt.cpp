@@ -181,6 +181,9 @@ bool IsConnectionFromLegacyReadStage(NYql::NNodes::TExprBase node) {
             if (TKqpReadTable::Match(node.Get())) {
                 result = true;
             }
+            if (TKqpReadTableRanges::Match(node.Get())) {
+                result = true;
+            }
             if (TKqpLookupTable::Match(node.Get())) {
                 result = true;
             }

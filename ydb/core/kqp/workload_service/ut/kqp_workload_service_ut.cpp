@@ -920,20 +920,20 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "a_first_classifier");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a_first_classifier");
             auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 1);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 1);
             auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "b_second_classifier");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b_second_classifier");
             rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 2);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 2);
             config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -948,20 +948,20 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "a_first_classifier_shared");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a_first_classifier_shared");
             auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 1);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 1);
             auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "b_second_classifier_shared");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b_second_classifier_shared");
             rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 2);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 2);
             config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1012,29 +1012,29 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "a");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a");
             auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 1);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 1);
             auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "b");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b");
             rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 2);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 2);
             config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "c");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "c");
             rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 3);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 3);
             config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"super_boss@builtin","resource_pool":"default"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"super_boss@builtin","resource_pool":"default"})");
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1049,30 +1049,30 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "c");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "c");
             auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 3);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 3);
             auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"super_boss@builtin","resource_pool":"default"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"super_boss@builtin","resource_pool":"default"})");
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "b");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b");
             rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 2);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 2);
             config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
 
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "a");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a");
             rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 1);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 1);
             config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1087,11 +1087,11 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "a");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a");
             auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 1);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 1);
             auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"staff@builtin","resource_pool":"my_pool"})");
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1106,11 +1106,11 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "b");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b");
             auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 2);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 2);
             auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"boss@builtin","resource_pool":"default"})");
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1125,11 +1125,11 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(name, "c");
+            UNIT_ASSERT_VALUES_EQUAL(*name, "c");
             auto rank = resultSet.ColumnParser("Rank").GetOptionalInt64();
-            UNIT_ASSERT_VALUES_EQUAL(rank, 3);
+            UNIT_ASSERT_VALUES_EQUAL(*rank, 3);
             auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(config, R"({"member_name":"super_boss@builtin","resource_pool":"default"})");
+            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"member_name":"super_boss@builtin","resource_pool":"default"})");
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }

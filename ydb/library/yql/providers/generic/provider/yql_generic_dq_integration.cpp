@@ -105,6 +105,7 @@ namespace NYql {
                 return read;
             }
 
+            // FIXME: check TPartitonSettings::MaxPartitions, otherwise `PRAGMA ydb.MaxTasksPerStage="..."` won't work
             ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext& ctx, const TPartitionSettings&) override {
                 if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
                     auto srcSettings = maybeDqSource.Cast().Settings();
@@ -116,7 +117,7 @@ namespace NYql {
 
                         auto [tableMeta, issues] = State_->GetTable(tableAddress);
                         if (issues) {
-                            for (const auto &issue : issues) {
+                            for (const auto& issue : issues) {
                                 ctx.AddError(issue);
                             }
 

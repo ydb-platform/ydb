@@ -124,7 +124,7 @@ namespace NYql {
 
             // preserve data source instance for the further usage
             auto emplaceIt =
-                TableDescriptions_.emplace(std::make_pair(tableAddress, std::make_shared<TTableDescription>()));
+                TableDescriptions_.emplace(tableAddress, std::make_shared<TTableDescription>());
             auto desc = emplaceIt.first->second;
             desc->DataSourceInstance = request.data_source_instance();
 
@@ -414,7 +414,7 @@ namespace NYql {
 
                 providersIt =
                     State_->CredentialProviders
-                        .emplace(std::make_pair(clusterConfig.name(), credentialsProviderFactory->CreateProvider()))
+                        .emplace(clusterConfig.name(), credentialsProviderFactory->CreateProvider())
                         .first;
             }
 

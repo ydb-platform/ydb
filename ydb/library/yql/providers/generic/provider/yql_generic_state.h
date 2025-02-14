@@ -28,7 +28,7 @@ namespace NYql {
             }
 
             explicit operator size_t() const {
-                return std::hash<TString>()(String());
+                return CombineHashes(std::hash<TString>()(ClusterName),  std::hash<TString>()(TableName));
             }
         };
 

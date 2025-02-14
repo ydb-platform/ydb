@@ -8,6 +8,8 @@
 #include <util/system/defaults.h>
 #include <util/system/yassert.h>
 
+#include <sanitizer/asan_interface.h>
+
 #include <stack>
 #include <unordered_map>
 #include <unordered_set>
@@ -20,6 +22,39 @@ namespace NKikimr {
 // Call this method once at the start of the process - to enable usage of default allocator.
 void UseDefaultAllocator();
 #endif
+
+template <class T>
+struct TWithoutPoison {
+#if defined(_asan_enabled_)
+    explicit TWithoutPoison(const T* ptr) : Ptr(ptr) {
+        if (Y_LIKELY(Ptr)) {
+            ASAN_UNPOISON_MEMORY_REGION(Ptr, sizeof(T));
+        }
+    }
+
+    void Poison() {
+        if (Ptr) {
+            ASAN_POISON_MEMORY_REGION(Ptr, sizeof(T));
+            Ptr = nullptr;
+        }
+    }
+
+    void Reset() {
+        Ptr = nullptr;
+    }
+
+    ~TWithoutPoison() {
+        Poison();
+    }
+
+private:
+    const T* Ptr;
+#else
+    explicit TWithoutPoison(const T*) {}
+    void Poison() {}
+    void Reset() {}
+#endif
+};
 
 struct TAlignedPagePoolCounters {
     explicit TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString());
@@ -73,7 +108,11 @@ class TAlignedPagePoolImpl {
 public:
     static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
     static constexpr ui64 PAGE_ADDR_MASK = ~(POOL_PAGE_SIZE - 1);
+#if defined(_asan_enabled_)
+    static constexpr ui64 ALLOC_AHEAD_PAGES = 1;
+#else
     static constexpr ui64 ALLOC_AHEAD_PAGES = 31;
+#endif
 
     explicit TAlignedPagePoolImpl(const TSourceLocation& location,
             const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
@@ -113,9 +152,9 @@ public:
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) & PAGE_ADDR_MASK);
     }
 
-    void* GetPage();
+    void* GetPage(); // unpoisoned: [0, +POOL_PAGE_SIZE)
 
-    void ReturnPage(void* addr) noexcept;
+    void ReturnPage(void* addr) noexcept; // poisoned
 
     void Swap(TAlignedPagePoolImpl& other) {
         DoSwap(FreePages, other.FreePages);
@@ -145,9 +184,8 @@ public:
         return ToString(DebugInfo);
     }
 
-    void* GetBlock(size_t size);
-
-    void ReturnBlock(void* ptr, size_t size) noexcept;
+    void* GetBlock(size_t size); // unpoisoned: [0, +size)
+    void ReturnBlock(void* ptr, size_t size) noexcept; // poisoned
 
     size_t GetPeakAllocated() const noexcept {
         return PeakAllocated;
@@ -243,8 +281,8 @@ public:
 #endif
 
 protected:
-    void* Alloc(size_t size);
-    void Free(void* ptr, size_t size) noexcept;
+    void* Alloc(size_t size); // unpoisoned: [0, +size)
+    void Free(void* ptr, size_t size) noexcept; // poisoned
 
     void UpdatePeaks() {
         PeakAllocated = Max(PeakAllocated, GetAllocated());
@@ -306,10 +344,10 @@ protected:
 using TAlignedPagePool = TAlignedPagePoolImpl<>;
 
 template<typename TMmap = TSystemMmap>
-void* GetAlignedPage(ui64 size);
+void* GetAlignedPage(ui64 size); // unpoisoned: [0, +size)
 
 template<typename TMmap = TSystemMmap>
-void ReleaseAlignedPage(void* mem, ui64 size);
+void ReleaseAlignedPage(void* mem, ui64 size); // poisoned
 
 template<typename TMmap = TSystemMmap>
 i64 GetTotalMmapedBytes();

@@ -10,6 +10,11 @@
 #include <util/system/info.h>
 #include <util/thread/lfstack.h>
 
+#if defined(_asan_enabled_)
+#   include <mutex>
+#   include <queue>
+#endif
+
 #if defined(_win_)
 #   include <util/system/winint.h>
 #elif defined(_unix_)
@@ -102,6 +107,9 @@ private:
             FreePage(addr);
             return GetPageSize();
         }
+#elif defined(_asan_enabled_)
+        FreePage(addr);
+        return GetPageSize();
 #endif
 
         ++Count;
@@ -148,6 +156,7 @@ public:
 
         void* res = T::Mmap(size);
         TotalMmappedBytes += size;
+        ASAN_POISON_MEMORY_REGION(res, size);
         return res;
     }
 
@@ -251,6 +260,31 @@ inline int TSystemMmap::Munmap(void* addr, size_t size)
 {
     Y_DEBUG_ABORT_UNLESS(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
     Y_DEBUG_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
+
+#if defined(_asan_enabled_)
+    using TPage = std::pair<void*, size_t>;
+    static std::mutex decontaminationMutex;
+    static std::queue<TPage> decontaminationChamber;
+    static size_t decontaminationSize = 0;
+    static const size_t MAX_DECONTAMINATION_SIZE_IN_BYTES = 100 * (1 << 20); // 100Mb
+    static const size_t MAX_DECONTAMINATION_PAGE_COUNT = 1000;
+
+    std::unique_lock lock(decontaminationMutex);
+    decontaminationChamber.emplace(addr, size);
+    decontaminationSize += size;
+
+    while (decontaminationSize > MAX_DECONTAMINATION_SIZE_IN_BYTES || decontaminationChamber.size() > MAX_DECONTAMINATION_PAGE_COUNT) {
+        std::tie(addr, size) = decontaminationChamber.front();
+        if (auto error = ::munmap(addr, size)) {
+            return error;
+        }
+        decontaminationSize -= size;
+        decontaminationChamber.pop();
+    }
+
+    return 0;
+#endif
+
     return ::munmap(addr, size);
 }
 #endif
@@ -337,7 +371,11 @@ TAlignedPagePoolImpl<T>::~TAlignedPagePoolImpl() {
                    "Expected %ld, actual %ld (%ld page(s))", TotalAllocated,
                    AllPages.size() * POOL_PAGE_SIZE + OffloadedActiveBytes, AllPages.size());
 
-    for (auto &ptr : AllPages) {
+#if defined(_asan_enabled_)
+    ReleaseFreePages();
+#endif
+
+    for (auto* ptr : AllPages) {
         TGlobalPools<T, false>::Instance().PushPage(0, ptr);
     }
 
@@ -352,6 +390,10 @@ TAlignedPagePoolImpl<T>::~TAlignedPagePoolImpl() {
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::ReleaseFreePages() {
+#if defined(_asan_enabled_)
+    Y_ABORT_UNLESS(FreePages.empty(), "Shouldn't be any free pages under address sanitizer!");
+#endif
+
     TotalAllocated -= FreePages.size() * POOL_PAGE_SIZE;
     if (Counters.TotalBytesAllocatedCntr) {
         (*Counters.TotalBytesAllocatedCntr) -= FreePages.size() * POOL_PAGE_SIZE;
@@ -408,8 +450,9 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
     ++PageAllocCount;
     if (!FreePages.empty()) {
         ++PageHitCount;
-        const auto res = FreePages.top();
+        auto* res = FreePages.top();
         FreePages.pop();
+        ASAN_UNPOISON_MEMORY_REGION(res, POOL_PAGE_SIZE);
         return res;
     }
 
@@ -420,7 +463,7 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_LIKELY(!IsDefaultAllocator)) {
 #endif
-        if (const auto ptr = TGlobalPools<T, false>::Instance().Get(0).GetPage()) {
+        if (auto* ptr = TGlobalPools<T, false>::Instance().Get(0).GetPage()) {
             TotalAllocated += POOL_PAGE_SIZE;
             if (AllocNotifyCallback) {
                 AllocNotifyCurrentBytes += POOL_PAGE_SIZE;
@@ -432,6 +475,7 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
             AllPages.emplace(ptr);
 
             UpdatePeaks();
+            ASAN_UNPOISON_MEMORY_REGION(ptr, POOL_PAGE_SIZE);
             return ptr;
         }
 
@@ -464,8 +508,15 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
     }
 #endif
 
-    Y_DEBUG_ABORT_UNLESS(AllPages.find(addr) != AllPages.end());
+    auto page = AllPages.find(addr);
+    Y_DEBUG_ABORT_UNLESS(page != AllPages.end());
+
+#if defined(_asan_enabled_)
+    AllPages.erase(page);
+    Free(addr, POOL_PAGE_SIZE);
+#else
     FreePages.emplace(addr);
+#endif
 }
 
 template<typename T>
@@ -487,7 +538,7 @@ void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
     if (size == POOL_PAGE_SIZE) {
         return GetPage();
     } else {
-        const auto ptr = Alloc(size);
+        auto* ptr = Alloc(size);
         Y_DEBUG_ABORT_UNLESS(ActiveBlocks.emplace(ptr, size).second);
         return ptr;
     }
@@ -517,6 +568,7 @@ void TAlignedPagePoolImpl<T>::ReturnBlock(void* ptr, size_t size) noexcept {
 
 template<typename T>
 void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
+    const auto origSize = size;
     void* res = nullptr;
     size = AlignUp(size, SYS_PAGE_SIZE);
 
@@ -566,28 +618,35 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
         }
 
         res = AlignUp(mem, POOL_PAGE_SIZE);
-        const size_t off = reinterpret_cast<intptr_t>(res) - reinterpret_cast<intptr_t>(mem);
-        if (Y_UNLIKELY(off)) {
-            // unmap prefix
-            globalPool.DoMunmap(mem, off);
+
+        // Unmap unaligned prefix before offset
+        const size_t offset = reinterpret_cast<intptr_t>(res) - reinterpret_cast<intptr_t>(mem);
+        if (Y_UNLIKELY(offset)) {
+            globalPool.DoMunmap(mem, offset);
         }
-        // Extra space is also page-aligned. Put it to the free page list
+
         auto alignedSize = AlignUp(size, POOL_PAGE_SIZE);
-        ui64 extraPages = (allocSize - off - alignedSize) / POOL_PAGE_SIZE;
-        ui64 tail = (allocSize - off - alignedSize) % POOL_PAGE_SIZE;
+        ui64 extraPages = (allocSize - offset - alignedSize) / POOL_PAGE_SIZE;
+        ui64 tail = (allocSize - offset - alignedSize) % POOL_PAGE_SIZE;
         auto extraPage = reinterpret_cast<ui8*>(res) + alignedSize;
+
+        // TODO: when POOL_PAGE_SIZE == 1 then we shouldn't get any extra pages anyway?
+#if !defined(_asan_enabled_)
+        // Extra space is also page-aligned. Put it to the free page list
         for (ui64 i = 0; i < extraPages; ++i) {
             AllPages.emplace(extraPage);
             FreePages.emplace(extraPage);
             extraPage += POOL_PAGE_SIZE;
         }
+#endif
+
+        // Unmap unaligned hole
         if (size != alignedSize) {
-            // unmap unaligned hole
             globalPool.DoMunmap(reinterpret_cast<ui8*>(res) + size, alignedSize - size);
         }
 
+        // Unmap suffix
         if (tail) {
-            // unmap suffix
             Y_DEBUG_ABORT_UNLESS(extraPage+tail <= reinterpret_cast<ui8*>(mem) + size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE);
             globalPool.DoMunmap(extraPage, tail);
         }
@@ -608,14 +667,20 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
     }
     ++AllocCount;
     UpdatePeaks();
+
+    ASAN_UNPOISON_MEMORY_REGION(res, origSize);
     return res;
 }
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::Free(void* ptr, size_t size) noexcept {
+    ASAN_POISON_MEMORY_REGION(ptr, size);
+
     size = AlignUp(size, SYS_PAGE_SIZE);
-    if (size <= MaxMidSize)
+    if (size <= MaxMidSize) {
         size = FastClp2(size);
+    }
+
     if (size <= MaxMidSize) {
         auto level = LeastSignificantBit(size) - LeastSignificantBit(POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level >= 1 && level <= MidLevels);
@@ -699,6 +764,8 @@ template class TAlignedPagePoolImpl<TFakeUnalignedMmap>;
 
 template<typename TMmap>
 void* GetAlignedPage(ui64 size) {
+    const auto origSize = size;
+
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size < TAlignedPagePool::POOL_PAGE_SIZE) {
         size = TAlignedPagePool::POOL_PAGE_SIZE;
@@ -711,12 +778,18 @@ void* GetAlignedPage(ui64 size) {
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level <= MidLevels);
         if (auto res = pool.Get(level).GetPage()) {
+            ASAN_UNPOISON_MEMORY_REGION(res, origSize);
             return res;
         }
     }
 
+#if defined(_asan_enabled_)
+    auto allocSize = size;
+#else
     auto allocSize = Max<ui64>(MaxMidSize, size);
+#endif
     void* mem = pool.DoMmap(allocSize);
+
     if (Y_UNLIKELY(MAP_FAILED == mem)) {
         TStringStream mmaps;
         const auto lastError = LastSystemError();
@@ -727,6 +800,7 @@ void* GetAlignedPage(ui64 size) {
         ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: " << LastSystemErrorText(lastError) << mmaps.Str();
     }
 
+#if !defined(_asan_enabled_)
     if (size < MaxMidSize) {
         // push extra allocated pages to cache
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
@@ -738,7 +812,9 @@ void* GetAlignedPage(ui64 size) {
             ptr += size;
         }
     }
+#endif
 
+    ASAN_UNPOISON_MEMORY_REGION(mem, origSize);
     return mem;
 }
 
@@ -753,10 +829,12 @@ void ReleaseAlignedPage(void* mem, ui64 size) {
         size = FastClp2(size);
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
         Y_DEBUG_ABORT_UNLESS(level <= MidLevels);
+        ASAN_POISON_MEMORY_REGION(mem, size);
         TGlobalPools<TMmap, true>::Instance().PushPage(level, mem);
         return;
     }
 
+    ASAN_POISON_MEMORY_REGION(mem, size);
     TGlobalPools<TMmap, true>::Instance().DoMunmap(mem, size);
 }
 

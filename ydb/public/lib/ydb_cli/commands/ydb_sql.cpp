@@ -245,7 +245,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     }
 
     if (!DiagnosticsFile.empty()) {
-        TFileOutput file(TStringBuilder() << DiagnosticsFile << ".json");
+        TFileOutput file(DiagnosticsFile);
 
         NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
 

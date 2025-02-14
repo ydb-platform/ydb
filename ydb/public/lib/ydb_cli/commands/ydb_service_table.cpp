@@ -532,7 +532,7 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
     }
 
     if (!DiagnosticsFile.empty()) {
-        TFileOutput file(DiagnosticsFile + ".json");
+        TFileOutput file(DiagnosticsFile);
 
         NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
 
@@ -817,7 +817,7 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
     }
 
     if (!DiagnosticsFile.empty()) {
-        TFileOutput file(TStringBuilder() << DiagnosticsFile << ".json");
+        TFileOutput file(DiagnosticsFile);
 
         NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
 

@@ -12,21 +12,7 @@
 
 namespace NEtcd {
 
-using namespace NKikimr::NGRpcService;
-using namespace NActors;
-
 namespace {
-
-using TEvRangeKVRequest = TGrpcRequestNoOperationCall<etcdserverpb::RangeRequest, etcdserverpb::RangeResponse>;
-using TEvPutKVRequest = TGrpcRequestNoOperationCall<etcdserverpb::PutRequest, etcdserverpb::PutResponse>;
-using TEvDeleteRangeKVRequest = TGrpcRequestNoOperationCall<etcdserverpb::DeleteRangeRequest, etcdserverpb::DeleteRangeResponse>;
-using TEvTxnKVRequest = TGrpcRequestNoOperationCall<etcdserverpb::TxnRequest, etcdserverpb::TxnResponse>;
-using TEvCompactKVRequest = TGrpcRequestNoOperationCall<etcdserverpb::CompactionRequest, etcdserverpb::CompactionResponse>;
-
-using TEvLeaseGrantRequest = TGrpcRequestNoOperationCall<etcdserverpb::LeaseGrantRequest, etcdserverpb::LeaseGrantResponse>;
-using TEvLeaseRevokeRequest = TGrpcRequestNoOperationCall<etcdserverpb::LeaseRevokeRequest, etcdserverpb::LeaseRevokeResponse>;
-using TEvLeaseTimeToLiveRequest = TGrpcRequestNoOperationCall<etcdserverpb::LeaseTimeToLiveRequest, etcdserverpb::LeaseTimeToLiveResponse>;
-using TEvLeaseLeasesRequest = TGrpcRequestNoOperationCall<etcdserverpb::LeaseLeasesRequest, etcdserverpb::LeaseLeasesResponse>;
 
 std::string GetNameWithIndex(const std::string_view& name, const size_t* counter) {
     auto param = std::string(1U, '$') += name;
@@ -40,28 +26,6 @@ std::string GetParamName(const std::string_view& name, size_t* counter = nullptr
     if (counter)
         param += std::to_string((*counter)++);
     return param;
-}
-
-template<typename TValueType>
-std::string AddParam(const std::string_view& name, NYdb::TParamsBuilder& params, const TValueType& value, size_t* counter = nullptr) {
-    const auto param = GetParamName(name, counter);
-    if constexpr (std::is_same<TValueType, std::string>::value) {
-        params.AddParam(param).String(value).Build();
-    } else if constexpr (std::is_same<TValueType, i64>::value) {
-        params.AddParam(param).Int64(value).Build();
-    } else if constexpr (std::is_same<TValueType, ui64>::value) {
-        params.AddParam(param).Uint64(value).Build();
-    }
-    return param;
-}
-
-void MakeSimplePredicate(const std::string& key, const std::string& rangeEnd, std::ostringstream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) {
-    if (rangeEnd.empty())
-        sql << "`key` = " << AddParam("Key", params, key, paramsCounter);
-    else if (rangeEnd == key)
-        sql << "startswith(`key`, " << AddParam("Key", params, key, paramsCounter) << ')';
-    else
-        sql << "`key` between " << AddParam("Key", params, key, paramsCounter) << " and " << AddParam("RangeEnd", params, rangeEnd, paramsCounter);
 }
 
 void FillHeader(i64 revision, etcdserverpb::ResponseHeader& header) {
@@ -132,7 +96,7 @@ struct TRange : public TOperation {
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         if (resultsCounter)
             ResultIndex = (*resultsCounter)++;
         sql << "select ";
@@ -246,7 +210,7 @@ struct TPut : public TOperation {
         return !Key.empty();
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         const auto& keyParamName = AddParam("Key", params, Key, paramsCounter);
         const auto& valueParamName = IgnoreValue ? std::string("NULL") : AddParam("Value", params, Value, paramsCounter);
         const auto& leaseParamName = IgnoreLease ? std::string("NULL") : AddParam("Lease", params, Lease, paramsCounter);
@@ -349,7 +313,7 @@ struct TDeleteRange : public TOperation {
         return !Key.empty() && (RangeEnd.empty() || Key <= RangeEnd);
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         if (resultsCounter)
             ResultIndex = (*resultsCounter)++;
 
@@ -397,12 +361,13 @@ struct TDeleteRange : public TOperation {
 
         if (NotifyWatchtower && notifier) {
             for (auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]); parser.TryNextRow();) {
-                NEtcd::TData oldData;
-                oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
-                oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
-                oldData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
-                oldData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
-                oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
+                NEtcd::TData oldData {
+                    .Value = NYdb::TValueParser(parser.GetValue("value")).GetString(),
+                    .Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64(),
+                    .Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64(),
+                    .Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64(),
+                    .Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64()
+                };
                 auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
                 notifier(std::move(key), std::move(oldData), {});
             }
@@ -462,7 +427,7 @@ struct TCompare {
     }
 
     // return default value if key is absent.
-    bool MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) const {
+    bool MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) const {
         sql << '`' << Fields[Target] << '`' << ' ' << Comparator[Result] << ' ';
         if (const auto val = std::get_if<std::string>(&Value))
             sql << AddParam("Value", params, *val, paramsCounter);
@@ -581,7 +546,7 @@ struct TTxn : public TOperation {
         return !Compares.empty() && fill(Success, rec.success()) && fill(Failure, rec.failure());
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         ResultIndex = (*resultsCounter)++;
 
         std::unordered_map<std::pair<std::string, std::string>, std::vector<TCompare>> map(Compares.size());
@@ -669,14 +634,18 @@ struct TTxn : public TOperation {
     }
 };
 
+using namespace NActors;
+
 class TBaseEtcdRequest {
 protected:
     virtual bool ParseGrpcRequest() = 0;
-    virtual void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params) = 0;
+    virtual void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) = 0;
     virtual void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) = 0;
 
     i64 Revision = 0LL;
 };
+
+using namespace NKikimr::NGRpcService;
 
 template <typename TDerived, typename TRequest>
 class TEtcdRequestGrpc
@@ -740,6 +709,17 @@ protected:
     const TSharedStuff::TPtr Stuff;
 };
 
+using TEvRangeKVRequest = TGrpcRequestNoOperationCall<etcdserverpb::RangeRequest, etcdserverpb::RangeResponse>;
+using TEvPutKVRequest = TGrpcRequestNoOperationCall<etcdserverpb::PutRequest, etcdserverpb::PutResponse>;
+using TEvDeleteRangeKVRequest = TGrpcRequestNoOperationCall<etcdserverpb::DeleteRangeRequest, etcdserverpb::DeleteRangeResponse>;
+using TEvTxnKVRequest = TGrpcRequestNoOperationCall<etcdserverpb::TxnRequest, etcdserverpb::TxnResponse>;
+using TEvCompactKVRequest = TGrpcRequestNoOperationCall<etcdserverpb::CompactionRequest, etcdserverpb::CompactionResponse>;
+
+using TEvLeaseGrantRequest = TGrpcRequestNoOperationCall<etcdserverpb::LeaseGrantRequest, etcdserverpb::LeaseGrantResponse>;
+using TEvLeaseRevokeRequest = TGrpcRequestNoOperationCall<etcdserverpb::LeaseRevokeRequest, etcdserverpb::LeaseRevokeResponse>;
+using TEvLeaseTimeToLiveRequest = TGrpcRequestNoOperationCall<etcdserverpb::LeaseTimeToLiveRequest, etcdserverpb::LeaseTimeToLiveResponse>;
+using TEvLeaseLeasesRequest = TGrpcRequestNoOperationCall<etcdserverpb::LeaseLeasesRequest, etcdserverpb::LeaseLeasesResponse>;
+
 class TRangeRequest
     : public TEtcdRequestGrpc<TRangeRequest, TEvRangeKVRequest> {
 public:
@@ -751,7 +731,7 @@ private:
         return Range.Parse(*GetProtoRequest());
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params) final {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         Range.Dump(std::cout) << std::endl;
         return Range.MakeQueryWithParams(sql, params);
     }
@@ -775,7 +755,7 @@ private:
         return Put.Parse(*GetProtoRequest());
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params) final {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         Put.Dump(std::cout) << std::endl;
         AddParam("Revision", params, Revision);
         return Put.MakeQueryWithParams(sql, params);
@@ -805,7 +785,7 @@ private:
         return DeleteRange.Parse(*GetProtoRequest());
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params) final {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         DeleteRange.Dump(std::cout) << std::endl;
         AddParam("Revision", params, Revision);
         return DeleteRange.MakeQueryWithParams(sql, params);
@@ -835,7 +815,7 @@ private:
         return Txn.Parse(*GetProtoRequest());
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params) final {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         Txn.Dump(std::cout) << std::endl;
         AddParam("Revision", params, Revision);
 
@@ -875,7 +855,7 @@ private:
         return KeyRevision > 0LL && KeyRevision < Revision;
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params) final {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         std::cout << "Compact(" << KeyRevision << ')' << std::endl;
         sql << "delete from `verhaal` where `modified` < " << AddParam("Revision", params, KeyRevision) << ';' << std::endl;
     }
@@ -904,7 +884,7 @@ private:
         return !rec.id();
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params) final {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         std::cout << "Grant(" << TTL << ")=" << Lease << std::endl;
         sql << "insert into `leases` (`id`,`ttl`,`created`,`updated`)" << std::endl;
         sql << '\t' << "values (" << AddParam("Lease", params, Lease) << ',' << AddParam("TimeToLive", params, TTL) << ",CurrentUtcDatetime(),CurrentUtcDatetime());" << std::endl;
@@ -935,7 +915,7 @@ private:
         return Lease != 0LL;
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params) final {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         std::cout << "Revoke(" << Lease << ')' << std::endl;
 
         const auto& revisionParamName = AddParam("Revision", params, Revision);
@@ -997,7 +977,7 @@ private:
         return Lease != 0LL;
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder& params) final {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         std::cout << "TimeToLive(" << Lease << ')' << std::endl;
 
         const auto& leaseParamName = AddParam("Lease", params, Lease);
@@ -1042,7 +1022,7 @@ private:
         return true;
     }
 
-    void MakeQueryWithParams(std::ostringstream& sql, NYdb::TParamsBuilder&) final {
+    void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder&) final {
         std::cout << "Leases()" << std::endl;
         sql << "select `id` from `leases`;" << std::endl;
     }
@@ -1059,6 +1039,33 @@ private:
     }
 };
 
+}
+
+template<typename TValueType>
+std::string AddParam(const std::string_view& name, NYdb::TParamsBuilder& params, const TValueType& value, size_t* counter) {
+    const auto param = GetParamName(name, counter);
+    if constexpr (std::is_same<TValueType, std::string_view>::value) {
+        params.AddParam(param).String(std::string(value)).Build();
+    } else if constexpr (std::is_same<TValueType, std::string>::value) {
+        params.AddParam(param).String(value).Build();
+    } else if constexpr (std::is_same<TValueType, i64>::value) {
+        params.AddParam(param).Int64(value).Build();
+    } else if constexpr (std::is_same<TValueType, ui64>::value) {
+        params.AddParam(param).Uint64(value).Build();
+    }
+    return param;
+}
+
+template std::string AddParam<i64>(const std::string_view& name, NYdb::TParamsBuilder& params, const i64& value, size_t* counter);
+template std::string AddParam<ui64>(const std::string_view& name, NYdb::TParamsBuilder& params, const ui64& value, size_t* counter);
+
+void MakeSimplePredicate(const std::string_view& key, const std::string_view& rangeEnd, std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) {
+    if (rangeEnd.empty())
+        sql << "`key` = " << AddParam("Key", params, key, paramsCounter);
+    else if (rangeEnd == key)
+        sql << "startswith(`key`, " << AddParam("Key", params, key, paramsCounter) << ')';
+    else
+        sql << "`key` between " << AddParam("Key", params, key, paramsCounter) << " and " << AddParam("RangeEnd", params, rangeEnd, paramsCounter);
 }
 
 NActors::IActor* MakeRange(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {

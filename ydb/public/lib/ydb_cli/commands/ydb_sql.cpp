@@ -270,7 +270,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             metaJson.InsertValue("query_text", EscapeC(Query));
             diagnosticsJson.InsertValue("meta", metaJson);
         }
-        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), true);
+        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
     }
 
     if (IsInterrupted()) {

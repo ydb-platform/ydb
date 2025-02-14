@@ -555,7 +555,7 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
             NJson::ReadJsonTree(*meta, &metaJson, true);
             diagnosticsJson.InsertValue("meta", metaJson);
         }
-        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), true);
+        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
     }
 
     if (FlameGraphPath && !stats.has_value()) {
@@ -844,7 +844,7 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
             metaJson.InsertValue("query_text", EscapeC(Query));
             diagnosticsJson.InsertValue("meta", metaJson);
         }
-        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), true);
+        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
     }
 
     PrintFlameGraph(fullStats);

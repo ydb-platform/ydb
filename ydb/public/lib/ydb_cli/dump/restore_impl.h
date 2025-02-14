@@ -135,6 +135,7 @@ class TRestoreClient {
     TRestoreResult RestoreCoordinationNode(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreDependentResources(const TFsPath& fsPath, const TString& dbPath);
     TRestoreResult RestoreRateLimiter(const TFsPath& fsPath, const TString& coordinationNodePath, const TString& resourcePath);
+    TRestoreResult RestoreExternalDataSource(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
 
     TRestoreResult CheckSchema(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc, ui32 partitionCount);

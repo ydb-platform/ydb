@@ -61,11 +61,11 @@ static constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
 }
 
 // return count, parts, step
-static std::tuple<ui32, ui32, ui32> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
+static std::tuple<NTableIndex::TClusterId, NTableIndex::TClusterId, NTableIndex::TClusterId> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
     const auto& kmeans = buildInfo.KMeans;
     Y_ASSERT(kmeans.K != 0);
     const auto count = TIndexBuildInfo::TKMeans::BinPow(kmeans.K, kmeans.Level);
-    ui32 step = 1;
+    NTableIndex::TClusterId step = 1;
     auto parts = count;
     auto shards = tableInfo.GetShard2PartitionIdx().size();
     if (!buildInfo.KMeans.NeedsAnotherLevel() || count <= 1 || shards <= 1) {
@@ -97,8 +97,8 @@ protected:
     TActorId Uploader;
     ui32 RetryCount = 0;
     ui32 RowsBytes = 0;
-    ui32 Parent = 0;
-    ui32 Child = 0;
+    NTableIndex::TClusterId Parent = 0;
+    NTableIndex::TClusterId Child = 0;
 
     NDataShard::TUploadStatus UploadStatus;
 
@@ -108,8 +108,8 @@ public:
                    const TActorId& responseActorId,
                    ui64 buildIndexId,
                    TIndexBuildInfo::TSample::TRows init,
-                   ui32 parent,
-                   ui32 child)
+                   NTableIndex::TClusterId parent,
+                   NTableIndex::TClusterId child)
         : TargetTable(std::move(targetTable))
         , ResponseActorId(responseActorId)
         , BuildIndexId(buildIndexId)
@@ -159,7 +159,7 @@ public:
 
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
-        type.set_type_id(Ydb::Type::UINT32);
+        type.set_type_id(NTableIndex::TypeClusterId);
         (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
         (*Types)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
         type.set_type_id(Ydb::Type::STRING);
@@ -766,7 +766,7 @@ private:
             InitMultiKMeans(buildInfo);
             return false;
         }
-        std::array<NScheme::TTypeInfo, 1> typeInfos{NScheme::NTypeIds::Uint32};
+        std::array<NScheme::TTypeInfo, 1> typeInfos{NScheme::NTypeIds::ClusterId};
         auto range = ParentRange(buildInfo.KMeans.Parent);
         auto addRestricted = [&] (const auto& idx) {
             const auto& status = buildInfo.Shards.at(idx);
@@ -860,8 +860,8 @@ private:
         NIceDb::TNiceDb db{txc.DB};
         db.Table<Schema::KMeansTreeState>().Key(buildInfo.Id).Update(
             NIceDb::TUpdate<Schema::KMeansTreeState::Level>(buildInfo.KMeans.Level),
-            NIceDb::TUpdate<Schema::KMeansTreeState::Parent>(buildInfo.KMeans.Parent),
-            NIceDb::TUpdate<Schema::KMeansTreeState::State>(buildInfo.KMeans.State)
+            NIceDb::TUpdate<Schema::KMeansTreeState::State>(buildInfo.KMeans.State),
+            NIceDb::TUpdate<Schema::KMeansTreeState::Parent>(buildInfo.KMeans.Parent)
         );
     }
 
@@ -1184,7 +1184,7 @@ public:
         return TSerializedTableRange(TSerializedCellVec::Serialize(cells), "", true, false);
     }
 
-    static TSerializedTableRange ParentRange(ui32 parent) {
+    static TSerializedTableRange ParentRange(NTableIndex::TClusterId parent) {
         if (parent == 0) {
             return {};  // empty
         }

@@ -5,7 +5,7 @@
 
 namespace NKikimr::NDataShard::NKMeans {
 
-TTableRange CreateRangeFrom(const TUserTable& table, ui32 parent, TCell& from, TCell& to) {
+TTableRange CreateRangeFrom(const TUserTable& table, NTableIndex::TClusterId parent, TCell& from, TCell& to) {
     if (parent == 0) {
         return table.GetTableRange();
     }
@@ -28,7 +28,7 @@ NTable::TLead CreateLeadFrom(const TTableRange& range) {
     return lead;
 }
 
-void AddRowMain2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
+void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
@@ -36,7 +36,7 @@ void AddRowMain2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> k
     buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
 }
 
-void AddRowMain2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
                         ui32 dataPos)
 {
     std::array<TCell, 1> cells;
@@ -47,7 +47,7 @@ void AddRowMain2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell>
                   TSerializedCellVec::Serialize((*row).Slice(dataPos)));
 }
 
-void AddRowBuild2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
+void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
@@ -55,7 +55,7 @@ void AddRowBuild2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> 
     buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
 }
 
-void AddRowBuild2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
                          ui32 dataPos)
 {
     std::array<TCell, 1> cells;
@@ -96,7 +96,7 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
     uploadTypes->reserve(1 + 1 + std::min(table.KeyColumnTypes.size() + data.size(), types.size()));
 
     Ydb::Type type;
-    type.set_type_id(Ydb::Type::UINT32);
+    type.set_type_id(NTableIndex::TypeClusterId);
     uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type);
 
     auto addType = [&](const auto& column) {

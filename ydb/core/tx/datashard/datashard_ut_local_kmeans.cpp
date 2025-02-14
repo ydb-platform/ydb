@@ -1,3 +1,4 @@
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -91,7 +92,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     }
 
     static std::tuple<TString, TString> DoLocalKMeans(
-        Tests::TServer::TPtr server, TActorId sender, ui32 parent, ui64 seed, ui64 k,
+        Tests::TServer::TPtr server, TActorId sender, NTableIndex::TClusterId parent, ui64 seed, ui64 k,
         NKikimrTxDataShard::TEvLocalKMeansRequest::EState upload, VectorIndexSettings::VectorType type,
         VectorIndexSettings::Metric metric)
     {
@@ -185,8 +186,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, "Uint32", true, true},
-            {IdColumn, "Uint32", true, true},
+            {ParentColumn, NTableIndex::StrClusterId, true, true},
+            {IdColumn, NTableIndex::StrClusterId, true, true},
             {CentroidColumn, "String", false, true},
         });
         CreateShardedTable(server, sender, "/Root", "table-level", options);
@@ -196,7 +197,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, "Uint32", true, true},
+            {ParentColumn, NTableIndex::StrClusterId, true, true},
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
         });
@@ -208,7 +209,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, "Uint32", true, true},
+            {ParentColumn, NTableIndex::StrClusterId, true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},

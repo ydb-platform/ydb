@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <util/generic/hash_set.h>
@@ -34,6 +36,16 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const T
 std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys);
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
+
+using TClusterId = ui64;
+
+inline constexpr auto TypeClusterId = Ydb::Type::UINT64;
+inline constexpr const char* StrClusterId = "Uint64";
+
+}
+namespace NScheme::NTypeIds {
+
+inline constexpr auto ClusterId = Uint64;
 
 }
 }

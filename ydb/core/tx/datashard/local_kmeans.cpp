@@ -86,8 +86,8 @@ class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::
 protected:
     using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
 
-    ui32 Parent = 0;
-    ui32 Child = 0;
+    NTableIndex::TClusterId Parent = 0;
+    NTableIndex::TClusterId Child = 0;
 
     ui32 Round = 0;
     ui32 MaxRounds = 0;
@@ -156,7 +156,7 @@ public:
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
-    TLocalKMeansScanBase(ui64 buildId, const TUserTable& table, TLead&& lead, ui32 parent, ui32 child,
+    TLocalKMeansScanBase(ui64 buildId, const TUserTable& table, TLead&& lead, NTableIndex::TClusterId parent, NTableIndex::TClusterId child,
                          const NKikimrTxDataShard::TEvLocalKMeansRequest& request,
                          std::shared_ptr<TResult> result)
         : TActor{&TThis::StateWork}
@@ -180,7 +180,7 @@ public:
         // upload types
         if (Ydb::Type type; State <= EState::KMEANS) {
             TargetTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
-            type.set_type_id(Ydb::Type::UINT32);
+            type.set_type_id(NTableIndex::TypeClusterId);
             (*TargetTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
             (*TargetTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
             type.set_type_id(Ydb::Type::STRING);
@@ -382,7 +382,7 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
     std::vector<TAggregatedCluster> AggregatedClusters;
 
 public:
-    TLocalKMeansScan(ui64 buildId, const TUserTable& table, TLead&& lead, ui32 parent, ui32 child, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
+    TLocalKMeansScan(ui64 buildId, const TUserTable& table, TLead&& lead, NTableIndex::TClusterId parent, NTableIndex::TClusterId child, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
                      std::shared_ptr<TResult> result)
         : TLocalKMeansScanBase{buildId, table, std::move(lead), parent, child, request, std::move(result)}
     {

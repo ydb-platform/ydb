@@ -2,6 +2,7 @@
 
 #include "schemeshard_types.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/tx.pb.h>
@@ -1894,15 +1895,15 @@ struct Schema : NIceDb::Schema {
     struct KMeansTreeState : Table<112> {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct Level : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct Parent : Column<3, NScheme::NTypeIds::Uint32> {};
-        struct State : Column<4, NScheme::NTypeIds::Uint32> {};
+        struct State : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct Parent : Column<4, NScheme::NTypeIds::ClusterId> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
             Level,
-            Parent,
-            State
+            State,
+            Parent
         >;
     };
 

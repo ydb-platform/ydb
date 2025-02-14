@@ -8030,13 +8030,13 @@
             },
             {
                 "ColumnId": 3,
-                "ColumnName": "Parent",
+                "ColumnName": "State",
                 "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 4,
-                "ColumnName": "State",
-                "ColumnType": "Uint32"
+                "ColumnName": "Parent",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],

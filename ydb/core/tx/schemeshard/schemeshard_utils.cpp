@@ -268,8 +268,8 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     {
         auto parentColumn = implTableDesc.AddColumns();
         parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
-        parentColumn->SetType("Uint32");
-        parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        parentColumn->SetType(NTableIndex::StrClusterId);
+        parentColumn->SetTypeId(NScheme::NTypeIds::ClusterId);
         parentColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
@@ -304,8 +304,8 @@ auto CalcVectorKmeansTreePrefixImplTableDescImpl(
     {
         auto idColumn = implTableDesc.AddColumns();
         idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
-        idColumn->SetType("Uint32");
-        idColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        idColumn->SetType(NTableIndex::StrClusterId);
+        idColumn->SetTypeId(NScheme::NTypeIds::ClusterId);
         idColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::IdColumn);
@@ -346,15 +346,15 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     {
         auto parentColumn = implTableDesc.AddColumns();
         parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
-        parentColumn->SetType("Uint32");
-        parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        parentColumn->SetType(NTableIndex::StrClusterId);
+        parentColumn->SetTypeId(NScheme::NTypeIds::ClusterId);
         parentColumn->SetNotNull(true);
     }
     {
         auto idColumn = implTableDesc.AddColumns();
         idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
-        idColumn->SetType("Uint32");
-        idColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        idColumn->SetType(NTableIndex::StrClusterId);
+        idColumn->SetTypeId(NScheme::NTypeIds::ClusterId);
         idColumn->SetNotNull(true);
     }
     {

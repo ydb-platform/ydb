@@ -5211,7 +5211,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         };
     }
 
-    TVector<std::function<void(TTestBasicRuntime&)> > GenChangefeeds(THashMap<TString, TTestDataWithScheme>& bucketContent, ui64 count = 1) {
+    TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(THashMap<TString, TTestDataWithScheme>& bucketContent, ui64 count = 1) {
         TVector<std::function<void(TTestBasicRuntime&)>> checkers;
         checkers.reserve(count);
         for (ui64 i = 1; i <= count; ++i) {
@@ -5222,7 +5222,61 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         return checkers;
     }
 
-    void TestImportChangefeeds(ui64 countChangefeed) {
+    std::function<void(TTestBasicRuntime&)> AddedSchemeCommon(THashMap<TString, TTestDataWithScheme>& bucketContent, const TString& permissions) {
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, permissions);
+
+        bucketContent.emplace("", data);
+        return [](TTestBasicRuntime& runtime){
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+                NLs::PathExist
+            });
+        };
+    }
+
+    std::function<void(TTestBasicRuntime&)> AddedScheme(THashMap<TString, TTestDataWithScheme>& bucketContent) {
+        return AddedSchemeCommon(bucketContent, "");
+    }
+
+    std::function<void(TTestBasicRuntime&)> AddedSchemeWithPermissions(THashMap<TString, TTestDataWithScheme>& bucketContent) {
+        const auto permissions = R"(
+            actions {
+              change_owner: "eve"
+            }
+            actions {
+              grant {
+                subject: "alice"
+                permission_names: "ydb.generic.read"
+              }
+            }
+            actions {
+              grant {
+                subject: "alice"
+                permission_names: "ydb.generic.write"
+              }
+            }
+            actions {
+              grant {
+                subject: "bob"
+                permission_names: "ydb.generic.read"
+              }
+            }
+        )";
+        return AddedSchemeCommon(bucketContent, permissions);
+    }
+
+    using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&)>;
+
+    void TestImportChangefeeds(ui64 countChangefeed, SchemeFunction addedScheme) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -5242,8 +5296,9 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )");
 
         THashMap<TString, TTestDataWithScheme> bucketContent(countChangefeed + 1);
-        bucketContent.emplace("", data);
-        auto checkers = GenChangefeeds(bucketContent, countChangefeed);
+
+        auto checkerTable = addedScheme(bucketContent);
+        auto checkersChangefeeds = GenChangefeeds(bucketContent, countChangefeed);
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -5263,19 +5318,41 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )", port));
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::PathExist
-        });
-        for (const auto& checker : checkers) {
+        checkerTable(runtime);
+        for (const auto& checker : checkersChangefeeds) {
             checker(runtime);
         }
     }
 
+    void TestImportChangefeed() {
+        TestImportChangefeeds(1, AddedScheme);
+    }
+
+    void TestImportChangefeeds() {
+        TestImportChangefeeds(3, AddedScheme);
+    }
+
+    void TestImportChangefeedWithTablePermissions() {
+        TestImportChangefeeds(1, AddedSchemeWithPermissions);
+    }
+
+    void TestImportChangefeedsWithTablePermissions() {
+        TestImportChangefeeds(3, AddedSchemeWithPermissions);
+    }
+
     Y_UNIT_TEST(Changefeed) {
-        TestImportChangefeeds(1);
+        TestImportChangefeed();
     }
 
     Y_UNIT_TEST(Changefeeds) {
-        TestImportChangefeeds(3);
+        TestImportChangefeeds();
+    }
+
+    Y_UNIT_TEST(ChangefeedWithTablePermissions) {
+        TestImportChangefeedWithTablePermissions();
+    }
+
+    Y_UNIT_TEST(ChangefeedsWithTablePermissions) {
+        TestImportChangefeedsWithTablePermissions();
     }
 }

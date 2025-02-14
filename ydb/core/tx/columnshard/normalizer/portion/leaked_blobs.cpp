@@ -182,7 +182,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     }
 
     NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr),
-        std::make_shared<TSchemaObjectsCache>(), TabletId);
+        std::make_shared<TSchemaObjectsCache>(), std::make_shared<TPortionIndexStats>(), TabletId);
 
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");

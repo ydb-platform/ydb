@@ -4824,6 +4824,235 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::IsView
         });
     }
+
+    struct GeneratedChangefeed {
+        std::pair<TString, TTestDataWithScheme> Changefeed;
+        std::function<void(TTestBasicRuntime&)> Checker;
+    };
+
+    GeneratedChangefeed GenChangefeed(ui64 num = 1) {
+        const TString changefeedName = TStringBuilder() << "updates_feed" << num;
+        const auto changefeedPath = TStringBuilder() << "/" << changefeedName;
+
+        const auto changefeedDesc = Sprintf(R"(
+            name: "%s"
+            mode: MODE_UPDATES
+            format: FORMAT_JSON
+            state: STATE_ENABLED
+        )", changefeedName.c_str());
+
+        const auto topicDesc = R"(
+            partitioning_settings {
+            min_active_partitions: 1
+            max_active_partitions: 1
+            auto_partitioning_settings {
+                strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+                partition_write_speed {
+                stabilization_window {
+                    seconds: 300
+                }
+                up_utilization_percent: 80
+                down_utilization_percent: 20
+                }
+            }
+            }
+            partitions {
+            active: true
+            }
+            retention_period {
+            seconds: 86400
+            }
+            partition_write_speed_bytes_per_second: 1048576
+            partition_write_burst_bytes: 1048576
+            attributes {
+            key: "__max_partition_message_groups_seqno_stored"
+            value: "6000000"
+            }
+            attributes {
+            key: "_allow_unauthenticated_read"
+            value: "true"
+            }
+            attributes {
+            key: "_allow_unauthenticated_write"
+            value: "true"
+            }
+            attributes {
+            key: "_message_group_seqno_retention_period_ms"
+            value: "1382400000"
+            }
+            consumers {
+            name: "my_consumer"
+            read_from {
+            }
+            attributes {
+                key: "_service_type"
+                value: "data-streams"
+            }
+            }
+        )";
+
+        NAttr::TAttributes attr;
+        attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
+        return {
+                {changefeedPath, GenerateTestData(
+                {
+                    EPathTypeCdcStream,
+                    changefeedDesc,
+                    std::move(attr)
+                }
+            )},
+            [changefeedPath = TString(changefeedPath)](TTestBasicRuntime& runtime){
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath, false, false, true), {
+                    NLs::PathExist
+                });
+            }
+        };
+    }
+
+    TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(THashMap<TString, TTestDataWithScheme>& bucketContent, ui64 count = 1) {
+        TVector<std::function<void(TTestBasicRuntime&)>> checkers;
+        checkers.reserve(count);
+        for (ui64 i = 1; i <= count; ++i) {
+            auto genChangefeed = GenChangefeed(i);
+            bucketContent.emplace(genChangefeed.Changefeed);
+            checkers.push_back(genChangefeed.Checker);
+        }
+        return checkers;
+    }
+
+    std::function<void(TTestBasicRuntime&)> AddedSchemeCommon(THashMap<TString, TTestDataWithScheme>& bucketContent, const TString& permissions) {
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}}, permissions);
+
+        bucketContent.emplace("", data);
+        return [](TTestBasicRuntime& runtime){
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+                NLs::PathExist
+            });
+        };
+    }
+
+    std::function<void(TTestBasicRuntime&)> AddedScheme(THashMap<TString, TTestDataWithScheme>& bucketContent) {
+        return AddedSchemeCommon(bucketContent, "");
+    }
+
+    std::function<void(TTestBasicRuntime&)> AddedSchemeWithPermissions(THashMap<TString, TTestDataWithScheme>& bucketContent) {
+        const auto permissions = R"(
+            actions {
+              change_owner: "eve"
+            }
+            actions {
+              grant {
+                subject: "alice"
+                permission_names: "ydb.generic.read"
+              }
+            }
+            actions {
+              grant {
+                subject: "alice"
+                permission_names: "ydb.generic.write"
+              }
+            }
+            actions {
+              grant {
+                subject: "bob"
+                permission_names: "ydb.generic.read"
+              }
+            }
+        )";
+        return AddedSchemeCommon(bucketContent, permissions);
+    }
+
+    using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&)>;
+
+    void TestImportChangefeeds(ui64 countChangefeed, SchemeFunction addedScheme) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )");
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(countChangefeed + 1);
+
+        auto checkerTable = addedScheme(bucketContent);
+        auto checkersChangefeeds = GenChangefeeds(bucketContent, countChangefeed);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        checkerTable(runtime);
+        for (const auto& checker : checkersChangefeeds) {
+            checker(runtime);
+        }
+    }
+
+    void TestImportChangefeed() {
+        TestImportChangefeeds(1, AddedScheme);
+    }
+
+    void TestImportChangefeeds() {
+        TestImportChangefeeds(3, AddedScheme);
+    }
+
+    void TestImportChangefeedWithTablePermissions() {
+        TestImportChangefeeds(1, AddedSchemeWithPermissions);
+    }
+
+    void TestImportChangefeedsWithTablePermissions() {
+        TestImportChangefeeds(3, AddedSchemeWithPermissions);
+    }
+
+    Y_UNIT_TEST(Changefeed) {
+        TestImportChangefeed();
+    }
+
+    Y_UNIT_TEST(Changefeeds) {
+        TestImportChangefeeds();
+    }
+
+    Y_UNIT_TEST(ChangefeedWithTablePermissions) {
+        TestImportChangefeedWithTablePermissions();
+    }
+
+    Y_UNIT_TEST(ChangefeedsWithTablePermissions) {
+        TestImportChangefeedsWithTablePermissions();
+    }
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
@@ -5125,234 +5354,5 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             )"
         );
-    }
-
-    struct GeneratedChangefeed {
-        std::pair<TString, TTestDataWithScheme> Changefeed;
-        std::function<void(TTestBasicRuntime&)> Checker;
-    };
-
-    GeneratedChangefeed GenChangefeed(ui64 num = 1) {
-        const TString changefeedName = TStringBuilder() << "updates_feed" << num;
-        const auto changefeedPath = TStringBuilder() << "/" << changefeedName;
-
-        const auto changefeedDesc = Sprintf(R"(
-            name: "%s"
-            mode: MODE_UPDATES
-            format: FORMAT_JSON
-            state: STATE_ENABLED
-        )", changefeedName.c_str());
-
-        const auto topicDesc = R"(
-            partitioning_settings {
-            min_active_partitions: 1
-            max_active_partitions: 1
-            auto_partitioning_settings {
-                strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
-                partition_write_speed {
-                stabilization_window {
-                    seconds: 300
-                }
-                up_utilization_percent: 80
-                down_utilization_percent: 20
-                }
-            }
-            }
-            partitions {
-            active: true
-            }
-            retention_period {
-            seconds: 86400
-            }
-            partition_write_speed_bytes_per_second: 1048576
-            partition_write_burst_bytes: 1048576
-            attributes {
-            key: "__max_partition_message_groups_seqno_stored"
-            value: "6000000"
-            }
-            attributes {
-            key: "_allow_unauthenticated_read"
-            value: "true"
-            }
-            attributes {
-            key: "_allow_unauthenticated_write"
-            value: "true"
-            }
-            attributes {
-            key: "_message_group_seqno_retention_period_ms"
-            value: "1382400000"
-            }
-            consumers {
-            name: "my_consumer"
-            read_from {
-            }
-            attributes {
-                key: "_service_type"
-                value: "data-streams"
-            }
-            }
-        )";
-
-        NAttr::TAttributes attr;
-        attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
-        return {
-                {changefeedPath, GenerateTestData(
-                {
-                    EPathTypeCdcStream,
-                    changefeedDesc,
-                    std::move(attr)
-                }
-            )},
-            [changefeedPath = TString(changefeedPath)](TTestBasicRuntime& runtime){
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath, false, false, true), {
-                    NLs::PathExist
-                });
-            }
-        };
-    }
-
-    TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(THashMap<TString, TTestDataWithScheme>& bucketContent, ui64 count = 1) {
-        TVector<std::function<void(TTestBasicRuntime&)>> checkers;
-        checkers.reserve(count);
-        for (ui64 i = 1; i <= count; ++i) {
-            auto genChangefeed = GenChangefeed(i);
-            bucketContent.emplace(genChangefeed.Changefeed);
-            checkers.push_back(genChangefeed.Checker);
-        }
-        return checkers;
-    }
-
-    std::function<void(TTestBasicRuntime&)> AddedSchemeCommon(THashMap<TString, TTestDataWithScheme>& bucketContent, const TString& permissions) {
-        const auto data = GenerateTestData(R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            primary_key: "key"
-        )", {{"a", 1}}, permissions);
-
-        bucketContent.emplace("", data);
-        return [](TTestBasicRuntime& runtime){
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-                NLs::PathExist
-            });
-        };
-    }
-
-    std::function<void(TTestBasicRuntime&)> AddedScheme(THashMap<TString, TTestDataWithScheme>& bucketContent) {
-        return AddedSchemeCommon(bucketContent, "");
-    }
-
-    std::function<void(TTestBasicRuntime&)> AddedSchemeWithPermissions(THashMap<TString, TTestDataWithScheme>& bucketContent) {
-        const auto permissions = R"(
-            actions {
-              change_owner: "eve"
-            }
-            actions {
-              grant {
-                subject: "alice"
-                permission_names: "ydb.generic.read"
-              }
-            }
-            actions {
-              grant {
-                subject: "alice"
-                permission_names: "ydb.generic.write"
-              }
-            }
-            actions {
-              grant {
-                subject: "bob"
-                permission_names: "ydb.generic.read"
-              }
-            }
-        )";
-        return AddedSchemeCommon(bucketContent, permissions);
-    }
-
-    using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&)>;
-
-    void TestImportChangefeeds(ui64 countChangefeed, SchemeFunction addedScheme) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-
-        const auto data = GenerateTestData(R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            primary_key: "key"
-        )");
-
-        THashMap<TString, TTestDataWithScheme> bucketContent(countChangefeed + 1);
-
-        auto checkerTable = addedScheme(bucketContent);
-        auto checkersChangefeeds = GenChangefeeds(bucketContent, countChangefeed);
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-
-        checkerTable(runtime);
-        for (const auto& checker : checkersChangefeeds) {
-            checker(runtime);
-        }
-    }
-
-    void TestImportChangefeed() {
-        TestImportChangefeeds(1, AddedScheme);
-    }
-
-    void TestImportChangefeeds() {
-        TestImportChangefeeds(3, AddedScheme);
-    }
-
-    void TestImportChangefeedWithTablePermissions() {
-        TestImportChangefeeds(1, AddedSchemeWithPermissions);
-    }
-
-    void TestImportChangefeedsWithTablePermissions() {
-        TestImportChangefeeds(3, AddedSchemeWithPermissions);
-    }
-
-    Y_UNIT_TEST(Changefeed) {
-        TestImportChangefeed();
-    }
-
-    Y_UNIT_TEST(Changefeeds) {
-        TestImportChangefeeds();
-    }
-
-    Y_UNIT_TEST(ChangefeedWithTablePermissions) {
-        TestImportChangefeedWithTablePermissions();
-    }
-
-    Y_UNIT_TEST(ChangefeedsWithTablePermissions) {
-        TestImportChangefeedsWithTablePermissions();
     }
 }

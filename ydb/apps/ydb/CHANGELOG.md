@@ -1,3 +1,4 @@
+* Include external data sources and external tables in local backups (`ydb tools dump` and `ydb tools restore`). Both scheme objects are backed up as YQL creation queries saved in the `create_external_data_source.sql` and `create_external_table.sql` files respectively, which can be executed to recreate the original scheme objects.
 * Fixed a bug where `ydb auth get-token` command tried to authenticate twice: while listing andpoints and while executing actual token request.
 * Fixed a bug where `ydb import file csv` command was saving progress even if a batch upload had been failed.
 * Include coordination nodes in local backups (`ydb tools dump` and `ydb tools restore`). Rate limiters that utilize the coordination node are saved in the coordination node's backup folder, preserving the existing path hierarchy.

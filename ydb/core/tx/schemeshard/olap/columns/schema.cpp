@@ -1,10 +1,7 @@
 #include "schema.h"
-
-#include <ydb/core/scheme_types/scheme_type_registry.h>
-
 #include <ydb/library/accessor/validator.h>
-
 #include <yql/essentials/minikql/mkql_type_ops.h>
+#include <ydb/core/scheme_types/scheme_type_registry.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -38,8 +35,7 @@ bool TOlapColumnsDescription::ApplyUpdate(
                 return false;
             }
             if (column.GetKeyOrder()) {
-                errors.AddError(NKikimrScheme::StatusSchemeError,
-                    TStringBuilder() << "column '" << column.GetName() << "' is pk column. its impossible to modify pk");
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "column '" << column.GetName() << "' is pk column. its impossible to modify pk");
                 return false;
             }
         }
@@ -72,8 +68,7 @@ bool TOlapColumnsDescription::ApplyUpdate(
     for (auto&& columnDiff : schemaUpdate.GetAlterColumns()) {
         auto it = ColumnsByName.find(columnDiff.GetName());
         if (it == ColumnsByName.end()) {
-            errors.AddError(
-                NKikimrScheme::StatusSchemeError, TStringBuilder() << "column '" << columnDiff.GetName() << "' not exists for altering");
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "column '" << columnDiff.GetName() << "' not exists for altering");
             return false;
         } else {
             auto itColumn = Columns.find(it->second);
@@ -122,9 +117,7 @@ bool TOlapColumnsDescription::ApplyUpdate(
             }
             ui32 id = column.GetColumnFamilyId().value();
             if (alterColumnFamiliesId.contains(id)) {
-                if (!column.ApplyColumnFamily(*columnFamilies.GetByIdVerified(id), errors)) {
-                    return false;
-                }
+                column.SetSerializer(columnFamilies.GetByIdVerified(id)->GetSerializerContainer());
             }
         }
     }
@@ -238,8 +231,7 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
         }
 
         if (typeInfo != col->GetType()) {
-            errors.AddError("Type '" + TypeName(typeInfo) + "' specified for column '" + colName + "' does not match schema preset type '" +
-                            TypeName(col->GetType()) + "'");
+            errors.AddError("Type '" + TypeName(typeInfo) + "' specified for column '" + colName + "' does not match schema preset type '" + TypeName(col->GetType()) + "'");
             return false;
         }
     }
@@ -271,4 +263,4 @@ const NKikimr::NSchemeShard::TOlapColumnSchema* TOlapColumnsDescription::GetById
     return TValidator::CheckNotNull(GetById(id));
 }
 
-}  // namespace NKikimr::NSchemeShard
+}

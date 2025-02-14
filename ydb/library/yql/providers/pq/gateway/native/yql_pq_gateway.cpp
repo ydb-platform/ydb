@@ -41,7 +41,7 @@ public:
         bool secure) override;
 
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
-    NYdb::NTopic::TTopicClientSettings GetCommonTopicClientSettings() override;
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() override;
 
 private:
     void InitClusterConfigs();
@@ -57,7 +57,7 @@ private:
     NYdb::TDriver YdbDriver;
     TPqClusterConfigsMapPtr ClusterConfigs;
     THashMap<TString, TPqSession::TPtr> Sessions;
-    NYdb::NTopic::TTopicClientSettings CommonTopicClientSettings;
+    TMaybe<NYdb::NTopic::TTopicClientSettings> CommonTopicClientSettings;
 };
 
 TPqNativeGateway::TPqNativeGateway(const TPqGatewayServices& services)
@@ -147,8 +147,8 @@ ITopicClient::TPtr TPqNativeGateway::GetTopicClient(const NYdb::TDriver& driver,
     return MakeIntrusive<TNativeTopicClient>(driver, settings);
 }
 
-NYdb::NTopic::TTopicClientSettings TPqNativeGateway::GetCommonTopicClientSettings() {
-    return CommonTopicClientSettings;
+NYdb::NTopic::TTopicClientSettings TPqNativeGateway::GetTopicClientSettings() {
+    return CommonTopicClientSettings.GetOrElse(NYdb::NTopic::TTopicClientSettings());
 }
 
 TPqNativeGateway::~TPqNativeGateway() {

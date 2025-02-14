@@ -26,7 +26,7 @@ struct TPqGatewayServices {
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     ::NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     NYdb::TDriver YdbDriver;
-    NYdb::NTopic::TTopicClientSettings CommonTopicClientSettings;
+    TMaybe<NYdb::NTopic::TTopicClientSettings> CommonTopicClientSettings;
 
     TPqGatewayServices(
         NYdb::TDriver driver,
@@ -35,7 +35,7 @@ struct TPqGatewayServices {
         TPqGatewayConfigPtr config,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         IMetricsRegistryPtr metrics = nullptr,
-        const NYdb::NTopic::TTopicClientSettings& commonTopicClientSettings = NYdb::NTopic::TTopicClientSettings())
+        TMaybe<NYdb::NTopic::TTopicClientSettings> commonTopicClientSettings = Nothing())
         : FunctionRegistry(functionRegistry)
         , Config(std::move(config))
         , Metrics(std::move(metrics))

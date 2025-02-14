@@ -80,7 +80,7 @@ void TDummyPqGateway::UpdateClusterConfigs(
     Y_UNUSED(secure);
 }
 
-NYdb::NTopic::TTopicClientSettings TDummyPqGateway::GetCommonTopicClientSettings() {
+NYdb::NTopic::TTopicClientSettings TDummyPqGateway::GetTopicClientSettings() {
     return NYdb::NTopic::TTopicClientSettings();
 }
 

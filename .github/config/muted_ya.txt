@@ -28,6 +28,8 @@ ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.Select
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
 ydb/core/kqp/ut/olap KqpOlap.TableSinkWithOlapStore
+ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
+ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean_with_restarts

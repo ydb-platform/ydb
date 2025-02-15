@@ -10,8 +10,7 @@ from yql_utils import (
     get_supported_providers,
     is_xfail,
     log,
-    normalize_source_code_path,
-    yql_binary_path)
+    normalize_source_code_path)
 
 from test_utils import (
     get_config,
@@ -24,6 +23,8 @@ def sanitize_issues(s):
     # 2022-08-13T16:11:21Z -> ISOTIME
     # 2022-08-13T16:11:21.549879Z -> ISOTIME
     s = re.sub(r"2\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(.\d+)?Z", "ISOTIME", s)
+    # (yexception) ... ->
+    s = re.sub(r"\(yexception\).*", "", s)
     # library/cpp/json/json_reader.cpp:420 -> library/cpp/json/json_reader.cpp:xxx
     return re.sub(r"cpp:\d+", "cpp:xxx", s)
 

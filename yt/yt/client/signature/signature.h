@@ -27,8 +27,15 @@ private:
     NYson::TYsonString Payload_;
     std::vector<std::byte> Signature_;
 
-    friend class TSignatureGeneratorBase;
-    friend class TSignatureValidatorBase;
+    friend class ISignatureGenerator;
+    friend class TSignatureGenerator;
+    friend class TDummySignatureGenerator;
+    friend class TAlwaysThrowingSignatureGenerator;
+
+    friend class ISignatureValidator;
+    friend class TSignatureValidator;
+    friend class TDummySignatureValidator;
+    friend class TAlwaysThrowingSignatureValidator;
 
     friend void Serialize(const TSignature& signature, NYson::IYsonConsumer* consumer);
     friend void Deserialize(TSignature& signature, NYTree::INodePtr node);

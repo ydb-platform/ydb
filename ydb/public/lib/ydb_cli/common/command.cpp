@@ -47,6 +47,18 @@ ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientComman
     }
 }
 
+ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriorityChatty(TClientCommand::TConfig::EVerbosityLevel lvl) {
+    switch (lvl) {
+        case TClientCommand::TConfig::EVerbosityLevel::NONE:
+            return ELogPriority::TLOG_INFO;
+        case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
+        case TClientCommand::TConfig::EVerbosityLevel::INFO:
+        case TClientCommand::TConfig::EVerbosityLevel::WARN:
+            return ELogPriority::TLOG_DEBUG;
+    }
+    return ELogPriority::TLOG_INFO;
+}
+
 size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
     size_t cnt = 0;
     for (int i = 0; i < argc; ++i) {
@@ -71,6 +83,41 @@ size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv
         cnt = 1;
     }
     return cnt;
+}
+
+namespace {
+    class TSingleProviderFactory : public ICredentialsProviderFactory {
+    public:
+        TSingleProviderFactory(std::shared_ptr<ICredentialsProviderFactory> originalFactory)
+        : OriginalFactory(originalFactory)
+        {}
+    virtual std::shared_ptr<ICredentialsProvider> CreateProvider() const override {
+        if (!provider) {
+            provider = OriginalFactory->CreateProvider();
+        }
+        return provider;
+    }
+    virtual std::shared_ptr<ICredentialsProvider> CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
+        if (!provider) {
+            provider = OriginalFactory->CreateProvider(facility);
+        }
+        return provider;
+    }
+
+    private:
+        std::shared_ptr<ICredentialsProviderFactory> OriginalFactory;
+        mutable TCredentialsProviderPtr provider = nullptr;
+    };
+}
+
+std::shared_ptr<ICredentialsProviderFactory> TClientCommand::TConfig::GetSingletonCredentialsProviderFactory() {
+    if (!SingletonCredentialsProviderFactory) {
+        auto credentialsGetterResult = CredentialsGetter(*this);
+        if (credentialsGetterResult) {
+            SingletonCredentialsProviderFactory = std::make_shared<TSingleProviderFactory>(credentialsGetterResult);
+        }
+    }
+    return SingletonCredentialsProviderFactory;
 }
 
 TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {
@@ -161,7 +208,7 @@ void TClientCommand::SaveParseResult(TConfig& config) {
 }
 
 void TClientCommand::Prepare(TConfig& config) {
-    config.ArgsSettings.Reset(new TConfig::TArgSettings());
+    config.ArgsSettings = TConfig::TArgSettings();
     config.Opts = &Opts;
     Config(config);
     CheckForExecutableOptions(config);
@@ -411,12 +458,12 @@ void TClientCommandTree::RenderCommandsDescription(
 }
 
 void TCommandWithPath::ParsePath(const TClientCommand::TConfig& config, const size_t argPos, bool isPathOptional) {
-    if (config.ParseResult->GetFreeArgCount() < argPos + 1 && isPathOptional) {
+    if (config.ParseResult->GetFreeArgCount() <= argPos) {
         if (isPathOptional) {
             Path = ".";
         }
     } else {
-        Path = config.ParseResult->GetFreeArgs()[argPos];
+        Path = config.ParseResult->GetFreeArgs().at(argPos);
     }
 
     AdjustPath(config);

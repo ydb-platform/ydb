@@ -45,7 +45,8 @@ public:
 
     ~TInternalActorTypeGuard() {
         if (Allowed) {
-            ChangeActivity(GetCycleCountFast(), Index, NextIndex);
+            ui32 prevIndex = Index;
+            ChangeActivity(GetCycleCountFast(), prevIndex, NextIndex);
         }
     }
 

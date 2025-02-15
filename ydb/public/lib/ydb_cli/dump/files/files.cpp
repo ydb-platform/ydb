@@ -14,6 +14,13 @@ enum EFilesType {
     INCOMPLETE,
     EMPTY,
     CREATE_VIEW,
+    DATABASE,
+    CREATE_USER,
+    CREATE_GROUP,
+    ALTER_GROUP,
+    CREATE_ASYNC_REPLICATION,
+    CREATE_EXTERNAL_DATA_SOURCE,
+    CREATE_EXTERNAL_TABLE,
 };
 
 static constexpr TFileInfo FILES_INFO[] = {
@@ -28,6 +35,13 @@ static constexpr TFileInfo FILES_INFO[] = {
     {"incomplete", "incomplete"},
     {"empty_dir", "empty_dir"},
     {"create_view.sql", "view"},
+    {"database.pb", "database description"},
+    {"create_user.sql", "users"},
+    {"create_group.sql", "groups"},
+    {"alter_group.sql", "group members"},
+    {"create_async_replication.sql", "async replication"},
+    {"create_external_data_source.sql", "external data source"},
+    {"create_external_table.sql", "external table"},
 };
 
 const TFileInfo& TableScheme() {
@@ -72,6 +86,34 @@ const TFileInfo& Empty() {
 
 const TFileInfo& CreateView() {
     return FILES_INFO[CREATE_VIEW];
+}
+
+const TFileInfo& Database() {
+    return FILES_INFO[DATABASE];
+}
+
+const TFileInfo& CreateUser() {
+    return FILES_INFO[CREATE_USER];
+}
+
+const TFileInfo& CreateGroup() {
+    return FILES_INFO[CREATE_GROUP];
+}
+
+const TFileInfo& AlterGroup() {
+    return FILES_INFO[ALTER_GROUP];
+}
+
+const TFileInfo& CreateAsyncReplication() {
+    return FILES_INFO[CREATE_ASYNC_REPLICATION];
+}
+
+const TFileInfo& CreateExternalDataSource() {
+    return FILES_INFO[CREATE_EXTERNAL_DATA_SOURCE];
+}
+
+const TFileInfo& CreateExternalTable() {
+    return FILES_INFO[CREATE_EXTERNAL_TABLE];
 }
 
 } // NYdb::NDump::NFiles

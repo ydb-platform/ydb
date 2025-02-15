@@ -93,6 +93,27 @@ bool NeedReportPlan(const Ydb::Table::ExecuteScanQueryRequest& req) {
     }
 }
 
+bool NeedCollectDiagnostics(const Ydb::Table::ExecuteScanQueryRequest& req) {
+    switch (req.mode()) {
+        case ExecuteScanQueryRequest_Mode_MODE_EXPLAIN:
+            return true;
+
+        case ExecuteScanQueryRequest_Mode_MODE_EXEC:
+            switch (req.collect_stats()) {
+                case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+                case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
+                    return true;
+                default:
+                    break;
+            }
+
+            return false;
+
+        default:
+            return false;
+    }
+}
+
 bool CheckRequest(const Ydb::Table::ExecuteScanQueryRequest& req, TParseRequestError& error)
 {
     switch (req.mode()) {
@@ -228,7 +249,7 @@ private:
             nullptr
         );
 
-        ev->Record.MutableRequest()->SetCollectDiagnostics(req->Getcollect_full_diagnostics());
+        ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req));
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;
@@ -291,6 +312,7 @@ private:
 
             bool reportStats = NeedReportStats(*Request_->GetProtoRequest());
             bool reportPlan = reportStats && NeedReportPlan(*Request_->GetProtoRequest());
+            bool collectDiagnostics = NeedCollectDiagnostics(*Request_->GetProtoRequest());
 
             if (reportStats) {
                 if (kqpResponse.HasQueryStats()) {
@@ -308,7 +330,9 @@ private:
                     response.mutable_result()->mutable_query_stats()->set_query_ast(kqpResponse.GetQueryAst());
                 }
 
-                response.mutable_result()->set_query_full_diagnostics(kqpResponse.GetQueryDiagnostics());
+                if (collectDiagnostics) {
+                    response.mutable_result()->mutable_query_stats()->set_query_meta(kqpResponse.GetQueryDiagnostics());
+                }
 
                 Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
                 Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());

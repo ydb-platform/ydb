@@ -392,7 +392,7 @@ public:
             if (commitTxIds) {
                 TVector<ui64> participants(awaitingDecisions.begin(), awaitingDecisions.end());
                 DataShard.GetVolatileTxManager().PersistAddVolatileTx(
-                    txId,
+                    userDb.GetVolatileTxId(),
                     writeVersion,
                     commitTxIds,
                     userDb.GetVolatileDependencies(),

@@ -20,6 +20,7 @@ namespace NKqpRun {
 
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 constexpr ui64 DEFAULT_STORAGE_SIZE = 32_GB;
+constexpr TDuration TENANT_CREATION_TIMEOUT = TDuration::Seconds(30);
 
 struct TAsyncQueriesSettings {
     enum class EVerbose {
@@ -43,6 +44,7 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
     enum class EHealthCheck {
         None,
         NodesCount,
+        FetchDatabase,
         ScriptRequest,
         Max
     };

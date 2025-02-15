@@ -79,6 +79,12 @@ void TCommandConfigFetch::Parse(TConfig& config) {
 }
 
 int TCommandConfigFetch::Run(TConfig& config) {
+    if (AllowEmptyDatabase) {
+        // explicitly clear database to get cluster database
+        // in `ydb admin cluster config fetch` even if
+        // some database is set by mistake
+        config.Database.clear();
+    }
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
     auto result = client.GetConfig().GetValueSync();

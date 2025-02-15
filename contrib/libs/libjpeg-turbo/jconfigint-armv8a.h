@@ -1,1 +1,0 @@
-#define NEON_INTRINSICS 1

@@ -283,6 +283,10 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeReplication(driver);
     case NScheme::ESchemeEntryType::View:
         return DescribeView(driver);
+    case NScheme::ESchemeEntryType::ExternalDataSource:
+        return DescribeExternalDataSource(driver);
+    case NScheme::ESchemeEntryType::ExternalTable:
+        return DescribeExternalTable(driver);
     default:
         return DescribeEntryDefault(entry);
     }
@@ -613,6 +617,36 @@ int TCommandDescribe::DescribeView(const TDriver& driver) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintViewResponsePretty);
+}
+
+int TCommandDescribe::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& description) const {
+    // to do
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeExternalDataSource(const TDriver& driver) {
+    NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    const auto description = sessionResult.GetSession().DescribeExternalDataSource(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(description);
+
+    return PrintDescription(this, OutputFormat, description.GetExternalDataSourceDescription(), &TCommandDescribe::PrintExternalDataSourceResponsePretty);
+}
+
+int TCommandDescribe::PrintExternalTableResponsePretty(const NYdb::NTable::TExternalTableDescription& description) const {
+    // to do
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeExternalTable(const TDriver& driver) {
+    NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    const auto result = sessionResult.GetSession().DescribeExternalTable(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    return PrintDescription(this, OutputFormat, result.GetExternalTableDescription(), &TCommandDescribe::PrintExternalTableResponsePretty);
 }
 
 namespace {
@@ -1071,7 +1105,7 @@ void TCommandList::Parse(TConfig& config) {
 
 void TCommandList::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
-    ParsePath(config, 0);
+    ParsePath(config, 0, true);
 }
 
 int TCommandList::Run(TConfig& config) {

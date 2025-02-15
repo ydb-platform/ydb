@@ -199,7 +199,8 @@ void TIssues::PrintTo(IOutputStream& out, bool oneLine) const
 void TIssues::PrintWithProgramTo(
         IOutputStream& out,
         const TString& programFilename,
-        const TString& programText) const
+        const TString& programText,
+        bool colorize) const
 {
     using namespace NColorizer;
 
@@ -210,11 +211,41 @@ void TIssues::PrintWithProgramTo(
         WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) {
             auto shift = level * 4;
             Indent(out, shift);
-            out << DarkGray() << programFilename << Old() << ':';
-            out << Purple() << issue.Range() << Old();
-            auto color = (issue.GetSeverity() ==  TSeverityIds::S_WARNING) ? Yellow() : LightRed();
+            if (colorize) {
+                out << DarkGray();
+            }
+            out << programFilename;
+            if (colorize) {
+                out << Old();
+            }
+
+            out << ':';
+            if (colorize) {
+                out << Purple();
+            }
+
+            out << issue.Range();
+            if (colorize) {
+                out << Old();
+            }
+
             auto severityName = SeverityToString(issue.GetSeverity());
-            out << color << ": "<< severityName << ": " << issue.GetMessage() << Old() << '\n';
+            if (colorize) {
+                if (issue.GetSeverity() == TSeverityIds::S_INFO) {
+                    out << LightGreen();
+                } else if (issue.GetSeverity() == TSeverityIds::S_WARNING) {
+                    out << Yellow();
+                } else {
+                    out << LightRed();
+                }
+            }
+
+            out << ": "<< severityName << ": " << issue.GetMessage();
+            if (colorize) {
+                out << Old();
+            }
+
+            out << '\n';
             Indent(out, shift);
             if (issue.Position.HasValue()) {
                 out << '\t' << lines[issue.Position.Row] << '\n';

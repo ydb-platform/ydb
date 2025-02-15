@@ -91,6 +91,7 @@ public:
         };
 
         static ELogPriority VerbosityLevelToELogPriority(EVerbosityLevel lvl);
+        static ELogPriority VerbosityLevelToELogPriorityChatty(EVerbosityLevel lvl);
 
         int ArgC;
         char** ArgV;
@@ -104,7 +105,7 @@ public:
         THashSet<TString> ExecutableOptions;
         bool HasExecutableOptions = false;
         TString Path;
-        THolder<TArgSettings> ArgsSettings;
+        TArgSettings ArgsSettings;
         TString Address;
         TString Database;
         TString CaCerts;
@@ -148,8 +149,10 @@ public:
         bool AllowEmptyAddress = false;
         bool OnlyExplicitProfile = false;
         bool AssumeYes = false;
+        std::optional<std::string> StorageUrl = std::nullopt;
 
         TCredentialsGetter CredentialsGetter;
+        std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
 
         TConfig(int argc, char** argv)
             : ArgC(argc)
@@ -174,6 +177,8 @@ public:
             };
         }
 
+        std::shared_ptr<ICredentialsProviderFactory> GetSingletonCredentialsProviderFactory();
+
         bool HasHelpCommand() const {
             return HasArgs({ "--help" }) || HasArgs({ "-h" }) || HasArgs({ "-?" }) || HasArgs({ "--help-ex" });
         }
@@ -185,18 +190,18 @@ public:
         }
 
         void SetFreeArgsMin(size_t value) {
-            ArgsSettings->Min.Set(value);
+            ArgsSettings.Min.Set(value);
             Opts->SetFreeArgsMin(value);
         }
 
         void SetFreeArgsMax(size_t value) {
-            ArgsSettings->Max.Set(value);
+            ArgsSettings.Max.Set(value);
             Opts->SetFreeArgsMax(value);
         }
 
         void SetFreeArgsNum(size_t minValue, size_t maxValue) {
-            ArgsSettings->Min.Set(minValue);
-            ArgsSettings->Max.Set(maxValue);
+            ArgsSettings.Min.Set(minValue);
+            ArgsSettings.Max.Set(maxValue);
             Opts->SetFreeArgsNum(minValue, maxValue);
         }
 
@@ -209,10 +214,10 @@ public:
             if (HasHelpCommand() || HasExecutableOptions) {
                 return;
             }
-            bool minSet = ArgsSettings->Min.GetIsSet();
-            size_t minValue = ArgsSettings->Min.Get();
-            bool maxSet = ArgsSettings->Max.GetIsSet();
-            size_t maxValue = ArgsSettings->Max.Get();
+            bool minSet = ArgsSettings.Min.GetIsSet();
+            size_t minValue = ArgsSettings.Min.Get();
+            bool maxSet = ArgsSettings.Max.GetIsSet();
+            size_t maxValue = ArgsSettings.Max.Get();
             bool minFailed = minSet && count < minValue;
             bool maxFailed = maxSet && count > maxValue;
             if (minFailed || maxFailed) {

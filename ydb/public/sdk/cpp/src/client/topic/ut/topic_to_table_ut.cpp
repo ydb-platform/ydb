@@ -9,6 +9,7 @@
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/blob.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/pq_l2_service.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
@@ -237,6 +238,8 @@ protected:
     virtual bool GetEnableHtapTx() const;
     virtual bool GetAllowOlapDataQuery() const;
 
+    size_t GetPQCacheRenameKeysCount();
+
 private:
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader, NTable::TTransaction& tx);
@@ -248,6 +251,8 @@ private:
                           ui32 partition);
     std::vector<std::string> GetTabletKeys(const TActorId& actorId,
                                            ui64 tabletId);
+    std::vector<std::string> GetPQTabletDataKeys(const TActorId& actorId,
+                                                 ui64 tabletId);
     NPQ::TWriteId GetTransactionWriteId(const TActorId& actorId,
                                         ui64 tabletId);
     void SendLongTxLockStatus(const TActorId& actorId,
@@ -1082,6 +1087,43 @@ std::vector<std::string> TFixture::GetTabletKeys(const TActorId& actorId,
     }
 
     return keys;
+}
+
+std::vector<std::string> TFixture::GetPQTabletDataKeys(const TActorId& actorId,
+                                                       ui64 tabletId)
+{
+    using namespace NKikimr::NPQ;
+
+    std::vector<std::string> keys;
+
+    for (const auto& key : GetTabletKeys(actorId, tabletId)) {
+        if (key.empty() ||
+            ((std::tolower(key.front()) != TKeyPrefix::TypeData) &&
+             (std::tolower(key.front()) != TKeyPrefix::TypeTmpData))) {
+            continue;
+        }
+
+        keys.push_back(key);
+    }
+
+    return keys;
+}
+
+size_t TFixture::GetPQCacheRenameKeysCount()
+{
+    using namespace NKikimr::NPQ;
+
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+
+    auto request = MakeHolder<TEvPqCache::TEvCacheKeysRequest>();
+
+    runtime.Send(MakePersQueueL2CacheID(), edge, request.Release());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = runtime.GrabEdgeEvent<TEvPqCache::TEvCacheKeysResponse>(handle);
+
+    return result->RenamedKeys;
 }
 
 void TFixture::RestartLongTxService()
@@ -2577,6 +2619,55 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_48, TFixture)
     auto topicDescription = DescribeTopic("topic_A");
 
     UNIT_ASSERT_GT(topicDescription.GetTotalPartitionsCount(), 2);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_50, TFixture)
+{
+    // We write to the topic in the transaction. When a transaction is committed, the keys in the blob
+    // cache are renamed.
+    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_B", TEST_CONSUMER);
+
+    TString message(128_KB, 'x');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+
+    auto session = CreateTableSession();
+
+    // tx #1
+    // After the transaction commit, there will be no large blobs in the batches.  The number of renames
+    // will not change in the cache.
+    auto tx = BeginTx(session);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_3, message, &tx);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    Sleep(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
+
+    // tx #2
+    // After the commit, the party will rename one big blob
+    tx = BeginTx(session);
+
+    for (unsigned i = 0; i < 80; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx);
+    }
+
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_3, message, &tx);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    Sleep(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 1);
 }
 
 class TFixtureSinks : public TFixture {

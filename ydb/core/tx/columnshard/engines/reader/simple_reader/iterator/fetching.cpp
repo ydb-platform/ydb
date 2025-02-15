@@ -17,27 +17,20 @@ TConclusion<bool> TIndexBlobsFetchingStep::DoExecuteInplace(
     return !source->StartFetchingIndexes(source, step, Indexes);
 }
 
-TConclusion<bool> TFilterProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    AFL_VERIFY(source);
-    AFL_VERIFY(Step);
-    auto filter = Step->BuildFilter(source->GetStageData().GetTable());
-    if (!filter.ok()) {
-        return TConclusionStatus::Fail(filter.status().message());
-    }
-    source->MutableStageData().AddFilter(*filter);
-    return true;
-}
-
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto filter =
-        source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(source->GetStageData().GetTable()->BuildTableVerified());
+    auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
+        source->GetStageData().GetTable()->ToTable(source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
+            source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo())));
     source->MutableStageData().AddFilter(filter);
     return true;
 }
 
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto filter = MakeSnapshotFilter(
-        source->GetStageData().GetTable()->BuildTableVerified(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
+    auto filter =
+        MakeSnapshotFilter(source->GetStageData().GetTable()->ToTable(
+                               std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
+                               source->GetContext()->GetCommonContext()->GetResolver()),
+            source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
     if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
         if (source->AddTxConflict()) {
             return true;
@@ -48,7 +41,10 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataS
 }
 
 TConclusion<bool> TDeletionFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto filterTable = source->GetStageData().GetTable()->BuildTableOptional(std::set<std::string>({ TIndexInfo::SPEC_COL_DELETE_FLAG }));
+    if (!source->GetStageData().GetTable()->HasColumn((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
+        return true;
+    }
+    auto filterTable = source->GetStageData().GetTable()->ToTable(std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG }));
     if (!filterTable) {
         return true;
     }
@@ -67,7 +63,9 @@ TConclusion<bool> TDeletionFilter::DoExecuteInplace(const std::shared_ptr<IDataS
 TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     NYDBTest::TControllers::GetColumnShardController()->OnSelectShardingFilter();
     const auto& shardingInfo = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo();
-    auto filter = shardingInfo->GetFilter(source->GetStageData().GetTable()->BuildTableVerified());
+    const std::set<ui32> ids = source->GetContext()->GetCommonContext()->GetResolver()->GetColumnIdsSetVerified(shardingInfo->GetColumnNames());
+    auto filter =
+        shardingInfo->GetFilter(source->GetStageData().GetTable()->ToTable(ids, source->GetContext()->GetCommonContext()->GetResolver()));
     source->MutableStageData().AddFilter(filter);
     return true;
 }
@@ -149,7 +147,6 @@ public:
 TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     auto context = source->GetContext();
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
-    contextTableConstruct.SetColumnNames(context->GetProgramInputColumns()->GetColumnNamesVector());
     if (!source->IsSourceInMemory()) {
         contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
     } else {
@@ -159,12 +156,8 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
     std::shared_ptr<arrow::Table> resultBatch;
     if (!source->GetStageResult().IsEmpty()) {
         resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
-        AFL_VERIFY((ui32)resultBatch->num_columns() == context->GetProgramInputColumns()->GetColumnNamesVector().size());
         if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
             filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount).SetTrySlices(true));
-        }
-        if (resultBatch && resultBatch->num_rows()) {
-            NArrow::TStatusValidator::Validate(context->GetReadMetadata()->GetProgram().ApplyProgram(resultBatch));
         }
     }
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
@@ -195,12 +188,10 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
 }
 
 TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
-        columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount()));
+        source->MutableStageData().GetTable()->AddVerified(source->GetContext()->GetCommonContext()->GetResolver()->GetColumnIdVerified(f->name()),
+            NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount()));
     }
-    source->MutableStageData().AddBatch(std::make_shared<NArrow::TGeneralContainer>(
-        arrow::RecordBatch::Make(TIndexInfo::ArrowSchemaSnapshot(), source->GetRecordsCount(), columns)));
     source->SetUsedRawBytes(0);
     source->Finalize({});
     return true;

@@ -2,9 +2,10 @@
 #include "predicate.h"
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/library/formats/arrow/replace_key.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/result.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 

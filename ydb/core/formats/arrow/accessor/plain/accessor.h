@@ -39,6 +39,18 @@ public:
         , Array(data) {
     }
 
+    static std::shared_ptr<arrow::Array> BuildArrayFromScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
+        AFL_VERIFY(scalar);
+        auto builder = NArrow::MakeBuilder(scalar->type, 1);
+        TStatusValidator::Validate(builder->AppendScalar(*scalar));
+        return NArrow::FinishBuilder(std::move(builder));
+    }
+
+    TTrivialArray(const std::shared_ptr<arrow::Scalar>& scalar)
+        : TBase(1, EType::Array, TValidator::CheckNotNull(scalar)->type)
+        , Array(BuildArrayFromScalar(scalar)) {
+    }
+
     template <class TArrowDataType = arrow::StringType>
     class TPlainBuilder {
     private:

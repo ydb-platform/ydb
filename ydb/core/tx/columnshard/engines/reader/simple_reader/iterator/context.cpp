@@ -107,22 +107,19 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*result, *GetSpecColumns(), "SPEC", EStageFeaturesIndexes::Filter, false);
             result->AddStep(std::make_shared<TSnapshotFilter>());
         }
-        for (auto&& i : GetReadMetadata()->GetProgram().GetSteps()) {
-            if (i->GetFilterOriginalColumnIds().empty()) {
-                break;
+        for (ui32 stepIdx = 0; stepIdx < GetReadMetadata()->GetProgram().GetChainVerified()->GetProcessors(); ++stepIdx) {
+            auto& step = GetReadMetadata()->GetProgram().GetChainVerified()->GetProcessors()[stepIdx];
+            if (step.GetColumnsToFetch().size()) {
+                TColumnsSet stepColumnIds(
+                    NArrow::NSSA::TColumnChainInfo::ExtractColumnIds(step.GetColumnsToFetch()), GetReadMetadata()->GetResultSchema());
+                acc.AddFetchingStep(*result, stepColumnIds, EStageFeaturesIndexes::Fetching);
+                acc.AddAssembleStep(*result, stepColumnIds, "EF", EStageFeaturesIndexes::Filter, false);
             }
-            TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), GetReadMetadata()->GetResultSchema());
-            acc.AddAssembleStep(*result, stepColumnIds, "EF", EStageFeaturesIndexes::Filter, false);
-            result->AddStep(std::make_shared<TFilterProgramStep>(i));
-            if (!i->IsFilterOnly()) {
-                break;
+            result->AddStep(std::make_shared<NCommon::TProgramStep>(step));
+            if (step->GetProcessorType() == NArrow::NSSA::EProcessorType::Filter && GetReadMetadata()->HasLimit() && step->GetLastOriginalDataFilter() == stepIdx) {
+                result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->GetLimitRobust(), GetReadMetadata()->IsDescSorted()));
             }
         }
-        if (GetReadMetadata()->HasLimit()) {
-            result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->GetLimitRobust(), GetReadMetadata()->IsDescSorted()));
-        }
-        acc.AddFetchingStep(*result, *GetFFColumns(), EStageFeaturesIndexes::Fetching);
-        acc.AddAssembleStep(*result, *GetFFColumns(), "LAST", EStageFeaturesIndexes::Fetching, false);
     }
     result->AddStep<NCommon::TBuildStageResultStep>();
     result->AddStep<TPrepareResultStep>();

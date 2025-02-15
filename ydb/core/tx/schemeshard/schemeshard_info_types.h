@@ -105,7 +105,7 @@ struct TSplitSettings {
     TForceShardSplitSettings GetForceShardSplitSettings() const {
         return TForceShardSplitSettings{
             .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
-            .DisableForceShardSplit = true,
+            .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
         };
     }
 };

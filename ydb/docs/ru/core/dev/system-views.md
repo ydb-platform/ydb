@@ -304,7 +304,7 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 ## Информация о пулах ресурсов {#resource_pools}
 
-`resource_pools` - таблица содержит информацию о настройках пулов ресурсов.
+`resource_pools` - таблица содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool.md#parameters) [пулов ресурсов](../concepts/glossary.md#resource-pool).
 
 Структура таблицы:
 
@@ -312,11 +312,13 @@ ORDER BY IntervalEnd desc, CPUCores desc
 --- | ---
 `Name` | Имя пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
 `Config` | Настройки пула ресурсов.<br/>Тип: `JsonDocument`.<br/>
-`Owner` | Владеле пула ресурсов.<br/>Тип: `Utf8`.<br/>
-`Permissions` | Доступы на объект пула ресурсов<br/>Тип: `JsonDocument`.<br/>
-`EffectivePermissions` | Фактический доступ на объект пула ресурсов<br/>Тип: `JsonDocument`.
+`Owner` | Владелец пула ресурсов.<br/>Тип: `Utf8`.<br/>
+`Permissions` | Список прав, выданных непосредственно на пул ресурсов. Права доступа в формате описанном [здесь](../yql/reference/syntax/grant/.md#permissions-list)<br/>Тип: `JsonDocument`.<br/>
+`EffectivePermissions` | Список прав, фактически действующих на данный пул ресурсов с учётом правил наследования прав. Права доступа в формате описанном [здесь](../yql/reference/syntax/grant/.md#permissions-list)<br/>Тип: `JsonDocument`.
 
 ### Пример
+
+Получение информации о настройках пула ресурсов с именем `default`:
 
 ```yql
 SELECT
@@ -329,11 +331,9 @@ FROM `.sys/resource_pools`
 WHERE name = "default";
 ```
 
-Получение информации о настройках пула ресурсов с именем `default`
-
 ## Информация о классификаторах пулов ресурсов {#resource_pools_classifiers}
 
-`resource_pools_classifiers` - таблица содержит информацию о настройках классификаторов пулов ресурсов.
+`resource_pools_classifiers` - таблица содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) [классификаторов пулов ресурсов](../concepts/glossary.md#resource-pool-classifier).
 
 Структура таблицы:
 
@@ -345,6 +345,8 @@ WHERE name = "default";
 
 ### Пример
 
+Получение информации о настройках классификатора пула ресурсов с именем `olap`:
+
 ```yql
 SELECT
     Name,
@@ -353,5 +355,3 @@ SELECT
 FROM `.sys/resource_pools_classifiers`
 WHERE name = "olap";
 ```
-
-Получение информации о настройках классификатора пула ресурсов с именем `olap`

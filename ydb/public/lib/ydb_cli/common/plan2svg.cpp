@@ -1614,7 +1614,7 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             PrintStageSummary(background, canvas, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip, taskCount);
 
             if (s->SpillingComputeBytes && s->SpillingComputeBytes->Details.Sum) {
-                auto x1 = Config.HeaderWidth + GAP_X + Config.SummaryWidth + - INTERNAL_GAP_X;
+                auto x1 = Config.SummaryLeft + Config.SummaryWidth - INTERNAL_GAP_X;
                 auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
                 background
                 << "<g><title>";

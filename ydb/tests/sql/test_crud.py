@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 from ydb.tests.sql.lib.test_base import TestBase
+import pytest
 
 
 class TestYdbCrudOperations(TestBase):
 
+    @pytest.mark.test_case("#0")
     def test_crud_operations(self):
         """
         Test basic CRUD operations: Create, Read, Update, Delete

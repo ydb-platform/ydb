@@ -313,7 +313,7 @@ ORDER BY IntervalEnd desc, CPUCores desc
 `Name` | Имя пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
 `Config` | Настройки пула ресурсов.<br/>Тип: `JsonDocument`.<br/>
 `Owner` | Владелец пула ресурсов.<br/>Тип: `Utf8`.<br/>
-`Permissions` | Список прав, выданных непосредственно на пул ресурсов. Права доступа в формате описанном [здесь](../yql/reference/syntax/grant/.md#permissions-list)<br/>Тип: `JsonDocument`.<br/>
+`Permissions` | Список прав, выданных непосредственно на пул ресурсов. Права доступа в формате описанном [здесь](../yql/reference/syntax/grant.md#permissions-list)<br/>Тип: `JsonDocument`.<br/>
 `EffectivePermissions` | Список прав, фактически действующих на данный пул ресурсов с учётом правил наследования прав. Права доступа в формате описанном [здесь](../yql/reference/syntax/grant/.md#permissions-list)<br/>Тип: `JsonDocument`.
 
 ### Пример

@@ -506,7 +506,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         auto filterInfo = TColumnInfo::Generated(2, "filter");
         auto resInfo = TColumnInfo::Generated(3, "res");
 
-        step->AddAssigne(TAssign(yInfo, 56));
+        step->AddAssigne(TAssign(yInfo, std::make_shared<arrow::Int64Scalar>(56)));
         step->AddAssigne(TAssign(resInfo, EOperation::Add, {xInfo, yInfo}));
         step->AddFilter(filterInfo);
         step->AddProjection(filterInfo);

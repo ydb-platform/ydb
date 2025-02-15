@@ -111,6 +111,10 @@ private:
         nodesMenagerConfig->SetPort(grpcPort);
         nodesMenagerConfig->SetHost("localhost");
 
+        auto* healthConfig = fqConfig.MutableHealth();
+        healthConfig->SetPort(grpcPort);
+        healthConfig->SetDatabase(database);
+
         if (Settings.EmulateS3) {
             fqConfig.MutableCommon()->SetObjectStorageEndpoint("file://");
         }

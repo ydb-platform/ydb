@@ -17,6 +17,7 @@ PEERDIR(
 
 PEERDIR(
     yql/essentials/udfs/common/compress_base
+    yql/essentials/udfs/common/re2
 )
 
 YQL_LAST_ABI_VERSION()

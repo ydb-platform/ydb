@@ -6,6 +6,7 @@ def pytest_configure(config):
         "markers", "test_case: Test case (github issue) identifier"
     )
 
+
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_makereport(item, call):
     # Receiving report object
@@ -22,4 +23,3 @@ def pytest_runtest_makereport(item, call):
                                            f'https://github.com/ydb-platform/ydb/issues/{test_case_id}'))
 
     return report
-

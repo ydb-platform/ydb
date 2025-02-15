@@ -51,15 +51,6 @@ public:
         , Database(database)
         , Reverse(reverse)
     {
-        const auto& cellsFrom = TableRange.From.GetCells();
-        if (cellsFrom.size() == 1 && !cellsFrom[0].IsNull()) {
-            From = TString{cellsFrom[0].Data(), cellsFrom[0].Size()};
-        }
-
-        const auto& cellsTo = TableRange.To.GetCells();
-        if (cellsTo.size() == 1 && !cellsTo[0].IsNull()) {
-            To = TString{cellsTo[0].Data(), cellsTo[0].Size()};
-        }
     }
 
     STFUNC(StateScan) {
@@ -267,8 +258,6 @@ private:
 
 private:
     EState State = EState::LIST_RESOURCE_POOLS;
-    TMaybe<TString> From;
-    TMaybe<TString> To;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString Database;
     const bool Reverse;

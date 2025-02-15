@@ -987,7 +987,7 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
                         }
                     }
                     virtual NArrow::NSSA::TColumnInfo GetDefaultColumn() const override {
-                        AFL_VERIFY(false);
+                        AFL_ENSURE(false);
                         return NArrow::NSSA::TColumnInfo::Generated(0, "");
                     }
                 };
@@ -1002,7 +1002,7 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
                         auto data = NOlap::NIndexes::NRequest::TDataForIndexesCheckers::Build(container);
                         if (data) {
                             for (auto&& [indexId, i] : olapSchema->GetIndexes().GetIndexes()) {
-                                AFL_VERIFY(!!i.GetIndexMeta());
+                                AFL_ENSURE(!!i.GetIndexMeta());
                                 i.GetIndexMeta()->FillIndexCheckers(data, *olapSchema);
                             }
                             auto checker = data->GetCoverChecker();

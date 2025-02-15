@@ -136,10 +136,10 @@ struct TSumData {
 
     static void CheckResult(ETest test, const std::shared_ptr<TAccessorsCollection>& batch, ui32 numKeys, bool nullable) {
         AFL_VERIFY(batch->GetColumnsCount() == numKeys + 2);
-        auto aggXOriginal = batch->GetArrayVerified(2);
-        auto aggYOriginal = batch->GetArrayVerified(3);
-        auto colXOriginal = batch->GetArrayVerified(0);
-        auto colYOriginal = (numKeys == 2) ? batch->GetArrayVerified(1) : nullptr;
+        auto aggXOriginal = batch->GetArrayVerified(3);
+        auto aggYOriginal = batch->GetArrayVerified(4);
+        auto colXOriginal = batch->GetArrayVerified(1);
+        auto colYOriginal = (numKeys == 2) ? batch->GetArrayVerified(2) : nullptr;
 
         UNIT_ASSERT_EQUAL(aggXOriginal->type_id(), arrow::Type::INT64);
         UNIT_ASSERT_EQUAL(aggYOriginal->type_id(), arrow::Type::UINT64);
@@ -206,9 +206,9 @@ struct TMinMaxSomeData {
 
     static void CheckResult(ETest /*test*/, const std::shared_ptr<TAccessorsCollection>& batch, ui32 numKeys, bool nullable) {
         UNIT_ASSERT_VALUES_EQUAL(numKeys, 1);
-        auto aggXOriginal = batch->GetArrayVerified(2);
-        auto aggYOriginal = batch->GetArrayVerified(3);
-        auto colXOriginal = batch->GetArrayVerified(0);
+        auto aggXOriginal = batch->GetArrayVerified(3);
+        auto aggYOriginal = batch->GetArrayVerified(4);
+        auto colXOriginal = batch->GetArrayVerified(1);
 
         UNIT_ASSERT_VALUES_EQUAL(batch->GetColumnsCount(), numKeys + 2);
         UNIT_ASSERT_EQUAL(aggXOriginal->type_id(), arrow::Type::INT16);
@@ -261,22 +261,22 @@ void GroupByXY(bool nullable, ui32 numKeys, ETest test = ETest::DEFAULT, EAggreg
 
     TProgramChain::TBuilder builder(resolver);
     NAggregation::TWithKeysAggregationProcessor::TBuilder aggrBuilder;
-    aggrBuilder.AddGroupBy(TColumnChainInfo(0), TColumnChainInfo(2), aggFunc);
     aggrBuilder.AddGroupBy(TColumnChainInfo(1), TColumnChainInfo(3), aggFunc);
-    aggrBuilder.AddKey(TColumnChainInfo(0));
+    aggrBuilder.AddGroupBy(TColumnChainInfo(2), TColumnChainInfo(4), aggFunc);
+    aggrBuilder.AddKey(TColumnChainInfo(1));
     if (numKeys == 2) {
-        aggrBuilder.AddKey(TColumnChainInfo(1));
+        aggrBuilder.AddKey(TColumnChainInfo(2));
     }
     builder.Add(aggrBuilder.Finish().DetachResult());
     if (numKeys == 2) {
-        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 0, 1, 2, 3 })));
+        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 2, 3, 4 })));
     } else {
-        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 0, 2, 3 })));
+        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 3, 4 })));
     }
     auto chain = builder.Finish().DetachResult();
     auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
     for (ui32 i = 0; i < (ui32)batch->num_columns(); ++i) {
-        resources->AddVerified(i, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)));
+        resources->AddVerified(i + 1, std::make_shared<NAccessor::TTrivialArray>(batch->column(i)));
     }
     chain->Apply(resources).Validate();
 

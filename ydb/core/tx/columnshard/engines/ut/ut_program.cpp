@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/columnshard/test_helper/kernels_wrapper.h>
+#include <ydb/core/tx/columnshard/test_helper/program_constructor.h>
 #include <ydb/core/tx/program/program.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -525,34 +526,18 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
     }
 
-    Y_UNIT_TEST(NumRecordsWithNulls) {
+    Y_UNIT_TEST(NumRowsWithNulls) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
         NReader::NCommon::TIndexColumnResolver columnResolver(indexInfo);
 
-        NKikimrSSA::TProgram programProto;
-        {
-            auto* command = programProto.AddCommand();
-            auto* functionProto = command->MutableAssign()->MutableFunction();
-            functionProto->AddArguments()->SetId(columnResolver.GetColumnIdVerified("uid"));
-            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_IS_NULL);
-            command->MutableAssign()->MutableColumn()->SetId(15);
-        }
-        {
-            auto* command = programProto.AddCommand();
-            command->MutableFilter()->MutablePredicate()->SetId(15);
-        }
-        {
-            auto* command = programProto.AddCommand();
-            auto* groupBy = command->MutableGroupBy();
-            auto* aggregate = groupBy->AddAggregates();
-            aggregate->MutableFunction()->SetId(static_cast<ui32>(NArrow::NSSA::NAggregation::EAggregate::Count));
-            aggregate->MutableColumn()->SetId(16);
-        }
-        {
-            auto* command = programProto.AddCommand();
-            command->MutableProjection()->AddColumns()->SetId(16);
-        }
-        const auto programSerialized = SerializeProgram(programProto);
+        TProgramProtoBuilder protoBuilder;
+        const ui32 isNullId =
+            protoBuilder.AddOperation(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_IS_NULL,
+                { columnResolver.GetColumnIdVerified("uid") });
+        protoBuilder.AddFilter(isNullId);
+        const ui32 countId = protoBuilder.AddAggregation(NArrow::NSSA::NAggregation::EAggregate::Count, {}, {});
+        protoBuilder.AddProjection({ countId });
+        const auto programSerialized = SerializeProgram(protoBuilder.GetProto());
 
         TProgramContainer program;
         program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized).Validate();
@@ -566,7 +551,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
         auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
 
-        TTableUpdatesBuilder result(NArrow::MakeArrowSchema({ std::make_pair("16", TTypeInfo(NTypeIds::Uint64)) }));
+        TTableUpdatesBuilder result(NArrow::MakeArrowSchema({ std::make_pair("10002", TTypeInfo(NTypeIds::Uint64)) }));
         result.AddRow().Add<uint64_t>(3);
 
         auto expected = result.BuildArrow();
@@ -577,20 +562,11 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
         NReader::NCommon::TIndexColumnResolver columnResolver(indexInfo);
 
-        NKikimrSSA::TProgram programProto;
-        {
-            auto* command = programProto.AddCommand();
-            auto* groupBy = command->MutableGroupBy();
-            auto* aggregate = groupBy->AddAggregates();
-            aggregate->AddArguments()->SetId(columnResolver.GetColumnIdVerified("uid"));
-            aggregate->MutableFunction()->SetId(static_cast<ui32>(NArrow::NSSA::NAggregation::EAggregate::Count));
-            aggregate->MutableColumn()->SetId(16);
-        }
-        {
-            auto* command = programProto.AddCommand();
-            command->MutableProjection()->AddColumns()->SetId(16);
-        }
-        const auto programSerialized = SerializeProgram(programProto);
+        TProgramProtoBuilder protoBuilder;
+        const ui32 resId =
+            protoBuilder.AddAggregation(NArrow::NSSA::NAggregation::EAggregate::Count, { columnResolver.GetColumnIdVerified("uid") }, {});
+        protoBuilder.AddProjection({ resId });
+        const auto programSerialized = SerializeProgram(protoBuilder.GetProto());
 
         TProgramContainer program;
         program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized).Validate();
@@ -604,8 +580,43 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
         auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
 
-        TTableUpdatesBuilder result(NArrow::MakeArrowSchema({ std::make_pair("16", TTypeInfo(NTypeIds::Uint64)) }));
-        result.AddRow().Add<uint64_t>(3);
+        TTableUpdatesBuilder result(NArrow::MakeArrowSchema({ std::make_pair("10001", TTypeInfo(NTypeIds::Uint64)) }));
+        result.AddRow().Add<uint64_t>(2);
+
+        auto expected = result.BuildArrow();
+        UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+    }
+
+    Y_UNIT_TEST(CountUIDByVAT) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        NReader::NCommon::TIndexColumnResolver columnResolver(indexInfo);
+
+        TProgramProtoBuilder protoBuilder;
+        const ui32 resId = protoBuilder.AddAggregation(NArrow::NSSA::NAggregation::EAggregate::Count,
+            { columnResolver.GetColumnIdVerified("uid") }, { columnResolver.GetColumnIdVerified("vat") });
+        protoBuilder.AddProjection({ resId, columnResolver.GetColumnIdVerified("vat") });
+        const auto programSerialized = SerializeProgram(protoBuilder.GetProto());
+
+        TProgramContainer program;
+        program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized).Validate();
+
+        TTableUpdatesBuilder updates(
+            NArrow::MakeArrowSchema({ std::make_pair("uid", TTypeInfo(NTypeIds::Utf8)), std::make_pair("vat", TTypeInfo(NTypeIds::Int32)) }));
+        updates.AddRow().Add("a").Add(1);
+        updates.AddRow().AddNull().Add(1);
+        updates.AddRow().Add("bbb").Add(1);
+        updates.AddRow().Add("a").Add(2);
+        updates.AddRow().AddNull().Add(2);
+        updates.AddRow().AddNull().Add(3);
+        updates.AddRow().AddNull().Add(3);
+
+        auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
+
+        TTableUpdatesBuilder result(NArrow::MakeArrowSchema(
+            { std::make_pair("10001", TTypeInfo(NTypeIds::Uint64)), std::make_pair("4", TTypeInfo(NTypeIds::Int32)) }));
+        result.AddRow().Add<ui64>(0).Add<i32>(3);
+        result.AddRow().Add<ui64>(1).Add<i32>(2);
+        result.AddRow().Add<ui64>(2).Add<i32>(1);
 
         auto expected = result.BuildArrow();
         UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());

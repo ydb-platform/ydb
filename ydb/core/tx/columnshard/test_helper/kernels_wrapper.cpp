@@ -12,6 +12,24 @@ TKernelsWrapper::TKernelsWrapper() {
 
 ui32 TKernelsWrapper::Add(NYql::TKernelRequestBuilder::EBinaryOp operation, bool scalar /*= false*/) {
     switch (operation) {
+        case NYql::TKernelRequestBuilder::EBinaryOp::And: {
+            auto blockResultType =
+                Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
+            if (scalar) {
+                return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::And, blockResultType, blockResultType, blockResultType);
+            } else {
+                return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::And, blockResultType, blockResultType, blockResultType);
+            }
+        }
+        case NYql::TKernelRequestBuilder::EBinaryOp::Or: {
+            auto blockResultType =
+                Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
+            if (scalar) {
+                return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::Or, blockResultType, blockResultType, blockResultType);
+            } else {
+                return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::Or, blockResultType, blockResultType, blockResultType);
+            }
+        }
         case NYql::TKernelRequestBuilder::EBinaryOp::Add: {
             auto blockInt32Type =
                 Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Int32));

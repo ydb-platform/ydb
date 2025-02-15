@@ -6,6 +6,8 @@ PY_SRCS(
 
 PEERDIR(
     library/python/monlib
+    ydb/public/sdk/python
+    ydb/public/sdk/python/enable_v3_new_behavior
 )
 
 

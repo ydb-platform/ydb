@@ -1496,7 +1496,7 @@ void TClient::CheckShutdown() const
     }
 }
 
-TClientPtr CreateClientImpl(
+TClientContext CreateClientContext(
     const TString& serverName,
     const TCreateClientOptions& options)
 {
@@ -1565,6 +1565,15 @@ TClientPtr CreateClientImpl(
     if (context.Token) {
         TConfig::ValidateToken(context.Token);
     }
+
+    return context;
+}
+
+TClientPtr CreateClientImpl(
+    const TString& serverName,
+    const TCreateClientOptions& options)
+{
+    auto context = CreateClientContext(serverName, options);
 
     auto globalTxId = GetGuid(context.Config->GlobalTxId);
 

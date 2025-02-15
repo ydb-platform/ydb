@@ -319,6 +319,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockStorage", &WrapBlockStorage},
         {"BlockMapJoinIndex", &WrapBlockMapJoinIndex},
         {"BlockMapJoinCore", &WrapBlockMapJoinCore},
+        {"BlockGraceJoinCore", &WrapBlockGraceJoinCore},
         {"MakeHeap", &WrapMakeHeap},
         {"PushHeap", &WrapPushHeap},
         {"PopHeap", &WrapPopHeap},

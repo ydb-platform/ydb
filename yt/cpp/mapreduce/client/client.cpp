@@ -1545,6 +1545,10 @@ TClientContext CreateClientContext(
         context.ServerName = Format("tvm.%v", context.ServerName);
     }
 
+    if (options.ProxyRole_) {
+        context.Config->Hosts = "hosts?role=" + *options.ProxyRole_;
+    }
+
     if (context.UseTLS || options.UseCoreHttpClient_) {
         context.HttpClient = NHttpClient::CreateCoreHttpClient(context.UseTLS, context.Config);
     } else {

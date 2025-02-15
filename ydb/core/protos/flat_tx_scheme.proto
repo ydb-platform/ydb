@@ -472,3 +472,6 @@ message TEvDataErasureInfoResponse {
     optional EStatus Status = 1;
     optional uint64 Generation = 2;
 }
+
+message TEvDataErasureManualStartupRequest {
+}

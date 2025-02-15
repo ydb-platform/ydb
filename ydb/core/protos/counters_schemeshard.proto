@@ -628,8 +628,11 @@ enum ETxTypes {
     TXTYPE_LIST_USERS = 90                                       [(TxTypeOpts) = {Name: "TxListUsers"}];
     TXTYPE_UNMARK_RESTORE_TABLES = 91                     [(TxTypeOpts) = {Name: "TxUnmarkRestoreTables"}];
 
-    TXTYPE_RUN_TENANT_DATA_ERASURE = 92 [(TxTypeOpts) = {Name: "TxRunTenantDataErasure"}];
+    TXTYPE_DATA_ERASURE_INIT = 92 [(TxTypeOpts) = {Name: "TxDataErasureInit"}];
     TXTYPE_RUN_DATA_ERASURE = 93 [(TxTypeOpts) = {Name: "TxRunDataErasure"}];
+    TXTYPE_RUN_DATA_ERASURE_TENANT = 94 [(TxTypeOpts) = {Name: "TxRunTenantDataErasure"}];
 
-    TXTYPE_COMPLETE_DATA_ERASURE = 94 [(TxTypeOpts) = {Name: "TxCompleteDataErasure"}];
+    TXTYPE_COMPLETE_DATA_ERASURE_SHARD = 95 [(TxTypeOpts) = {Name: "TxCompleteDataErasureShard"}];
+    TXTYPE_COMPLETE_DATA_ERASURE_TENANT = 96 [(TxTypeOpts) = {Name: "TxCompleteDataErasureTenant"}];
+    TXTYPE_COMPLETE_DATA_ERASURE_BSC = 97 [(TxTypeOpts) = {Name: "TxCompleteDataErasureBSC"}];
 }

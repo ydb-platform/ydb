@@ -4,14 +4,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(10)
 
-TIMEOUT(20)
+TIMEOUT(900)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(LARGE)
+TAG(ya:fat)
 
 PEERDIR(
     library/cpp/getopt
@@ -24,7 +20,7 @@ PEERDIR(
 )
 
 SRCS(
-    ut_data_erasure.cpp
+    ut_data_erasure_reboots.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -1969,6 +1969,7 @@ message TDataErasureConfig {
     // Every 10 m do request to BSC
     optional uint64 BlobStorageControllerRequestIntervalSeconds = 5 [default = 600];
     optional TTenantDataErasureConfig TenantDataErasureConfig = 6;
+    optional bool ForceManualStartup = 7 [default = false];
 }
 
 message TGraphConfig {

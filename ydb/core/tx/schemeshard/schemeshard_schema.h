@@ -1940,7 +1940,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct DataErasureStarts : Table<115> {
+    struct DataErasureGenerations : Table<115> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<2, NScheme::NTypeIds::Uint32> {};
         struct StartTime : Column<3, NScheme::NTypeIds::Timestamp> {};
@@ -1953,7 +1953,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct ActiveDataErasureTenants : Table<116> {
+    struct WaitingDataErasureTenants : Table<116> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
@@ -1966,7 +1966,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct TenantDataErasureStarts : Table<117> {
+    struct TenantDataErasureGenerations : Table<117> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<2, NScheme::NTypeIds::Uint32> {};
 
@@ -1977,7 +1977,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct ActiveDataErasureShards : Table<118> {
+    struct WaitingDataErasureShards : Table<118> {
         struct OwnerShardIdx :  Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalShardIdx :  Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
         struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
@@ -2102,11 +2102,11 @@ struct Schema : NIceDb::Schema {
         ResourcePool,
         BackupCollection,
         KMeansTreeProgress,
-        KMeansTreeSample
-        DataErasureStarts,
-        ActiveDataErasureTenants,
-        TenantDataErasureStarts,
-        ActiveDataErasureShards
+        KMeansTreeSample,
+        DataErasureGenerations,
+        WaitingDataErasureTenants,
+        TenantDataErasureGenerations,
+        WaitingDataErasureShards
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

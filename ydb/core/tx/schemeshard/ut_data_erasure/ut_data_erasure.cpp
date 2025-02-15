@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
@@ -57,6 +58,71 @@ ui64 CreateTestSubdomain(
     return schemeshardId;
 }
 
+class TFakeBSController : public TActor<TFakeBSController>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    void DefaultSignalTabletActive(const TActorContext &) override
+    {
+        // must be empty
+    }
+
+    void OnActivateExecutor(const TActorContext &) override
+    {
+        Become(&TThis::StateWork);
+        SignalTabletActive(SelfId());
+    }
+
+    void OnDetach(const TActorContext &ctx) override
+    {
+        Die(ctx);
+    }
+
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContext &ctx) override
+    {
+        Die(ctx);
+    }
+
+public:
+    TFakeBSController(const TActorId &tablet, TTabletStorageInfo *info)
+        : TActor(&TThis::StateInit)
+        , TTabletExecutedFlat(info, tablet, nullptr)
+    {
+    }
+
+    STFUNC(StateInit)
+    {
+        StateInitImpl(ev, SelfId());
+    }
+
+    STFUNC(StateWork)
+    {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvBlobStorage::TEvControllerShredRequest, Handle);
+        }
+    }
+
+    void Handle(TEvBlobStorage::TEvControllerShredRequest::TPtr& ev, const TActorContext& ctx) {
+        auto record = ev->Get()->Record;
+        if (record.GetGeneration() > Generation) {
+            Generation = record.GetGeneration();
+            Completed = false;
+            Progress = 0;
+        } else if (record.GetGeneration() == Generation) {
+            if (!Completed) {
+                Progress += 5000;
+                if (Progress >= 10000) {
+                    Progress = 10000;
+                    Completed = true;
+                }
+            }
+        }
+        ctx.Send(ev->Sender, new TEvBlobStorage::TEvControllerShredResponse(Generation, Completed, Progress));
+    }
+
+public:
+    ui64 Generation = 0;
+    bool Completed = true;
+    ui32 Progress = 10000;
+};
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TestDataErasure) {
@@ -67,12 +133,14 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController),
-                     &CreateFlatBsController);
+        auto info = CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController);
+        CreateTestBootstrapper(runtime, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+            return new TFakeBSController(tablet, info);
+        });
 
         runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
         auto& dataErasureConfig = runtime.GetAppData().DataErasureConfig;
-        dataErasureConfig.SetDataErasureIntervalSeconds(2);
+        dataErasureConfig.SetDataErasureIntervalSeconds(3);
         dataErasureConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
 
         auto sender = runtime.AllocateEdgeActor();
@@ -83,7 +151,9 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         CreateTestSubdomain(runtime, env, &txId, "Database1");
         CreateTestSubdomain(runtime, env, &txId, "Database2");
 
-        env.SimulateSleep(runtime, TDuration::Seconds(10));
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
+        runtime.DispatchEvents(options);
 
         auto request = MakeHolder<TEvSchemeShard::TEvDataErasureInfoRequest>();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
@@ -91,7 +161,141 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         TAutoPtr<IEventHandle> handle;
         auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDataErasureInfoResponse>(handle);
 
-        UNIT_ASSERT_EQUAL(response->Record.GetGeneration(), 1);
-        UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_BSC);
+        UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 1, response->Record.GetGeneration());
+        UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
+    }
+
+    Y_UNIT_TEST(DataErasureRun3Cycles) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto info = CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController);
+        CreateTestBootstrapper(runtime, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+            return new TFakeBSController(tablet, info);
+        });
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
+        auto& dataErasureConfig = runtime.GetAppData().DataErasureConfig;
+        dataErasureConfig.SetDataErasureIntervalSeconds(3);
+        dataErasureConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
+
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        ui64 txId = 100;
+
+        CreateTestSubdomain(runtime, env, &txId, "Database1");
+        CreateTestSubdomain(runtime, env, &txId, "Database2");
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 9));
+        runtime.DispatchEvents(options);
+
+        auto request = MakeHolder<TEvSchemeShard::TEvDataErasureInfoRequest>();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDataErasureInfoResponse>(handle);
+
+        UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 3, response->Record.GetGeneration());
+        UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
+    }
+
+    Y_UNIT_TEST(DataErasureManualLaunch) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto info = CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController);
+        CreateTestBootstrapper(runtime, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+                return new TFakeBSController(tablet, info);
+            });
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
+        auto& dataErasureConfig = runtime.GetAppData().DataErasureConfig;
+        dataErasureConfig.SetForceManualStartup(true);
+        dataErasureConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
+
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        ui64 txId = 100;
+
+        CreateTestSubdomain(runtime, env, &txId, "Database1");
+        CreateTestSubdomain(runtime, env, &txId, "Database2");
+
+        {
+            auto request = MakeHolder<TEvSchemeShard::TEvDataErasureManualStartupRequest>();
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        }
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
+        runtime.DispatchEvents(options);
+
+        auto request = MakeHolder<TEvSchemeShard::TEvDataErasureInfoRequest>();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDataErasureInfoResponse>(handle);
+
+        UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 1, response->Record.GetGeneration());
+        UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
+    }
+
+    Y_UNIT_TEST(DataErasureManualLaunch3Cycles) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto info = CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController);
+        CreateTestBootstrapper(runtime, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+                return new TFakeBSController(tablet, info);
+            });
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
+        auto& dataErasureConfig = runtime.GetAppData().DataErasureConfig;
+        dataErasureConfig.SetForceManualStartup(true);
+        dataErasureConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
+
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        ui64 txId = 100;
+
+        CreateTestSubdomain(runtime, env, &txId, "Database1");
+        CreateTestSubdomain(runtime, env, &txId, "Database2");
+
+        auto RunDataErasure = [&runtime] (ui32 expectedGeneration) {
+            auto sender = runtime.AllocateEdgeActor();
+            {
+                auto request = MakeHolder<TEvSchemeShard::TEvDataErasureManualStartupRequest>();
+                runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            }
+
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
+            runtime.DispatchEvents(options);
+
+            auto request = MakeHolder<TEvSchemeShard::TEvDataErasureInfoRequest>();
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDataErasureInfoResponse>(handle);
+
+            UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), expectedGeneration, response->Record.GetGeneration());
+            UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
+        };
+
+        RunDataErasure(1);
+        RunDataErasure(2);
+        RunDataErasure(3);
     }
 }

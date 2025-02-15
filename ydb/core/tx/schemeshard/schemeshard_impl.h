@@ -19,7 +19,6 @@
 #include "schemeshard_schema.h"
 #include "schemeshard__operation.h"
 #include "schemeshard__stats.h"
-#include "schemeshard_data_erasure_scheduler.h"
 
 #include "olap/manager/manager.h"
 
@@ -80,6 +79,8 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 extern const ui64 NEW_TABLE_ALTER_VERSION;
+
+class TDataErasureManager;
 
 class TSchemeShard
     : public TActor<TSchemeShard>
@@ -168,56 +169,6 @@ private:
 
         void OnTimeout(const TPathId& pathId) override {
             Self->OnBackgroundCleaningTimeout(pathId);
-        }
-
-    private:
-        TSchemeShard* Self;
-    };
-
-    using TDataErasureQueue = NOperationQueue::TOperationQueueWithTimer<
-        TPathId,
-        TFifoQueue<TPathId>,
-        TEvPrivate::EvRunDataErasure,
-        NKikimrServices::FLAT_TX_SCHEMESHARD,
-        NKikimrServices::TActivity::DATA_ERASURE>;
-
-    class TDataErasureStarter : public TDataErasureQueue::IStarter {
-    public:
-        TDataErasureStarter(TSchemeShard* self)
-            : Self(self)
-        { }
-
-        NOperationQueue::EStartStatus StartOperation(const TPathId& pathId) override {
-            return Self->StartDataErasure(pathId);
-        }
-
-        void OnTimeout(const TPathId& pathId) override {
-            Self->OnDataErasureTimeout(pathId);
-        }
-
-    private:
-        TSchemeShard* Self;
-    };
-
-    using TTenantDataErasureQueue = NOperationQueue::TOperationQueueWithTimer<
-        TShardIdx,
-        TFifoQueue<TShardIdx>,
-        TEvPrivate::EvRunTenantDataErasure,
-        NKikimrServices::FLAT_TX_SCHEMESHARD,
-        NKikimrServices::TActivity::TENANT_DATA_ERASURE>;
-
-    class TTenantDataErasureStarter : public TTenantDataErasureQueue::IStarter {
-    public:
-        TTenantDataErasureStarter(TSchemeShard* self)
-            : Self(self)
-        { }
-
-        NOperationQueue::EStartStatus StartOperation(const TShardIdx& shardIdx) override {
-            return Self->StartTenantDataErasure(shardIdx);
-        }
-
-        void OnTimeout(const TShardIdx& shardIdx) override {
-            Self->OnTenantDataErasureTimeout(shardIdx);
         }
 
     private:
@@ -357,28 +308,6 @@ public:
 
     TBackgroundCleaningStarter BackgroundCleaningStarter;
     TBackgroundCleaningQueue* BackgroundCleaningQueue = nullptr;
-
-    TDataErasureStarter DataErasureStarter;
-    TDataErasureQueue* DataErasureQueue = nullptr;
-
-    TTenantDataErasureStarter TenantDataErasureStarter;
-    TTenantDataErasureQueue* TenantDataErasureQueue = nullptr;
-
-        enum class EDataErasureStatus {
-            UNSPECIFIED,
-            COMPLETED,
-            IN_PROGRESS,
-        };
-
-    ui64 DataErasureGeneration = 0;
-    EDataErasureStatus DataErasureStatus = EDataErasureStatus::UNSPECIFIED;
-
-    THashMap<TPathId, EDataErasureStatus> ActiveDataErasureTenants;
-    THashMap<TPathId, TActorId> RunningDataErasureTenants;
-    THashMap<TShardIdx, EDataErasureStatus> ActiveDataErasureShards;
-    THashMap<TShardIdx, TActorId> RunningDataErasureShards;
-
-    TAutoPtr<TDataErasureScheduler> DataErasureScheduler;
 
     struct TBackgroundCleaningState {
         THashSet<TTxId> TxIds;
@@ -573,18 +502,6 @@ public:
         const NKikimrConfig::TBackgroundCleaningConfig& config,
         const TActorContext &ctx);
 
-    void ConfigureDataErasure(
-        const NKikimrConfig::TDataErasureConfig& config,
-        const TActorContext& ctx);
-
-    void ConfigureDataErasureQueue(
-        const NKikimrConfig::TDataErasureConfig& config,
-        const TActorContext& ctx);
-
-    void ConfigureTenantDataErasureQueue(
-        const NKikimrConfig::TDataErasureConfig& config,
-        const TActorContext& ctx);
-
     void ConfigureLoginProvider(
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx);
@@ -594,8 +511,6 @@ public:
         const TActorContext &ctx);
 
     void StartStopCompactionQueues();
-
-    void StartDataErasure(const TActorContext& ctx);
 
     void WaitForTableProfiles(ui64 importId, ui32 itemIdx);
     void LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* config, const TActorContext& ctx);
@@ -1048,20 +963,6 @@ public:
     void CleanBackgroundCleaningState(const TPathId& pathId);
     void ClearTempDirsState();
 
-    void EnqueueDataErasure(const TPathId& pathId);
-    // void RemoveDataErasure(const TShardIdx& shardIdx);
-    NOperationQueue::EStartStatus StartDataErasure(const TPathId& pathId);
-    void OnDataErasureTimeout(const TPathId& pathId);
-    void UpdateDataErasureQueueMetrics();
-    void DataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx);
-
-    void EnqueueTenantDataErasure(const TShardIdx& shardIdx);
-    void RemoveTenantDataErasure(const TShardIdx& shardIdx);
-    NOperationQueue::EStartStatus StartTenantDataErasure(const TShardIdx& shardIdx);
-    void OnTenantDataErasureTimeout(const TShardIdx& shardIdx);
-    void UpdateTenantDataErasureQueueMetrics();
-    void TenantDataErasureHandleDisconnect(TTabletId tabletId, const TActorId& clientId);
-
     struct TTxCleanDroppedSubDomains;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedSubDomains();
 
@@ -1137,17 +1038,23 @@ public:
     template <EventBasePtr TEvPtr>
     NTabletFlatExecutor::ITransaction* CreateTxOperationReply(TOperationId id, TEvPtr& ev);
 
+    struct TTxDataErasureManagerInit;
+    NTabletFlatExecutor::ITransaction* CreateTxDataErasureManagerInit();
+
+    struct TTxRunDataErasure;
+    NTabletFlatExecutor::ITransaction* CreateTxRunDataErasure(bool isNewDataErasure);
+
     struct TTxRunTenantDataErasure;
     NTabletFlatExecutor::ITransaction* CreateTxRunTenantDataErasure(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev);
 
-    struct TTxRunDataErasure;
-    NTabletFlatExecutor::ITransaction* CreateTxRunDataErasure(ui64 generation, const TInstant& startTime);
+    struct TTxCompleteDataErasureShard;
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureShard(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev);
 
-    struct TTxCompleteDataErasure;
-    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasure(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev);
+    struct TTxCompleteDataErasureTenant;
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureTenant(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev);
 
-    struct TTxDataErasureSchedulerInit;
-    NTabletFlatExecutor::ITransaction* CreateTxDataErasureSchedulerInit();
+    struct TTxCompleteDataErasureBSC;
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureBSC(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev);
 
     void PublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths, const TActorContext& ctx);
     void PublishToSchemeBoard(TTxId txId, TDeque<TPathId>&& paths, const TActorContext& ctx);
@@ -1258,9 +1165,9 @@ public:
     void Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvRunDataErasure::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvDataErasureManualStartupRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvWakeupToRunDataErasureBSC::TPtr& ev, const TActorContext& ctx);
 
 
@@ -1590,7 +1497,11 @@ public:
     void ConnectToSA();
     TDuration SendBaseStatsToSA();
 
-
+    TAutoPtr<TDataErasureManager> CreateDataErasureManager(const NKikimrConfig::TDataErasureConfig& config);
+    void ConfigureDataErasureManager(const NKikimrConfig::TDataErasureConfig& config);
+    void StartStopDataErasure();
+    void MarkFirstRunRootDataErasureManager();
+    void RunDataErasure(bool isNewDataErasure);
 
 public:
     void ChangeStreamShardsCount(i64 delta) override;
@@ -1612,6 +1523,7 @@ public:
     void SetShardsQuota(ui64 value) override;
 
     NLogin::TLoginProvider LoginProvider;
+    TAutoPtr<TDataErasureManager> DataErasureManager = nullptr;
 
 private:
     void OnDetach(const TActorContext &ctx) override;

@@ -2996,7 +2996,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(WithNonStructSchemaS3) {
         NSQLTranslation::TTranslationSettings settings;
         settings.ClusterMapping["s3bucket"] = NYql::S3ProviderName;
-        UNIT_ASSERT(SqlToYql("select * from s3bucket.`foo` with schema (col1 Int32, String as col2, Int64 as col3);", settings).IsOk());
+        UNIT_ASSERT(SqlToYqlWithSettings("select * from s3bucket.`foo` with schema (col1 Int32, String as col2, Int64 as col3);", settings).IsOk());
     }
 
     Y_UNIT_TEST(AllowNestedTuplesInGroupBy) {
@@ -5201,7 +5201,7 @@ select FormatType($f());
     Y_UNIT_TEST(WarnForDeprecatedSchema) {
         NSQLTranslation::TTranslationSettings settings;
         settings.ClusterMapping["s3bucket"] = NYql::S3ProviderName;
-        NYql::TAstParseResult res = SqlToYql("select * from s3bucket.`foo` with schema (col1 Int32, String as col2, Int64 as col3);", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("select * from s3bucket.`foo` with schema (col1 Int32, String as col2, Int64 as col3);", settings);
         UNIT_ASSERT(res.Root);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Warning: Deprecated syntax for positional schema: please use 'column type' instead of 'type AS column', code: 4535\n");
     }

@@ -6,11 +6,19 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_user_data_storage.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 
 namespace NYql {
 namespace NFastCheck {
 
 bool CheckProgram(const TString& program, const TOptions& options, TIssues& errors) {
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
     TAstParseResult astRes;
     if (options.IsSql) {
         NSQLTranslation::TTranslationSettings settings;
@@ -22,7 +30,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
             settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         }
 
-        astRes = SqlToYql(program, settings);
+        astRes = SqlToYql(translators, program, settings);
     } else {
         astRes = ParseAst(program);
     }
@@ -46,7 +54,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
             settings.File = x.first;
             settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
 
-            astRes = SqlToYql(x.second, settings);
+            astRes = SqlToYql(translators, x.second, settings);
             if (!astRes.IsOk()) {
                 errors = std::move(astRes.Issues);
                 return false;

@@ -7,8 +7,7 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-void TFetchedData::SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema) {
-    const ui32 recordsCount = Table->GetRecordsCountVerified();
+void TFetchedData::SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema, const ui32 recordsCount) {
     for (auto&& i : fields) {
         const ui32 id = schema.GetColumnId(i->name());
         if (Table->HasColumn(id)) {

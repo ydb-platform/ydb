@@ -324,7 +324,7 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
             MutableStageData().AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
         }
     }
-    MutableStageData().SyncTableColumns(columns->GetSchema()->fields(), *resultSchema);
+    MutableStageData().SyncTableColumns(columns->GetSchema()->fields(), *resultSchema, GetRecordsCount());
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

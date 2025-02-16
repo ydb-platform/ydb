@@ -198,7 +198,7 @@ def main():
                     from  `test_results/test_runs_column`
                     where
                         run_timestamp <= Date('{date}') + Interval("P1D")
-                        and run_timestamp >= Date('{date}') - {history_for_n_day}*Interval("P1D") 
+                        and run_timestamp >= Date('{date}') - {history_for_n_day+1}*Interval("P1D") 
 
                         and job_name in (
                             'Nightly-run',

@@ -157,7 +157,7 @@ public:
     typedef std::shared_ptr<TConsumerProtocolAssignment> TPtr;
 
     struct MessageMeta {
-        static constexpr TKafkaVersions PresentVersions = {0, 7};
+        static constexpr TKafkaVersions PresentVersions = {0, 3};
         static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
     };
 
@@ -167,7 +167,7 @@ public:
     struct TopicPartition : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersions PresentVersions = {0, 7};
+            static constexpr TKafkaVersions PresentVersions = {0, 3};
             static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
         };
 

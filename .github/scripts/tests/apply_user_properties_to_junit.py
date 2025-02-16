@@ -14,7 +14,7 @@ def add_properties_to_testcases(root, all_properties):
         for testcase in testsuite.findall('testcase'):
             testcase_full_name = testcase.attrib.get('name')
 
-            # Attempt to split the test name into components
+            # Attempt to split the test name  into components
             parts = testcase_full_name.split(".", 2)
             if len(parts) == 3:
                 file_name = ".".join(parts[:2])

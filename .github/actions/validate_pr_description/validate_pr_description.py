@@ -42,7 +42,7 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
         "New feature",
         "Experimental feature",
         "User Interface",
-        # "Improvement", # Obsolete category
+        "Improvement", 
         "Performance improvement",
         "Bugfix",
         "Backward incompatible change"

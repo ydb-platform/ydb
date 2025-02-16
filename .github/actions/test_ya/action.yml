@@ -412,6 +412,12 @@ runs:
           # archive unitest reports (orig)
           gzip -c $CURRENT_JUNIT_XML_PATH > $CURRENT_PUBLIC_DIR/orig_junit.xml.gz
 
+          # postprocess junit user_attributesreport
+          .github/scripts/tests/apply_user_properties_to_junut.py \
+          --test_dir="$YA_MAKE_OUT_DIR" \
+          --in_file="$CURRENT_JUNIT_XML_PATH" \
+          --out_file="$CURRENT_JUNIT_XML_PATH"
+
           # postprocess junit report
           .github/scripts/tests/transform_ya_junit.py -i \
             -m .github/config/muted_ya.txt \
@@ -422,12 +428,6 @@ runs:
             --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" \
             "$CURRENT_JUNIT_XML_PATH"
           cp $CURRENT_JUNIT_XML_PATH $LAST_JUNIT_REPORT_XML
-
-          # postprocess junit user_attributesreport
-          .github/scripts/tests/apply_user_properties_to_junut.py \
-          --test_dir="$YA_MAKE_OUT_DIR" \
-          --in_file="$CURRENT_JUNIT_XML_PATH" \
-          --out_file="$CURRENT_JUNIT_XML_PATH"
 
           TESTS_RESULT=0
           .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?

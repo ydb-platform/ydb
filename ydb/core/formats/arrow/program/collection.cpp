@@ -16,7 +16,7 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& 
         AddVerified(columnId, std::make_shared<TTrivialChunkedArray>(data.chunked_array()), withFilter);
     } else if (data.is_scalar()) {
         AFL_VERIFY(!withFilter);
-        AddConstantVerified(columnId, data.scalar());
+        AddVerified(columnId, std::make_shared<TTrivialArray>(data.scalar()), withFilter);
     } else {
         AFL_VERIFY(false);
     }
@@ -76,25 +76,17 @@ std::vector<std::shared_ptr<IChunkedArray>> TAccessorsCollection::GetAccessors(c
         return {};
     }
     std::vector<std::shared_ptr<IChunkedArray>> result;
-    std::vector<ui32> constantIdx;
     std::optional<ui32> recordsCount;
-    ui32 idx = 0;
     for (auto&& i : columnIds) {
-        auto accessor = GetAccessorOptional(i);
-        if (!accessor) {
-            constantIdx.emplace_back(idx);
-        } else if (!recordsCount) {
+        auto accessor = GetAccessorVerified(i);
+        if (!recordsCount) {
             recordsCount = accessor->GetRecordsCount();
         } else {
             AFL_VERIFY(*recordsCount == accessor->GetRecordsCount())("rc", recordsCount)("accessor", accessor->GetRecordsCount());
         }
         result.emplace_back(accessor);
-        ++idx;
     }
     AFL_VERIFY(recordsCount);
-    for (auto&& i : constantIdx) {
-        result[i] = GetConstantVerified(columnIds[i], *recordsCount);
-    }
     return result;
 }
 
@@ -125,6 +117,15 @@ std::shared_ptr<arrow::Scalar> TAccessorsCollection::GetConstantScalarVerified(c
     auto it = Constants.find(columnId);
     AFL_VERIFY(it != Constants.end());
     return it->second;
+}
+
+std::shared_ptr<arrow::Scalar> TAccessorsCollection::GetConstantScalarOptional(const ui32 columnId) const {
+    auto it = Constants.find(columnId);
+    if (it != Constants.end()) {
+        return it->second;
+    } else {
+        return nullptr;
+    }
 }
 
 TAccessorsCollection::TAccessorsCollection(const std::shared_ptr<arrow::RecordBatch>& data, const NSSA::IColumnResolver& resolver) {
@@ -180,15 +181,9 @@ std::shared_ptr<NKikimr::NArrow::TGeneralContainer> TAccessorsCollection::ToGene
             if (columnIds && !columnIds->contains(i)) {
                 continue;
             }
-            auto accessor = GetAccessorOptional(i);
-            if (accessor) {
-                fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), accessor->GetDataType()));
-                arrays.emplace_back(accessor);
-            } else {
-                auto scalar = GetConstantScalarVerified(i);
-                fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), scalar->type));
-                arrays.emplace_back(std::make_shared<TTrivialArray>(scalar));
-            }
+            auto accessor = GetAccessorVerified(i);
+            fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), accessor->GetDataType()));
+            arrays.emplace_back(accessor);
         }
     } else {
         for (auto&& i : Accessors) {
@@ -197,13 +192,6 @@ std::shared_ptr<NKikimr::NArrow::TGeneralContainer> TAccessorsCollection::ToGene
             }
             fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i.first), i.second->GetDataType()));
             arrays.emplace_back(i.second);
-        }
-        for (auto&& i : Constants) {
-            if (columnIds && !columnIds->contains(i.first)) {
-                continue;
-            }
-            fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i.first), i.second->type));
-            arrays.emplace_back(std::make_shared<TTrivialArray>(i.second));
         }
     }
     return std::make_shared<TGeneralContainer>(std::move(fields), std::move(arrays));

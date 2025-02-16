@@ -545,11 +545,11 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         chain->Apply(resources).Validate();
         UNIT_ASSERT_VALUES_EQUAL(resources->GetColumnsCount(), 2);
         UNIT_ASSERT_VALUES_EQUAL(resources->GetRecordsCountVerified(), 1);
-        UNIT_ASSERT_EQUAL(resources->GetConstantScalarVerified(3)->type->id(), arrow::Type::INT16);
-        UNIT_ASSERT_EQUAL(resources->GetConstantScalarVerified(4)->type->id(), arrow::Type::TIMESTAMP);
+        UNIT_ASSERT_EQUAL(resources->GetAccessorVerified(3)->GetDataType()->id(), arrow::Type::INT16);
+        UNIT_ASSERT_EQUAL(resources->GetAccessorVerified(4)->GetDataType()->id(), arrow::Type::TIMESTAMP);
 
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int16Scalar>(resources->GetConstantScalarVerified(3))->value, -1);
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::TimestampScalar>(resources->GetConstantScalarVerified(4))->value, 4);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int16Scalar>(resources->GetAccessorVerified(3)->GetScalar(0))->value, -1);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::TimestampScalar>(resources->GetAccessorVerified(4)->GetScalar(0))->value, 4);
     }
 
     Y_UNIT_TEST(Sum) {
@@ -573,11 +573,11 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
 
         UNIT_ASSERT_VALUES_EQUAL(resources->GetColumnsCount(), 2);
         UNIT_ASSERT_VALUES_EQUAL(resources->GetRecordsCountVerified(), 1);
-        UNIT_ASSERT_EQUAL(resources->GetConstantScalarVerified(3)->type->id(), arrow::Type::INT64);
-        UNIT_ASSERT_EQUAL(resources->GetConstantScalarVerified(4)->type->id(), arrow::Type::UINT64);
+        UNIT_ASSERT_EQUAL(resources->GetAccessorVerified(3)->GetDataType()->id(), arrow::Type::INT64);
+        UNIT_ASSERT_EQUAL(resources->GetAccessorVerified(4)->GetDataType()->id(), arrow::Type::UINT64);
 
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int64Scalar>(resources->GetConstantScalarVerified(3))->value, 2);
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::UInt64Scalar>(resources->GetConstantScalarVerified(4))->value, 10);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int64Scalar>(resources->GetAccessorVerified(3)->GetScalar(0))->value, 2);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::UInt64Scalar>(resources->GetAccessorVerified(4)->GetScalar(0))->value, 10);
     }
 
     Y_UNIT_TEST(SumGroupBy) {

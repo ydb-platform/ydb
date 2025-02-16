@@ -76,6 +76,7 @@ public:
 
     std::shared_ptr<IChunkedArray> GetConstantVerified(const ui32 columnId, const ui32 recordsCount) const;
     std::shared_ptr<arrow::Scalar> GetConstantScalarVerified(const ui32 columnId) const;
+    std::shared_ptr<arrow::Scalar> GetConstantScalarOptional(const ui32 columnId) const;
 
     void Clear() {
         Accessors.clear();
@@ -83,7 +84,7 @@ public:
         RecordsCountActual = std::nullopt;
     }
 
-    ui32 GetRecordsCountVerified(const std::optional<ui32> def = 0) const {
+    std::optional<ui32> GetRecordsCountOptional() const {
         std::optional<ui32> result;
         for (auto&& i : Accessors) {
             if (!result) {
@@ -92,18 +93,12 @@ public:
                 AFL_VERIFY(*result == i.second->GetRecordsCount());
             }
         }
-        if (Constants.size()) {
-            if (!result) {
-                result = 1;
-            } else {
-                AFL_VERIFY(*result == 1);
-            }
-        }
-        AFL_VERIFY(result || def);
-        if (!result) {
-            AFL_VERIFY(def);
-            return *def;
-        }
+        return result;
+    }
+
+    ui32 GetRecordsCountVerified() const {
+        const auto result = GetRecordsCountOptional();
+        AFL_VERIFY(!!result);
         return *result;
     }
 

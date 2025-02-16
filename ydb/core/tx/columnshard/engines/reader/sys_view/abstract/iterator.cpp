@@ -56,7 +56,7 @@ TConclusion<std::shared_ptr<TPartialReadResult>> TStatsIteratorBase::GetBatch() 
         if (applyConclusion.IsFail()) {
             return applyConclusion;
         }
-        if (collection->GetRecordsCountVerified() == 0) {
+        if (collection->GetRecordsCountOptional().value_or(0) == 0) {
             continue;
         }
         auto table = collection->ToTable({}, &resolver, false);

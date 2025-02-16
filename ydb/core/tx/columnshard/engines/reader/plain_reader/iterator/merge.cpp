@@ -41,7 +41,11 @@ void TBaseMergeTask::PrepareResultBatch() {
         AFL_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
         auto accessors = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(ResultBatch, *Context->GetCommonContext()->GetResolver());
         Context->GetReadMetadata()->GetProgram().ApplyProgram(accessors).Validate();
-        ResultBatch = accessors->ToTable(std::nullopt, Context->GetCommonContext()->GetResolver(), false);
+        if (accessors->GetRecordsCountOptional().value_or(0) == 0) {
+            ResultBatch = nullptr;
+        } else {
+            ResultBatch = accessors->ToTable(std::nullopt, Context->GetCommonContext()->GetResolver(), false);
+        }
     }
     if (ResultBatch && ResultBatch->num_rows()) {
         const auto& shardingPolicy = Context->GetCommonContext()->GetComputeShardingPolicy();

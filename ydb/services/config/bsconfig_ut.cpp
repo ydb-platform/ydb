@@ -165,24 +165,45 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
         ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
     }
 
-    void ReplaceConfig(auto &channel, std::optional<TString> yamlConfig, std::optional<TString> storageYamlConfig,
-            std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode) {
+    void ReplaceConfig(
+            auto &channel,
+            std::optional<TString> mainConfig,
+            std::optional<TString> storageConfig,
+            std::optional<bool> switchDedicatedStorageSection,
+            bool dedicatedConfigMode) {
+
         std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
         stub = Ydb::Config::V1::ConfigService::NewStub(channel);
 
         Ydb::Config::ReplaceConfigRequest request;
-        Y_UNUSED(yamlConfig, storageYamlConfig, switchDedicatedStorageSection, dedicatedConfigMode);
-        // FIXME
-        // if (yamlConfig) {
-        //     request.set_main_config(*yamlConfig);
-        // }
-        // if (storageYamlConfig) {
-        //     request.set_storage_config(*storageYamlConfig);
-        // }
-        // if (switchDedicatedStorageSection) {
-        //     request.set_switch_dedicated_storage_section(*switchDedicatedStorageSection);
-        // }
-        // request.set_dedicated_config_mode(dedicatedConfigMode);
+
+        if (!dedicatedConfigMode && !switchDedicatedStorageSection) {
+            if (mainConfig) {
+                request.set_replace(*mainConfig);
+            }
+        } else if (dedicatedConfigMode && !switchDedicatedStorageSection) {
+            auto& replace = *request.mutable_replace_with_dedicated_storage_section();
+            if (mainConfig) {
+                replace.set_main_config(*mainConfig);
+            }
+            if (storageConfig) {
+                replace.set_storage_config(*storageConfig);
+            }
+        } else if (switchDedicatedStorageSection && *switchDedicatedStorageSection) {
+            auto& replace = *request.mutable_replace_enable_dedicated_storage_section();
+            if (mainConfig) {
+                replace.set_main_config(*mainConfig);
+            }
+            if (storageConfig) {
+                replace.set_storage_config(*storageConfig);
+            }
+        } else if (switchDedicatedStorageSection && !*switchDedicatedStorageSection) {
+            if (mainConfig) {
+                request.set_replace_disable_dedicated_storage_section(*mainConfig);
+            }
+        } else {
+            Y_ABORT("invariant violation");
+        }
 
         Ydb::Config::ReplaceConfigResponse response;
         Ydb::Config::ReplaceConfigResult result;
@@ -195,16 +216,22 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
         response.operation().result().UnpackTo(&result);
     }
 
-    void FetchConfig(auto& channel, bool dedicatedStorageSection, bool dedicatedClusterSection,
-            std::optional<TString>& yamlConfig, std::optional<TString>& storageYamlConfig) {
+    void FetchConfig(
+            auto& channel,
+            bool dedicatedStorageSection,
+            bool dedicatedClusterSection,
+            std::optional<TString>& mainConfig,
+            std::optional<TString>& storageConfig) {
         std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
         stub = Ydb::Config::V1::ConfigService::NewStub(channel);
 
         Ydb::Config::FetchConfigRequest request;
-        Y_UNUSED(dedicatedStorageSection, dedicatedClusterSection);
-        // FIXME
-        // request.set_dedicated_storage_section(dedicatedStorageSection);
-        // request.set_dedicated_cluster_section(dedicatedClusterSection);
+
+        auto& all = *request.mutable_all();
+
+        if (dedicatedStorageSection || dedicatedClusterSection) {
+            all.mutable_detach_storage_config_section();
+        }
 
         Ydb::Config::FetchConfigResponse response;
         Ydb::Config::FetchConfigResult result;
@@ -215,19 +242,21 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
         response.operation().result().UnpackTo(&result);
 
-        Y_UNUSED(yamlConfig, storageYamlConfig);
-        // FIXME
-        // if (result.has_main_config()) {
-        //     yamlConfig.emplace(result.main_config());
-        // } else {
-        //     yamlConfig.reset();
-        // }
+        std::optional<TString> rcvMainConfig;
+        std::optional<TString> rcvStorageConfig;
 
-        // if (result.has_storage_config()) {
-        //     storageYamlConfig.emplace(result.storage_config());
-        // } else {
-        //     storageYamlConfig.reset();
-        // }
+        for (auto& entry : result.config()) {
+            if (entry.identity().type_case() == Ydb::Config::ConfigIdentity::TypeCase::kMain) {
+                rcvMainConfig = entry.config();
+            }
+
+            if (entry.identity().type_case() == Ydb::Config::ConfigIdentity::TypeCase::kStorage) {
+                rcvStorageConfig = entry.config();
+            }
+        }
+
+        mainConfig = rcvMainConfig;
+        storageConfig = rcvStorageConfig;
     }   
 
     Y_UNIT_TEST(ReplaceConfig) {

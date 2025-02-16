@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from ydb.tests.sql.lib.test_base import TestBase
-import pytest
 
 
 class TestYdbCrudOperations(TestBase):

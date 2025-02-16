@@ -168,8 +168,33 @@ public:
     bool IsDistconfEnableQuery() const {
         NKikimrConfig::TAppConfig newConfig;
         try {
-            // FIXME:
-            // newConfig = NYaml::Parse(GetProtoRequest()->main_config());
+            TString mainConfig;
+
+            auto fillConfigs = [&](const auto& configBundle) {
+                for (const auto& config : configBundle.config()) {
+                    if (NYamlConfig::IsMainConfig(config)) {
+                        mainConfig = config;
+                    }
+                }
+            };
+
+            switch (GetProtoRequest()->action_case()) {
+                case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceEnableDedicatedStorageSection:
+                    fillConfigs(GetProtoRequest()->replace_enable_dedicated_storage_section());
+                    break;
+                case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
+                    fillConfigs(GetProtoRequest()->replace_disable_dedicated_storage_section());
+                    break;
+                case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
+                    fillConfigs(GetProtoRequest()->replace_with_dedicated_storage_section());
+                    break;
+                case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
+                    fillConfigs(GetProtoRequest()->replace());
+                    break;
+                case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
+                    break; // TODO: handle as error?
+            }
+            newConfig = NYaml::Parse(mainConfig); // check allow unknown fields
         } catch (const std::exception&) {
             return false; // assuming no distconf enabled in this config
         }

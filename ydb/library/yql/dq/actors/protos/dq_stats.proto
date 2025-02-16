@@ -485,5 +485,8 @@ message TDqExecutionStats {
     repeated TDqStageStats Stages = 14;
     repeated string TxPlansWithStats = 15;
 
+    uint64 StatFinishBytes = 16;
+    uint64 StatConvertBytes = 17;
+
     google.protobuf.Any Extra = 100;
 }

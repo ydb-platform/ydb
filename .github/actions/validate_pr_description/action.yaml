@@ -12,6 +12,7 @@ runs:
       id: validate
       shell: bash
       run: |
+        python3 -m pip install PyGithub
         python3 ${{ github.action_path }}/validate_pr_description.py pr_body.txt
 
 inputs:

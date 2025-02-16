@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    ydb_storage_config.cpp
+    ydb_config.cpp
 )
 
 PEERDIR(

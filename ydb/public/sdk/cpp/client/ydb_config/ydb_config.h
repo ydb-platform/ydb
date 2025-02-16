@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/grpc/ydb_bsconfig_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_config_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/ydb.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/settings.h>

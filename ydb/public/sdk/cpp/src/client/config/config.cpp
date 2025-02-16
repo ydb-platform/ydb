@@ -1,9 +1,9 @@
-#include <ydb-cpp-sdk/client/bsconfig/storage_config.h>
+#include <ydb-cpp-sdk/client/config/config.h>
 
 #include <src/client/common_client/impl/client.h>
 #include <src/client/impl/ydb_internal/make_request/make.h>
 
-#include <ydb/public/api/grpc/ydb_bsconfig_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_config_v1.grpc.pb.h>
 
 namespace NYdb::inline V3::NStorageConfig {
 

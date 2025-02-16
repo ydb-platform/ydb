@@ -3,7 +3,7 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
 SRCS(
-    storage_config.cpp
+    config.cpp
 )
 
 PEERDIR(

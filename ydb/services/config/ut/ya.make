@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/services/config)
 SIZE(MEDIUM)
 
 SRCS(
-    config_ut.cpp
+    bsconfig_ut.cpp
 )
 
 PEERDIR(

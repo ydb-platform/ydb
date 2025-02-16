@@ -17,7 +17,7 @@ def add_properties_to_testcases(root, all_properties):
             # Attempt to split the test name into components
             parts = testcase_full_name.split(".", 2)
             if len(parts) == 3:
-                file_name = parts[0] + ".py"
+                file_name = ".".join(parts[:2])
                 test_name = ".".join(parts[2:])
 
                 full_test_path = os.path.join(directory_name, file_name)

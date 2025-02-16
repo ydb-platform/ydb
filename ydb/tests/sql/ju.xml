@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<testsuites>
+	<testsuite name="ydb/tests/sql" tests="2" time="6.989053897559643" failures="1" skipped="1">
+		<testcase name="sole chunk chunk" time="0.0">
+			<failure>Test failed with 3 exit code. See logs for more info
+Test wrapper's stderr tail:
+, line 156, in _multicall
+INTERNALERROR&amp;gt;     teardown[0].send(outcome)
+INTERNALERROR&amp;gt;   File &quot;ydb/tests/sql/lib/conftest.py&quot;, line 42, in pytest_runtest_makereport
+INTERNALERROR&amp;gt;     assert False, &quot;pytest.mark.test_case(id), id must start with #, ie pytest.mark.test_case(#100)&quot;
+INTERNALERROR&amp;gt; AssertionError: pytest.mark.test_case(id), id must start with #, ie pytest.mark.test_case(#100)
+INTERNALERROR&amp;gt; assert False
+
+====================== 1 passed, 26 deselected in 15.42s =======================
+
+log:
+/home/slonn/o/ydb/tests/sql/test-results/py3test/run_test.log
+logsdir:
+/home/slonn/o/ydb/tests/sql/test-results/py3test/testing_out_stuff
+stderr:
+/home/slonn/o/ydb/tests/sql/test-results/py3test/testing_out_stuff/stderr</failure>
+		</testcase>
+		<testcase name="test_crud.py.TestYdbCrudOperations.test_crud_operations2" time="6.989053897559643"/>
+		<testcase name="test_crud.py.TestYdbCrudOperations.test_crud_operations" time="0">
+			<skipped>[Error message is missing or not found]</skipped>
+		</testcase>
+	</testsuite>
+	<testsuite name="ydb/tests/sql/large" tests="0" time="0" failures="0" skipped="0"/>
+</testsuites>

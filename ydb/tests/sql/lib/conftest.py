@@ -38,6 +38,9 @@ def pytest_runtest_makereport(item, call):
                     user_properties[filesystempath][domain_info] = {}
 
                 test_case_id = marker.args[0]
+                if not test_case_id.startswith("#"):
+                    assert False, "pytest.mark.test_case(id), id must start with #, ie pytest.mark.test_case(#100)"
+
                 test_case_id = test_case_id.replace("#", "")
 
                 props = [("url:test_case",

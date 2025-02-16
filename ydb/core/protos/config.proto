@@ -1388,11 +1388,7 @@ message TImmediateControlsConfig {
             MaxValue: 50,
             DefaultValue: 10 }];
 
-        optional uint64 ThrottlingDeviceSpeed = 14 [(ControlOptions) = {
-            Description: "Maximum allowed speed when throttling is active",
-            MinValue: 1048576,
-            MaxValue: 10737418240,
-            DefaultValue: 52428800 }];
+        reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
             Description: "0 - working mode, 1 - dry run mode",
             MinValue: 0,
@@ -2240,6 +2236,8 @@ message TAppConfig {
     repeated TLabel Labels = 103;
 
     optional string ConfigStorePath = 104;
+    optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
+    optional bool ConfigLoadedFromStore = 106;
 }
 
 message TYdbVersion {

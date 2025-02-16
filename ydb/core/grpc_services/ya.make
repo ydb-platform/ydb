@@ -32,6 +32,8 @@ SRCS(
     rpc_create_coordination_node.cpp
     rpc_create_table.cpp
     rpc_describe_coordination_node.cpp
+    rpc_describe_external_data_source.cpp
+    rpc_describe_external_table.cpp
     rpc_describe_path.cpp
     rpc_describe_table.cpp
     rpc_describe_table_options.cpp

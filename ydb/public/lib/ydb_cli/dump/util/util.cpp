@@ -59,4 +59,10 @@ TGetDatabaseStatusResult GetDatabaseStatus(TCmsClient& cmsClient, const std::str
     });
 }
 
+TStatus CreateDatabase(TCmsClient& cmsClient, const std::string& path, const TCreateDatabaseSettings& settings) {
+    return NConsoleClient::RetryFunction([&]() -> TStatus {
+        return cmsClient.CreateDatabase(path, settings).ExtractValueSync();
+    });
 }
+
+} // NYdb::NDump

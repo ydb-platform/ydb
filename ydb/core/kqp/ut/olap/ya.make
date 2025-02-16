@@ -20,6 +20,7 @@ SRCS(
     decimal_ut.cpp
     delete_ut.cpp
     indexes_ut.cpp
+    json_ut.cpp
     kqp_olap_stats_ut.cpp
     locks_ut.cpp
     optimizer_ut.cpp

@@ -19,6 +19,7 @@ TCommandCluster::TCommandCluster()
     AddCommand(std::make_unique<TCommandClusterBootstrap>());
     AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(true));
     AddCommand(std::make_unique<TCommandClusterDump>());
+    AddCommand(std::make_unique<TCommandClusterRestore>());
 }
 
 TCommandClusterBootstrap::TCommandClusterBootstrap()
@@ -45,7 +46,7 @@ int TCommandClusterBootstrap::Run(TConfig& config) {
 }
 
 TCommandClusterDump::TCommandClusterDump()
-    : TYdbCommand("dump", {}, "Dump cluster into local directory")
+    : TYdbReadOnlyCommand("dump", {}, "Dump cluster into local directory")
 {}
 
 void TCommandClusterDump::Config(TConfig& config) {
@@ -65,11 +66,47 @@ void TCommandClusterDump::Parse(TConfig& config) {
 }
 
 int TCommandClusterDump::Run(TConfig& config) {
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.DumpCluster(FilePath));
+
+    return EXIT_SUCCESS;
+}
+
+TCommandClusterRestore::TCommandClusterRestore()
+    : TYdbCommand("restore", {}, "Restore cluster from local dump")
+{}
+
+void TCommandClusterRestore::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = true;
+
+    config.Opts->AddLongOption('i', "input", "Path in a local filesystem to a directory with dump.")
+        .RequiredArgument("PATH")
+        .StoreResult(&FilePath);
+
+     config.Opts->AddLongOption('w', "wait-nodes-duration", "Wait for available database nodes for specified duration. Example: 10s, 5m, 1h.")
+        .DefaultValue(TDuration::Minutes(1))
+        .RequiredArgument("DURATION")
+        .StoreResult(&WaitNodesDuration);
+}
+
+void TCommandClusterRestore::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+}
+
+int TCommandClusterRestore::Run(TConfig& config) {
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+
+    auto settings = NDump::TRestoreClusterSettings()
+        .WaitNodesDuration(WaitNodesDuration);
+
+    NDump::TClient client(CreateDriver(config), std::move(log));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.RestoreCluster(FilePath, settings));
 
     return EXIT_SUCCESS;
 }

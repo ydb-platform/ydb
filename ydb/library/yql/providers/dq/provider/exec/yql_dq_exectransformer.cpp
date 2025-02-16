@@ -335,16 +335,9 @@ TExprNode::TPtr DqMarkBlockStage(const TDqStatePtr& state, const TPublicIds::TPt
             return false;
         }
 
-        if constexpr (!NYql::NBlockStreamIO::WideToBlocks) {
-            if (node->IsCallable("WideToBlocks") && node->Head().IsCallable("ToFlow") && node->Head().Head().IsArgument()) {
-                // scalar channel as input
-                return false;
-            }
-        } else {
-            if (node->IsCallable("WideToBlocks") && node->Head().IsArgument()) {
-                // scalar channel as input
-                return false;
-            }
+        if (node->IsCallable("WideToBlocks") && node->Head().IsArgument()) {
+            // scalar channel as input
+            return false;
         }
 
         const TTypeAnnotationNode* nodeType = node->GetTypeAnn();

@@ -209,12 +209,12 @@ copy=["cmake/FindJNITarget.cmake"]
 add_values=[{attr="includes", values=["cmake/FindJNITarget.cmake"]}]
 
 [[rules]]
-attrs=["target_commands-macro=run_antlr"]
+attrs=["custom_runs-command=run_antlr"]
 copy=["cmake/antlr.cmake"]
 add_values=[{attr="includes", values=["cmake/antlr.cmake"]}]
 
 [[rules]]
-attrs=["target_commands-macro=run_antlr4"]
+attrs=["custom_runs-command=run_antlr4"]
 copy=["cmake/antlr4.cmake"]
 add_values=[{attr="includes", values=["cmake/antlr4.cmake"]}]
 

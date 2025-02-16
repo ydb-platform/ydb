@@ -30,9 +30,7 @@ private:
     YDB_READONLY(bool, IsSorted, false);
     YDB_READONLY(bool, IsNullable, false);
     YDB_READONLY_DEF(TColumnDefaultScalarValue, DefaultValue);
-    std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
     std::shared_ptr<TColumnLoader> Loader;
-    NArrow::NTransformation::ITransformer::TPtr GetLoadTransformer() const;
 
 public:
     TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField,
@@ -40,9 +38,8 @@ public:
         const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex);
 
     TColumnSaver GetColumnSaver() const {
-        NArrow::NTransformation::ITransformer::TPtr transformer = GetSaveTransformer();
         AFL_VERIFY(Serializer);
-        return TColumnSaver(transformer, Serializer);
+        return TColumnSaver(Serializer);
     }
 
     std::vector<std::shared_ptr<IPortionDataChunk>> ActualizeColumnData(
@@ -51,12 +48,10 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << "serializer=" << (Serializer ? Serializer->DebugString() : "NO") << ";";
-        sb << "encoding=" << (DictionaryEncoding ? DictionaryEncoding->DebugString() : "NO") << ";";
         sb << "loader=" << (Loader ? Loader->DebugString() : "NO") << ";";
         return sb;
     }
 
-    NArrow::NTransformation::ITransformer::TPtr GetSaveTransformer() const;
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo);
 
     const std::shared_ptr<TColumnLoader>& GetLoader() const {

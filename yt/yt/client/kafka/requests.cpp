@@ -289,7 +289,7 @@ void TRspMetadataBroker::Serialize(IKafkaProtocolWriter* writer, int apiVersion)
     writer->WriteString(Host);
     writer->WriteInt32(Port);
     if (apiVersion >= 1) {
-        writer->WriteString(Rack);
+        writer->WriteNullableString(Rack);
     }
     if (apiVersion >= 9) {
         NKafka::Serialize(TagBuffer, writer, /*isCompact*/ true);
@@ -332,6 +332,9 @@ void TRspMetadataTopic::Serialize(IKafkaProtocolWriter* writer, int apiVersion) 
 void TRspMetadata::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
     NKafka::Serialize(Brokers, writer, apiVersion >= 9, apiVersion);
+    if (apiVersion >= 2) {
+        writer->WriteNullableString(ClusterId);
+    }
     if (apiVersion >= 1) {
         writer->WriteInt32(ControllerId);
     }
@@ -601,8 +604,10 @@ void TRspFetch::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TReqSaslHandshake::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
+void TReqSaslHandshake::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
+    ApiVersion = apiVersion;
+
     Mechanism = reader->ReadString();
 }
 

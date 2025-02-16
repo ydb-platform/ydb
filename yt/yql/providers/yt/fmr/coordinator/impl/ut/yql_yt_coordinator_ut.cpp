@@ -8,7 +8,7 @@
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 #include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
 
-namespace NYql {
+namespace NYql::NFmr {
 
 class TFmrWorkerProxy: public IFmrWorker {
 public:
@@ -311,4 +311,4 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
     }
 }
 
-} // namspace NYql
+} // namespace NYql::NFmr

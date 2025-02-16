@@ -944,6 +944,11 @@ private:
         VisitAllFields(TRule_alter_sequence_stmt::GetDescriptor(), msg);
     }
 
+    void VisitShowCreateTable(const TRule_show_create_table_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_show_create_table_stmt::GetDescriptor(), msg);
+    }
+
     void VisitIntoTable(const TRule_into_table_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_into_table_stmt::GetDescriptor(), msg);
@@ -3021,6 +3026,7 @@ TStaticData::TStaticData()
         {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
         {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
         {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
+        {TRule_show_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShowCreateTable)},
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},

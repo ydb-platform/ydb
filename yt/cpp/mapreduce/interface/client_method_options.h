@@ -1118,6 +1118,9 @@ struct TCreateClientOptions
 
     /// @brief Proxy Address to be used for connection
     FLUENT_FIELD_OPTION(TString, ProxyAddress);
+
+    /// @brief Desired proxy role to be used for connection.
+    FLUENT_FIELD_OPTION(TString, ProxyRole);
 };
 
 ///

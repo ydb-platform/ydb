@@ -74,7 +74,7 @@ public:
     explicit TConfigurator(NDetail::TRegisteredFieldDirectoryPtr state = {});
 
     template <class TValue>
-    NDetail::TFieldRegistrar<TValue>& Field(const TString& name, TYsonStructField<TStruct, TValue> field);
+    NDetail::TFieldRegistrar<TValue>& Field(const std::string& name, TYsonStructField<TStruct, TValue> field);
 
     // Converts to a registrar of a base class
     template <class TAncestor>

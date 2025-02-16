@@ -215,9 +215,6 @@ namespace NKikimr {
                     if (Hull) {
                         Hull->ApplyHugeBlobSize(MinHugeBlobInBytes, ctx);
                     }
-                    if (DefragId) {
-                        ctx.Send(DefragId, new TEvMinHugeBlobSizeUpdate(MinHugeBlobInBytes));
-                    }
                     ctx.Send(*SkeletonFrontIDPtr, new TEvMinHugeBlobSizeUpdate(MinHugeBlobInBytes));
                 }
             }
@@ -750,7 +747,8 @@ namespace NKikimr {
             const ui64 bufSize = info.Buffer.GetSize();
 
             try {
-                info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinHugeBlobInBytes);
+                info.IsHugeBlob = ev->Get()->RewriteBlob || // if we are rewriting a huge blob, keep it that way
+                    HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinHugeBlobInBytes);
             } catch (yexception ex) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what()  << " Marker# BSVS41");
                 info.HullStatus = {NKikimrProto::ERROR, "", false};
@@ -1865,7 +1863,7 @@ namespace NKikimr {
         void StartDefrag(const TActorContext &ctx) {
             auto defragCtx = std::make_shared<TDefragCtx>(VCtx, Config, HugeBlobCtx, PDiskCtx, ctx.SelfID,
                 Db->HugeKeeperID, true);
-            DefragId = ctx.Register(CreateDefragActor(defragCtx, GInfo, MinHugeBlobInBytes));
+            DefragId = ctx.Register(CreateDefragActor(defragCtx, GInfo));
             ActiveActors.Insert(DefragId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
         }
 
@@ -2165,74 +2163,13 @@ namespace NKikimr {
                         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("defrag actor is not started", subrequest));
                     }
                     break;
-                case TDbMon::Shred: {
-                    class TShredCollector : public TActorBootstrapped<TShredCollector> {
-                        const THashSet<TActorId> Actors;
-                        NMon::TEvHttpInfo::TPtr Ev;
-                        TActorId ParentId;
-                        ui32 PendingReplies = 0;
-                        TStringStream Response;
-
-                    public:
-                        TShredCollector(const THashSet<TActorId>& actors, NMon::TEvHttpInfo::TPtr ev)
-                            : Actors(actors)
-                            , Ev(ev)
-                        {}
-
-                        void Bootstrap(TActorId parentId) {
-                            ParentId = parentId;
-                            for (TActorId actorId : Actors) {
-                                Send(actorId, new NMon::TEvHttpInfo(Ev->Get()->Request, Ev->Get()->SubRequestId),
-                                    IEventHandle::FlagTrackDelivery);
-                                ++PendingReplies;
-                            }
-                            Become(&TThis::StateFunc);
-                            CheckIfDone();
-                        }
-
-                        void Handle(NMon::TEvHttpInfoRes::TPtr ev) {
-                            auto *msg = dynamic_cast<NMon::TEvHttpInfoRes*>(ev->Get());
-                            Y_ABORT_UNLESS(msg);
-                            Response << msg->Answer;
-                            --PendingReplies;
-                            CheckIfDone();
-                        }
-
-                        void Handle(TEvents::TEvUndelivered::TPtr /*ev*/) {
-                            --PendingReplies;
-                            CheckIfDone();
-                        }
-
-                        void CheckIfDone() {
-                            if (!PendingReplies) {
-                                TStringStream str;
-                                HTML(str) {
-                                    DIV_CLASS("panel panel-info") {
-                                        DIV_CLASS("panel-heading") {
-                                            str << "Shred State";
-                                        }
-                                        DIV_CLASS("panel-body") {
-                                            str << Response.Str();
-                                        }
-                                    }
-                                }
-
-                                Send(Ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), Ev->Get()->SubRequestId));
-                                Send(ParentId, new TEvents::TEvGone);
-                                PassAway();
-                            }
-                        }
-
-                        STRICT_STFUNC(StateFunc,
-                            hFunc(NMon::TEvHttpInfoRes, Handle)
-                            hFunc(TEvents::TEvUndelivered, Handle)
-                            cFunc(TEvents::TSystem::Poison, PassAway)
-                        )
-                    };
-                    ActiveActors.Insert(ctx.Register(new TShredCollector(ShredActors, ev)), __FILE__, __LINE__, ctx,
-                        NKikimrServices::BLOBSTORAGE);
+                case TDbMon::Shred:
+                    if (ShredActorId) {
+                        TActivationContext::Send(IEventHandle::Forward(ev, ShredActorId));
+                    } else {
+                        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("shred actor is not started", subrequest));
+                    }
                     break;
-                }
                 default:
                     break;
             }
@@ -2536,7 +2473,6 @@ namespace NKikimr {
         void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
-            ShredActors.erase(ev->Sender);
         }
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
@@ -2729,7 +2665,7 @@ namespace NKikimr {
         // Shredding support
 
         std::deque<std::unique_ptr<IEventHandle>> ShredQ;
-        THashSet<TActorId> ShredActors;
+        TActorId ShredActorId;
 
         template<typename TEvent>
         void HandleShredEnqueue(TAutoPtr<TEventHandle<TEvent>> ev) {
@@ -2770,11 +2706,23 @@ namespace NKikimr {
                 return;
             }
 
+            auto&& ds = Hull->GetHullDs();
+            auto shredCtx = std::make_shared<TShredCtx>(TShredCtx{
+                .Lsn = Db->LsnMngr->GetLsn(), // current max lsn -- all operation from now on will be counted by actor
+                .VCtx = VCtx,
+                .PDiskCtx = PDiskCtx,
+                .SkeletonId = SelfId(),
+                .HugeKeeperId = Db->HugeKeeperID,
+                .DefragId = DefragId,
+                .SyncLogId = Db->SyncLogID,
+            });
+
             const TActorContext& ctx = TActivationContext::AsActorContext();
-            const TActorId actorId = RunInBatchPool(ctx, CreateSkeletonShredActor(ev, PDiskCtx, Db->HugeKeeperID,
-                DefragId, VCtx));
+            const TActorId actorId = RunInBatchPool(ctx, CreateSkeletonShredActor(ev, std::move(shredCtx)));
             ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-            ShredActors.insert(actorId);
+            if (const TActorId prev = std::exchange(ShredActorId, actorId)) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, prev, SelfId(), nullptr, 0));
+            }
         }
 
         void HandleShredError(NPDisk::TEvPreShredCompactVDisk::TPtr ev) {
@@ -2792,9 +2740,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvNotifyChunksDeleted::TPtr ev) {
-            for (const auto& actorId : ShredActors) {
-                Send(actorId, new TEvNotifyChunksDeleted(*ev->Get()));
-            }
+            TActivationContext::Send(IEventHandle::Forward(ev, ShredActorId));
         }
 
         // NOTES: we have 4 state functions, one of which is an error state (StateDatabaseError) and

@@ -8,7 +8,7 @@ namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSignatureGeneratorBase
+class ISignatureGenerator
     : public TRefCounted
 {
 public:
@@ -24,13 +24,13 @@ private:
     friend class TAlwaysThrowingSignatureGenerator;
 };
 
-DEFINE_REFCOUNTED_TYPE(TSignatureGeneratorBase)
+DEFINE_REFCOUNTED_TYPE(ISignatureGenerator)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignatureGeneratorBasePtr CreateDummySignatureGenerator();
+ISignatureGeneratorPtr CreateDummySignatureGenerator();
 
-TSignatureGeneratorBasePtr CreateAlwaysThrowingSignatureGenerator();
+ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator();
 
 ////////////////////////////////////////////////////////////////////////////////
 

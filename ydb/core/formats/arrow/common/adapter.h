@@ -58,7 +58,7 @@ public:
             }
             slices.emplace_back(batch->Slice(filter.GetStartIndex(), filter.GetSliceSize()));
         }
-        return NArrow::ToBatch(TStatusValidator::GetValid(arrow::Table::FromRecordBatches(slices)), true);
+        return NArrow::ToBatch(TStatusValidator::GetValid(arrow::Table::FromRecordBatches(slices)));
     }
     [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> GetEmptySame(const std::shared_ptr<arrow::RecordBatch>& batch) {
         return batch->Slice(0, 0);

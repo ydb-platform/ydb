@@ -181,6 +181,7 @@ PEERDIR(
     yql/essentials/minikql/comp_nodes/llvm14
     yql/essentials/public/udf/service/exception_policy
     yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/dq/llvm14
     yt/yql/providers/yt/comp_nodes/llvm14
 )
 

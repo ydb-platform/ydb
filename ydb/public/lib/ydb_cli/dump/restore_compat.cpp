@@ -3,8 +3,7 @@
 #include <ydb/library/backup/query_builder.h>
 #include <ydb/library/backup/query_uploader.h>
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 using namespace NBackup;
 using namespace NTable;
@@ -183,5 +182,4 @@ NPrivate::IDataWriter* CreateCompatWriter(
     return new TDataWriter(path, tableClient, accumulator, settings);
 }
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

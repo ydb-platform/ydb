@@ -342,6 +342,8 @@ runs:
           export CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
           export CURRENT_PUBLIC_DIR_URL=$PUBLIC_DIR_URL/$CURRENT_PUBLIC_DIR_RELATIVE
           mkdir $CURRENT_PUBLIC_DIR
+          export TEST_META_INFO=$CURRENT_PUBLIC_DIR/tests_meta
+          mkdir $TEST_META_INFO
 
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session
@@ -414,7 +416,7 @@ runs:
 
           # postprocess junit user_attributesreport
           .github/scripts/tests/apply_user_properties_to_junut.py \
-          --test_dir="$YA_MAKE_OUT_DIR" \
+          --test_dir="$TEST_META_INFO" \
           --in_file="$CURRENT_JUNIT_XML_PATH" \
           --out_file="$CURRENT_JUNIT_XML_PATH"
 

@@ -1,6 +1,6 @@
 import pytest
 import json
-import os.path
+import os
 
 
 def pytest_configure(config):
@@ -16,37 +16,40 @@ def pytest_runtest_makereport(item, call):
     report = outcome.get_result()
 
     if call.when == "teardown":
-        # Check if test_case marker is set
-        marker = item.get_closest_marker("test_case")
-        if marker:
-            user_properties_file_name = "pytest_user_properties.json"
-            user_properties = {}
-            if os.path.isfile(user_properties_file_name):
-                with open(user_properties_file_name, "r") as upf:
-                    user_properties = json.load(upf)
+        test_meta_dir = os.getenv("TEST_META_INFO")
 
-            filesystempath = report.location[0]
+        if test_meta_dir:
+            # Check if test_case marker is set
+            marker = item.get_closest_marker("test_case")
+            if marker:
+                filesystempath = report.location[0]
+                domain_info = report.location[2]
 
-            if filesystempath not in user_properties:
-                user_properties[filesystempath] = {}
+                user_properties_file_name = filesystempath.replace("/", "_") + "_" + domain_info.replace(":", "_") + ".json"
+                user_properties_file_name = os.path.join(test_meta_dir, user_properties_file_name)
+                assert not os.path.isfile(user_properties_file_name)
 
-            domain_info = report.location[2]
-            if domain_info not in user_properties[filesystempath]:
-                user_properties[filesystempath][domain_info] = {}
+                user_properties = {}
 
-            test_case_id = marker.args[0]
-            test_case_id = test_case_id.replace("#", "")
+                if filesystempath not in user_properties:
+                    user_properties[filesystempath] = {}
 
-            props = [("url:test_case",
-                      f'https://github.com/ydb-platform/ydb/issues/{test_case_id}')]
+                if domain_info not in user_properties[filesystempath]:
+                    user_properties[filesystempath][domain_info] = {}
 
-            for prop in props:
-                report.user_properties.append(prop)
+                test_case_id = marker.args[0]
+                test_case_id = test_case_id.replace("#", "")
 
-            for prop in report.user_properties:
-                user_properties[filesystempath][domain_info][prop[0]] = prop[1]
+                props = [("url:test_case",
+                          f'https://github.com/ydb-platform/ydb/issues/{test_case_id}')]
 
-            with open(user_properties_file_name, "w") as upf:
-                json.dump(user_properties, upf)
+                for prop in props:
+                    report.user_properties.append(prop)
+
+                for prop in report.user_properties:
+                    user_properties[filesystempath][domain_info][prop[0]] = prop[1]
+
+                with open(user_properties_file_name, "w") as upf:
+                    json.dump(user_properties, upf, indent=4)
 
     return outcome

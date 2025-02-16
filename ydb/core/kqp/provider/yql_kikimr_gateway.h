@@ -556,10 +556,10 @@ struct TKikimrTableMetadata : public TThrRefBase {
             for (const auto& _ : Indexes[i].GetImplTables()) {
                 YQL_ENSURE(it != message->GetSecondaryGlobalIndexMetadata().end());
                 if (implTable) {
-                    implTable = &ImplTables.emplace_back(MakeIntrusive<TKikimrTableMetadata>(&*it++));
-                } else {
                     (*implTable)->Next = MakeIntrusive<TKikimrTableMetadata>(&*it++);
                     implTable = &(*implTable)->Next;
+                } else {
+                    implTable = &ImplTables.emplace_back(MakeIntrusive<TKikimrTableMetadata>(&*it++));
                 }
             }
         }

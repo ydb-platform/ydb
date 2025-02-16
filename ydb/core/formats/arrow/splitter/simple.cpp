@@ -3,15 +3,18 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/splitter/similar_packer.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow::NSplitter {
 
-std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<arrow::Array>& data, const std::shared_ptr<arrow::Field>& field, const ui32 maxBlobSize) const {
+std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(
+    const std::shared_ptr<arrow::Array>& data, const std::shared_ptr<arrow::Field>& field, const ui32 maxBlobSize) const {
     AFL_VERIFY(data);
     AFL_VERIFY(field);
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{field});
-    auto batch = arrow::RecordBatch::Make(schema, data->length(), {data});
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{ field });
+    auto batch = arrow::RecordBatch::Make(schema, data->length(), { data });
     return Split(batch, maxBlobSize);
 }
 
@@ -30,8 +33,7 @@ public:
         : Data(data)
         , SplitFactor(baseSplitFactor)
         , MaxBlobSize(maxBlobSize)
-        , ColumnSaver(columnSaver)
-    {
+        , ColumnSaver(columnSaver) {
         AFL_VERIFY(Data && Data->num_rows());
         AFL_VERIFY(SplitFactor);
     }
@@ -42,8 +44,7 @@ public:
         , Result(TSaverSplittedChunk(data, std::move(serializedData)))
         , SplitFactor(baseSplitFactor)
         , MaxBlobSize(maxBlobSize)
-        , ColumnSaver(columnSaver)
-    {
+        , ColumnSaver(columnSaver) {
         AFL_VERIFY(Data && Data->num_rows());
         AFL_VERIFY(SplitFactor);
     }
@@ -53,7 +54,7 @@ public:
             AFL_VERIFY(!Result);
             AFL_VERIFY(++Iterations < 100);
             AFL_VERIFY(SplitFactor <= Data->num_rows())("factor", SplitFactor)("records", Data->num_rows())("iteration", Iterations)(
-                                          "size", NArrow::GetBatchDataSize(Data));
+                                        "size", NArrow::GetBatchDataSize(Data));
             bool found = false;
             std::vector<TSplitChunk> result;
             if (SplitFactor == 1) {
@@ -93,7 +94,10 @@ public:
                             AFL_VERIFY(badBatchRecordsCount && badBatchCount)("count", badBatchCount)("records", badBatchRecordsCount);
                             auto badSlice = Data->Slice(*badStartPosition, badBatchRecordsCount);
                             TBatchSerializationStat stats(badBatchSerializedSize, badBatchRecordsCount, Max<ui32>());
-                            result.emplace_back(std::max<ui32>(stats.PredictOptimalSplitFactor(badBatchRecordsCount, MaxBlobSize).value_or(1), badBatchCount) + 1, MaxBlobSize, badSlice, ColumnSaver);
+                            result.emplace_back(
+                                std::max<ui32>(stats.PredictOptimalSplitFactor(badBatchRecordsCount, MaxBlobSize).value_or(1), badBatchCount) +
+                                    1,
+                                MaxBlobSize, badSlice, ColumnSaver);
                             badStartPosition = {};
                             badBatchRecordsCount = 0;
                             badBatchCount = 0;
@@ -106,7 +110,9 @@ public:
                 if (badStartPosition) {
                     auto badSlice = Data->Slice(*badStartPosition, badBatchRecordsCount);
                     TBatchSerializationStat stats(badBatchSerializedSize, badBatchRecordsCount, Max<ui32>());
-                    result.emplace_back(std::max<ui32>(stats.PredictOptimalSplitFactor(badBatchRecordsCount, MaxBlobSize).value_or(1), badBatchCount) + 1, MaxBlobSize, badSlice, ColumnSaver);
+                    result.emplace_back(
+                        std::max<ui32>(stats.PredictOptimalSplitFactor(badBatchRecordsCount, MaxBlobSize).value_or(1), badBatchCount) + 1,
+                        MaxBlobSize, badSlice, ColumnSaver);
                 }
                 ++SplitFactor;
             }
@@ -121,9 +127,10 @@ public:
 
 std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<arrow::RecordBatch>& data, const ui32 maxBlobSize) const {
     AFL_VERIFY(data->num_rows());
-    TSplitChunk baseChunk(Stats ? Stats->PredictOptimalSplitFactor(data->num_rows(), maxBlobSize).value_or(1) : 1, maxBlobSize, data, ColumnSaver);
-    std::vector<TSplitChunk> chunks = {baseChunk};
-    for (auto it = chunks.begin(); it != chunks.end(); ) {
+    TSplitChunk baseChunk(
+        Stats ? Stats->PredictOptimalSplitFactor(data->num_rows(), maxBlobSize).value_or(1) : 1, maxBlobSize, data, ColumnSaver);
+    std::vector<TSplitChunk> chunks = { baseChunk };
+    for (auto it = chunks.begin(); it != chunks.end();) {
         AFL_VERIFY(chunks.size() < 100);
         if (!!it->GetResult()) {
             ++it;
@@ -145,7 +152,8 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<ar
     return result;
 }
 
-std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitByRecordsCount(std::shared_ptr<arrow::RecordBatch> data, const std::vector<ui64>& recordsCount) const {
+std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitByRecordsCount(
+    const std::shared_ptr<arrow::RecordBatch>& data, const std::vector<ui32>& recordsCount) const {
     std::vector<TSaverSplittedChunk> result;
     ui64 position = 0;
     for (auto&& i : recordsCount) {
@@ -157,44 +165,9 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitByRecordsCount(std::share
     return result;
 }
 
-std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitBySizes(std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const {
-    auto splitPartSizesLocal = splitPartSizesExt;
-    Y_ABORT_UNLESS(data);
-    {
-        ui32 sumSizes = 0;
-        for (auto&& i : splitPartSizesExt) {
-            sumSizes += i;
-        }
-        Y_ABORT_UNLESS(sumSizes <= dataSerialization.size());
-
-        if (sumSizes < dataSerialization.size()) {
-            splitPartSizesLocal.emplace_back(dataSerialization.size() - sumSizes);
-        }
-    }
-    std::vector<ui64> recordsCount;
-    i64 remainedRecordsCount = data->num_rows();
-    const double rowsPerByte = 1.0 * data->num_rows() / dataSerialization.size();
-    i32 remainedParts = splitPartSizesLocal.size();
-    for (ui32 idx = 0; idx < splitPartSizesLocal.size(); ++idx) {
-        AFL_VERIFY(remainedRecordsCount >= remainedParts)("remained_records_count", remainedRecordsCount)
-            ("remained_parts", remainedParts)("idx", idx)("size", splitPartSizesLocal.size())("sizes", JoinSeq(",", splitPartSizesLocal))("data_size", dataSerialization.size());
-        --remainedParts;
-        i64 expectedRecordsCount = rowsPerByte * splitPartSizesLocal[idx];
-        if (expectedRecordsCount < 1) {
-            expectedRecordsCount = 1;
-        } else if (remainedRecordsCount < expectedRecordsCount + remainedParts) {
-            expectedRecordsCount = remainedRecordsCount - remainedParts;
-        }
-        if (idx + 1 == splitPartSizesLocal.size()) {
-            expectedRecordsCount = remainedRecordsCount;
-        }
-        Y_ABORT_UNLESS(expectedRecordsCount);
-        recordsCount.emplace_back(expectedRecordsCount);
-        remainedRecordsCount -= expectedRecordsCount;
-        Y_ABORT_UNLESS(remainedRecordsCount >= 0);
-    }
-    Y_ABORT_UNLESS(remainedRecordsCount == 0);
-    return SplitByRecordsCount(data, recordsCount);
+std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitBySizes(
+    std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const {
+    return SplitByRecordsCount(data, TSimilarPacker::SizesToRecordsCount(data->num_rows(), dataSerialization, splitPartSizesExt));
 }
 
-}
+}   // namespace NKikimr::NArrow::NSplitter

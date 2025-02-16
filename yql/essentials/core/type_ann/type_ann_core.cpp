@@ -13018,7 +13018,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["NextValue"] = &NextValueWrapper;
 
         Functions["MatchRecognize"] = &MatchRecognizeWrapper;
-        Functions["MatchRecognizeMeasuresAggregates"] = &MatchRecognizeMeasuresAggregatesWrapper;
+        Functions["MatchRecognizeMeasuresCallables"] = &MatchRecognizeMeasuresCallablesWrapper;
+        Functions["MatchRecognizeMeasuresCallable"] = &MatchRecognizeMeasuresCallableWrapper;
         Functions["MatchRecognizeParams"] = &MatchRecognizeParamsWrapper;
         Functions["MatchRecognizeMeasures"] = &MatchRecognizeMeasuresWrapper;
         Functions["MatchRecognizePattern"] = &MatchRecognizePatternWrapper;

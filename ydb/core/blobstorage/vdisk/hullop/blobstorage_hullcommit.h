@@ -128,17 +128,6 @@ namespace NKikimr {
                             THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data(),
                             Metadata.RemovedHugeBlobs.ToString().data()));
 
-            // notify PDisk about dirty chunks (the ones from which huge slots are being freed right now)
-            THashSet<TChunkIdx> chunkIds;
-            for (const TDiskPart& p : Metadata.RemovedHugeBlobs) {
-                chunkIds.insert(p.ChunkIdx);
-            }
-            if (chunkIds) {
-//              TODO(alexvru): uncommit when PDisk stops breaking tests when this is enabled
-//                ctx.Send(Ctx->PDiskCtx->PDiskId, new NPDisk::TEvMarkDirty(Ctx->PDiskCtx->Dsk->Owner,
-//                    Ctx->PDiskCtx->Dsk->OwnerRound, {chunkIds.begin(), chunkIds.end()}));
-            }
-
             ctx.Send(Ctx->LoggerId, CommitMsg.release());
         }
 
@@ -252,6 +241,13 @@ namespace NKikimr {
             CommitRecord.CommitChunks = std::move(Metadata.CommitChunks);
             CommitRecord.DeleteChunks = std::move(Metadata.DeleteChunks);
             CommitRecord.DeleteToDecommitted = Metadata.DeleteToDecommitted;
+
+            // notify PDisk about dirty chunks (the ones from which huge slots are being freed right now)
+            THashSet<TChunkIdx> chunkIds;
+            for (const TDiskPart& p : Metadata.RemovedHugeBlobs) {
+                chunkIds.insert(p.ChunkIdx);
+            }
+            CommitRecord.DirtyChunks = {chunkIds.begin(), chunkIds.end()};
 
             // validate its contents
             VerifyCommitRecord(CommitRecord);

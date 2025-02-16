@@ -55,7 +55,7 @@ public:
     TSimplePortionsGroupInfo& operator+=(const TSimplePortionsGroupInfo& item) {
         Blobs += item.Blobs;
         BlobBytes += item.BlobBytes;
-        RawBytes += RawBytes + item.RawBytes;
+        RawBytes += item.RawBytes;
         Count += item.Count;
         RecordsCount += item.RecordsCount;
         for (const auto& [channel, bytes] : item.BytesByChannel) {

@@ -255,38 +255,38 @@ NSsa::TAssign TProgramBuilder::MakeConstant(const NSsa::TColumnInfo& name, const
 
     switch (constant.GetValueCase()) {
         case TId::kBool:
-            return TAssign(name, constant.GetBool());
+            return TAssign(name, std::make_shared<arrow::BooleanScalar>(constant.GetBool()));
         case TId::kInt8:
-            return TAssign(name, i8(constant.GetInt8()));
+            return TAssign(name, std::make_shared<arrow::Int8Scalar>(i8(constant.GetInt8())));
         case TId::kUint8:
-            return TAssign(name, ui8(constant.GetUint8()));
+            return TAssign(name, std::make_shared<arrow::UInt8Scalar>(ui8(constant.GetUint8())));
         case TId::kInt16:
-            return TAssign(name, i16(constant.GetInt16()));
+            return TAssign(name, std::make_shared<arrow::Int16Scalar>(i16(constant.GetInt16())));
         case TId::kUint16:
-            return TAssign(name, ui16(constant.GetUint16()));
+            return TAssign(name, std::make_shared<arrow::UInt16Scalar>(ui16(constant.GetUint16())));
         case TId::kInt32:
-            return TAssign(name, constant.GetInt32());
+            return TAssign(name, std::make_shared<arrow::Int32Scalar>(constant.GetInt32()));
         case TId::kUint32:
-            return TAssign(name, constant.GetUint32());
+            return TAssign(name, std::make_shared<arrow::UInt32Scalar>(constant.GetUint32()));
         case TId::kInt64:
-            return TAssign(name, constant.GetInt64());
+            return TAssign(name, std::make_shared<arrow::Int64Scalar>(constant.GetInt64()));
         case TId::kUint64:
-            return TAssign(name, constant.GetUint64());
+            return TAssign(name, std::make_shared<arrow::UInt64Scalar>(constant.GetUint64()));
         case TId::kFloat:
-            return TAssign(name, constant.GetFloat());
+            return TAssign(name, std::make_shared<arrow::FloatScalar>(constant.GetFloat()));
         case TId::kDouble:
-            return TAssign(name, constant.GetDouble());
+            return TAssign(name, std::make_shared<arrow::DoubleScalar>(constant.GetDouble()));
         case TId::kTimestamp:
             return TAssign::MakeTimestamp(name, constant.GetTimestamp());
         case TId::kBytes:
         {
             TString str = constant.GetBytes();
-            return TAssign(name, std::string(str.data(), str.size()), true);
+            return TAssign(name, std::make_shared<arrow::BinaryScalar>(std::make_shared<arrow::Buffer>((const ui8*)str.data(), str.size()), arrow::binary()));
         }
         case TId::kText:
         {
             TString str = constant.GetText();
-            return TAssign(name, std::string(str.data(), str.size()), false);
+            return TAssign(name, std::make_shared<arrow::StringScalar>(std::string(str.data(), str.size())));
         }
         case TId::VALUE_NOT_SET:
             break;
@@ -304,7 +304,7 @@ NSsa::TAggregateAssign TProgramBuilder::MakeAggregate(const NSsa::TColumnInfo& n
             Error = TStringBuilder() << "Unknown kernel for " << func.GetId() << ";kernel_idx=" << func.GetKernelIdx();
             return TAggregateAssign(name);
         }
-        return TAggregateAssign(name, kernelFunction, {argument});
+        return TAggregateAssign(name, kernelFunction, { argument });
     }
 
     if (func.ArgumentsSize() == 1) {

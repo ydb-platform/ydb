@@ -44,7 +44,7 @@ bool ConvertContent(
             for (const auto& item : items) {
                 json.AppendValue(item);
             }
-            out[key] = WriteJson(json, false);
+            out[to_upper(key)] = WriteJson(json, false);
         }
     } catch (...) {
         issues.AddIssue(TStringBuilder() << "Cannot unpack the content of an external table of type: " << sourceType

@@ -81,7 +81,9 @@ Ydb::Table::DescribeExternalDataSourceResult Convert(const TDirEntry& inSelf, co
     out.set_source_type(inDesc.GetSourceType());
     out.set_location(inDesc.GetLocation());
     auto& properties = *out.mutable_properties();
-    properties = inDesc.GetProperties().GetProperties();
+    for (const auto& [key, value] : inDesc.GetProperties().GetProperties()) {
+        properties[to_upper(key)] = value;
+    }
     Convert(inDesc.GetAuth(), properties);
     return out;
 }

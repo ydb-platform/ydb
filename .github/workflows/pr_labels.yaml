@@ -27,6 +27,7 @@ jobs:
               ['* Experimental feature', 'experimental-feature'],
               ['* Improvement', 'improvement'],
               ['* Performance improvement', 'performance'],
+              ['* User Interface', 'ui'],
               ['* Bugfix', 'bugfix'],
               ['* Backward incompatible change', 'backward-incompatible'],
               ['* Documentation', 'documentation'],

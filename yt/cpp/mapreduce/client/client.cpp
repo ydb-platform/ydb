@@ -1496,7 +1496,7 @@ void TClient::CheckShutdown() const
     }
 }
 
-TClientPtr CreateClientImpl(
+TClientContext CreateClientContext(
     const TString& serverName,
     const TCreateClientOptions& options)
 {
@@ -1545,6 +1545,10 @@ TClientPtr CreateClientImpl(
         context.ServerName = Format("tvm.%v", context.ServerName);
     }
 
+    if (options.ProxyRole_) {
+        context.Config->Hosts = "hosts?role=" + *options.ProxyRole_;
+    }
+
     if (context.UseTLS || options.UseCoreHttpClient_) {
         context.HttpClient = NHttpClient::CreateCoreHttpClient(context.UseTLS, context.Config);
     } else {
@@ -1565,6 +1569,15 @@ TClientPtr CreateClientImpl(
     if (context.Token) {
         TConfig::ValidateToken(context.Token);
     }
+
+    return context;
+}
+
+TClientPtr CreateClientImpl(
+    const TString& serverName,
+    const TCreateClientOptions& options)
+{
+    auto context = CreateClientContext(serverName, options);
 
     auto globalTxId = GetGuid(context.Config->GlobalTxId);
 

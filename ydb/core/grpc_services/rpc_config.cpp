@@ -2,7 +2,7 @@
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/library/yaml_config/tools/util/defaults.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
-#include "rpc_bsconfig_base.h"
+#include "rpc_config_base.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>

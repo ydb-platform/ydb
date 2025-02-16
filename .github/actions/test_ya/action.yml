@@ -418,7 +418,7 @@ runs:
           .github/scripts/tests/apply_user_properties_to_junit.py \
           --test_dir="$TEST_META_INFO" \
           --in_file="$CURRENT_JUNIT_XML_PATH" \
-          --out_file="$CURRENT_JUNIT_XML_PATH"
+          --out_file="$CURRENT_JUNIT_XML_PATH" || true
 
           # postprocess junit report
           .github/scripts/tests/transform_ya_junit.py -i \

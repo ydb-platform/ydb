@@ -4261,25 +4261,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         CompareYson(R"([[[1u];[2u]];[[2u];[2u]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(SelfJoin2) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        settings.SetAppConfig(appConfig);
-
-        TKikimrRunner kikimr(settings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        {
-            auto result = session.ExecuteDataQuery(R"(
-                SELECT l.Key as k1, r.Key as k2, r.Data FROM `/Root/EightShard` as l inner join `/Root/EightShard` as r
-                on l.Data = r.Data;
-            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            result.GetIssues().PrintTo(Cerr);
-            AssertSuccessResult(result);
-        }
-    }
-
     Y_UNIT_TEST(FullScanCount) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;

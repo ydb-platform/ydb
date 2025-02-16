@@ -15,30 +15,32 @@ public:
     }
 
     TAsyncStatus ReplaceConfig(
-            const std::optional<std::string>& yaml_config,
-            const std::optional<std::string>& storage_yaml_config,
+            const std::optional<std::string>& main_config,
+            const std::optional<std::string>& storage_config,
             const TReplaceConfigSettings& settings)
     {
         auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
 
-        if (yaml_config) {
-            request.set_main_config(*yaml_config);
-        }
+        Y_UNUSED(main_config, storage_config, settings); // FIXME
 
-        if (storage_yaml_config) {
-            request.set_storage_config(*storage_yaml_config);
-        }
+        // if (yaml_config) {
+        //     request.set_main_config(*yaml_config);
+        // }
 
-        if (settings.SwitchDedicatedStorageSection_) {
-            request.set_switch_dedicated_storage_section(*settings.SwitchDedicatedStorageSection_);
-        }
+        // if (storage_yaml_config) {
+        //     request.set_storage_config(*storage_yaml_config);
+        // }
 
-        request.set_dedicated_config_mode(settings.DedicatedConfigMode_);
-        request.set_dry_run(settings.DryRun_);
-        request.set_allow_unknown_fields(settings.AllowUnknownFields_);
-        request.set_allow_absent_database(settings.AllowAbsentDatabase_);
-        request.set_allow_incorrect_version(settings.AllowIncorrectVersion_);
-        request.set_allow_incorrect_cluster(settings.AllowIncorrectCluster_);
+        // if (settings.SwitchDedicatedStorageSection_) {
+        //     request.set_switch_dedicated_storage_section(*settings.SwitchDedicatedStorageSection_);
+        // }
+
+        // request.set_dedicated_config_mode(settings.DedicatedConfigMode_);
+        // request.set_dry_run(settings.DryRun_);
+        // request.set_allow_unknown_fields(settings.AllowUnknownFields_);
+        // request.set_allow_absent_database(settings.AllowAbsentDatabase_);
+        // request.set_allow_incorrect_version(settings.AllowIncorrectVersion_);
+        // request.set_allow_incorrect_cluster(settings.AllowIncorrectCluster_);
 
         return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
             std::move(request),
@@ -50,21 +52,23 @@ public:
             const TFetchConfigSettings& settings)
     {
         auto request = MakeOperationRequest<Ydb::Config::FetchConfigRequest>(settings);
-        if (dedicated_storage_section) {
-            request.set_dedicated_storage_section(true);
-        }
-        if (dedicated_cluster_section) {
-            request.set_dedicated_cluster_section(true);
-        }
+        Y_UNUSED(dedicated_storage_section, dedicated_cluster_section, settings); // FIXME
+        // if (dedicated_storage_section) {
+        //     request.set_dedicated_storage_section(true);
+        // }
+        // if (dedicated_cluster_section) {
+        //     request.set_dedicated_cluster_section(true);
+        // }
         auto promise = NThreading::NewPromise<TFetchConfigResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
             NYdb::TStringType config;
             NYdb::TStringType storage_config;
-            if (Ydb::Config::FetchConfigResult result; any && any->UnpackTo(&result)) {
-                config = result.main_config();
-                storage_config = result.storage_config();
-            }
+            Y_UNUSED(any);
+            // if (Ydb::Config::FetchConfigResult result; any && any->UnpackTo(&result)) {
+            //     config = result.main_config();
+            //     storage_config = result.storage_config();
+            // }
 
             TFetchConfigResult val(TStatus(std::move(status)), std::string{std::move(config)},
                 std::string{std::move(storage_config)});

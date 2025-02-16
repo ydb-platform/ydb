@@ -40,6 +40,8 @@
 #include <yql/essentials/protos/pg_ext.pb.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/sql.h>
 
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/yson/node/node_io.h>
@@ -557,6 +559,12 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
     FuncRegistry_ = NKikimr::NMiniKQL::CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace,
         NKikimr::NMiniKQL::CreateBuiltinRegistry(), true, RunOptions_.UdfsPaths);
 
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationPG::MakeTranslator()
+    );
+
     TExprContext ctx;
     if (RunOptions_.PgSupport) {
         ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
@@ -566,13 +574,13 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
         TModulesTable modules;
         FillUserDataTableFromFileSystem(*RunOptions_.MountConfig, RunOptions_.DataTable);
 
-        if (!CompileLibraries(RunOptions_.DataTable, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
+        if (!CompileLibraries(translators, RunOptions_.DataTable, ctx, modules, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
             *RunOptions_.ErrStream << "Errors on compile libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(std::move(modules), ctx.NextUniqueId, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate);
+        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate);
     } else {
         if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;

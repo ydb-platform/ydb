@@ -99,6 +99,7 @@ PEERDIR(
     ydb/core/jaeger_tracing
     ydb/core/protos
     ydb/core/protos/out
+    ydb/core/control/lib
     ydb/library/aclib
     ydb/library/login
     ydb/library/pdisk_io

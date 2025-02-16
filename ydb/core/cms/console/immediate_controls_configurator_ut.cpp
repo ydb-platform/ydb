@@ -55,6 +55,7 @@ NKikimrConsole::TConfigItem ITEM_CONTROLS_EXCEED_MAX;
 void InitImmediateControlsConfigurator(TTenantTestRuntime &runtime)
 {
     runtime.Register(CreateImmediateControlsConfigurator(runtime.GetAppData().Icb,
+                                                         runtime.GetAppData().StaticControlBoard,
                                                          NKikimrConfig::TImmediateControlsConfig(),
                                                          /* allowExistingControls */ true));
     TDispatchOptions options;
@@ -184,12 +185,13 @@ void CompareControls(TTenantTestRuntime &runtime,
                      const NKikimrConfig::TImmediateControlsConfig &cfg)
 {
     auto icb = runtime.GetAppData().Icb;
+    auto staticControlBoard = runtime.GetAppData().StaticControlBoard;
 
     TControlWrapper wrapper;
 
     icb->RegisterSharedControl(wrapper, "DataShardControls.MaxTxInFly");
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetDataShardControls().GetMaxTxInFly());
-    icb->RegisterSharedControl(wrapper, "DataShardControls.DisableByKeyFilter");
+    staticControlBoard->RegisterSharedControl(wrapper, EStaticControlType::DataShardControlsDisableByKeyFilter);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetDataShardControls().GetDisableByKeyFilter());
     icb->RegisterSharedControl(wrapper, "DataShardControls.MaxTxLagMilliseconds");
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetDataShardControls().GetMaxTxLagMilliseconds());

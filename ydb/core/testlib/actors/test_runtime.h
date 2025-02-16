@@ -4,7 +4,8 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/memory_controller/memory_controller.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/static_control_board_impl.h>
 #include <ydb/core/protos/shared_cache.pb.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -51,6 +52,7 @@ namespace NActors {
             TAutoPtr<NActors::IDestructable> Opaque;
             TKeyConfigGenerator KeyConfigGenerator;
             std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
+            std::vector<TIntrusivePtr<NKikimr::TStaticControlBoard>> StaticControlBoard;
         };
 
         struct TActorSystemSetupConfig {

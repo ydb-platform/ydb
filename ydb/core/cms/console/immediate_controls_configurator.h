@@ -1,7 +1,8 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/static_control_board_impl.h>
 
 #include <util/generic/ptr.h>
 
@@ -12,6 +13,7 @@ namespace NKikimr::NConsole {
  * immediate control board via CMS.
  */
 IActor *CreateImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,
+                                            TIntrusivePtr<TStaticControlBoard> staticControlBoard,
                                             const NKikimrConfig::TImmediateControlsConfig &cfg,
                                             bool allowExistingControls = false);
 

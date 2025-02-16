@@ -885,11 +885,12 @@ void TImmediateControlBoardInitializer::InitializeServices(NActors::TActorSystem
         const NKikimr::TAppData* appData) {
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         MakeIcbId(NodeId),
-        TActorSetupCmd(CreateImmediateControlActor(appData->Icb, appData->Counters), TMailboxType::ReadAsFilled, appData->UserPoolId)
+        TActorSetupCmd(CreateImmediateControlActor(appData->Icb, appData->StaticControlBoard, appData->Counters), TMailboxType::ReadAsFilled, appData->UserPoolId)
     ));
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         TActorId(),
         TActorSetupCmd(NConsole::CreateImmediateControlsConfigurator(appData->Icb,
+                                                                     appData->StaticControlBoard,
                                                                      Config.GetImmediateControlsConfig()),
                        TMailboxType::ReadAsFilled, appData->UserPoolId)
     ));

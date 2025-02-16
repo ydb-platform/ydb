@@ -316,7 +316,7 @@ void TDataShard::IcbRegister() {
     if (!IcbRegistered) {
         auto* appData = AppData();
 
-        appData->Icb->RegisterSharedControl(DisableByKeyFilter, "DataShardControls.DisableByKeyFilter");
+        appData->StaticControlBoard->RegisterSharedControl(DisableByKeyFilter, EStaticControlType::DataShardControlsDisableByKeyFilter);
         appData->Icb->RegisterSharedControl(MaxTxInFly, "DataShardControls.MaxTxInFly");
         appData->Icb->RegisterSharedControl(MaxTxLagMilliseconds, "DataShardControls.MaxTxLagMilliseconds");
         appData->Icb->RegisterSharedControl(DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfile.LogThresholdMs");

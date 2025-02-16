@@ -5,9 +5,9 @@
 
 #include <ydb/public/api/grpc/ydb_config_v1.grpc.pb.h>
 
-namespace NYdb::inline V3::NStorageConfig {
+namespace NYdb::inline V3::NConfig {
 
-class TStorageConfigClient::TImpl : public TClientImplCommon<TStorageConfigClient::TImpl> {
+class TConfigClient::TImpl : public TClientImplCommon<TConfigClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TCommonClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings)
@@ -91,13 +91,13 @@ public:
     }
 };
 
-TStorageConfigClient::TStorageConfigClient(const TDriver& driver, const TCommonClientSettings& settings)
-    : Impl_(new TStorageConfigClient::TImpl(CreateInternalInterface(driver), settings))
+TConfigClient::TConfigClient(const TDriver& driver, const TCommonClientSettings& settings)
+    : Impl_(new TConfigClient::TImpl(CreateInternalInterface(driver), settings))
 {}
 
-TStorageConfigClient::~TStorageConfigClient() = default;
+TConfigClient::~TConfigClient() = default;
 
-TAsyncStatus TStorageConfigClient::ReplaceConfig(
+TAsyncStatus TConfigClient::ReplaceConfig(
         const std::optional<std::string>& yaml_config,
         const std::optional<std::string>& storage_yaml_config,
         const TReplaceConfigSettings& settings)
@@ -105,13 +105,13 @@ TAsyncStatus TStorageConfigClient::ReplaceConfig(
     return Impl_->ReplaceConfig(yaml_config, storage_yaml_config, settings);
 }
 
-TAsyncFetchConfigResult TStorageConfigClient::FetchConfig(bool dedicated_storage_section,
+TAsyncFetchConfigResult TConfigClient::FetchConfig(bool dedicated_storage_section,
         bool dedicated_cluster_section, const TFetchConfigSettings& settings)
 {
     return Impl_->FetchConfig(dedicated_storage_section, dedicated_cluster_section, settings);
 }
 
-TAsyncStatus TStorageConfigClient::BootstrapCluster(const std::string& selfAssemblyUUID, const TBootstrapClusterSettings& settings) {
+TAsyncStatus TConfigClient::BootstrapCluster(const std::string& selfAssemblyUUID, const TBootstrapClusterSettings& settings) {
     return Impl_->BootstrapCluster(selfAssemblyUUID, settings);
 }
 

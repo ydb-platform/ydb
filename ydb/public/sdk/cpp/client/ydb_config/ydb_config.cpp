@@ -3,42 +3,42 @@
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 
-namespace NYdb::NStorageConfig {
+namespace NYdb::NConfig {
 
-class TStorageConfigClient::TImpl : public TClientImplCommon<TStorageConfigClient::TImpl> {
+class TConfigClient::TImpl : public TClientImplCommon<TConfigClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TCommonClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings)
     {
     }
 
-    TAsyncStatus ReplaceStorageConfig(const TString& config) {
-        auto request = MakeRequest<Ydb::Config::ReplaceStorageConfigRequest>();
+    TAsyncStatus ReplaceConfig(const TString& config) {
+        auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
         request.set_yaml_config(config);
 
-        return RunSimple<Ydb::Config::V1::BSConfigService, Ydb::Config::ReplaceStorageConfigRequest, Ydb::Config::ReplaceStorageConfigResponse>(
+        return RunSimple<Ydb::Config::V1::BSConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
             std::move(request),
-            &Ydb::Config::V1::BSConfigService::Stub::AsyncReplaceStorageConfig);
+            &Ydb::Config::V1::BSConfigService::Stub::AsyncReplaceConfig);
     }
 
-    TAsyncFetchStorageConfigResult FetchStorageConfig(const TStorageConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::Config::FetchStorageConfigRequest>(settings);
-        auto promise = NThreading::NewPromise<TFetchStorageConfigResult>();
+    TAsyncFetchConfigResult FetchConfig(const TConfigSettings& settings = {}) {
+        auto request = MakeOperationRequest<Ydb::Config::FetchConfigRequest>(settings);
+        auto promise = NThreading::NewPromise<TFetchConfigResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 TString config;
-                if (Ydb::Config::FetchStorageConfigResult result; any && any->UnpackTo(&result)) {
+                if (Ydb::Config::FetchConfigResult result; any && any->UnpackTo(&result)) {
                     config = result.yaml_config();
                 }
 
-                TFetchStorageConfigResult val(TStatus(std::move(status)), std::move(config));
+                TFetchConfigResult val(TStatus(std::move(status)), std::move(config));
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::Config::V1::BSConfigService, Ydb::Config::FetchStorageConfigRequest, Ydb::Config::FetchStorageConfigResponse>(
+        Connections_->RunDeferred<Ydb::Config::V1::BSConfigService, Ydb::Config::FetchConfigRequest, Ydb::Config::FetchConfigResponse>(
             std::move(request),
             extractor,
-            &Ydb::Config::V1::BSConfigService::Stub::AsyncFetchStorageConfig,
+            &Ydb::Config::V1::BSConfigService::Stub::AsyncFetchConfig,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -55,21 +55,21 @@ public:
     }
 };
 
-TStorageConfigClient::TStorageConfigClient(const TDriver& driver, const TCommonClientSettings& settings)
-    : Impl_(new TStorageConfigClient::TImpl(CreateInternalInterface(driver), settings))
+TConfigClient::TConfigClient(const TDriver& driver, const TCommonClientSettings& settings)
+    : Impl_(new TConfigClient::TImpl(CreateInternalInterface(driver), settings))
 {}
 
-TStorageConfigClient::~TStorageConfigClient() = default;
+TConfigClient::~TConfigClient() = default;
 
-TAsyncStatus TStorageConfigClient::ReplaceStorageConfig(const TString& config) {
-    return Impl_->ReplaceStorageConfig(config);
+TAsyncStatus TConfigClient::ReplaceConfig(const TString& config) {
+    return Impl_->ReplaceConfig(config);
 }
 
-TAsyncFetchStorageConfigResult TStorageConfigClient::FetchStorageConfig(const TStorageConfigSettings& settings) {
-    return Impl_->FetchStorageConfig(settings);
+TAsyncFetchConfigResult TConfigClient::FetchConfig(const TConfigSettings& settings) {
+    return Impl_->FetchConfig(settings);
 }
 
-TAsyncStatus TStorageConfigClient::BootstrapCluster(const TString& selfAssemblyUUID) {
+TAsyncStatus TConfigClient::BootstrapCluster(const TString& selfAssemblyUUID) {
     return Impl_->BootstrapCluster(selfAssemblyUUID);
 }
 

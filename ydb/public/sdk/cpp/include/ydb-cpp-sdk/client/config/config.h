@@ -9,7 +9,7 @@
 #include <memory>
 #include <string>
 
-namespace NYdb::inline V3::NStorageConfig {
+namespace NYdb::inline V3::NConfig {
 
 struct TFetchConfigResult : public TStatus {
     TFetchConfigResult(
@@ -18,20 +18,20 @@ struct TFetchConfigResult : public TStatus {
             std::string&& storage_config)
         : TStatus(std::move(status))
         , Config_(std::move(config))
-        , StorageConfig_(std::move(storage_config))
+        , Config_(std::move(storage_config))
     {}
 
     const std::string& GetConfig() const {
         return Config_;
     }
 
-    const std::string& GetStorageConfig() const {
-        return StorageConfig_;
+    const std::string& GetConfig() const {
+        return Config_;
     }
 
 private:
     std::string Config_;
-    std::string StorageConfig_;
+    std::string Config_;
 };
 
 using TAsyncFetchConfigResult = NThreading::TFuture<TFetchConfigResult>;
@@ -50,11 +50,11 @@ struct TFetchConfigSettings : public NYdb::TOperationRequestSettings<TFetchConfi
 
 struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {};
 
-class TStorageConfigClient {
+class TConfigClient {
 public:
-    explicit TStorageConfigClient(const TDriver& driver, const TCommonClientSettings& settings = {});
+    explicit TConfigClient(const TDriver& driver, const TCommonClientSettings& settings = {});
 
-    ~TStorageConfigClient();
+    ~TConfigClient();
 
     // Replace config
     TAsyncStatus ReplaceConfig(

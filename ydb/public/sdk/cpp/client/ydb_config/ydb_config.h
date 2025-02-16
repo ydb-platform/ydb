@@ -11,10 +11,10 @@
 
 #include <memory>
 
-namespace NYdb::NStorageConfig {
+namespace NYdb::NConfig {
 
-struct TFetchStorageConfigResult : public TStatus {
-    TFetchStorageConfigResult(
+struct TFetchConfigResult : public TStatus {
+    TFetchConfigResult(
             TStatus&& status,
             TString&& config)
         : TStatus(std::move(status))
@@ -29,22 +29,22 @@ private:
     TString Config_;
 };
 
-using TAsyncFetchStorageConfigResult = NThreading::TFuture<TFetchStorageConfigResult>;
+using TAsyncFetchConfigResult = NThreading::TFuture<TFetchConfigResult>;
 
-struct TStorageConfigSettings : public NYdb::TOperationRequestSettings<TStorageConfigSettings> {};
+struct TConfigSettings : public NYdb::TOperationRequestSettings<TConfigSettings> {};
 
-class TStorageConfigClient {
+class TConfigClient {
 public:
 
-    explicit TStorageConfigClient(const TDriver& driver, const TCommonClientSettings& settings = {});
+    explicit TConfigClient(const TDriver& driver, const TCommonClientSettings& settings = {});
 
-    ~TStorageConfigClient();
+    ~TConfigClient();
 
     // Replace config
-    TAsyncStatus ReplaceStorageConfig(const TString& config);
+    TAsyncStatus ReplaceConfig(const TString& config);
 
     // Fetch current cluster storage config
-    TAsyncFetchStorageConfigResult FetchStorageConfig(const TStorageConfigSettings& settings = {});
+    TAsyncFetchConfigResult FetchConfig(const TConfigSettings& settings = {});
 
     // Bootstrap cluster with automatic configuration
     TAsyncStatus BootstrapCluster(const TString& selfAssemblyUUID);

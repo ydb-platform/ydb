@@ -9,7 +9,7 @@ def pytest_configure(config):
     )
 
 
-@pytest.hookimpl(tryfirst=True,hookwrapper=True)
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     # Receiving report object
     outcome = yield

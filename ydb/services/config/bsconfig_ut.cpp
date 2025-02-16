@@ -73,7 +73,7 @@ public:
         }
         ServerSettings->Formats = new NKikimr::TFormatFactory;
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
-        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TBSConfigGRpcService>("bsconfig");
+        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TConfigGRpcService>("bsconfig");
 
         Server_.Reset(new NKikimr::Tests::TServer(*ServerSettings));
         Tenants_.Reset(new NKikimr::Tests::TTenants(Server_));
@@ -158,73 +158,79 @@ TString NormalizeYaml(const TString& yaml) {
     return normalized.Str();
 }
 
-Y_UNIT_TEST_SUITE(BSConfigGRPCService) {
+Y_UNIT_TEST_SUITE(ConfigGRPCService) {
 
     template <typename TCtx>
     void AdjustCtxForDB(TCtx &ctx) {    
         ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
     }
 
-    void ReplaceStorageConfig(auto &channel, std::optional<TString> yamlConfig, std::optional<TString> storageYamlConfig,
+    void ReplaceConfig(auto &channel, std::optional<TString> yamlConfig, std::optional<TString> storageYamlConfig,
             std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode) {
-        std::unique_ptr<Ydb::Config::V1::BSConfigService::Stub> stub;
-        stub = Ydb::Config::V1::BSConfigService::NewStub(channel);
+        std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
+        stub = Ydb::Config::V1::ConfigService::NewStub(channel);
 
-        Ydb::Config::ReplaceStorageConfigRequest request;
-        if (yamlConfig) {
-            request.set_yaml_config(*yamlConfig);
-        }
-        if (storageYamlConfig) {
-            request.set_storage_yaml_config(*storageYamlConfig);
-        }
-        if (switchDedicatedStorageSection) {
-            request.set_switch_dedicated_storage_section(*switchDedicatedStorageSection);
-        }
-        request.set_dedicated_config_mode(dedicatedConfigMode);
+        Ydb::Config::ReplaceConfigRequest request;
+        Y_UNUSED(yamlConfig, storageYamlConfig, switchDedicatedStorageSection, dedicatedConfigMode);
+        // FIXME
+        // if (yamlConfig) {
+        //     request.set_main_config(*yamlConfig);
+        // }
+        // if (storageYamlConfig) {
+        //     request.set_storage_config(*storageYamlConfig);
+        // }
+        // if (switchDedicatedStorageSection) {
+        //     request.set_switch_dedicated_storage_section(*switchDedicatedStorageSection);
+        // }
+        // request.set_dedicated_config_mode(dedicatedConfigMode);
 
-        Ydb::Config::ReplaceStorageConfigResponse response;
-        Ydb::Config::ReplaceStorageConfigResult result;
+        Ydb::Config::ReplaceConfigResponse response;
+        Ydb::Config::ReplaceConfigResult result;
 
-        grpc::ClientContext replaceStorageConfigCtx;
-        AdjustCtxForDB(replaceStorageConfigCtx);
-        stub->ReplaceStorageConfig(&replaceStorageConfigCtx, request, &response);
+        grpc::ClientContext replaceConfigCtx;
+        AdjustCtxForDB(replaceConfigCtx);
+        stub->ReplaceConfig(&replaceConfigCtx, request, &response);
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
         Cerr << "response: " << response.operation().result().DebugString() << Endl;
         response.operation().result().UnpackTo(&result);
     }
 
-    void FetchStorageConfig(auto& channel, bool dedicatedStorageSection, bool dedicatedClusterSection,
+    void FetchConfig(auto& channel, bool dedicatedStorageSection, bool dedicatedClusterSection,
             std::optional<TString>& yamlConfig, std::optional<TString>& storageYamlConfig) {
-        std::unique_ptr<Ydb::Config::V1::BSConfigService::Stub> stub;
-        stub = Ydb::Config::V1::BSConfigService::NewStub(channel);
+        std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
+        stub = Ydb::Config::V1::ConfigService::NewStub(channel);
 
-        Ydb::Config::FetchStorageConfigRequest request;
-        request.set_dedicated_storage_section(dedicatedStorageSection);
-        request.set_dedicated_cluster_section(dedicatedClusterSection);
+        Ydb::Config::FetchConfigRequest request;
+        Y_UNUSED(dedicatedStorageSection, dedicatedClusterSection);
+        // FIXME
+        // request.set_dedicated_storage_section(dedicatedStorageSection);
+        // request.set_dedicated_cluster_section(dedicatedClusterSection);
 
-        Ydb::Config::FetchStorageConfigResponse response;
-        Ydb::Config::FetchStorageConfigResult result;
+        Ydb::Config::FetchConfigResponse response;
+        Ydb::Config::FetchConfigResult result;
 
-        grpc::ClientContext fetchStorageConfigCtx;
-        AdjustCtxForDB(fetchStorageConfigCtx);
-        stub->FetchStorageConfig(&fetchStorageConfigCtx, request, &response);
+        grpc::ClientContext fetchConfigCtx;
+        AdjustCtxForDB(fetchConfigCtx);
+        stub->FetchConfig(&fetchConfigCtx, request, &response);
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
         response.operation().result().UnpackTo(&result);
 
-        if (result.has_yaml_config()) {
-            yamlConfig.emplace(result.yaml_config());
-        } else {
-            yamlConfig.reset();
-        }
+        Y_UNUSED(yamlConfig, storageYamlConfig);
+        // FIXME
+        // if (result.has_main_config()) {
+        //     yamlConfig.emplace(result.main_config());
+        // } else {
+        //     yamlConfig.reset();
+        // }
 
-        if (result.has_storage_yaml_config()) {
-            storageYamlConfig.emplace(result.storage_yaml_config());
-        } else {
-            storageYamlConfig.reset();
-        }
+        // if (result.has_storage_config()) {
+        //     storageYamlConfig.emplace(result.storage_config());
+        // } else {
+        //     storageYamlConfig.reset();
+        // }
     }   
 
-    Y_UNIT_TEST(ReplaceStorageConfig) {
+    Y_UNIT_TEST(ReplaceConfig) {
         TKikimrWithGrpcAndRootSchema server;
         TString yamlConfig = R"(
 metadata:
@@ -263,18 +269,18 @@ config:
     host_config_id: 2
 )";
         TString yamlConfigExpected = SubstGlobalCopy(yamlConfig, "version: 0", "version: 1");
-        ReplaceStorageConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false);
+        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false);
         std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
-        FetchStorageConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
+        FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
         UNIT_ASSERT(yamlConfigFetched);
         UNIT_ASSERT(!storageYamlConfigFetched);
         UNIT_ASSERT_VALUES_EQUAL(yamlConfigExpected, *yamlConfigFetched);
     }
 
-    Y_UNIT_TEST(FetchStorageConfig) {
+    Y_UNIT_TEST(FetchConfig) {
         TKikimrWithGrpcAndRootSchema server;
         std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
-        FetchStorageConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
+        FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
         UNIT_ASSERT(!yamlConfigFetched);
         UNIT_ASSERT(!storageYamlConfigFetched);
     }

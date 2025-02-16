@@ -3,7 +3,7 @@
 
 #include "rpc_deferrable.h"
 
-#include <ydb/public/api/protos/ydb_bsconfig.pb.h>
+#include <ydb/public/api/protos/ydb_config.pb.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>

@@ -6,7 +6,7 @@ option java_package = "com.yandex.ydb.bsconfig.v1";
 option java_outer_classname = "ConfigGrpc";
 option java_multiple_files = true;
 
-import "ydb/public/api/protos/ydb_bsconfig.proto";
+import "ydb/public/api/protos/ydb_config.proto";
 
 service ConfigService {
 

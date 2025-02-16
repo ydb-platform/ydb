@@ -313,6 +313,11 @@ TErrorOr<T>::TErrorOr(TErrorOr<U>&& other) noexcept
 }
 
 template <class T>
+TErrorOr<T>::TErrorOr(const TErrorException& errorEx) noexcept
+    : TError(errorEx)
+{ }
+
+template <class T>
 TErrorOr<T>::TErrorOr(const std::exception& ex)
     : TError(ex)
 { }

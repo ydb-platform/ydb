@@ -111,6 +111,8 @@ private:
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
 
     void Finalize(const std::optional<ui64> memoryLimit);
+    virtual void DoSetSourceInMemory(const bool /*value*/) override {
+    }
 
 protected:
     std::optional<ui64> UsedRawBytes;

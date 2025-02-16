@@ -24,11 +24,16 @@ private:
     using TBlobs = THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>, Table);
+    YDB_READONLY(bool, Aborted, false);
 
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AccessorsGuard;
     std::optional<TPortionDataAccessor> PortionAccessor;
 
 public:
+    void Abort() {
+        Aborted = true;
+    }
+
     bool GetUseFilter() const {
         return Table->GetFilterUsage();
     }
@@ -153,13 +158,13 @@ public:
 
     TFetchedResult(
         std::unique_ptr<TFetchedData>&& data, const std::optional<std::set<ui32>>& columnIds, const NArrow::NSSA::IColumnResolver& resolver)
-        : Batch(data->GetTable()->ToGeneralContainer(&resolver, columnIds, false))
-        , NotAppliedFilter(data->GetNotAppliedFilter()) {
+        : Batch(data->GetAborted() ? nullptr : data->GetTable()->ToGeneralContainer(&resolver, columnIds, false))
+        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
     }
 
     TFetchedResult(std::unique_ptr<TFetchedData>&& data, const NArrow::NSSA::IColumnResolver& resolver)
-        : Batch(data->GetTable()->ToGeneralContainer(&resolver, {}, false))
-        , NotAppliedFilter(data->GetNotAppliedFilter()) {
+        : Batch(data->GetAborted() ? nullptr : data->GetTable()->ToGeneralContainer(&resolver, {}, false))
+        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
     }
 
     TPortionDataAccessor::TReadPage ExtractPageForResult() {

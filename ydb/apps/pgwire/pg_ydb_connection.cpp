@@ -127,7 +127,7 @@ public:
                         }
 
                         {
-                            TResultSetParser parser(std::move(resultSet));
+                            NYdb::TResultSetParser parser(std::move(resultSet));
                             while (parser.TryNextRow()) {
                                 response->DataRows.emplace_back();
                                 auto& row = response->DataRows.back();
@@ -387,7 +387,7 @@ public:
 
                         {
                             auto maxRows = ev->Get()->Message->GetExecuteData().MaxRows;
-                            TResultSetParser parser(std::move(resultSet));
+                            NYdb::TResultSetParser parser(std::move(resultSet));
                             while (parser.TryNextRow()) {
                                 response->DataRows.emplace_back();
                                 auto& row = response->DataRows.back();

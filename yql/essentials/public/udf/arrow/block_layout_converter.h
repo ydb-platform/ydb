@@ -12,6 +12,7 @@ public:
     struct PackResult {
         std::vector<ui8, TMKQLAllocator<ui8>> PackedTuples;
         std::vector<ui8, TMKQLAllocator<ui8>> Overflow;
+        ui32 NTuples;
     };
 
 public:

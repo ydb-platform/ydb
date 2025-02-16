@@ -978,6 +978,35 @@ TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Unpack(
     const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const;
 
+void CalculateColumnSized(
+    const ui8* res,
+    const std::vector<ui8, TMKQLAllocator<ui8>>& overflow,
+    ui32 count,
+    std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const {
+    
+    bytes.resize(Columns.size());
+
+    // handle fixed size columns
+    for (const auto& column: OrigColumns) {
+        if (column.SizeType == EColumnSizeType::Fixed) {
+            bytes[column.OriginalIndex] = column.DataSize * count;
+        }
+    }
+
+    // handle variable size columns
+    for (; count--; res += TotalRowSize) {
+        for (const auto& column: VariableColumns_) {
+            ui32 size = ReadUnaligned<ui8>(res + col.Offset);
+            if (size == 255) { // overflow buffer used
+                const auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
+                const auto overflowSize = ReadUnaligned<ui32>(res + col.Offset + 1 + 1 * sizeof(ui32));
+                size = prefixSize + overflowSize;
+            }
+            bytes[column.OriginalIndex] += size;
+        }
+    }
+}
+
 } // namespace NPackedTuple
 } // namespace NMiniKQL
 } // namespace NKikimr

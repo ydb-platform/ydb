@@ -200,7 +200,13 @@ def main():
                         run_timestamp <= Date('{date}') + Interval("P1D")
                         and run_timestamp >= Date('{date}') - {history_for_n_day}*Interval("P1D") 
 
-                        and (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
+                        and job_name in (
+                            'Nightly-run',
+                            'Regression-run',
+                            'Regression-whitelist-run',
+                            'Postcommit_relwithdebinfo', 
+                            'Postcommit_asan'
+                        ) 
                         and build_type = '{build_type}'
                         and branch = '{branch}'
                     order by full_name,run_timestamp desc

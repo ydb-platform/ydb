@@ -99,7 +99,7 @@
 
 #include <ydb/services/auth/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
-#include <ydb/services/bsconfig/grpc_service.h>
+#include <ydb/services/config/grpc_service.h>
 #include <ydb/services/dynamic_config/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>

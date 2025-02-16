@@ -22,7 +22,7 @@ on:
         default: "changelog-for-"
 
 env:
-  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   gather-prs:
@@ -86,7 +86,7 @@ jobs:
       - name: Update Changelog
         uses: ./.github/actions/update_changelog 
         env:
-          UPDATE_REPO_TOKEN: ${{ secrets.GH_TOKEN }}
+          UPDATE_REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           pr_data: "${{ needs.gather-prs.outputs.prs }}"
           changelog_path: "${{ github.event.inputs.changelog_path }}"

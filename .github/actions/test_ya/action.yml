@@ -418,6 +418,8 @@ runs:
           --in_file="$CURRENT_JUNIT_XML_PATH" \
           --out_file="$CURRENT_JUNIT_XML_PATH"
 
+          cat $CURRENT_JUNIT_XML_PATH
+
           # postprocess junit report
           .github/scripts/tests/transform_ya_junit.py -i \
             -m .github/config/muted_ya.txt \

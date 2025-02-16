@@ -22,8 +22,8 @@ def post(is_valid, error_description):
             comment = c
 
     status_to_header = {
-        True: "Validation successful",
-        False: "Validation failed"
+        True: "The validation of the Pull Request description is successful.",
+        False: "The validation of the Pull Request description has failed. Please update the description."
     }
 
     color = "green" if is_valid else "red"

@@ -222,7 +222,7 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriori
     }
 
     priority += dcPriority[GetDataCenter()];
-    priority -= GetRestartsPerPeriod() / 3;
+    priority -= GetRestartsPerPeriod() / Hive.GetNodeRestartsForPenalty();
 
     return priority;
 }

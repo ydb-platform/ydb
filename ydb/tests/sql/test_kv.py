@@ -5,6 +5,10 @@ from ydb.tests.sql.lib.test_base import TestBase
 
 class TestYdbKvWorkload(TestBase):
 
+    @pytest.mark.test_case("#4")
+    def test_crud_operations21(self):
+        pass
+
     @pytest.mark.parametrize("is_column", [True, False])
     @pytest.mark.parametrize("type_,value",
                              [

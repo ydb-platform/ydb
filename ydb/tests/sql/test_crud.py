@@ -4,9 +4,6 @@ from ydb.tests.sql.lib.test_base import TestBase
 
 class TestYdbCrudOperations(TestBase):
 
-    def test_crud_operations2(self):
-        pass
-
     def test_crud_operations(self):
         """
         Test basic CRUD operations: Create, Read, Update, Delete

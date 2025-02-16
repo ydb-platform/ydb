@@ -415,12 +415,10 @@ runs:
           gzip -c $CURRENT_JUNIT_XML_PATH > $CURRENT_PUBLIC_DIR/orig_junit.xml.gz
 
           # postprocess junit user_attributesreport
-          .github/scripts/tests/apply_user_properties_to_junut.py \
+          .github/scripts/tests/apply_user_properties_to_junit.py \
           --test_dir="$TEST_META_INFO" \
           --in_file="$CURRENT_JUNIT_XML_PATH" \
           --out_file="$CURRENT_JUNIT_XML_PATH"
-
-          cat $CURRENT_JUNIT_XML_PATH
 
           # postprocess junit report
           .github/scripts/tests/transform_ya_junit.py -i \

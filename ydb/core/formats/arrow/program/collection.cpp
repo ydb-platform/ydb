@@ -6,24 +6,25 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data) {
+void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter) {
     if (data.is_array()) {
-        AddVerified(columnId, std::make_shared<TTrivialArray>(data.make_array()));
+        AddVerified(columnId, std::make_shared<TTrivialArray>(data.make_array()), withFilter);
     } else if (data.is_arraylike()) {
         if (data.chunked_array()->num_chunks() == 1) {
-            return AddVerified(columnId, data.chunked_array()->chunk(0));
+            return AddVerified(columnId, data.chunked_array()->chunk(0), withFilter);
         }
-        AddVerified(columnId, std::make_shared<TTrivialChunkedArray>(data.chunked_array()));
+        AddVerified(columnId, std::make_shared<TTrivialChunkedArray>(data.chunked_array()), withFilter);
     } else if (data.is_scalar()) {
+        AFL_VERIFY(!withFilter);
         AddConstantVerified(columnId, data.scalar());
     } else {
         AFL_VERIFY(false);
     }
 }
 
-void TAccessorsCollection::AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data) {
+void TAccessorsCollection::AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter) {
     AFL_VERIFY(columnId);
-    if (UseFilter) {
+    if (UseFilter && withFilter) {
         if (!Filter->IsTotalAllowFilter()) {
             auto filtered = data->ApplyFilter(*Filter);
             RecordsCountActual = filtered->GetRecordsCount();
@@ -259,9 +260,9 @@ void TAccessorsCollection::RemainOnly(const std::vector<ui32>& columns, const bo
     }
 }
 
-void TAccessorsCollection::AddBatch(const std::shared_ptr<TGeneralContainer>& container, const NSSA::IColumnResolver& resolver) {
+void TAccessorsCollection::AddBatch(const std::shared_ptr<TGeneralContainer>& container, const NSSA::IColumnResolver& resolver, const bool withFilter) {
     for (ui32 i = 0; i < container->GetColumnsCount(); ++i) {
-        AddVerified(resolver.GetColumnIdVerified(container->GetSchema()->GetFieldVerified(i)->name()), container->GetColumnVerified(i));
+        AddVerified(resolver.GetColumnIdVerified(container->GetSchema()->GetFieldVerified(i)->name()), container->GetColumnVerified(i), withFilter);
     }
 }
 

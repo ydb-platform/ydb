@@ -15,7 +15,7 @@ void TFetchedData::SyncTableColumns(const std::vector<std::shared_ptr<arrow::Fie
             continue;
         }
         Table->AddVerified(id, std::make_shared<NArrow::NAccessor::TTrivialArray>(NArrow::TThreadSimpleArraysCache::Get(
-                                   i->type(), schema.GetExternalDefaultValueVerified(i->name()), recordsCount)));
+                                   i->type(), schema.GetExternalDefaultValueVerified(i->name()), recordsCount)), true);
     }
 }
 

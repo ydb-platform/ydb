@@ -62,7 +62,7 @@ public:
         UseFilter = value;
     }
 
-    void AddBatch(const std::shared_ptr<TGeneralContainer>& container, const NSSA::IColumnResolver& resolver);
+    void AddBatch(const std::shared_ptr<TGeneralContainer>& container, const NSSA::IColumnResolver& resolver, const bool withFilter);
 
     TAccessorsCollection(const std::shared_ptr<arrow::RecordBatch>& data, const NSSA::IColumnResolver& resolver);
     TAccessorsCollection(const std::shared_ptr<arrow::Table>& data, const NSSA::IColumnResolver& resolver);
@@ -115,8 +115,8 @@ public:
         return Accessors.contains(id) || Constants.contains(id);
     }
 
-    void AddVerified(const ui32 columnId, const arrow::Datum& data);
-    void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data);
+    void AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter = false);
+    void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter = false);
 
     void AddConstantVerified(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& scalar) {
         AFL_VERIFY(columnId);

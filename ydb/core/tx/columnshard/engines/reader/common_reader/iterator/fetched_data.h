@@ -89,8 +89,8 @@ public:
         return result;
     }
 
-    void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& container, const NArrow::NSSA::IColumnResolver& resolver) {
-        Table->AddBatch(container, resolver);
+    void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& container, const NArrow::NSSA::IColumnResolver& resolver, const bool withFilter) {
+        Table->AddBatch(container, resolver, withFilter);
     }
 
     void AddBlobs(THashMap<TChunkAddress, TString>&& blobData) {

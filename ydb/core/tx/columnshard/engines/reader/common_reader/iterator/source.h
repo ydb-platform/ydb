@@ -56,7 +56,6 @@ private:
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
-    virtual void DoSetSourceInMemory(const bool value) = 0;
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
@@ -92,7 +91,10 @@ public:
     void SetSourceInMemory(const bool value) {
         AFL_VERIFY(!IsSourceInMemoryFlag);
         IsSourceInMemoryFlag = value;
-        DoSetSourceInMemory(value);
+        if (!value) {
+            AFL_VERIFY(StageData);
+            StageData->SetUseFilter(value);
+        }
     }
 
     void SetMemoryGroupId(const ui64 groupId) {

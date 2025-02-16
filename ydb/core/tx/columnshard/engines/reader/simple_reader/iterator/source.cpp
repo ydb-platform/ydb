@@ -232,7 +232,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
                      .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
                      .DetachResult();
 
-    MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver());
+    MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }
 
 namespace {

@@ -47,12 +47,6 @@ private:
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
-    virtual void DoSetSourceInMemory(const bool value) override {
-        if (!value) {
-            AFL_VERIFY(StageData);
-            StageData->SetUseFilter(value);
-        }
-    }
 
 protected:
     THashMap<ui32, TFetchingInterval*> Intervals;

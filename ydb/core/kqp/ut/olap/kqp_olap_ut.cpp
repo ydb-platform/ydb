@@ -914,6 +914,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideMemoryLimitForPortionReading(10000000);
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
 
         auto tableClient = kikimr.GetTableClient();
@@ -946,7 +947,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT(results.erase(ts.GetValue()));
             tsPrev = ts;
         }
-        UNIT_ASSERT(rows.size() == 6);
+        UNIT_ASSERT(rows.size() == 4);
     }
 
     Y_UNIT_TEST(ExtractRanges) {

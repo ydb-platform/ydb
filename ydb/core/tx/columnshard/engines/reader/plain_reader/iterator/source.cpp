@@ -231,7 +231,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
                      .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
                      .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
                      .DetachResult();
-    MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver());
+    MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }
 
 namespace {
@@ -319,7 +319,7 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         }
         GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(*batch, ss, (ui64)CommittedBlob.GetInsertWriteId());
         GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(*batch, CommittedBlob.GetIsDelete());
-        MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver());
+        MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
         if (CommittedBlob.GetIsDelete()) {
             MutableStageData().AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
         }

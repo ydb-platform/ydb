@@ -29,11 +29,7 @@ bool CopyToConfigRequest(const Ydb::Config::ReplaceConfigRequest &from, NKikimrB
     TString configStr;
 
     auto fillConfigs = [&](const auto& configBundle) {
-        for (const auto& config : configBundle.config()) {
-            if (NYamlConfig::IsMainConfig(config)) {
-                configStr = config;
-            }
-        }
+        configStr = configBundle.main_config();
     };
 
     switch (from.action_case()) {
@@ -41,13 +37,13 @@ bool CopyToConfigRequest(const Ydb::Config::ReplaceConfigRequest &from, NKikimrB
             fillConfigs(from.replace_enable_dedicated_storage_section());
             break;
         case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
-            fillConfigs(from.replace_disable_dedicated_storage_section());
+            configStr = from.replace_disable_dedicated_storage_section();
             break;
         case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
             fillConfigs(from.replace_with_dedicated_storage_section());
             break;
         case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
-            fillConfigs(from.replace());
+            configStr = from.replace();
             break;
         case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
             break; // TODO: handle as error?
@@ -134,11 +130,7 @@ public:
         TString configStr;
 
         auto fillConfigs = [&](const auto& configBundle) {
-            for (const auto& config : configBundle.config()) {
-                if (NYamlConfig::IsMainConfig(config)) {
-                    configStr = config;
-                }
-            }
+            configStr = configBundle.main_config();
         };
 
         switch (GetProtoRequest()->action_case()) {
@@ -146,13 +138,13 @@ public:
                 fillConfigs(GetProtoRequest()->replace_enable_dedicated_storage_section());
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
-                fillConfigs(GetProtoRequest()->replace_disable_dedicated_storage_section());
+                configStr = GetProtoRequest()->replace_disable_dedicated_storage_section();
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
                 fillConfigs(GetProtoRequest()->replace_with_dedicated_storage_section());
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
-                fillConfigs(GetProtoRequest()->replace());
+                configStr = GetProtoRequest()->replace();
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
                 break; // TODO: handle as error?
@@ -168,14 +160,10 @@ public:
     bool IsDistconfEnableQuery() const {
         NKikimrConfig::TAppConfig newConfig;
         try {
-            TString mainConfig;
+            TString configStr;
 
             auto fillConfigs = [&](const auto& configBundle) {
-                for (const auto& config : configBundle.config()) {
-                    if (NYamlConfig::IsMainConfig(config)) {
-                        mainConfig = config;
-                    }
-                }
+                configStr = configBundle.main_config();
             };
 
             switch (GetProtoRequest()->action_case()) {
@@ -183,18 +171,18 @@ public:
                     fillConfigs(GetProtoRequest()->replace_enable_dedicated_storage_section());
                     break;
                 case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
-                    fillConfigs(GetProtoRequest()->replace_disable_dedicated_storage_section());
+                    configStr = GetProtoRequest()->replace_disable_dedicated_storage_section();
                     break;
                 case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
                     fillConfigs(GetProtoRequest()->replace_with_dedicated_storage_section());
                     break;
                 case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
-                    fillConfigs(GetProtoRequest()->replace());
+                    configStr = GetProtoRequest()->replace();
                     break;
                 case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
                     break; // TODO: handle as error?
             }
-            newConfig = NYaml::Parse(mainConfig); // check allow unknown fields
+            newConfig = NYaml::Parse(configStr); // check allow unknown fields
         } catch (const std::exception&) {
             return false; // assuming no distconf enabled in this config
         }
@@ -210,14 +198,12 @@ public:
         bool dedicated_config_mode = false;
 
         auto fillConfigs = [&](const auto& configBundle) {
-            for (const auto& config : configBundle.config()) {
-                if (NYamlConfig::IsMainConfig(config)) {
-                    mainConfig = config;
-                }
+            if (configBundle.has_main_config()) {
+                mainConfig = configBundle.main_config();
+            }
 
-                if (NYamlConfig::IsStorageConfig(config)) {
-                    storageConfig = config;
-                }
+            if (configBundle.has_storage_config()) {
+                storageConfig = configBundle.storage_config();
             }
         };
 
@@ -229,14 +215,14 @@ public:
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceDisableDedicatedStorageSection:
                 switch_dedicated_storage_section = false;
-                fillConfigs(request->replace_disable_dedicated_storage_section());
+                mainConfig = request->replace_disable_dedicated_storage_section();
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplaceWithDedicatedStorageSection:
                 dedicated_config_mode = true;
                 fillConfigs(request->replace_with_dedicated_storage_section());
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::kReplace:
-                fillConfigs(request->replace());
+                mainConfig = request->replace();
                 break;
             case Ydb::Config::ReplaceConfigRequest::ActionCase::ACTION_NOT_SET:
                 break; // TODO: handle as error?
@@ -294,7 +280,7 @@ public:
 
         switch (request.mode_case()) {
             case Ydb::Config::FetchConfigRequest::ModeCase::kAll:
-                if (request.all().config_transform_case() == Ydb::Config::FetchModeAll::ConfigTransformCase::kDetachStorageConfigSection) {
+                if (request.all().config_transform_case() == Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kDetachStorageConfigSection) {
                     record.SetDedicatedStorageSection(true);
                     record.SetDedicatedClusterSection(true);
                 }

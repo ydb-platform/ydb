@@ -1485,7 +1485,7 @@ namespace NKikimr::NYaml {
 
     Ydb::Config::ReplaceConfigRequest BuildReplaceDistributedStorageCommand(const TString& data) {
         Ydb::Config::ReplaceConfigRequest replaceRequest;
-        replaceRequest.mutable_replace()->add_config(data);
+        replaceRequest.set_replace(data);
         return replaceRequest;
     }
 

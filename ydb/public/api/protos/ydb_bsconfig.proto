@@ -40,28 +40,27 @@ message ConfigIdentity {
 message ReplaceConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
-    // Zero or more configs of any type.
-    // Exact type of config identified by metadata stored inside config.
     message ConfigBundle {
-        repeated string config = 1;
+        optional string main_config = 1;
+        optional string storage_config = 2;
     }
 
     oneof action {
-        // Replace config on cluster.
-        // By default awaits single config with matching metadata (kind MainConfig, right cluster and version + 1)
-        ConfigBundle replace = 2;
+        // Replaces config on cluster.
+        // By default awaits config with matching metadata (kind MainConfig, right cluster and version + 1)
+        string replace = 2;
 
-        // Replace storage and/or main configs on cluster in dedicated storage config mode
+        // Replaces storage and/or main configs on cluster in dedicated storage config mode
         // By default awaits either MainConfig or StorageConfig or both with matching metadata
         ConfigBundle replace_with_dedicated_storage_section = 3;
 
-        // Replace storage and main configs on cluster in single config mode **AND** enables dedicated storage config mode
+        // Replaces storage and main configs on cluster in single config mode **AND** enables dedicated storage config mode
         // By default awaits MainConfig and StorageConfig with matching metadata
         ConfigBundle replace_enable_dedicated_storage_section = 4;
 
-        // Replace main config on cluster in single config mode **AND** disables dedicated storage config mode
+        // Replaces main config on cluster in single config mode **AND** disables dedicated storage config mode
         // By default awaits MainConfig with matching metadata
-        ConfigBundle replace_disable_dedicated_storage_section = 5;
+        string replace_disable_dedicated_storage_section = 5;
     }
 
     // Try to apply config(s) without making real changes
@@ -70,7 +69,7 @@ message ReplaceConfigRequest {
     // All errors returned as issues in response
     bool dry_run = 6;
 
-    // Allows to apply config with fields unknown to out parser
+    // Allows to apply config with fields unknown to config parser
     // It is useful when user need to try some new experimental flag, then rollback to previous version
     //    and want to update existing config keeping flag from newer version in config
     // All unknown fields still reported in result as warnings
@@ -92,31 +91,37 @@ message ReplaceConfigResponse {
 
 message ReplaceConfigResult {}
 
-message FetchModeAll {
-    // Use this option to somehow transform main config
-    // Currently used to automatically derive detached StorageSection from MainConfig
-    //     or vice versa
-    oneof config_transform {
-        // Optionally may be set to explicitly tell "do not transform anything"
-        google.protobuf.Empty none = 1;
-
-        // Fetch will return MainConfig and StorageConfig derived from MainConfig
-        //    by detaching storage config
-        google.protobuf.Empty detach_storage_config_section = 2;
-
-        // Fetch will return MainConfig derived from MainConfig and StorageConfig
-        //    by attaching storage config to main config
-        google.protobuf.Empty attach_storage_config_section = 3;
-    }
-}
-
-message FetchModeByIdentity {
-    // List of configs to fetch
-    repeated ConfigIdentity identity = 1;
-}
-
 message FetchConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+
+    // Settings for mode "all"
+    // In this mode server will return all configs to user
+    // There are additional settings allowing to transform configs in server answer
+    message FetchModeAll {
+        // Use this option to somehow transform main config
+        // Currently used to automatically derive detached StorageSection from MainConfig
+        //     or vice versa
+        oneof config_transform {
+            // Optionally may be set to explicitly tell "do not transform anything"
+            google.protobuf.Empty none = 1;
+
+            // Fetch will return MainConfig and StorageConfig derived from MainConfig
+            //    by detaching storage config
+            google.protobuf.Empty detach_storage_config_section = 2;
+
+            // Fetch will return MainConfig derived from MainConfig and StorageConfig
+            //    by attaching storage config to main config
+            google.protobuf.Empty attach_storage_config_section = 3;
+        }
+    }
+
+    // Settings for mode "by identity"
+    // In this mode server will return all configs with identites which are exactly match to identites in request
+    // If there is no matching identity on server the identity will be skipped
+    message FetchModeByIdentity {
+        // List of configs to fetch
+        repeated ConfigIdentity identity = 1;
+    }
 
     // Depending on mode Fetch will return different set of configs
     // List of modes may be extended in future

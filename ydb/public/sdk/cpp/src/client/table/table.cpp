@@ -376,6 +376,7 @@ class TTableDescription::TImpl {
                 break;
             }
         }
+        //TODO fill shards
     }
 
 public:

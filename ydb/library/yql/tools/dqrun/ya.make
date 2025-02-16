@@ -39,6 +39,8 @@ ENDIF()
         yql/essentials/core/file_storage/http_download
         yql/essentials/core/services
         yql/essentials/core/services/mounts
+        yql/essentials/sql
+        yql/essentials/sql/v1
         ydb/library/yql/dq/actors/input_transforms
         ydb/library/yql/dq/comp_nodes
         ydb/library/yql/dq/opt

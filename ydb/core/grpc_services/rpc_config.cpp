@@ -296,11 +296,11 @@ public:
     }
 };
 
-void DoReplaceBSConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoReplaceConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TReplaceStorageConfigRequest(p.release()));
 }
 
-void DoFetchBSConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoFetchConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TFetchStorageConfigRequest(p.release()));
 }
 

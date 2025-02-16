@@ -7,9 +7,9 @@ namespace NKikimr::NGRpcService {
     class IRequestOpCtx;
     class IFacilityProvider;
 
-    void DoReplaceBSConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+    void DoReplaceConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
-    void DoFetchBSConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+    void DoFetchConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
     void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 

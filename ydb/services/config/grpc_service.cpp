@@ -2,7 +2,7 @@
 
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
-#include <ydb/core/grpc_services/service_bsconfig.h>
+#include <ydb/core/grpc_services/service_config.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include "ydb/library/grpc/server/grpc_method_setup.h"
 
@@ -26,11 +26,11 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
     #define SETUP_BS_METHOD(methodName, method, rlMode, requestType) \
-        SETUP_METHOD(methodName, method, rlMode, requestType, Config, bsconfig)
+        SETUP_METHOD(methodName, method, rlMode, requestType, Config, config)
 
-    SETUP_BS_METHOD(ReplaceConfig, DoReplaceBSConfig, Rps, BSCONFIG_REPLACESTORAGECONFIG);
-    SETUP_BS_METHOD(FetchConfig, DoFetchBSConfig, Rps, BSCONFIG_FETCHSTORAGECONFIG);
-    SETUP_BS_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, BSCONFIG_BOOTSTRAP);
+    SETUP_BS_METHOD(ReplaceConfig, DoReplaceConfig, Rps, CONFIG_REPLACECONFIG);
+    SETUP_BS_METHOD(FetchConfig, DoFetchConfig, Rps, CONFIG_FETCHCONFIG);
+    SETUP_BS_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP);
 
     #undef SETUP_BS_METHOD
 }

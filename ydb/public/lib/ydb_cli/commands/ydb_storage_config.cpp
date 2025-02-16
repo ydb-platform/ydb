@@ -62,11 +62,11 @@ void TCommandStorageConfigFetch::Parse(TConfig& config) {
 
 int TCommandStorageConfigFetch::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NStorageConfig::TStorageConfigClient(*driver);
+    auto client = NYdb::NConfig::TConfigClient(*driver);
     auto result = client.FetchConfig(DedicatedStorageSection, DedicatedClusterSection).GetValueSync();
     NStatusHelpers::ThrowOnError(result);
 
-    const auto& clusterConfig = result.GetConfig();
+    const auto& clusterConfig = result.GetMainConfig();
     const auto& storageConfig = result.GetStorageConfig();
 
     if (!clusterConfig.empty()) {
@@ -141,8 +141,8 @@ void TCommandStorageConfigReplace::Parse(TConfig& config) {
 
 int TCommandStorageConfigReplace::Run(TConfig& config) {
     std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NStorageConfig::TStorageConfigClient(*driver);
-    NYdb::NStorageConfig::TReplaceConfigSettings settings;
+    auto client = NYdb::NConfig::TConfigClient(*driver);
+    NYdb::NConfig::TReplaceConfigSettings settings;
     settings
         .SwitchDedicatedStorageSection(SwitchDedicatedStorageSection)
         .DedicatedConfigMode(DedicatedConfigMode);

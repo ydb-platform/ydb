@@ -38,7 +38,7 @@ void TCommandClusterBootstrap::Parse(TConfig& config) {
 
 int TCommandClusterBootstrap::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    NYdb::NStorageConfig::TStorageConfigClient client(*driver);
+    NYdb::NConfig::TConfigClient client(*driver);
     auto result = client.BootstrapCluster(SelfAssemblyUUID).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return EXIT_SUCCESS;

@@ -181,9 +181,9 @@ void TCommandConfigReplace::Parse(TConfig& config) {
 
 int TCommandConfigReplace::Run(TConfig& config) {
     std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NStorageConfig::TStorageConfigClient(*driver);
+    auto client = NYdb::NConfig::TConfigClient(*driver);
 
-    NYdb::NStorageConfig::TReplaceConfigSettings settings;
+    NYdb::NConfig::TReplaceConfigSettings settings;
 
     if (Force) {
         settings.AllowIncorrectVersion();

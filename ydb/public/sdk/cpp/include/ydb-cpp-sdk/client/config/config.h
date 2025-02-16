@@ -14,24 +14,24 @@ namespace NYdb::inline V3::NConfig {
 struct TFetchConfigResult : public TStatus {
     TFetchConfigResult(
             TStatus&& status,
-            std::string&& config,
+            std::string&& main_config,
             std::string&& storage_config)
         : TStatus(std::move(status))
-        , Config_(std::move(config))
-        , Config_(std::move(storage_config))
+        , MainConfig_(std::move(main_config))
+        , StorageConfig_(std::move(storage_config))
     {}
 
-    const std::string& GetConfig() const {
-        return Config_;
+    const std::string& GetMainConfig() const {
+        return MainConfig_;
     }
 
-    const std::string& GetConfig() const {
-        return Config_;
+    const std::string& GetStorageConfig() const {
+        return StorageConfig_;
     }
 
 private:
-    std::string Config_;
-    std::string Config_;
+    std::string MainConfig_;
+    std::string StorageConfig_;
 };
 
 using TAsyncFetchConfigResult = NThreading::TFuture<TFetchConfigResult>;
@@ -58,8 +58,8 @@ public:
 
     // Replace config
     TAsyncStatus ReplaceConfig(
-        const std::optional<std::string>& yaml_config,
-        const std::optional<std::string>& storage_yaml_config,
+        const std::optional<std::string>& main_config,
+        const std::optional<std::string>& storage_config,
         const TReplaceConfigSettings& settings = {});
 
     // Fetch current cluster storage config

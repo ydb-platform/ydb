@@ -35,6 +35,8 @@ enum Ev : ui32 {
 
     Subscribe,
     Change,
+    Changes,
+    Cancel,
 
     End
 };
@@ -61,18 +63,27 @@ struct TEvSubscribe : public NActors::TEventLocal<TEvSubscribe, Ev::Subscribe> {
     {}
 };
 
-struct TEvChange : public NActors::TEventLocal<TEvChange, Ev::Change> {
-    TEvChange(std::string&& key, TData&& oldData, TData&& newData = {})
+struct TChange {
+    TChange(std::string&& key, TData&& oldData, TData&& newData = {})
         : Key(std::move(key)), OldData(std::move(oldData)), NewData(std::move(newData))
     {}
 
-    TEvChange(const TEvChange& put)
-        : Key(put.Key), OldData(put.OldData), NewData(put.NewData)
-    {}
-
-    const std::string Key;
-    const TData OldData, NewData;
+    std::string Key;
+    TData OldData, NewData;
 };
+
+struct TEvChange : public TChange, public NActors::TEventLocal<TEvChange, Ev::Change> {
+    using TChange::TChange;
+    TEvChange(const TEvChange& put) : TChange(put) {}
+};
+
+struct TEvChanges : public NActors::TEventLocal<TEvChanges, Ev::Changes> {
+    TEvChanges(std::vector<TChange>&& changes = {}) : Changes(std::move(changes)) {}
+
+    std::vector<TChange> Changes;
+};
+
+struct TEvCancel : public NActors::TEventLocal<TEvCancel, Ev::Cancel> {};
 
 template <Ev TRpcId, typename TReq, typename TRes>
 class TEtcdRequestStreamWrapper

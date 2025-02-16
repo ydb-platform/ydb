@@ -96,6 +96,161 @@ private:
     const TSharedStuff::TPtr Stuff;
 };
 
+class TWatch : public TActorBootstrapped<TWatch> {
+public:
+    using IStreamCtx = NKikimr::NGRpcServer::IGRpcStreamingContext<etcdserverpb::WatchRequest, etcdserverpb::WatchResponse>;
+
+    TWatch(
+        TActorId watchtower,
+        TActorId watchman,
+        TSharedStuff::TPtr stuff,
+        std::string key,
+        std::string rangeEnd,
+        EWatchKind kind,
+        i64 fromRevision,
+        bool withPrevious,
+        bool makeFragmets,
+        bool sendProgress
+    ) : Watchtower(std::move(watchtower)),
+        Watchman(std::move(watchman)),
+        Stuff(std::move(stuff)),
+        Key(std::move(key)),
+        RangeEnd(std::move(rangeEnd)),
+        Kind(kind),
+        FromRevision(fromRevision),
+        WithPrevious(withPrevious),
+        MakeFragmets(makeFragmets),
+        SendProgress(sendProgress),
+        AwaitHistory(fromRevision > 0LL)
+    {
+        Y_UNUSED(MakeFragmets);
+    }
+
+    void Bootstrap(const TActorContext& ctx) {
+        Become(&TThis::StateFunc);
+        TimeOfLastSent = TMonotonic::Now();
+        ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
+        ctx.Send(Watchtower, new TEvSubscribe(Key, RangeEnd, Kind, WithPrevious));
+        if (AwaitHistory)
+            RequestHistory();
+    }
+private:
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            CFunc(TEvents::TEvWakeup::EventType, Wakeup);
+            CFunc(TEvCancel::EventType, UnsubscribeAndDie);
+
+            HFunc(TEvChange, Handle);
+
+            HFunc(TEvQueryResult, Handle);
+            HFunc(TEvQueryError, Handle);
+        }
+    }
+
+    void Wakeup(const TActorContext& ctx) {
+        if (SendProgress && TMonotonic::Now() - TimeOfLastSent > TDuration::Seconds(13)) {
+            ctx.Send(Watchman, new TEvChanges);
+            TimeOfLastSent = TMonotonic::Now();
+        }
+        ctx.Schedule(TDuration::Seconds(11), new TEvents::TEvWakeup);
+    }
+
+    void RequestHistory() {
+        NYdb::TParamsBuilder params;
+        const auto& revName = AddParam("Revision", params, FromRevision);
+
+        std::ostringstream where;
+        MakeSimplePredicate(Key, RangeEnd, where, params);
+
+        std::ostringstream sql;
+        sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from `verhaal` where " << revName << " <= `modified` and " << where.str() << " order by `modified` asc;" << std::endl;
+
+        const auto my = this->SelfId();
+        const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
+        Stuff->Client->ExecuteQuery(sql.str(), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
+            if (const auto res = future.GetValueSync(); res.IsSuccess())
+                ass->Send(my, new TEvQueryResult(res.GetResultSets()));
+            else
+                ass->Send(my, new TEvQueryError(res.GetIssues()));
+        });
+    }
+
+    void Handle(TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
+        std::vector<TChange> changes;
+        changes.reserve(ev->Get()->Results.front().RowsCount());
+        for (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow();) {
+            auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
+            TData data {
+                .Value = NYdb::TValueParser(parser.GetValue("value")).GetString(),
+                .Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64(),
+                .Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64(),
+                .Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64(),
+                .Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64()
+            };
+
+            auto& buff = Buffer[key];
+
+            while (!buff.second.empty() && buff.second.front().NewData.Modified <= data.Modified)
+                buff.second.pop();
+
+            if ((EWatchKind::OnChanges == Kind || (data.Version ? EWatchKind::OnUpdates : EWatchKind::OnDeletions) == Kind) &&
+                (!WithPrevious || buff.first))
+                changes.emplace_back(std::move(key), WithPrevious && buff.first ? std::move(*buff.first) : TData(), TData(data));
+
+            buff.first = std::move(data);
+        }
+
+        changes.reserve(changes.size() + Buffer.size());
+        for (auto& [_, buff] : Buffer)
+            for (; !buff.second.empty(); buff.second.pop())
+                changes.emplace_back(std::move(buff.second.front()));
+
+        std::sort(changes.begin(), changes.end(), [](const TChange& lhs, const TChange& rhs) { return lhs.NewData.Modified < rhs.NewData.Modified; });
+
+        if (!changes.empty() || SendProgress) {
+            ctx.Send(Watchman, new TEvChanges(std::move(changes)));
+            TimeOfLastSent = TMonotonic::Now();
+        }
+        AwaitHistory = false;
+    }
+
+    void Handle(TEvQueryError::TPtr &ev, const TActorContext& ctx) {
+        std::cerr << "Watch error received: " << ev->Get()->Issues.ToString() << std::endl;
+        UnsubscribeAndDie(ctx);
+    }
+
+    void Handle(TEvChange::TPtr& ev, const TActorContext& ctx) {
+        if (EWatchKind::OnChanges == Kind ||
+            (ev->Get()->NewData.Version ? EWatchKind::OnUpdates : EWatchKind::OnDeletions) == Kind) {
+
+            if (AwaitHistory)
+                Buffer[ev->Get()->Key].second.emplace(std::move(*ev->Get()));
+            else
+                ctx.Send(Watchman, new TEvChanges({TChange(std::move(ev->Get()->Key), WithPrevious && ev->Get()->OldData.Version ? std::move(ev->Get()->OldData) : TData(), std::move(ev->Get()->NewData))}));
+        }
+    }
+
+    void UnsubscribeAndDie(const TActorContext& ctx) {
+        ctx.Send(Watchtower, new TEvSubscribe);
+        return Die(ctx);
+    }
+
+    const TActorId Watchtower, Watchman;
+    const TSharedStuff::TPtr Stuff;
+
+    const std::string Key, RangeEnd;
+    const EWatchKind Kind;
+    const i64 FromRevision;
+    const bool WithPrevious;
+    const bool MakeFragmets;
+    const bool SendProgress;
+
+    TMonotonic TimeOfLastSent;
+
+    bool AwaitHistory;
+    std::unordered_map<std::string, std::pair<std::optional<TData>, std::queue<TChange>>> Buffer;
+};
+
 class TWatchman : public TActorBootstrapped<TWatchman> {
 public:
     using IStreamCtx = NKikimr::NGRpcServer::IGRpcStreamingContext<etcdserverpb::WatchRequest, etcdserverpb::WatchResponse>;
@@ -110,79 +265,27 @@ public:
         if (!Ctx->Read())
             return Die(ctx);
         TimeOfLastWrite = TMonotonic::Now();
-        ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
     }
 private:
-    struct TSubscription {
-        using TPtr = std::shared_ptr<TSubscription>;
-        using TWeakPtr = std::weak_ptr<TSubscription>;
-
-        i64 WatchId = 0LL;
-        i64 FromRevision = 0LL;
-        bool SendProgress = false;
-        bool WithPrevious = false;
-        bool MakeFragmets = false;
-        EWatchKind Kind = EWatchKind::Unsubscribe;
-        bool AwaitHistory = false;
-
-        std::unordered_map<std::string, std::pair<std::optional<TData>, std::queue<TEvChange::TPtr>>> Buffer;
-    };
-
-    using TByExactKeyMap = std::unordered_multimap<std::string, TSubscription::TWeakPtr>;
-    using TByKeyPrefixMap = std::multimap<std::string, TSubscription::TWeakPtr>;
-    // TODO: Add by range.
-
-    using TUserSubscriptionsMap = std::unordered_multimap<i64, TSubscription::TPtr>;
-
-    template<class TResultEvent>
-    struct TMyEventResult : public TResultEvent {
-        template<class TResult>
-        TMyEventResult(TSubscription::TWeakPtr subscription, const TResult& result)
-            : TResultEvent(result), Subscription(std::move(subscription))
-        {}
-
-        const TSubscription::TWeakPtr Subscription;
-    };
-
-    using TMyQueryResult = TMyEventResult<TEvQueryResult>;
-    using TMyQueryError = TMyEventResult<TEvQueryError>;
-
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(TEvents::TEvWakeup::EventType, Wakeup);
-
             HFunc(IStreamCtx::TEvReadFinished, Handle);
             HFunc(IStreamCtx::TEvWriteFinished, Handle);
             HFunc(IStreamCtx::TEvNotifiedWhenDone, Handle);
 
-            HFunc(TEvChange, Handle);
-
-            HFunc(TMyQueryResult, Handle);
-            hFunc(TMyQueryError, Handle);
+            HFunc(TEvChanges, Handle);
         }
     }
 
     void Create(const etcdserverpb::WatchCreateRequest& req, etcdserverpb::WatchResponse& res, const TActorContext& ctx)  {
-        const auto& key = req.key();
-        const auto& rangeEnd = DecrementKey(req.range_end());
+        auto key = req.key();
+        auto rangeEnd = DecrementKey(req.range_end());
+
         const auto watchId = req.watch_id();
-
-        const auto& sub = UserSubscriptionsMap.emplace(watchId, std::make_shared<TSubscription>())->second;
-
-        if (rangeEnd.empty())
-            ByExactKeyMap.emplace(key, sub);
-        else if (rangeEnd == key) {
-            ByKeyPrefixMap.emplace(key, sub);
-            if (!MinSizeOfPrefix || MinSizeOfPrefix > key.size())
-                MinSizeOfPrefix = key.size();
-        }
-
-        sub->FromRevision = req.start_revision();
-        sub->WithPrevious = req.prev_kv();
-        sub->WatchId = req.watch_id();
-        sub->MakeFragmets = req.fragment();
-        sub->SendProgress = req.progress_notify();
-        sub->AwaitHistory = sub->FromRevision && sub->FromRevision <  res.header().revision();
+        const auto revision = req.start_revision();
+        const bool withPrevious = req.prev_kv();
+        const bool makeFragmets = req.fragment();
+        const bool sendProgress = req.progress_notify();
 
         bool ignoreUpdate = false, ignoreDelete = false;
         for (const auto f : req.filters()) {
@@ -195,50 +298,49 @@ private:
 
         std::cout << "Watch(";
         DumpKeyRange(std::cout, key, rangeEnd);
-        if (sub->FromRevision)
-            std::cout << ",rev=" << sub->FromRevision;
-        if (sub->WithPrevious)
+        if (revision)
+            std::cout << ",rev=" << revision;
+        if (withPrevious)
             std::cout << ",previous";
-        if (sub->WatchId)
-            std::cout << ",id=" << sub->WatchId;
+        if (watchId)
+            std::cout << ",id=" << watchId;
         if (ignoreUpdate)
             std::cout << ",w/o updates";
         if (ignoreDelete)
             std::cout << ",w/o deletes";
-        if (sub->MakeFragmets)
+        if (makeFragmets)
             std::cout << ",fragment";
-        if (sub->SendProgress)
+        if (sendProgress)
             std::cout << ",progress";
         std::cout << ')' << std::endl;
 
         if (!(ignoreUpdate && ignoreDelete)) {
-            if (ignoreDelete && !ignoreUpdate)
-                sub->Kind = EWatchKind::OnUpdates;
-            else if (ignoreUpdate && !ignoreDelete)
-                sub->Kind = EWatchKind::OnDeletions;
-            else
-                sub->Kind = EWatchKind::OnChanges;
+            const auto kind = ignoreDelete && !ignoreUpdate ?
+                EWatchKind::OnUpdates :
+                    ignoreUpdate && !ignoreDelete ?
+                        EWatchKind::OnDeletions : EWatchKind::OnChanges;
 
-            ctx.Send(Watchtower, new TEvSubscribe(key, rangeEnd, sub->Kind, sub->WithPrevious));
+            Watches.emplace(watchId, ctx.RegisterWithSameMailbox(new TWatch(Watchtower, ctx.SelfID, Stuff, std::move(key), std::move(rangeEnd), kind, revision, withPrevious, makeFragmets, sendProgress)));
         }
 
         res.set_created(true);
-        if (sub->WatchId) {
-            res.set_watch_id(sub->WatchId);
-        }
+        if (watchId)
+            res.set_watch_id(watchId);
 
         if (!Ctx->Write(std::move(res)))
             return UnsubscribeAndDie(ctx);
         TimeOfLastWrite = TMonotonic::Now();
-
-        if (sub->AwaitHistory)
-            RequestHistory(key, rangeEnd, sub);
     }
 
     void Cancel(const etcdserverpb::WatchCancelRequest& req, etcdserverpb::WatchResponse& res, const TActorContext& ctx)  {
         const auto watchId = req.watch_id();
-        const auto erased = UserSubscriptionsMap.erase(watchId);
-        std::cout << __func__ << '(' << watchId << ')' << '/' << erased << std::endl;
+        std::cout << __func__ << '(' << watchId << ')' << std::endl;
+
+        const auto range = Watches.equal_range(watchId);
+        std::for_each(range.first, range.second, [&ctx](const std::pair<i64, TActorId>& watch) {
+            ctx.Send(watch.second, new TEvCancel);
+        });
+        Watches.erase(range.first, range.second);
 
         res.set_canceled(true);
         if (watchId)
@@ -254,203 +356,6 @@ private:
         if (!Ctx->Write(std::move(res)))
             return UnsubscribeAndDie(ctx);
         TimeOfLastWrite = TMonotonic::Now();
-    }
-
-    void Wakeup(const TActorContext& ctx) {
-        if (std::any_of(UserSubscriptionsMap.cbegin(), UserSubscriptionsMap.cend(), [](const auto& sub) { return sub.second->SendProgress; } )) {
-            if (TMonotonic::Now() - TimeOfLastWrite > TDuration::Seconds(13)) {
-                etcdserverpb::WatchResponse response;
-                const auto header = response.mutable_header();
-                header->set_revision(Stuff->Revision.load());
-                header->set_cluster_id(0ULL);
-                header->set_member_id(0ULL);
-                header->set_raft_term(0ULL);
-
-                if (!Ctx->Write(std::move(response)))
-                    return UnsubscribeAndDie(ctx);
-                TimeOfLastWrite = TMonotonic::Now();
-            }
-        }
-        ctx.Schedule(TDuration::Seconds(11), new TEvents::TEvWakeup);
-    }
-
-    void RequestHistory(const std::string_view& key, const std::string_view& rangeEnd, const TSubscription::TPtr& sub) {
-        NYdb::TParamsBuilder params;
-        const auto& revName = AddParam("Revision", params, sub->FromRevision);
-
-        std::ostringstream where;
-        MakeSimplePredicate(key, rangeEnd, where, params);
-
-        std::ostringstream sql;
-        sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from `verhaal` where " << revName << " <= `modified` and " << where.str() << " order by `modified` asc;" << std::endl;
-
-        const auto my = this->SelfId();
-        const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        const TSubscription::TWeakPtr weak(sub);
-        Stuff->Client->ExecuteQuery(sql.str(), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, weak, ass](const auto& future) {
-            if (const auto res = future.GetValueSync(); res.IsSuccess())
-                ass->Send(my, new TMyQueryResult(weak, res.GetResultSets()));
-            else
-                ass->Send(my, new TMyQueryError(weak, res.GetIssues()));
-        });
-    }
-
-    static void FillEvent(const TSubscription& sub, const std::string& key, const TData& oldData, const TData& newData, mvccpb::Event& event) {
-        event.set_type(newData.Version ? mvccpb::Event_EventType_PUT : mvccpb::Event_EventType_DELETE);
-
-        if (sub.WithPrevious && oldData.Version) {
-            const auto kv = event.mutable_prev_kv();
-            kv->set_key(key);
-            kv->set_value(oldData.Value);
-            kv->set_version(oldData.Version);
-            kv->set_lease(oldData.Lease);
-            kv->set_mod_revision(oldData.Modified);
-            kv->set_create_revision(oldData.Created);
-        }
-
-        const auto kv = event.mutable_kv();
-        kv->set_key(key);
-        if (newData.Version) {
-            kv->set_value(newData.Value);
-            kv->set_version(newData.Version);
-            kv->set_lease(newData.Lease);
-            kv->set_mod_revision(newData.Modified);
-            kv->set_create_revision(newData.Created);
-        }
-
-        std::cout << (newData.Version ? "Put" : "Drop") << '(' << key << ',';
-        if (sub.WithPrevious && oldData.Version) {
-            std::cout << "old " << oldData.Version << ',' << oldData.Created << ',' << oldData.Modified << ',' << oldData.Value.size() << ',' << oldData.Lease  << ',';
-        }
-        if (newData.Version) {
-            std::cout << "new " << newData.Version << ',' << newData.Created << ',' << newData.Modified << ',' << newData.Value.size() << ',' << newData.Lease;
-        }
-        std::cout << ')' << std::endl;
-    }
-
-    void Handle(TMyQueryResult::TPtr &ev, const TActorContext& ctx) {
-        if (const auto& sub = static_cast<TMyQueryResult*>(ev->Get())->Subscription.lock()) {
-            etcdserverpb::WatchResponse res;
-            const auto header = res.mutable_header();
-            header->set_revision(Stuff->Revision.load());
-            header->set_cluster_id(0ULL);
-            header->set_member_id(0ULL);
-            header->set_raft_term(0ULL);
-
-            for (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow();) {
-                const auto& key = NYdb::TValueParser(parser.GetValue("key")).GetString();
-                TData data {
-                    .Value = NYdb::TValueParser(parser.GetValue("value")).GetString(),
-                    .Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64(),
-                    .Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64(),
-                    .Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64(),
-                    .Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64()
-                };
-
-                auto& buff = sub->Buffer[key];
-
-                if ((EWatchKind::OnChanges == sub->Kind || (data.Version ? EWatchKind::OnUpdates : EWatchKind::OnDeletions) == sub->Kind) &&
-                    (!sub->WithPrevious || buff.first))
-                    FillEvent(*sub, key, buff.first ? *buff.first : TData{}, data, *res.add_events());
-
-                while (!buff.second.empty() && buff.second.front()->Get()->NewData.Modified <= data.Modified)
-                    buff.second.pop();
-
-                buff.first = std::move(data);
-            }
-
-            std::multimap<i64, TEvChange::TPtr> events;
-            for (auto& [_, buff] : sub->Buffer)
-                for (; !buff.second.empty(); buff.second.pop())
-                    events.emplace(buff.second.front()->Get()->NewData.Modified, std::move(buff.second.front()));
-
-            for (const auto& [_, ev] : events)
-                FillEvent(*sub, ev->Get()->Key, ev->Get()->OldData, ev->Get()->NewData, *res.add_events());
-
-            sub->AwaitHistory = false;
-
-            if (!res.events().empty() || sub->SendProgress) {
-                if (!Ctx->Write(std::move(res)))
-                    return UnsubscribeAndDie(ctx);
-                TimeOfLastWrite = TMonotonic::Now();
-            }
-        }
-    }
-
-    void Handle(TMyQueryError::TPtr &ev) {
-        std::cerr << "Watch error received: " << ev->Get()->Issues.ToString() << std::endl;
-    }
-
-    void Handle(TEvChange::TPtr& ev, const TActorContext& ctx) {
-        const auto revision = Stuff->Revision.load();
-        const auto process = [revision](const TEvChange::TPtr& ev, TSubscription& sub) -> std::optional<etcdserverpb::WatchResponse> {
-             if (EWatchKind::OnChanges == sub.Kind ||
-                (ev->Get()->NewData.Version ? EWatchKind::OnUpdates : EWatchKind::OnDeletions) == sub.Kind) {
-                if (sub.AwaitHistory) {
-                    sub.Buffer[ev->Get()->Key].second.push(ev);
-                    return std::nullopt;
-                }
-
-                etcdserverpb::WatchResponse res;
-                const auto header = res.mutable_header();
-                header->set_revision(revision);
-                header->set_cluster_id(0ULL);
-                header->set_member_id(0ULL);
-                header->set_raft_term(0ULL);
-
-                FillEvent(sub, ev->Get()->Key, ev->Get()->OldData, ev->Get()->NewData, *res.add_events());
-
-                if (sub.WatchId)
-                    res.set_watch_id(sub.WatchId);
-                 return std::move(res);
-             } else
-                 return std::nullopt;
-        };
-
-        if (!ByExactKeyMap.empty()) {
-            const auto range = ByExactKeyMap.equal_range(ev->Get()->Key);
-            for (auto it = range.first; range.second != it;) {
-                if (ev->Get()->Key == it->first) {
-                    if (const auto sub = it->second.lock()) {
-                        if (auto res = process(ev, *sub)) {
-                            if (!Ctx->Write(std::move(*res)))
-                                return UnsubscribeAndDie(ctx);
-                            TimeOfLastWrite = TMonotonic::Now();
-                        }
-                    } else {
-                        it = ByExactKeyMap.erase(it);
-                        continue;
-                    }
-                }
-                ++it;
-            }
-        }
-
-        if (!ByKeyPrefixMap.empty()) {
-            const auto& prefix = ev->Get()->Key.substr(0, MinSizeOfPrefix);
-            const auto end = ByKeyPrefixMap.lower_bound(IncrementKey(prefix));
-            for (auto it = ByKeyPrefixMap.lower_bound(prefix); end != it;) {
-                if (ev->Get()->Key.starts_with(it->first)) {
-                    if (const auto sub = it->second.lock()) {
-                        if (auto res = process(ev, *sub)) {
-                            if (!Ctx->Write(std::move(*res)))
-                                return UnsubscribeAndDie(ctx);
-                            TimeOfLastWrite = TMonotonic::Now();
-                        }
-                    } else {
-                        const bool updateMinPrefixSize = MinSizeOfPrefix <= it->first.size();
-                        it = ByKeyPrefixMap.erase(it);
-                        if (updateMinPrefixSize) {
-                            MinSizeOfPrefix = ByKeyPrefixMap.empty() ? 0U : ByKeyPrefixMap.cbegin()->first.size();
-                            for (const auto& item : ByKeyPrefixMap)
-                                MinSizeOfPrefix = std::min(MinSizeOfPrefix, item.first.size());
-                        }
-                        continue;
-                    }
-                }
-                ++it;
-            }
-        }
     }
 
     void Handle(IStreamCtx::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
@@ -489,8 +394,58 @@ private:
         return UnsubscribeAndDie(ctx);
     }
 
+    void Handle(TEvChanges::TPtr& ev, const TActorContext& ctx) {
+        etcdserverpb::WatchResponse response;
+        const auto header = response.mutable_header();
+        header->set_revision(Stuff->Revision.load());
+        header->set_cluster_id(0ULL);
+        header->set_member_id(0ULL);
+        header->set_raft_term(0ULL);
+
+        for (const auto& change : ev->Get()->Changes) {
+            const auto event = response.add_events();
+            event->set_type(change.NewData.Version ? mvccpb::Event_EventType_PUT : mvccpb::Event_EventType_DELETE);
+
+            if (change.OldData.Version) {
+                const auto kv = event->mutable_prev_kv();
+                kv->set_key(change.Key);
+                kv->set_value(change.OldData.Value);
+                kv->set_version(change.OldData.Version);
+                kv->set_lease(change.OldData.Lease);
+                kv->set_mod_revision(change.OldData.Modified);
+                kv->set_create_revision(change.OldData.Created);
+            }
+
+            const auto kv = event->mutable_kv();
+            kv->set_key(change.Key);
+            if (change.NewData.Version) {
+                kv->set_value(change.NewData.Value);
+                kv->set_version(change.NewData.Version);
+                kv->set_lease(change.NewData.Lease);
+                kv->set_mod_revision(change.NewData.Modified);
+                kv->set_create_revision(change.NewData.Created);
+            }
+
+            std::cout << (change.NewData.Version ? "Put" : "Drop") << '(' << change.Key;
+            if (change.OldData.Version) {
+                std::cout << ", old " << change.OldData.Version << ',' << change.OldData.Created << ',' << change.OldData.Modified << ',' << change.OldData.Value.size() << ',' << change.OldData.Lease;
+            }
+            if (change.NewData.Version) {
+                std::cout << ", new " << change.NewData.Version << ',' << change.NewData.Created << ',' << change.NewData.Modified << ',' << change.NewData.Value.size() << ',' << change.NewData.Lease;
+            }
+            std::cout << ')' << std::endl;
+        }
+
+        if (!Ctx->Write(std::move(response)))
+            return UnsubscribeAndDie(ctx);
+        TimeOfLastWrite = TMonotonic::Now();
+    }
+
     void UnsubscribeAndDie(const TActorContext& ctx) {
-        ctx.Send(Watchtower, new TEvSubscribe);
+        for (const auto& watch : Watches)
+            ctx.Send(watch.second, new TEvCancel);
+        Watches.clear();
+
         return Die(ctx);
     }
 
@@ -498,11 +453,8 @@ private:
     const TActorId Watchtower;
     const TSharedStuff::TPtr Stuff;
 
-    TByExactKeyMap ByExactKeyMap;
-    TByKeyPrefixMap ByKeyPrefixMap;
+    std::unordered_multimap<i64, TActorId> Watches;
 
-    size_t MinSizeOfPrefix = 0U;
-    TUserSubscriptionsMap UserSubscriptionsMap;
     TMonotonic TimeOfLastWrite;
 };
 
@@ -701,4 +653,3 @@ NActors::IActor* BuildWatchtower(TIntrusivePtr<NMonitoring::TDynamicCounters> co
 }
 
 }
-

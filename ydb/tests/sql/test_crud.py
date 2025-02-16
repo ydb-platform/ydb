@@ -5,12 +5,15 @@ import pytest
 
 class TestYdbCrudOperations(TestBase):
 
+    @pytest.mark.test_case("#2")
+    def test_crud_operations2(self):
+        pass
+
     @pytest.mark.test_case("#0")
     def test_crud_operations(self):
         """
         Test basic CRUD operations: Create, Read, Update, Delete
         """
-
         table_name = f"{self.table_path}"
 
         table_definition = f"""

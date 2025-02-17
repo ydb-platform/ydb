@@ -99,14 +99,12 @@ struct TRange : public TOperation {
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         if (resultsCounter)
             ResultIndex = (*resultsCounter)++;
-        sql << "select ";
-        if (CountOnly)
-            sql << "count(*)";
-        else if (KeysOnly)
-            sql << "`key`";
-        else
-            sql << "`key`,`value`,`created`,`modified`,`version`,`lease`";
-        sql << std::endl << "from ";
+
+        const auto& resultName = GetNameWithIndex("Output", resultsCounter);
+        sql << resultName << " = select `key`,`created`,`modified`,`version`,`lease`,";
+        if (KeysOnly)
+            sql << "'' as ";
+        sql << "`value` from ";
         const bool fromHistory = KeyRevision || MinCreateRevision || MaxCreateRevision || MinModificateRevision || MaxModificateRevision;
         sql << '`' << (fromHistory ? "verhaal" : "huidig") << '`' << std::endl;
         sql << "where ";
@@ -135,40 +133,42 @@ struct TRange : public TOperation {
             sql << std::endl << '\t' << "and `modified` <= " << AddParam("MaxModificateRevision", params, MaxModificateRevision, paramsCounter);
         }
 
-        if (SortOrder) {
-            sql << std::endl << "order by `" << Fields[SortTarget] << "` " << (*SortOrder ? "asc" : "desc");
-        }
-
-        if (Limit) {
-            sql << std::endl << "limit " << AddParam<ui64>("Limit", params, Limit, paramsCounter);
-        }
-
         sql << ';' << std::endl;
+        sql << "select count(*) from " << resultName << ';' << std::endl;
+
+        if (!CountOnly) {
+            if (resultsCounter)
+                ++(*resultsCounter);
+
+            sql << "select * from " << resultName;
+
+            if (SortOrder) {
+                sql << std::endl << "order by `" << Fields[SortTarget] << "` " << (*SortOrder ? "asc" : "desc");
+            }
+
+            if (Limit) {
+                sql << std::endl << "limit " << AddParam<ui64>("Limit", params, Limit, paramsCounter);
+            }
+            sql << ';' << std::endl;
+        }
     }
 
     etcdserverpb::RangeResponse MakeResponse(i64 revision, const NYdb::TResultSets& results) const {
         etcdserverpb::RangeResponse response;
         FillHeader(revision, *response.mutable_header());
 
-        if (!results.empty()) {
-            if (CountOnly) {
-                if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
-                    response.set_count(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
-                }
-            } else {
-                for (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow();) {
-                    if (KeysOnly)
-                        response.add_kvs()->set_key(NYdb::TValueParser(parser.GetValue(0)).GetString());
-                    else {
-                        const auto kvs = response.add_kvs();
-                        kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
-                        kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
-                        kvs->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
-                        kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
-                        kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
-                        kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
-                    }
-                }
+        if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
+            response.set_count(NYdb::TValueParser(parser.GetValue(0)).GetUint64());
+        }
+        if (!CountOnly) {
+            for (auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]); parser.TryNextRow();) {
+                const auto kvs = response.add_kvs();
+                kvs->set_key(NYdb::TValueParser(parser.GetValue("key")).GetString());
+                kvs->set_value(NYdb::TValueParser(parser.GetValue("value")).GetString());
+                kvs->set_mod_revision(NYdb::TValueParser(parser.GetValue("modified")).GetInt64());
+                kvs->set_create_revision(NYdb::TValueParser(parser.GetValue("created")).GetInt64());
+                kvs->set_version(NYdb::TValueParser(parser.GetValue("version")).GetInt64());
+                kvs->set_lease(NYdb::TValueParser(parser.GetValue("lease")).GetInt64());
             }
         }
         return response;
@@ -798,6 +798,11 @@ private:
         };
 
         auto response = DeleteRange.MakeResponse(Revision, results, notifier);
+        if (!response.deleted()) {
+            auto expected = Revision + 1U;
+            Stuff->Revision.compare_exchange_strong(expected, Revision);
+        }
+
         return this->Reply(response, ctx);
     }
 
@@ -1060,12 +1065,15 @@ template std::string AddParam<i64>(const std::string_view& name, NYdb::TParamsBu
 template std::string AddParam<ui64>(const std::string_view& name, NYdb::TParamsBuilder& params, const ui64& value, size_t* counter);
 
 void MakeSimplePredicate(const std::string_view& key, const std::string_view& rangeEnd, std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) {
+    const auto& keyParamName = AddParam("Key", params, key, paramsCounter);
     if (rangeEnd.empty())
-        sql << "`key` = " << AddParam("Key", params, key, paramsCounter);
+        sql << keyParamName << " = `key`";
+    else if ("\0"sv == rangeEnd)
+        sql << keyParamName << " <= `key`";
     else if (rangeEnd == key)
-        sql << "startswith(`key`, " << AddParam("Key", params, key, paramsCounter) << ')';
+        sql << "startswith(`key`, " << keyParamName << ')';
     else
-        sql << "`key` between " << AddParam("Key", params, key, paramsCounter) << " and " << AddParam("RangeEnd", params, rangeEnd, paramsCounter);
+        sql << "`key` between " << keyParamName << " and " << AddParam("RangeEnd", params, rangeEnd, paramsCounter);
 }
 
 NActors::IActor* MakeRange(std::unique_ptr<IRequestCtx> p, TSharedStuff::TPtr stuff) {

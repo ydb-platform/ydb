@@ -237,6 +237,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 etcdserverpb::RangeResponse rangeResponse;
                 etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
 
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 4LL);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 4U);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key1");
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).key(), "key2");
@@ -260,9 +261,101 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 etcdserverpb::RangeResponse rangeResponse;
                 etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
 
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 2LL);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 2U);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key1");
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).key(), "key4");
+            }
+        });
+    }
+
+    Y_UNIT_TEST(ReadRangeWithLimit) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            Put("key0", "value0", etcd);
+            Put("key1", "value1", etcd);
+            Put("key2", "value2", etcd);
+            Put("key3", "value3", etcd);
+            Put("key4", "value4", etcd);
+            Put("key5", "value5", etcd);
+            Put("key6", "value6", etcd);
+            Put("key7", "value7", etcd);
+
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("key1");
+                rangeRequest.set_range_end("\0"sv);
+                rangeRequest.set_limit(4LL);
+
+                etcdserverpb::RangeResponse rangeResponse;
+                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 7LL);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 4U);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key1");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).key(), "key2");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).key(), "key3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(3).key(), "key4");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).value(), "value1");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).value(), "value2");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).value(), "value3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(3).value(), "value4");
+            }
+        });
+    }
+
+    Y_UNIT_TEST(ReadRangeWithLimitAndSort) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            Put("key0", "value7", etcd);
+            Put("key1", "value6", etcd);
+            Put("key2", "value5", etcd);
+            Put("key3", "value4", etcd);
+            Put("key4", "value3", etcd);
+            Put("key5", "value2", etcd);
+            Put("key6", "value1", etcd);
+            Put("key7", "value0", etcd);
+
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("key1");
+                rangeRequest.set_range_end("key6");
+                rangeRequest.set_limit(3LL);
+                rangeRequest.set_sort_target(etcdserverpb::RangeRequest_SortTarget_VALUE);
+                rangeRequest.set_sort_order(etcdserverpb::RangeRequest_SortOrder_ASCEND);
+                etcdserverpb::RangeResponse rangeResponse;
+                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 5LL);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 3U);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key5");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).key(), "key4");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).key(), "key3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).value(), "value2");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).value(), "value3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).value(), "value4");
+            }
+
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("key");
+                rangeRequest.set_range_end("kez");
+                rangeRequest.set_limit(3LL);
+                rangeRequest.set_sort_target(etcdserverpb::RangeRequest_SortTarget_KEY);
+                rangeRequest.set_sort_order(etcdserverpb::RangeRequest_SortOrder_DESCEND);
+                rangeRequest.set_keys_only(true);
+                etcdserverpb::RangeResponse rangeResponse;
+                etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
+
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 8LL);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 3U);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key7");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).key(), "key6");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).key(), "key5");
+                UNIT_ASSERT(rangeResponse.kvs(0).value().empty());
+                UNIT_ASSERT(rangeResponse.kvs(1).value().empty());
+                UNIT_ASSERT(rangeResponse.kvs(2).value().empty());
             }
         });
     }
@@ -435,6 +528,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 etcdserverpb::RangeResponse rangeResponse;
                 etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse);
 
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 1LL);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 1U);
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "my_key");
                 UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).value(), "my_val");

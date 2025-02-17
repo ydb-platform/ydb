@@ -7,6 +7,8 @@ std::string IncrementKey(std::string key) {
         if (const auto k = key[--i]; ~k) {
             key[i] = k + '\x01';
             return key;
+        } else if (!i) {
+            return key;
         } else {
             key[i] = '\x00';
         }
@@ -19,6 +21,8 @@ std::string DecrementKey(std::string key) {
         if (const auto k = key[--i]) {
             key[i] = k - '\x01';
             return key;
+        } else if (!i) {
+            return key;
         } else {
             key[i] = '\xFF';
         }
@@ -29,6 +33,8 @@ std::string DecrementKey(std::string key) {
 std::ostream& DumpKeyRange(std::ostream& out, std::string_view key, std::string_view end) {
     if (end.empty())
         out << '=' << key;
+    else if ("\0"sv == end)
+        out << '>' << '=' << key;
     else if (end == key)
         out << '^' << key;
     else

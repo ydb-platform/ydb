@@ -14,7 +14,7 @@ namespace {
 
 template <ui32 TRpcId, typename TReq, typename TRes, typename TDerived>
 class TEtcdRequestWrapperImpl
-    : public IRequestNoOpCtx
+    : public IRequestCtx
     , public TEvProxyRuntimeEvent
 {
 friend class TProtoResponseHelper;
@@ -279,6 +279,10 @@ private:
 
     void Reply(NProtoBuf::Message *resp, ui32 status) override {
         return Ctx_->Reply(resp, status);
+    }
+
+    void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details) override {
+        return Ctx_->ReplyError(code, msg, details);
     }
 
     TResonse* CreateResponseMessage() {

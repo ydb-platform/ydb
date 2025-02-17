@@ -298,9 +298,9 @@ A **[group](../security/authorization.md#group)** or **access group** is a named
 
 ### Role {#access-role}
 
-**A role** is a named collection of [access rights](#access-right) that can be granted to [users](#access-user) or [groups](#access-group).
+A **role** is a named collection of [access rights](#access-right) that can be granted to [users](#access-user) or [groups](#access-group).
 
-Roles in {{ ydb-short-name }} are implemented as [groups](#access-group) that are created during the initial cluster deployment and to which a set of [access rights](#access-right) is granted on the root of the cluster scheme.
+Roles in {{ ydb-short-name }} are implemented as [groups](#access-group) that are created during the initial cluster deployment and granted a set of [access rights](#access-right) on the root of the cluster scheme.
 
 ### SID {#access-sid}
 

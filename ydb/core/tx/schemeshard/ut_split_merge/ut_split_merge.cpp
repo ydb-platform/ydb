@@ -157,11 +157,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
     Y_UNIT_TEST(SplitShardsWithDecimalKey) {
         TTestBasicRuntime runtime;
-        auto& appData = runtime.GetAppData();
-        appData.FeatureFlags.SetEnableParameterizedDecimal(true);
 
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
+        opts.EnableParameterizedDecimal(true);
 
         TTestEnv env(runtime, opts);
 

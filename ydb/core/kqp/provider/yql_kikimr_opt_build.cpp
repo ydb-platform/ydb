@@ -688,10 +688,6 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         return true;
     }
 
-    if (node.Maybe<TCoCommit>()) {
-        return true;
-    }
-
     if (auto maybeAlterDatabase = node.Maybe<TKiAlterDatabase>()) {
         auto alterDatabase = maybeAlterDatabase.Cast();
         if (!checkDataSink(alterDatabase.DataSink())) {
@@ -699,20 +695,12 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         }
 
         txRes.Ops.insert(node.Raw());
-        auto result = ExploreTx(alterDatabase.World(), ctx, dataSink, txRes, tablesData, types);
         txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::AlterDatabase, alterDatabase.Pos(), ctx));
-        return result;
+        return true;
     }
 
-    if (auto maybeCommit = node.Maybe<TCoCommit>()) {
-        auto commit = maybeCommit.Cast();
-
-        if (commit.DataSink().Maybe<TKiDataSink>() && checkDataSink(commit.DataSink().Cast<TKiDataSink>())) {
-            txRes.Sync.push_back(commit);
-            return true;
-        }
-
-        return ExploreTx(commit.World(), ctx, dataSink, txRes, tablesData, types);
+    if (node.Maybe<TCoCommit>()) {
+        return true;
     }
 
     if (node.Maybe<TCoSync>()) {

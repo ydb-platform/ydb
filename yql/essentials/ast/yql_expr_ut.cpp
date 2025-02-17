@@ -1213,30 +1213,6 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         UNIT_ASSERT(TString::npos != disassembled.find("(declare $Group (DataType 'Uint32))"));
         UNIT_ASSERT(TString::npos != disassembled.find("(declare $Name (OptionalType (DataType 'String)))"));
     }
-
-
-    Y_UNIT_TEST(AlterDatabase) {
-        const auto program = R"(
-        (
-        (import aggregate_module '"/lib/yql/aggregate.yqls")
-        (import window_module '"/lib/yql/window.yqls")
-        (import core_module '"/lib/yql/core.yqls")
-        (let world (block '(
-        (let sink (DataSink '"yt" '"plato"))
-        (let world (Write! world sink (Key '('databasePath (String '"/Root/test"))) (Void) '('('mode 'alterDatabase) '('owner '"user1"))))
-        (return world)
-        )))
-        (let world (block '(
-        (let world (CommitAll! world))
-        (return world)
-        )))
-        (return world)
-        )
-        )";
-
-        const auto astRes = ParseAst(program);
-        UNIT_ASSERT(astRes.IsOk());
-    }
 }
 
 } // namespace NYql

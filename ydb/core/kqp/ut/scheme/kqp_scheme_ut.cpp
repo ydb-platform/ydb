@@ -3863,20 +3863,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(createUserSql).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        // {
-        //     auto alterDatabaseSql = TStringBuilder() << R"(
-        //         --!syntax_v1
-        //         ALTER DATABASE `/Root/Test/table` OWNER TO superuser;
-        //     )";
+        {
+            auto alterDatabaseSql = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER DATABASE `/Root/Test/table` OWNER TO superuser;
+            )";
 
-        //     auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
+            auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
 
-        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-        //     std::cerr << "??????????????????????????" << std::endl;
-        //     std::cerr << result.GetIssues().ToString() << std::endl;
-        //     std::cerr << "??????????????????????????" << std::endl;
-        //     // UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'ROW'");
-        // }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            std::cerr << "??????????????????????????" << std::endl;
+            std::cerr << result.GetIssues().ToString() << std::endl;
+            std::cerr << "??????????????????????????" << std::endl;
+            // UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'ROW'");
+        }
         {
             auto alterDatabaseSql = TStringBuilder() << R"(
                 --!syntax_v1

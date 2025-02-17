@@ -13,9 +13,31 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
+class TAccessorCollectedContainer {
+private:
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> Data;
+    YDB_READONLY(bool, ItWasScalar, false);
+
+public:
+    TAccessorCollectedContainer(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& data)
+        : Data(data) {
+        AFL_VERIFY(Data);
+    }
+
+    TAccessorCollectedContainer(const arrow::Datum& data);
+
+    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& GetData() const {
+        return Data;
+    }
+
+    const NArrow::NAccessor::IChunkedArray* operator->() const {
+        return Data.get();
+    }
+};
+
 class TAccessorsCollection {
 private:
-    THashMap<ui32, std::shared_ptr<NArrow::NAccessor::IChunkedArray>> Accessors;
+    THashMap<ui32, TAccessorCollectedContainer> Accessors;
     THashMap<ui32, std::shared_ptr<arrow::Scalar>> Constants;
     std::vector<ui32> ColumnIdsSequence;
     std::shared_ptr<TColumnFilter> Filter = std::make_shared<TColumnFilter>(TColumnFilter::BuildAllowFilter());
@@ -112,6 +134,7 @@ public:
 
     void AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter = false);
     void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter = false);
+    void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter = false);
 
     void AddConstantVerified(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& scalar) {
         AFL_VERIFY(columnId);
@@ -215,7 +238,8 @@ public:
         void AddArray(const std::shared_ptr<IChunkedArray>& arr) {
             AFL_VERIFY(!Started);
             if (Arrays.size()) {
-                AFL_VERIFY(ArraysOriginal.back()->GetRecordsCount() == arr->GetRecordsCount());
+                AFL_VERIFY(ArraysOriginal.back()->GetRecordsCount() == arr->GetRecordsCount())("last", ArraysOriginal.back()->GetRecordsCount())(
+                                                                         "new", arr->GetRecordsCount());
             }
             ArraysOriginal.emplace_back(arr);
             Arrays.emplace_back(arr->GetChunkedArray());
@@ -352,18 +376,18 @@ public:
         return GetAccessorVerified(columnId)->GetChunkedArray();
     }
 
-    std::shared_ptr<IChunkedArray> GetAccessorVerified(const ui32 columnId) const {
+    const std::shared_ptr<IChunkedArray>& GetAccessorVerified(const ui32 columnId) const {
         auto it = Accessors.find(columnId);
         AFL_VERIFY(it != Accessors.end())("id", columnId);
-        return it->second;
+        return it->second.GetData();
     }
 
-    std::shared_ptr<IChunkedArray> GetAccessorOptional(const ui32 columnId) const {
+    const std::shared_ptr<IChunkedArray>& GetAccessorOptional(const ui32 columnId) const {
         auto it = Accessors.find(columnId);
         if (it != Accessors.end()) {
-            return it->second;
+            return it->second.GetData();
         } else {
-            return nullptr;
+            return Default<std::shared_ptr<IChunkedArray>>();
         }
     }
 
@@ -387,26 +411,13 @@ public:
         return UseFilter ? nullptr : Filter;
     }
 
-    void FlushNotUsedFilter() {
-        if (UseFilter) {
-            return;
-        }
-        if (Filter->IsTotalAllowFilter()) {
-            return;
-        }
-        for (auto&& i : Accessors) {
-            i.second = i.second->ApplyFilter(*Filter);
-        }
-        Filter = std::make_shared<TColumnFilter>(TColumnFilter::BuildAllowFilter());
-    }
-
     void AddFilter(const TColumnFilter& filter) {
         if (!UseFilter) {
             *Filter = Filter->And(filter);
         } else {
             *Filter = Filter->CombineSequentialAnd(filter);
             for (auto&& i : Accessors) {
-                i.second = i.second->ApplyFilter(filter);
+                i.second = TAccessorCollectedContainer(i.second.GetData()->ApplyFilter(filter));
             }
         }
         RecordsCountActual = Filter->GetFilteredCount();

@@ -7,23 +7,18 @@
 namespace NKikimr::NArrow::NAccessor {
 
 void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter) {
-    if (data.is_array()) {
-        AddVerified(columnId, std::make_shared<TTrivialArray>(data.make_array()), withFilter);
-    } else if (data.is_arraylike()) {
-        if (data.chunked_array()->num_chunks() == 1) {
-            return AddVerified(columnId, data.chunked_array()->chunk(0), withFilter);
-        }
-        AddVerified(columnId, std::make_shared<TTrivialChunkedArray>(data.chunked_array()), withFilter);
-    } else if (data.is_scalar()) {
-        AFL_VERIFY(!withFilter);
-        AddVerified(columnId, std::make_shared<TTrivialArray>(data.scalar()), withFilter);
-    } else {
-        AFL_VERIFY(false);
-    }
+    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter);
 }
 
 void TAccessorsCollection::AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter) {
+    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter);
+}
+
+void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter) {
     AFL_VERIFY(columnId);
+    if (!Filter->IsTotalAllowFilter()) {
+        AFL_VERIFY(!data.GetItWasScalar());
+    }
     if (UseFilter && withFilter) {
         if (!Filter->IsTotalAllowFilter()) {
             auto filtered = data->ApplyFilter(*Filter);
@@ -96,11 +91,13 @@ TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(const
     }
     TChunkedArguments result;
     for (auto&& i : columnIds) {
-        auto accessor = GetAccessorOptional(i);
-        if (!accessor) {
+        auto it = Accessors.find(i);
+        if (it == Accessors.end()) {
             result.AddScalar(GetConstantScalarVerified(i));
+        } else if (it->second.GetItWasScalar()) {
+            result.AddScalar(it->second->GetScalar(0));
         } else {
-            result.AddArray(accessor);
+            result.AddArray(it->second.GetData());
         }
     }
     result.StartRead(concatenate);
@@ -191,7 +188,7 @@ std::shared_ptr<NKikimr::NArrow::TGeneralContainer> TAccessorsCollection::ToGene
                 continue;
             }
             fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i.first), i.second->GetDataType()));
-            arrays.emplace_back(i.second);
+            arrays.emplace_back(i.second.GetData());
         }
     }
     return std::make_shared<TGeneralContainer>(std::move(fields), std::move(arrays));
@@ -251,6 +248,23 @@ void TAccessorsCollection::RemainOnly(const std::vector<ui32>& columns, const bo
 void TAccessorsCollection::AddBatch(const std::shared_ptr<TGeneralContainer>& container, const NSSA::IColumnResolver& resolver, const bool withFilter) {
     for (ui32 i = 0; i < container->GetColumnsCount(); ++i) {
         AddVerified(resolver.GetColumnIdVerified(container->GetSchema()->GetFieldVerified(i)->name()), container->GetColumnVerified(i), withFilter);
+    }
+}
+
+ TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& data)
+    : ItWasScalar(data.is_scalar()) {
+    if (data.is_array()) {
+        Data = std::make_shared<TTrivialArray>(data.make_array());
+    } else if (data.is_arraylike()) {
+        if (data.chunked_array()->num_chunks() == 1) {
+            Data = std::make_shared<TTrivialArray>(data.chunked_array()->chunk(0));
+        } else {
+            Data = std::make_shared<TTrivialChunkedArray>(data.chunked_array());
+        }
+    } else if (data.is_scalar()) {
+        Data = std::make_shared<TTrivialArray>(data.scalar());
+    } else {
+        AFL_VERIFY(false);
     }
 }
 

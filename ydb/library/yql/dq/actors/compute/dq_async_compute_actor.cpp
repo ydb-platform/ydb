@@ -1193,7 +1193,7 @@ private:
         TBase::CheckRunStatus();
     }
 
-    bool ReadyToSendCheckpointRequest() {
+    bool ReadyToSendCheckpointRequest() const {
         return !CheckpointRequestedFromTaskRunner
             && Checkpoints
             && Checkpoints->HasPendingCheckpoint()

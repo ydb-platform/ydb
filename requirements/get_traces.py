@@ -119,6 +119,7 @@ def fetch_sub_issues_by_id(issue_id, github_token):
               number
               url
               id
+              body
             }
             pageInfo { 
               hasNextPage 
@@ -153,7 +154,7 @@ def fetch_sub_issues_by_id(issue_id, github_token):
                 sub_issues.append({
                     'case_id': f"#{node['number']}",
                     'name': node['title'],
-                    'description': 'Sub-Issue',
+                    'description': node['body'],
                     'path': node['url'],
                     'issue': node['number'],
                     'status': "Pending",

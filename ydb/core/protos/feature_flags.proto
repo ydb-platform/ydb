@@ -167,7 +167,7 @@ message TFeatureFlags {
     optional bool EnableOlapCompression = 142 [default = false];
     optional bool EnableExternalDataSourcesOnServerless = 143 [default = true];
     optional bool EnableSparsedColumns = 144 [default = false];
-    optional bool EnableParameterizedDecimal = 145 [default = false];
+    optional bool EnableParameterizedDecimal = 145 [default = true];
     optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = true];
     optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
     optional bool EnableTopicAutopartitioningForCDC = 148 [default = false];

@@ -500,7 +500,8 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 enum EKeyPosition {
     RhsContainsLhs,
     RhsAfterLhs,
-    LhsContainsRhs
+    LhsContainsRhs,
+    GapBetweenLhsAndRhs
 };
 
 // Calculates the location of keys relative to each other
@@ -529,10 +530,9 @@ static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
         return LhsContainsRhs;
     } else if (nextOffset == rhs.GetOffset()) {
         return RhsAfterLhs;
+    } else {
+        return GapBetweenLhsAndRhs;
     }
-
-    Y_ABORT("lhs: %s, rhs: %s",
-            lhs.ToString().data(), rhs.ToString().data());
 }
 
 static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
@@ -567,7 +567,8 @@ static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueRespo
             lastKey = MakeKeyFromString(filtered.back(), partitionId);
             break;
         case RhsAfterLhs:
-            // The new key is adjacent to the previous key.
+        case GapBetweenLhsAndRhs:
+            // The new key is adjacent to the previous key or there is a gap between them
             filtered.push_back(std::move(key));
             lastKey = MakeKeyFromString(filtered.back(), partitionId);
             break;

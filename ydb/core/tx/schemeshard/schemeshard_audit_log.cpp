@@ -79,6 +79,23 @@ TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) 
     return databasePath;
 }
 
+TPath DatabasePathFromModifySchemeOperation(TSchemeShard* SS, const NKikimrSchemeOp::TModifyScheme& operation) {
+    if (operation.GetWorkingDir().empty()) {
+        // Moving operations does not have working directory. It is valid to take src or dst as directory for database
+        if (operation.HasMoveTable()) {
+            return DatabasePathFromWorkingDir(SS, operation.GetMoveTable().GetSrcPath());
+        }
+        if (operation.HasMoveIndex()) {
+            return DatabasePathFromWorkingDir(SS, operation.GetMoveIndex().GetTablePath());
+        }
+        if (operation.HasMoveTableIndex()) {
+            return DatabasePathFromWorkingDir(SS, operation.GetMoveTableIndex().GetSrcPath());
+        }
+    }
+
+    return DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
+}
+
 }  // anonymous namespace
 
 void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID, const TString& sanitizedToken) {
@@ -87,7 +104,7 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
     for (const auto& operation : request.GetTransaction()) {
         auto logEntry = MakeAuditLogFragment(operation);
 
-        TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
+        TPath databasePath = DatabasePathFromModifySchemeOperation(SS, operation);
         auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(databasePath);
         auto peerName = NKikimr::NAddressClassifier::ExtractAddress(request.GetPeerName());
 
@@ -143,7 +160,7 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
     for (const auto& operation : request.GetTransaction()) {
         auto logEntry = MakeAuditLogFragment(operation);
 
-        TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
+        TPath databasePath = DatabasePathFromModifySchemeOperation(SS, operation);
         auto peerName = request.GetPeerName();
 
         auto entry = TStringBuilder();

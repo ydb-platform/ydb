@@ -100,7 +100,6 @@ bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
 
     for (auto colInd = KeyColumnsFixedNum; colInd != KeyColumnsNum; ++colInd) {
         const auto &col = Columns[colInd];
-        Y_ASSERT(col.Role == EColumnRole::Payload);
 
         /// TODO: better key comparison
 

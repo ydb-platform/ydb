@@ -133,9 +133,14 @@ class TNeumannHashTable {
     TNeumannHashTable &operator=(const TNeumannHashTable &) = delete;
 
     void Build(const ui8 *const tuples, const ui8 *const overflow, ui32 nItems,
-               ui32 estimatedLogSize = 20) {
+               ui32 estimatedLogSize = 0) {
         Y_ASSERT(Directories_.empty() && Buffer_.empty() &&
                  Tuples_ == nullptr && Overflow_ == nullptr);
+
+        if (estimatedLogSize == 0) {
+            estimatedLogSize = 32 - std::countl_zero<ui32>(nItems);
+            estimatedLogSize = estimatedLogSize > 2 ? estimatedLogSize - 2 : estimatedLogSize;
+        }
 
         Tuples_ = tuples;
         Overflow_ = overflow;
@@ -187,7 +192,6 @@ class TNeumannHashTable {
         }
     }
 
-    // void Apply(ui32 hash, const ui8 *key, OnMatchCallback *onMatch) {
     void Apply(const ui8 *const row, const ui8 *const overflow,
                auto &&onMatch) {
         Y_ASSERT(!Directories_.empty() && Tuples_ != nullptr);

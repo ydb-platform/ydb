@@ -15,6 +15,16 @@
 
 namespace NYdb::NConfig {
 
+struct TReplaceConfigSettings : public NYdb::TOperationRequestSettings<TReplaceConfigSettings> {
+    FLUENT_SETTING_FLAG(DryRun);
+    FLUENT_SETTING_FLAG(AllowUnknownFields);
+    FLUENT_SETTING_FLAG(BypassChecks);
+};
+
+struct TFetchConfigSettings : public NYdb::TOperationRequestSettings<TFetchConfigSettings> {};
+
+struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {};
+
 struct TMainConfigIdentity {
     ui64 Version;
     TString Cluster;
@@ -61,9 +71,6 @@ private:
 
 using TAsyncFetchConfigResult = NThreading::TFuture<TFetchConfigResult>;
 
-// FIXME add settings for fetch and replace
-struct TConfigSettings : public NYdb::TOperationRequestSettings<TConfigSettings> {};
-
 class TConfigClient {
 public:
 
@@ -72,22 +79,34 @@ public:
     ~TConfigClient();
 
     // Replace config
-    TAsyncStatus ReplaceConfig(const TString& mainConfig);
+    TAsyncStatus ReplaceConfig(
+        const TString& mainConfig,
+        const TReplaceConfigSettings& settings = {});
 
     // Replace config
-    TAsyncStatus ReplaceConfig(const TString& mainConfig, const TString& storageConfig);
+    TAsyncStatus ReplaceConfig(
+        const TString& mainConfig,
+        const TString& storageConfig,
+        const TReplaceConfigSettings& settings = {});
 
     // Replace config
-    TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(const TString& mainConfig);
+    TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(
+        const TString& mainConfig,
+        const TReplaceConfigSettings& settings = {});
 
     // Replace config
-    TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig);
+    TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(
+        const TString& mainConfig,
+        const TString& storageConfig,
+        const TReplaceConfigSettings& settings = {});
 
     // Fetch current cluster storage config
-    TAsyncFetchConfigResult FetchConfig(const TConfigSettings& settings = {});
+    TAsyncFetchConfigResult FetchConfig(const TFetchConfigSettings& settings = {});
 
     // Bootstrap cluster with automatic configuration
-    TAsyncStatus BootstrapCluster(const TString& selfAssemblyUUID);
+    TAsyncStatus BootstrapCluster(
+        const TString& selfAssemblyUUID,
+        const TBootstrapClusterSettings& settings = {});
 
 private:
     class TImpl;

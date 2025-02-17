@@ -11,44 +11,61 @@
 
 namespace NYdb::inline V3::NConfig {
 
-struct TFetchConfigResult : public TStatus {
-    TFetchConfigResult(
-            TStatus&& status,
-            std::string&& main_config,
-            std::string&& storage_config)
-        : TStatus(std::move(status))
-        , MainConfig_(std::move(main_config))
-        , StorageConfig_(std::move(storage_config))
-    {}
-
-    const std::string& GetMainConfig() const {
-        return MainConfig_;
-    }
-
-    const std::string& GetStorageConfig() const {
-        return StorageConfig_;
-    }
-
-private:
-    std::string MainConfig_;
-    std::string StorageConfig_;
-};
-
-using TAsyncFetchConfigResult = NThreading::TFuture<TFetchConfigResult>;
-
 struct TReplaceConfigSettings : public NYdb::TOperationRequestSettings<TReplaceConfigSettings> {
-    FLUENT_SETTING_OPTIONAL(bool, SwitchDedicatedStorageSection);
-    FLUENT_SETTING_FLAG(DedicatedConfigMode);
     FLUENT_SETTING_FLAG(DryRun);
     FLUENT_SETTING_FLAG(AllowUnknownFields);
-    FLUENT_SETTING_FLAG(AllowAbsentDatabase);
-    FLUENT_SETTING_FLAG(AllowIncorrectVersion);
-    FLUENT_SETTING_FLAG(AllowIncorrectCluster);
+    FLUENT_SETTING_FLAG(BypassChecks);
 };
 
 struct TFetchConfigSettings : public NYdb::TOperationRequestSettings<TFetchConfigSettings> {};
 
 struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {};
+
+struct TMainConfigIdentity {
+    ui64 Version;
+    TString Cluster;
+};
+
+struct TStorageConfigIdentity {
+    ui64 Version;
+    TString Cluster;
+};
+
+struct TDatabaseConfigIdentity {
+    ui64 Version;
+    TString Cluster;
+    TString Database;
+};
+
+using TKnownIdentitiyTypes = std::variant<
+      std::monostate
+    , TMainConfigMetadata
+    , TStorageConfigMetadata
+    , TDatabaseConfigMetadata
+    >;
+
+struct TConfig {
+    TKnownIdentityTypes Identity;
+    TString Config;
+};
+
+struct TFetchConfigResult : public TStatus {
+    TFetchConfigResult(
+            TStatus&& status,
+            std::vector<TConfig>&& configs)
+        : TStatus(std::move(status))
+        , Config_(std::move(config))
+    {}
+
+    const std::vector<TConfig>& GetConfigs() const {
+        return Configs_;
+    }
+
+private:
+    std::vector<TConfig> Configs_;
+};
+
+using TAsyncFetchConfigResult = NThreading::TFuture<TFetchConfigResult>;
 
 class TConfigClient {
 public:
@@ -58,16 +75,33 @@ public:
 
     // Replace config
     TAsyncStatus ReplaceConfig(
-        const std::optional<std::string>& main_config,
-        const std::optional<std::string>& storage_config,
+        const TString& mainConfig,
+        const TReplaceConfigSettings& settings = {});
+
+    // Replace config
+    TAsyncStatus ReplaceConfig(
+        const TString& mainConfig,
+        const TString& storageConfig,
+        const TReplaceConfigSettings& settings = {});
+
+    // Replace config
+    TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(
+        const TString& mainConfig,
+        const TReplaceConfigSettings& settings = {});
+
+    // Replace config
+    TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(
+        const TString& mainConfig,
+        const TString& storageConfig,
         const TReplaceConfigSettings& settings = {});
 
     // Fetch current cluster storage config
-    TAsyncFetchConfigResult FetchConfig(bool dedicated_storage_section, bool dedicated_cluster_section,
-        const TFetchConfigSettings& settings = {});
+    TAsyncFetchConfigResult FetchConfig(const TFetchConfigSettings& settings = {});
 
     // Bootstrap cluster with automatic configuration
-    TAsyncStatus BootstrapCluster(const std::string& selfAssemblyUUID, const TBootstrapClusterSettings& settings = {});
+    TAsyncStatus BootstrapCluster(
+        const TString& selfAssemblyUUID,
+        const TBootstrapClusterSettings& settings = {});
 
 private:
     class TImpl;

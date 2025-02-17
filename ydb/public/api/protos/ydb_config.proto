@@ -10,10 +10,24 @@ option java_multiple_files = true;
 import "ydb/public/api/protos/ydb_operation.proto";
 import "google/protobuf/empty.proto";
 
+// Main config is "the" main config used for configuring everyting
+// For most installations this config is enough, because it
+//     allows database administrator to configure all entites:
+//     whole cluster, database, specific node(s), etc.
 message MainConfigIdentity {}
 
+// Storage config allows administrator separate management of
+//      storage/infrastructure part from main/application part
+//      it is useful on large clusters, where enumeration of all
+//      physical machines takes too much space and make it inconvenient
+//      to store and manage this configuration data together with other
 message StorageConfigIdentity {}
 
+// Database config allows to manage specific parts of configuration
+//         by database administrators themself. It mostly applies to
+//         feature flags enabled on particular database
+// This type of config is disabled by default and can be enabled
+//      in configuration
 message DatabaseConfigIdentity {
     string database = 1;
 }
@@ -107,10 +121,14 @@ message FetchConfigRequest {
 
             // Fetch will return MainConfig and StorageConfig derived from MainConfig
             //    by detaching storage config
+            // (MainConfig) -> (MainConfig*, StorageConfig)
+            // MainConfig with asterisk means MainConfig with excluded storage-related sections
             google.protobuf.Empty detach_storage_config_section = 2;
 
             // Fetch will return MainConfig derived from MainConfig and StorageConfig
             //    by attaching storage config to main config
+            // (MainConfig*, StorageConfig) -> (MainConfig)
+            // MainConfig with asterisk means MainConfig with excluded storage-related sections
             google.protobuf.Empty attach_storage_config_section = 3;
         }
     }

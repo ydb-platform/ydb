@@ -186,8 +186,6 @@ bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option);
 
 TVector<TString> GetResOrPullColumnHints(const TExprNode& node);
 
-TDatabaseSettings ParseDatabaseSettings(NNodes::TExprList node, TExprContext& ctx);
-
 TWriteTableSettings ParseWriteTableSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteTopicSettings ParseWriteTopicSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteReplicationSettings ParseWriteReplicationSettings(NNodes::TExprList node, TExprContext& ctx);

@@ -110,6 +110,14 @@ struct TWriteTransferSettings {
     {}
 };
 
+struct TDatabaseSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TCoNameValueTupleList Other;
+
+    TDatabaseSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other) {}
+};
+
 struct TWriteRoleSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtomList> Roles;
@@ -185,6 +193,8 @@ TWriteTransferSettings ParseWriteTransferSettings(NNodes::TExprList node, TExprC
 
 TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteObjectSettings ParseWriteObjectSettings(NNodes::TExprList node, TExprContext& ctx);
+
+TDatabaseSettings ParseDatabaseSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext& ctx);
 

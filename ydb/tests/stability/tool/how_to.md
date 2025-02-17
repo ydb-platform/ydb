@@ -16,16 +16,16 @@
     ./tool deploy_tools --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
     ```
 5) start workload:
-    - `start_all_workloads` - start all listed below workloads 
+    - `start_default_workloads` - start all listed below workloads 
     - `start_workload_simple_queue_row`
     - `start_workload_simple_queue_column`
     - `start_workload_olap_workload`
     
-    not included in  `start_all_workloads`:
+    not included in  `start_default_workloads`:
     - `start_workload_log`
 
     ```
-    ./tool start_all_workloads --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
+    ./tool start_default_workloads --cluster_path=<path_to_cluster.yaml> --ydbd_path=<repo_root>/ydb/apps/ydbd/ydbd
     ```
     to stop workload, use command `stop_workloads`
     

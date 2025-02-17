@@ -331,6 +331,8 @@ public:
     // Batch
 
     virtual IRawBatchRequestPtr CreateRawBatchRequest() = 0;
+
+    virtual IRawClientPtr Clone() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

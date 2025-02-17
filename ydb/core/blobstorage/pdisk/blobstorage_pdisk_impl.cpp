@@ -2577,6 +2577,9 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestMarkDirty:
                 ProcessMarkDirty(static_cast<TMarkDirty&>(*req));
                 break;
+            case ERequestType::RequestChunkShredResult:
+                ProcessChunkShredResult(static_cast<TChunkShredResult&>(*req));
+                break;
             default:
                 Y_FAIL_S("Unexpected request type# " << TypeName(*req));
                 break;
@@ -3187,6 +3190,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestPreShredCompactVDiskResult:
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestMarkDirty:
+        case ERequestType::RequestChunkShredResult:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();
@@ -3883,6 +3887,7 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestPreShredCompactVDiskResult:
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestMarkDirty:
+        case ERequestType::RequestChunkShredResult:
             // These requests don't require response.
             return true;
     }
@@ -3913,8 +3918,31 @@ void TPDisk::AddCbsSet(ui32 ownerId) {
     SchedulerConfigure(conf);
 }
 
+TChunkIdx TPDisk::GetUnshreddedFreeChunk() {
+    // Find a free unshredded chunk
+    for (TFreeChunks* freeChunks : {&Keeper.UntrimmedFreeChunks, &Keeper.TrimmedFreeChunks}) {
+        for (auto it = freeChunks->begin(); it != freeChunks->end(); ++it) {
+            TChunkIdx chunkIdx = *it;
+            TChunkState& state = ChunkState[chunkIdx];
+            // Look for free chunks that haven't been shredded in this generation
+            if (state.CommitState == TChunkState::FREE && state.IsDirty && state.ShredGeneration < ShredGeneration) {
+                // Found an unshredded free chunk
+                TChunkIdx unshreddedChunkIdx = freeChunks->PopAt(it);
+                Y_VERIFY(unshreddedChunkIdx == chunkIdx);
+                // Mark it as being shredded and update its generation
+                LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                    "PDisk# " << PCtx->PDiskId
+                    << " found unshredded free chunk# " << chunkIdx
+                    << " ShredGeneration# " << ShredGeneration);
+                return unshreddedChunkIdx;
+            }
+        }
+    }
+    return 0;
+}
+
 void TPDisk::ProgressShredState() {
-    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+    LOG_TRACE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
         "ProgressShredState at PDisk# " << PCtx->PDiskId
         << " ShredGeneration# " << ShredGeneration
         << " ShredState# " << (ui32)ShredState);
@@ -3959,9 +3987,80 @@ void TPDisk::ProgressShredState() {
             << " has finished all pre-shred compact VDisk requests"
             << " ShredGeneration# " << ShredGeneration
             << " finishedCount# " << finishedCount);
+        // All preparations are done, no junk chunks can be unmarked,
+        // Update chunk states and start shredding the empty space
+        for (TChunkIdx chunkIdx = 0; chunkIdx < ChunkState.size(); ++chunkIdx) {
+            TChunkState& state = ChunkState[chunkIdx];
+            // Update shred generation for all the clean chunks
+            if (!state.IsDirty) {
+                state.ShredGeneration = ShredGeneration;
+            }
+        }
         ShredState = EShredStateSendShredVDisk;
     }
     if (ShredState == EShredStateSendShredVDisk) {
+        // Shred free space while possible
+        if (ChunkBeingShredded == 0) {
+            ChunkBeingShredded = GetUnshreddedFreeChunk();
+        }
+        if (ChunkBeingShredded != 0) {
+            // Continue shredding the free chunk
+            while (true) {
+                if (ChunkBeingShreddedInFlight >= 2) {
+                    // We have enough in-flight requests, don't start a new one
+                    return;
+                }
+                if (ChunkBeingShreddedNextSectorIdx * Format.SectorSize >= Format.ChunkSize) {
+                    ++ChunkBeingShreddedIteration;
+                    ChunkBeingShreddedNextSectorIdx = 0;
+                }
+                if (ChunkBeingShreddedIteration >= 2) {
+                    // We have enough iterations, don't start a new one, just wait for the in-flight requests to finish
+                    if (ChunkBeingShreddedInFlight > 0) {
+                        return;
+                    }
+                    // Done shredding the chunk, mark it clean and push it back to the free chunks
+                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "PDisk# " << PCtx->PDiskId
+                        << " is done shredding chunk ChunkBeingShredded# " << ChunkBeingShredded);
+                    TChunkState &state = ChunkState[ChunkBeingShredded];
+                    state.OperationsInProgress--;
+                    state.IsDirty = false;
+                    state.ShredGeneration = ShredGeneration;
+                    Y_VERIFY(ChunkState[ChunkBeingShredded].OperationsInProgress == 0);
+                    Keeper.UntrimmedFreeChunks.PushFront(ChunkBeingShredded);
+                    ChunkBeingShredded = GetUnshreddedFreeChunk();
+                    ChunkBeingShreddedIteration = 0;
+                    ChunkBeingShreddedNextSectorIdx = 0;
+                } 
+                if (ChunkBeingShredded) {
+                    if (ChunkBeingShreddedIteration == 0 && ChunkBeingShreddedNextSectorIdx == 0) {
+                        Y_VERIFY(ChunkState[ChunkBeingShredded].OperationsInProgress == 0);
+                        ChunkState[ChunkBeingShredded].OperationsInProgress++;
+                    }
+                    // Continue shredding the chunk: send a write request to the device using the iteration-specific pattern
+                    THolder<TAlignedData>& payload = ShredPayload[ChunkBeingShreddedIteration];
+                    if (payload == nullptr) {
+                        payload = MakeHolder<TAlignedData>(Format.RoundUpToSectorSize(2097152));
+                        ui8* data = payload->Get();
+                        memset(data, ChunkBeingShreddedIteration == 0 ? 0x55 : 0xaa, payload->Size());
+                    }
+                    ui64 size = std::min((ui64)Format.ChunkSize - ChunkBeingShreddedNextSectorIdx * Format.SectorSize, (ui64)payload->Size());
+                    ui64 offset = Format.Offset(ChunkBeingShredded, ChunkBeingShreddedNextSectorIdx);
+                    ui64 reqIdx = ShredReqIdx++;
+                    TCompletionAction *completionAction = new TChunkShredCompletion(this, ChunkBeingShredded, ChunkBeingShreddedNextSectorIdx, size, TReqId(TReqId::ChunkShred, reqIdx));
+                    ++ChunkBeingShreddedInFlight;
+                    ChunkBeingShreddedNextSectorIdx += size / Format.SectorSize;
+                    Mon.ChunkShred.CountRequest(size);
+                    BlockDevice->PwriteAsync(payload->Get(), size, offset, completionAction,
+                        TReqId(TReqId::ChunkShred, reqIdx), {});
+                    return;
+                }
+                break;
+            }
+        }
+        
+        // If there are no free chunks unshredded, we should ask a vdisk to shred its free space
+        ui32 shreddedFreeChunks = Keeper.GetFreeChunkCount();
         ui32 finishedCount = 0;
         for (ui32 ownerId = 0; ownerId < OwnerData.size(); ++ownerId) {
             TOwnerData &data = OwnerData[ownerId];
@@ -3971,22 +4070,31 @@ void TPDisk::ProgressShredState() {
                 } else if (data.ShredState != TOwnerData::VDISK_SHRED_STATE_SHRED_REQUESTED
                         && data.ShredState != TOwnerData::VDISK_SHRED_STATE_SHRED_FINISHED) {
                     std::vector<TChunkIdx> chunksToShred;
-                    chunksToShred.reserve(ChunkState.size());
+                    chunksToShred.reserve(shreddedFreeChunks/2);
                     for (TChunkIdx chunkIdx = 0; chunkIdx < ChunkState.size(); ++chunkIdx) {
-                        if (ChunkState[chunkIdx].OwnerId == ownerId) {
-                            // TODO(cthulhu): check if chunk is dirty
+                        TChunkState& state = ChunkState[chunkIdx];
+                        // We need to shred only chunks that got dirty before the current shred generation
+                        if (state.OwnerId == ownerId && state.IsDirty && state.ShredGeneration < ShredGeneration) {
                             chunksToShred.push_back(chunkIdx);
+                            if (chunksToShred.size() >= shreddedFreeChunks/2) {
+                                break;
+                            }
                         }
                     }
-                    THolder<TEvShredVDisk> shredRequest(new TEvShredVDisk(ShredGeneration, chunksToShred));
-                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
-                        "PDisk# " << PCtx->PDiskId
-                        << " sends shred request to VDisk# " << data.VDiskId
-                        << " ownerId# " << ownerId
-                        << " request# " << shredRequest->ToString());
-                    PCtx->ActorSystem->Send(new IEventHandle(data.CutLogId, PCtx->PDiskActor, shredRequest.Release()));
-                    data.ShredState = TOwnerData::VDISK_SHRED_STATE_SHRED_REQUESTED;
-                    data.LastShredGeneration = ShredGeneration;
+                    if (chunksToShred.size() > 0) {
+                            THolder<TEvShredVDisk> shredRequest(new TEvShredVDisk(ShredGeneration, chunksToShred));
+                            LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                                "PDisk# " << PCtx->PDiskId
+                            << " sends shred request to VDisk# " << data.VDiskId
+                            << " ownerId# " << ownerId
+                            << " request# " << shredRequest->ToString());
+                        PCtx->ActorSystem->Send(new IEventHandle(data.CutLogId, PCtx->PDiskActor, shredRequest.Release()));
+                        data.ShredState = TOwnerData::VDISK_SHRED_STATE_SHRED_REQUESTED;
+                        data.LastShredGeneration = ShredGeneration;
+                    } else {
+                        data.ShredState = TOwnerData::VDISK_SHRED_STATE_SHRED_FINISHED;
+                        data.LastShredGeneration = ShredGeneration;
+                    }
                 }
                 if (data.ShredState != TOwnerData::VDISK_SHRED_STATE_SHRED_FINISHED) {
                     LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
@@ -4170,12 +4278,52 @@ void TPDisk::ProcessShredVDiskResult(TShredVDiskResult& request) {
         ShredRequesters.clear();
         return;
     }
-    OwnerData[request.Owner].ShredState = TOwnerData::VDISK_SHRED_STATE_SHRED_FINISHED;
+    OwnerData[request.Owner].ShredState = TOwnerData::VDISK_SHRED_STATE_COMPACT_FINISHED;
     ProgressShredState();
 }
 
 void TPDisk::ProcessMarkDirty(TMarkDirty& request) {
-    Y_UNUSED(request);
+    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+        "ProcessMarkDirty at PDisk# " << PCtx->PDiskId
+        << " ShredGeneration# " << ShredGeneration
+        << " request# " << request.ToString());
+    {
+        bool isLogged = false;
+        ui64 markedDirty = 0;
+        TGuard<TMutex> guard(StateMutex);
+        for (auto chunkIdx : request.ChunksToMarkDirty) {
+            if (chunkIdx >= ChunkState.size()) {
+                if (!isLogged) {
+                    isLogged = true;
+                    LOG_CRIT_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "MarkDirty contains invalid chunkIdx# " << chunkIdx << " for PDisk# " << PCtx->PDiskId
+                        << " ShredGeneration# " << ShredGeneration << " request# " << request.ToString());
+                }
+            } else {
+                if (!ChunkState[chunkIdx].IsDirty) {
+                    ChunkState[chunkIdx].IsDirty = true;
+                    markedDirty++;
+                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        "PDisk# " << PCtx->PDiskId << " marked chunkIdx# " << chunkIdx << " as dirty"
+                        << " chunk.ShredGeneration# " << ChunkState[chunkIdx].ShredGeneration
+                        << " ShredGeneration# " << ShredGeneration);
+                }
+            }
+        }
+        if (markedDirty > 0) {
+            // TODO(cthulhu): save dirty chunks to syslog
+        }
+    }
+}
+
+void TPDisk::ProcessChunkShredResult(TChunkShredResult& request) {
+    LOG_TRACE_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+        "ProcessChunkShredResult at PDisk# " << PCtx->PDiskId
+        << " ShredGeneration# " << ShredGeneration
+        << " request# " << request.ToString());
+    Y_ABORT_UNLESS(ChunkBeingShreddedInFlight > 0);
+    --ChunkBeingShreddedInFlight;
+    ProgressShredState();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

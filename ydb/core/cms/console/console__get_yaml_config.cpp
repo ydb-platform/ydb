@@ -20,7 +20,10 @@ public:
     {
         Response = MakeHolder<TEvConsole::TEvGetAllConfigsResponse>();
 
-        if (IngressDatabase) {
+        if (IngressDatabase
+            // treat root (domain) database as cluster for backward compatibility
+            && *IngressDatabase != Self->DomainName && *IngressDatabase != ("/" + Self->DomainName))
+        {
             if (Self->DatabaseYamlConfigs.contains(*IngressDatabase)) {
                 auto& identity = *Response->Record.MutableResponse()->add_identity();
                 identity.set_database(*IngressDatabase);

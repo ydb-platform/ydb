@@ -1,5 +1,10 @@
 <html>
 <head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism-themes/1.9.0/prism-vs.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
     <style>
         body {
             font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
@@ -92,7 +97,7 @@
         .button svg {
             fill: #4b535c;
             fill-rule: evenodd;
-         }
+        }
 
         .button svg:hover {
             fill: #0366d6;
@@ -119,12 +124,13 @@
         .button-group > button svg {
             fill: #4b535c;
             fill-rule: evenodd;
-         }
+        }
 
         .button-group > button svg:hover {
             fill: #0366d6;
             fill-rule: evenodd;
         }
+
         .button-group  .icon-container .show_history_svg {
             fill: #ffffff;
             stroke: #000;
@@ -232,7 +238,6 @@
             visibility: visible;
             opacity: 1;
         }
-    
   
         table > tbody > tr > td:nth-child(2),
         table > tbody > tr > td:nth-child(3),
@@ -255,7 +260,7 @@
             left: 5;
             height: auto;
         }
-    
+
         .collapsible-header {
             cursor: pointer;
             background-color: #f2f2f2;
@@ -263,14 +268,60 @@
             border: 1px solid #ddd;
             margin-bottom: 5px;
         }
-    
-       
+
         .toggle-visibility-buttons {
             margin-bottom: 10px;
             overflow:hidden;
             float: right;
         }
-    </style>
+
+        .error-button {
+            border: none;
+            cursor: pointer;
+            background: url("data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjM0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSIzNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOC41OSAxNi4zNGw0LjU4LTQuNTktNC41OC00LjU5TDEwIDUuNzVsNiA2LTYgNnoiLz48L3N2Zz4=") no-repeat 50% 50% / 1em 1em;
+            width: 1em;
+            height: 1em;  
+            content: "";
+            transition: transform .5s;
+        }
+
+        pre>code[class*=language-] {
+            font-size: x-small;
+        }
+
+        .console-frame {
+            font-size: x-small;
+            display: grid;
+            border-radius: 4px;
+            overscroll-behavior: none;
+            background: #ddd;
+            padding: 5px;
+            color: #f1f2f3;
+            overflow-y: auto;
+            font-family: monospace;
+            word-break: keep-all;
+            font-size: x-small;
+        }
+
+        .console-frame::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .console-frame::-webkit-scrollbar-track {
+            background: #c5c6c8;
+        }
+
+        .console-frame::-webkit-scrollbar-thumb {
+            background: #838485;
+            border-radius: 4px;
+        }
+        pre[class*=language-] {
+            padding: 1em;
+            margin: 0;
+            overflow: auto;
+        }
+
+</style>
 <script>
     function findParentBySelector(elm, selector) {
         var all = document.querySelectorAll(selector);
@@ -538,6 +589,19 @@
             toggleAllTables('collapse');
         });
     });
+    function toggleError(button) {
+    const errorContent = button.nextElementSibling;
+    const consoleFrame = errorContent.querySelector('.console-frame');
+    if (errorContent.style.display === 'none') {
+        errorContent.style.display = 'block';
+        consoleFrame.style.display = 'block';
+        button.style.transform = "rotate(90deg)"
+    } else {
+        errorContent.style.display = 'none';
+        consoleFrame.style.display = 'none';
+        button.style.transform = "rotate(0deg)"
+    }
+  }
 </script>
 </head>
 <body>
@@ -576,7 +640,7 @@
         <td class="test_name">
         {% endif %}
             <span>{{ t.full_name }}</span>
-            {% if status.is_error %} 
+            {% if status.is_error %}
             <div class="button-group">
                 <button class="button" title="Show options">
                     <svg  class="more"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 448 512">
@@ -645,6 +709,14 @@
                         <span class="button-text">Open test history</span>
                     </button>
            
+                    </div>
+                </div>
+            {% endif %}
+            {% if t.status_description %}
+            <button class="error-button" onclick="toggleError(this)"></button>
+            <div style="display: none;" class="error-content">
+                <div class="console-frame" style="display: none;">
+                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}">{{ t.status_description | default("Status description missed") }}</code></pre>
                 </div>
             </div>
             {% endif %}

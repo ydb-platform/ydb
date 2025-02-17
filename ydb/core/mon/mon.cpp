@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/ticket_parser.h>
 
@@ -538,16 +539,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        bool found = false;
-        if (result.UserToken) {
-            for (const TString& sid : ActorMonPage->AllowedSIDs) {
-                if (result.UserToken->IsExist(sid)) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (found || ActorMonPage->AllowedSIDs.empty() || !result.UserToken) {
+        if (IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1169,16 +1161,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        bool found = false;
-        if (result.UserToken) {
-            for (const TString& sid : AllowedSIDs) {
-                if (result.UserToken->IsExist(sid)) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (found || AllowedSIDs.empty() || !result.UserToken) {
+        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
             SendRequest(result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");

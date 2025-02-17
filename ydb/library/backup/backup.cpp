@@ -2,7 +2,19 @@
 #include "db_iterator.h"
 #include "util.h"
 
+#include <ydb-cpp-sdk/client/cms/cms.h>
+#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb-cpp-sdk/client/draft/ydb_view.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/draft/ydb_view.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
@@ -13,6 +25,7 @@
 #include <ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb-cpp-sdk/client/result/result.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/topic/client.h>
@@ -20,6 +33,7 @@
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/regex/pcre/regexp.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -41,6 +55,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <format>
+#include <ranges>
 
 namespace NYdb::NBackup {
 
@@ -507,7 +523,7 @@ NTopic::TTopicDescription DescribeTopic(TDriver driver, const TString& path) {
     const auto result = NConsoleClient::RetryFunction([&]() {
         return client.DescribeTopic(path).ExtractValueSync();
     });
-    VerifyStatus(result, "describe topic to build a backup");
+    VerifyStatus(result, "describe topic");
     return result.GetTopicDescription();
 }
 
@@ -557,7 +573,7 @@ NView::TViewDescription DescribeView(TDriver driver, const TString& path) {
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeView(path).ExtractValueSync();
     });
-    VerifyStatus(status, "describe view to build a backup");
+    VerifyStatus(status, "describe view");
     return status.GetViewDescription();
 }
 
@@ -617,8 +633,46 @@ NCoordination::TNodeDescription DescribeCoordinationNode(TDriver driver, const T
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeNode(path).ExtractValueSync();
     });
-    VerifyStatus(status, "describe coordination node to build a backup");
+    VerifyStatus(status, "describe coordination node");
     return status.ExtractResult();
+}
+
+std::vector<std::string> ListRateLimiters(NRateLimiter::TRateLimiterClient& client, const std::string& coordinationNodePath) {
+    const auto settings = NRateLimiter::TListResourcesSettings().Recursive(true);
+    const std::string AllRootResourcesTag = "";
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.ListResources(coordinationNodePath, AllRootResourcesTag, settings).ExtractValueSync();
+    });
+    VerifyStatus(status, "list rate limiters");
+    return status.GetResourcePaths();
+}
+
+NRateLimiter::TDescribeResourceResult DescribeRateLimiter(
+    NRateLimiter::TRateLimiterClient& client, const std::string& coordinationNodePath, const std::string& rateLimiterPath)
+{
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeResource(coordinationNodePath, rateLimiterPath).ExtractValueSync();
+    });
+    VerifyStatus(status, "describe rate limiter");
+    return status;
+}
+
+void BackupDependentResources(TDriver driver, const std::string& coordinationNodePath, const TFsPath& fsBackupFolder) {
+    NRateLimiter::TRateLimiterClient client(driver);
+    const auto rateLimiters = ListRateLimiters(client, coordinationNodePath);
+
+    for (const auto& rateLimiterPath : rateLimiters) {
+        const auto desc = DescribeRateLimiter(client, coordinationNodePath, rateLimiterPath);
+        Ydb::RateLimiter::CreateResourceRequest request;
+        desc.GetHierarchicalDrrProps().SerializeTo(*request.mutable_resource()->mutable_hierarchical_drr());
+        if (const auto& meteringConfig = desc.GetMeteringConfig()) {
+            meteringConfig->SerializeTo(*request.mutable_resource()->mutable_metering_config());
+        }
+
+        TFsPath childFolderPath = fsBackupFolder.Child(TString{rateLimiterPath});
+        childFolderPath.MkDirs();
+        WriteProtoToFile(request, childFolderPath, NDump::NFiles::CreateRateLimiter());
+    }
 }
 
 }
@@ -633,14 +687,239 @@ void BackupCoordinationNode(TDriver driver, const TString& dbPath, const TFsPath
     nodeDescription.SerializeTo(creationRequest);
 
     WriteProtoToFile(creationRequest, fsBackupFolder, NDump::NFiles::CreateCoordinationNode());
+    BackupDependentResources(driver, dbPath, fsBackupFolder);
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
+namespace {
+
+NReplication::TReplicationDescription DescribeReplication(TDriver driver, const TString& path) {
+    NReplication::TReplicationClient client(driver);
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeReplication(path).ExtractValueSync();
+    });
+    VerifyStatus(status, "describe async replication");
+    return status.GetReplicationDescription();
+}
+
+TString BuildConnectionString(const NReplication::TConnectionParams& params) {
+    return TStringBuilder()
+        << (params.GetEnableSsl() ? "grpcs://" : "grpc://")
+        << params.GetDiscoveryEndpoint()
+        << "/?database=" << params.GetDatabase();
+}
+
+inline TString BuildTarget(const char* src, const char* dst) {
+    return TStringBuilder() << "  `" << src << "` AS `" << dst << "`";
+}
+
+inline TString Quote(const char* value) {
+    return TStringBuilder() << "'" << value << "'";
+}
+
+template <typename StringType>
+inline TString Quote(const StringType& value) {
+    return Quote(value.c_str());
+}
+
+inline TString BuildOption(const char* key, const TString& value) {
+    return TStringBuilder() << "  " << key << " = " << value << "";
+}
+
+inline TString Interval(const TDuration& value) {
+    return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
+}
+
+TString BuildCreateReplicationQuery(
+        const TString& db,
+        const TString& backupRoot,
+        const TString& name,
+        const NReplication::TReplicationDescription& desc)
+{
+    TVector<TString> targets(::Reserve(desc.GetItems().size()));
+    for (const auto& item : desc.GetItems()) {
+        if (!item.DstPath.ends_with("/indexImplTable")) { // TODO(ilnaz): get rid of this hack
+            targets.push_back(BuildTarget(item.SrcPath.c_str(), item.DstPath.c_str()));
+        }
+    }
+
+    const auto& params = desc.GetConnectionParams();
+
+    TVector<TString> opts(::Reserve(5 /* max options */));
+    opts.push_back(BuildOption("CONNECTION_STRING", Quote(BuildConnectionString(params))));
+    switch (params.GetCredentials()) {
+        case NReplication::TConnectionParams::ECredentials::Static:
+            opts.push_back(BuildOption("USER", Quote(params.GetStaticCredentials().User)));
+            opts.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(params.GetStaticCredentials().PasswordSecretName)));
+            break;
+        case NReplication::TConnectionParams::ECredentials::OAuth:
+            opts.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(params.GetOAuthCredentials().TokenSecretName)));
+            break;
+    }
+
+    opts.push_back(BuildOption("CONSISTENCY_LEVEL", Quote(ToString(desc.GetConsistencyLevel()))));
+    if (desc.GetConsistencyLevel() == NReplication::TReplicationDescription::EConsistencyLevel::Global) {
+        opts.push_back(BuildOption("COMMIT_INTERVAL", Interval(desc.GetGlobalConsistency().GetCommitInterval())));
+    }
+
+    return std::format(
+            "-- database: \"{}\"\n"
+            "-- backup root: \"{}\"\n"
+            "CREATE ASYNC REPLICATION `{}`\nFOR\n{}\nWITH (\n{}\n);",
+        db.c_str(), backupRoot.c_str(), name.c_str(), JoinSeq(",\n", targets).c_str(), JoinSeq(",\n", opts).c_str());
+}
+
+}
+
+void BackupReplication(
+    TDriver driver,
+    const TString& db,
+    const TString& dbBackupRoot,
+    const TString& dbPathRelativeToBackupRoot,
+    const TFsPath& fsBackupFolder)
+{
+    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
+    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
+
+    LOG_I("Backup async replication " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto desc = DescribeReplication(driver, dbPath);
+    const auto creationQuery = BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), desc);
+
+    WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateAsyncReplication());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
+namespace {
+
+Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TDriver driver, const TString& path) {
+    NTable::TTableClient client(driver);
+    Ydb::Table::DescribeExternalDataSourceResult description;
+    auto status = client.RetryOperationSync([&](NTable::TSession session) {
+        auto result = session.DescribeExternalDataSource(path).ExtractValueSync();
+        if (result.IsSuccess()) {
+            description = TProtoAccessor::GetProto(result.GetExternalDataSourceDescription());
+        }
+        return result;
+    });
+    VerifyStatus(status, "describe external data source");
+    return description;
+}
+
+std::string ToString(std::string_view key, std::string_view value) {
+    // indented to follow the default YQL formatting
+    return std::format(R"(    {} = "{}")", key, value);
+}
+
+namespace NExternalDataSource {
+
+    std::string PropertyToString(const std::pair<TProtoStringType, TProtoStringType>& property) {
+        const auto& [key, value] = property;
+        return ToString(key, value);
+    }
+
+}
+
+TString BuildCreateExternalDataSourceQuery(const Ydb::Table::DescribeExternalDataSourceResult& description) {
+    return std::format(
+        "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}` WITH (\n{},\n{}{}\n);",
+        description.self().name().c_str(),
+        ToString("SOURCE_TYPE", description.source_type()),
+        ToString("LOCATION", description.location()),
+        description.properties().empty()
+            ? ""
+            : std::string(",\n") +
+                JoinSeq(",\n", std::views::transform(description.properties(), NExternalDataSource::PropertyToString)).c_str()
+    );
+}
+
+}
+
+void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto description = DescribeExternalDataSource(driver, dbPath);
+    const auto creationQuery = BuildCreateExternalDataSourceQuery(description);
+
+    WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalDataSource());
+    BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
+namespace {
+
+Ydb::Table::DescribeExternalTableResult DescribeExternalTable(TDriver driver, const TString& path) {
+    NTable::TTableClient client(driver);
+    Ydb::Table::DescribeExternalTableResult description;
+    auto status = client.RetryOperationSync([&](NTable::TSession session) {
+        auto result = session.DescribeExternalTable(path).ExtractValueSync();
+        if (result.IsSuccess()) {
+            description = TProtoAccessor::GetProto(result.GetExternalTableDescription());
+        }
+        return result;
+    });
+    VerifyStatus(status, "describe external table");
+    return description;
+}
+
+namespace NExternalTable {
+
+    std::string PropertyToString(const std::pair<TProtoStringType, TProtoStringType>& property) {
+        const auto& [key, json] = property;
+        const auto items = NJson::ReadJsonFastTree(json).GetArray();
+        Y_ENSURE(!items.empty(), "Empty items for an external table property: " << key);
+        if (items.size() == 1) {
+            return ToString(key, items.front().GetString());
+        } else {
+            return ToString(key, std::format("[{}]", JoinSeq(", ", items).c_str()));
+        }
+    }
+
+}
+
+std::string ColumnToString(const Ydb::Table::ColumnMeta& column) {
+    const auto& type = column.type();
+    const bool notNull = !type.has_optional_type() || (type.has_pg_type() && column.not_null());
+    return std::format(
+        "    {} {}{}",
+        column.name().c_str(),
+        TType(type).ToString(),
+        notNull ? " NOT NULL" : ""
+    );
+}
+
+TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableResult& description) {
+    return std::format(
+        "CREATE EXTERNAL TABLE IF NOT EXISTS `{}` (\n{}\n) WITH (\n{},\n{}{}\n);",
+        description.self().name().c_str(),
+        JoinSeq(",\n", std::views::transform(description.columns(), ColumnToString)).c_str(),
+        ToString("DATA_SOURCE", description.data_source_path()),
+        ToString("LOCATION", description.location()),
+        description.content().empty()
+            ? ""
+            : std::string(",\n") +
+                JoinSeq(",\n", std::views::transform(description.content(), NExternalTable::PropertyToString)).c_str()
+    );
+}
+
+}
+
+void BackupExternalTable(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+    Y_ENSURE(!dbPath.empty());
+    LOG_I("Backup external table " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    const auto description = DescribeExternalTable(driver, dbPath);
+    const auto creationQuery = BuildCreateExternalTableQuery(description);
+
+    WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalTable());
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
 void CreateClusterDirectory(const TDriver& driver, const TString& path, bool rootBackupDir = false) {
     if (rootBackupDir) {
-        LOG_I("Create temporary directory " << path.Quote());
+        LOG_I("Create temporary directory " << path.Quote() << " in database");
     } else {
-        LOG_D("Create directory " << path.Quote());
+        LOG_D("Create directory " << path.Quote() << " in database");
     }
     NScheme::TSchemeClient client(driver);
     TStatus status = client.MakeDirectory(path).GetValueSync();
@@ -655,7 +934,7 @@ void RemoveClusterDirectory(const TDriver& driver, const TString& path) {
 }
 
 void RemoveClusterDirectoryRecursive(const TDriver& driver, const TString& path) {
-    LOG_I("Remove temporary directory " << path.Quote());
+    LOG_I("Remove temporary directory " << path.Quote() << " in database");
     NScheme::TSchemeClient schemeClient(driver);
     NTable::TTableClient tableClient(driver);
     TStatus status = NConsoleClient::RemoveDirectoryRecursive(schemeClient, tableClient, path, {}, true, false);
@@ -680,16 +959,16 @@ static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
     }
 }
 
-void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& backupPrefix,
+void BackupFolderImpl(TDriver driver, const TString& database, const TString& dbPrefix, const TString& backupPrefix,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
         NYql::TIssues& issues
 ) {
-    TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways);
+    TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
     TMap<TString, TAsyncStatus> copiedTablesStatuses;
     TVector<NTable::TCopyItem> tablesToCopy;
-    // Copy all tables to temporal folder
+    // Copy all tables to temporal folder and backup other scheme objects along the way.
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
         while (dbIt) {
@@ -728,6 +1007,15 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
             }
             if (dbIt.IsCoordinationNode()) {
                 BackupCoordinationNode(driver, dbIt.GetFullPath(), childFolderPath);
+            }
+            if (dbIt.IsReplication()) {
+                BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
+            }
+            if (dbIt.IsExternalDataSource()) {
+                BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
+            }
+            if (dbIt.IsExternalTable()) {
+                BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
             }
             dbIt.Next();
         }
@@ -804,6 +1092,282 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
     folderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
 }
 
+namespace {
+
+NCms::TListDatabasesResult ListDatabases(TDriver driver) {
+    NCms::TCmsClient client(driver);
+
+    auto status = NDump::ListDatabases(client);
+    VerifyStatus(status);
+
+    return status;
+}
+
+NCms::TGetDatabaseStatusResult GetDatabaseStatus(TDriver driver, const std::string& path) {
+    NCms::TCmsClient client(driver);
+
+    auto status = NDump::GetDatabaseStatus(client, path);
+    VerifyStatus(status);
+
+    return status;
+}
+
+bool IsNotLowerAlphaNum(char c) {
+    if (isalnum(c)) {
+        if (isalpha(c)) {
+            return !islower(c);
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
+bool IsValidSid(const std::string& sid) {
+    return std::find_if(sid.begin(), sid.end(), IsNotLowerAlphaNum) == sid.end();
+}
+
+struct TAdmins {
+    TString GroupSid;
+    THashSet<TString> UserSids;
+};
+
+TAdmins FindAdmins(TDriver driver, const TString& dbPath) {
+    THashSet<TString> adminUserSids;
+
+    auto entry = DescribePath(driver, dbPath);
+
+    NYdb::NTable::TTableClient client(driver);
+    auto query = Sprintf("SELECT * FROM `%s/.sys/auth_group_members`", dbPath.c_str());
+    auto settings = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx();
+
+    std::vector<TResultSet> resultSets;
+    TStatus status = client.RetryOperationSync([&](NTable::TSession session) {
+        auto result = session.ExecuteDataQuery(query, settings).ExtractValueSync();
+        VerifyStatus(result);
+        resultSets = result.GetResultSets();
+        return result;
+    });
+    VerifyStatus(status);
+
+    TStringStream alterGroupQuery;
+    for (const auto& resultSet : resultSets) {
+        TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto groupSidValue = parser.GetValue("GroupSid");
+            auto memberSidValue = parser.GetValue("MemberSid");
+
+            const auto& groupSid = groupSidValue.GetProto().text_value();
+            const auto& memberSid = memberSidValue.GetProto().text_value();
+
+            if (groupSid == entry.Owner) {
+                adminUserSids.insert(memberSid);
+            }
+        }
+    }
+
+    return { TString(entry.Owner), adminUserSids };
+}
+
+struct TBackupDatabaseSettings {
+    bool WithRegularUsers = false;
+    bool WithContent = false;
+    TString TemporalBackupPostfix = "";
+};
+
+void BackupUsers(TDriver driver, const TString& dbPath, const TFsPath& folderPath, const THashSet<TString>& filter = {}) {
+    NYdb::NTable::TTableClient client(driver);
+    auto query = Sprintf("SELECT * FROM `%s/.sys/auth_users`", dbPath.c_str());
+    auto settings = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx();
+
+    std::vector<TResultSet> resultSets;
+    TStatus status = client.RetryOperationSync([&](NTable::TSession session) {
+        auto result = session.ExecuteDataQuery(query, settings).ExtractValueSync();
+        VerifyStatus(result);
+        resultSets = result.GetResultSets();
+        return result;
+    });
+    VerifyStatus(status);
+
+    TStringStream createUserQuery;
+    for (const auto& resultSet : resultSets) {
+        TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto sidValue = parser.GetValue("Sid");
+            auto passwordValue = parser.GetValue("PasswordHash");
+            auto isEnabledValue = parser.GetValue("IsEnabled");
+
+            const auto& sid = sidValue.GetProto().text_value();
+            const auto& password = passwordValue.GetProto().text_value();
+            bool isEnabled = isEnabledValue.GetProto().bool_value();
+
+            if (!filter.empty() && !filter.contains(sid)) {
+                continue;
+            }
+
+            // Some SIDs may be created through configuration that bypasses this checks
+            if (IsValidSid(sid)) {
+                createUserQuery << Sprintf("CREATE USER `%s` HASH '%s';\n", sid.c_str(), password.c_str());
+            }
+
+            if (!isEnabled) {
+                createUserQuery << Sprintf("ALTER USER `%s` NOLOGIN;\n", sid.c_str());
+            }
+        }
+    }
+
+    WriteCreationQueryToFile(createUserQuery.Str(), folderPath, NDump::NFiles::CreateUser());
+}
+
+void BackupGroups(TDriver driver, const TString& dbPath, const TFsPath& folderPath, const THashSet<TString>& filter = {}) {
+    NYdb::NTable::TTableClient client(driver);
+    auto query = Sprintf("SELECT * FROM `%s/.sys/auth_groups`", dbPath.c_str());
+    auto settings = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx();
+
+    std::vector<TResultSet> resultSets;
+    TStatus status = client.RetryOperationSync([&](NTable::TSession session) {
+        auto result = session.ExecuteDataQuery(query, settings).ExtractValueSync();
+        VerifyStatus(result);
+        resultSets = result.GetResultSets();
+        return result;
+    });
+    VerifyStatus(status);
+
+    TStringStream createGroupQuery;
+    for (const auto& resultSet : resultSets) {
+        TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto sidValue = parser.GetValue("Sid");
+            const auto& sid = sidValue.GetProto().text_value();
+
+            if (!filter.empty() && !filter.contains(sid)) {
+                continue;
+            }
+
+            // Some SIDs may be created through configuration that bypasses this checks
+            if (IsValidSid(sid)) {
+                createGroupQuery << Sprintf("CREATE GROUP `%s`;\n", sid.c_str());
+            }
+        }
+    }
+
+    WriteCreationQueryToFile(createGroupQuery.Str(), folderPath, NDump::NFiles::CreateGroup());
+}
+
+void BackupGroupMembers(TDriver driver, const TString& dbPath, const TFsPath& folderPath, const THashSet<TString>& filterGroups = {}) {
+    NYdb::NTable::TTableClient client(driver);
+    auto query = Sprintf("SELECT * FROM `%s/.sys/auth_group_members`", dbPath.c_str());
+    auto settings = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx();
+
+    std::vector<TResultSet> resultSets;
+    TStatus status = client.RetryOperationSync([&](NTable::TSession session) {
+        auto result = session.ExecuteDataQuery(query, settings).ExtractValueSync();
+        VerifyStatus(result);
+        resultSets = result.GetResultSets();
+        return result;
+    });
+    VerifyStatus(status);
+
+    TStringStream alterGroupQuery;
+    for (const auto& resultSet : resultSets) {
+        TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto groupSidValue = parser.GetValue("GroupSid");
+            auto memberSidValue = parser.GetValue("MemberSid");
+
+            const auto& groupSid = groupSidValue.GetProto().text_value();
+            const auto& memberSid = memberSidValue.GetProto().text_value();
+
+            if (!filterGroups.empty() && !filterGroups.contains(groupSid)) {
+                continue;
+            }
+
+            alterGroupQuery << Sprintf("ALTER GROUP `%s` ADD USER `%s`;\n", groupSid.c_str(), memberSid.c_str());
+        }
+    }
+
+    WriteCreationQueryToFile(alterGroupQuery.Str(), folderPath, NDump::NFiles::AlterGroup());
+}
+
+void BackupDatabaseImpl(TDriver driver, const TString& dbPath, const TFsPath& folderPath, TBackupDatabaseSettings settings) {
+    LOG_I("Backup database " << dbPath.Quote() << " to " << folderPath.GetPath().Quote());
+    folderPath.MkDirs();
+
+    auto status = GetDatabaseStatus(driver, dbPath);
+    Ydb::Cms::CreateDatabaseRequest proto;
+    status.SerializeTo(proto);
+    WriteProtoToFile(proto, folderPath, NDump::NFiles::Database());
+
+    if (!settings.WithRegularUsers) {
+        TAdmins admins = FindAdmins(driver, dbPath);
+        BackupUsers(driver, dbPath, folderPath, admins.UserSids);
+        BackupGroups(driver, dbPath, folderPath, { admins.GroupSid });
+        BackupGroupMembers(driver, dbPath, folderPath, { admins.GroupSid });
+    } else {
+        BackupUsers(driver, dbPath, folderPath);
+        BackupGroups(driver, dbPath, folderPath);
+        BackupGroupMembers(driver, dbPath, folderPath);
+    }
+
+    BackupPermissions(driver, dbPath, "", folderPath);
+    if (settings.WithContent) {
+        // full path to temporal directory in database
+        TString tmpDbFolder;
+        try {
+            tmpDbFolder = JoinDatabasePath(dbPath, "~" + settings.TemporalBackupPostfix);
+            CreateClusterDirectory(driver, tmpDbFolder, true);
+
+            NYql::TIssues issues;
+            BackupFolderImpl(
+                driver,
+                dbPath,
+                dbPath,
+                tmpDbFolder,
+                folderPath,
+                /* exclusionPatterns */ {},
+                /* schemaOnly */ false,
+                /* useConsistentCopyTable */ true,
+                /* avoidCopy */ false,
+                /* preservePoolKinds */ false,
+                /* ordered */ false,
+                issues
+            );
+
+            if (issues) {
+                Cerr << issues.ToString();
+            }
+        } catch (...) {
+            RemoveClusterDirectoryRecursive(driver, tmpDbFolder);
+            folderPath.ForceDelete();
+            throw;
+        }
+        RemoveClusterDirectoryRecursive(driver, tmpDbFolder);
+    }
+}
+
+TString FindClusterRootPath(TDriver driver) {
+    NScheme::TSchemeClient client(driver);
+    auto status = NDump::ListDirectory(client, "/");
+    VerifyStatus(status);
+
+    Y_ENSURE(status.GetChildren().size() == 1, "Exactly one cluster root expected, found: " << JoinSeq(", ", status.GetChildren()));
+    return "/" + status.GetChildren().begin()->Name;
+}
+
+void BackupClusterRoot(TDriver driver, const TFsPath& folderPath) {
+    TString rootPath = FindClusterRootPath(driver);
+
+    LOG_I("Backup cluster root " << rootPath.Quote() << " to " << folderPath);
+
+    BackupUsers(driver, rootPath, folderPath);
+    BackupGroups(driver, rootPath, folderPath);
+    BackupGroupMembers(driver, rootPath, folderPath);
+    BackupPermissions(driver, rootPath, "", folderPath);
+}
+
+} // anonymous namespace
+
 void CheckedCreateBackupFolder(const TFsPath& folderPath) {
     const bool exists = folderPath.Exists();
     if (exists) {
@@ -840,7 +1404,7 @@ void BackupFolder(const TDriver& driver, const TString& database, const TString&
         }
 
         NYql::TIssues issues;
-        BackupFolderImpl(driver, dbPrefix, tmpDbFolder, folderPath, exclusionPatterns,
+        BackupFolderImpl(driver, database, dbPrefix, tmpDbFolder, folderPath, exclusionPatterns,
             schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, issues
         );
 
@@ -866,6 +1430,69 @@ void BackupFolder(const TDriver& driver, const TString& database, const TString&
         RemoveClusterDirectoryRecursive(driver, tmpDbFolder);
     }
     LOG_I("Backup completed successfully");
+}
+
+void BackupDatabase(const TDriver& driver, const TString& database, TFsPath folderPath) {
+    TString temporalBackupPostfix = CreateTemporalBackupName();
+    if (!folderPath) {
+        folderPath = temporalBackupPostfix;
+    }
+    CheckedCreateBackupFolder(folderPath);
+
+    try {
+        NYql::TIssues issues;
+        TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
+
+        BackupDatabaseImpl(driver, database, folderPath, {
+            .WithRegularUsers = true,
+            .WithContent = true,
+            .TemporalBackupPostfix = temporalBackupPostfix,
+        });
+
+        folderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
+        if (issues) {
+            Cerr << issues.ToString();
+        }
+    } catch (...) {
+        LOG_E("Backup failed");
+        folderPath.ForceDelete();
+        throw;
+    }
+    LOG_I("Backup database " << database.Quote() << " is completed successfully");
+}
+
+void BackupCluster(const TDriver& driver, TFsPath folderPath) {
+    TString temporalBackupPostfix = CreateTemporalBackupName();
+    if (!folderPath) {
+        folderPath = temporalBackupPostfix;
+    }
+    CheckedCreateBackupFolder(folderPath);
+
+    LOG_I("Backup cluster to " << folderPath.GetPath().Quote());
+
+    try {
+        NYql::TIssues issues;
+        TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
+
+        BackupClusterRoot(driver, folderPath);
+        auto databases = ListDatabases(driver);
+        for (const auto& database : databases.GetPaths()) {
+            BackupDatabaseImpl(driver, TString(database), folderPath.Child("." + database), {
+                .WithRegularUsers = false,
+                .WithContent = false,
+            });
+        }
+
+        folderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
+        if (issues) {
+            Cerr << issues.ToString();
+        }
+    } catch (...) {
+        LOG_E("Backup failed");
+        folderPath.ForceDelete();
+        throw;
+    }
+    LOG_I("Backup cluster is completed successfully");
 }
 
 } //  NYdb::NBackup

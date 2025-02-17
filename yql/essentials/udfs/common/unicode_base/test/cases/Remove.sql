@@ -1,9 +1,9 @@
 /* syntax version 1 */
 SELECT 
-    CAST(value AS Utf8),
-    Unicode::RemoveAll(CAST(value AS Utf8), Utf8("фа")) AS all,
-    Unicode::RemoveFirst(CAST(value AS Utf8), Utf8("а")) AS first,
-    Unicode::RemoveLast(CAST(value AS Utf8), Utf8("а")) AS last,
-    Unicode::RemoveFirst(CAST(value AS Utf8), Utf8("фа")) AS first2,
-    Unicode::RemoveLast(CAST(value AS Utf8), Utf8("фа")) AS last2
+    value as value,
+    Unicode::RemoveAll(value, "фа"u) AS all,
+    Unicode::RemoveFirst(value, "а"u) AS first,
+    Unicode::RemoveLast(value, "а"u) AS last,
+    Unicode::RemoveFirst(value, "фа"u) AS first2,
+    Unicode::RemoveLast(value, "фа"u) AS last2
 FROM Input;

@@ -1632,29 +1632,21 @@ TExprNode::TPtr BuildBlockMapJoin(TExprNode::TPtr leftFlow, TExprNode::TPtr righ
             .Build();
     }
 
-    // Static assert to ensure backward compatible change: if the
-    // constant below is true, both input and output types of
-    // WideToBlocks callable have to be WideStream; otherwise,
-    // both input and output types have to be WideFlow.
-    // FIXME: When all spots using WideToBlocks are adjusted
-    // to work with WideStream, drop the assertion below.
-    static_assert(!NYql::NBlockStreamIO::WideToBlocks);
-
     return ctx.Builder(pos)
         .Callable("NarrowMap")
             .Callable(0, "ToFlow")
                 .Callable(0, "WideFromBlocks")
                     .Callable(0, "BlockMapJoinCore")
-                        .Callable(0, "FromFlow")
-                            .Callable(0, "WideToBlocks")
+                        .Callable(0, "WideToBlocks")
+                            .Callable(0, "FromFlow")
                                 .Callable(0, "ExpandMap")
                                     .Add(0, std::move(leftFlow))
                                     .Add(1, std::move(leftExpandLambda))
                                 .Seal()
                             .Seal()
                         .Seal()
-                        .Callable(1, "FromFlow")
-                            .Callable(0, "WideToBlocks")
+                        .Callable(1, "WideToBlocks")
+                            .Callable(0, "FromFlow")
                                 .Callable(0, "ExpandMap")
                                     .Add(0, std::move(rightFlow))
                                     .Add(1, std::move(rightExpandLambda))

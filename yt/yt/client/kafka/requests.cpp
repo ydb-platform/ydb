@@ -601,8 +601,10 @@ void TRspFetch::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TReqSaslHandshake::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
+void TReqSaslHandshake::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
+    ApiVersion = apiVersion;
+
     Mechanism = reader->ReadString();
 }
 

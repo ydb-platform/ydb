@@ -32,6 +32,7 @@ namespace NYql {
             TMaybe<ui64> DeterministicTimeProviderSeed_;
             bool UseSystemColumns;
             bool UseWorkerPool;
+            bool UseAntlr4;
 
             TWorkerFactoryOptions(
                 IProgramFactoryPtr Factory,
@@ -51,7 +52,8 @@ namespace NYql {
                 ui64 nativeYtTypeFlags,
                 TMaybe<ui64> deterministicTimeProviderSeed,
                 bool useSystemColumns,
-                bool useWorkerPool
+                bool useWorkerPool,
+                bool useAntlr4
             )
                 : Factory(std::move(Factory))
                 , InputSpec(InputSpec)
@@ -71,6 +73,7 @@ namespace NYql {
                 , DeterministicTimeProviderSeed_(deterministicTimeProviderSeed)
                 , UseSystemColumns(useSystemColumns)
                 , UseWorkerPool(useWorkerPool)
+                , UseAntlr4(useAntlr4)
             {
             }
         };
@@ -129,6 +132,7 @@ namespace NYql {
                 const THashMap<TString, TString>& modules,
                 const TInputSpecBase& inputSpec,
                 const TOutputSpecBase& outputSpec,
+                bool useAntlr4,
                 EProcessorMode processorMode);
         };
 

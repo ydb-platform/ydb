@@ -1038,6 +1038,10 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
     if (logWrite.CommitRecord.DeleteToDecommitted) {
         for (ui32 chunkIdx : logWrite.CommitRecord.DeleteChunks) {
             TChunkState& state = ChunkState[chunkIdx];
+            if (!state.IsDirty) {
+                // TODO(cthulhu): log that chunk got dirty
+                state.IsDirty = true;
+            }
             switch (state.CommitState) {
             case TChunkState::DATA_RESERVED:
                 state.CommitState = TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS;
@@ -1057,6 +1061,10 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
     } else {
         for (ui32 chunkIdx : logWrite.CommitRecord.DeleteChunks) {
             TChunkState& state = ChunkState[chunkIdx];
+            if (!state.IsDirty) {
+                // TODO(cthulhu): log that chunk got dirty
+                state.IsDirty = true;
+            }
             if (state.HasAnyOperationsInProgress()) {
                 switch (state.CommitState) {
                 case TChunkState::DATA_RESERVED:

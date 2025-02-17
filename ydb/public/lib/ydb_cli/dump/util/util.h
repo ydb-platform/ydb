@@ -1,8 +1,9 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb-cpp-sdk/client/cms/cms.h>
 #include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
@@ -55,4 +56,24 @@ TStatus ModifyPermissions(
     NScheme::TSchemeClient& schemeClient,
     const TString& path,
     const NScheme::TModifyPermissionsSettings& settings = {});
-}
+
+NScheme::TListDirectoryResult ListDirectory(
+    NScheme::TSchemeClient& schemeClient,
+    const TString& path,
+    const NScheme::TListDirectorySettings& settings = {});
+
+NCms::TListDatabasesResult ListDatabases(
+    NCms::TCmsClient& cmsClient,
+    const NCms::TListDatabasesSettings& settings = {});
+
+NCms::TGetDatabaseStatusResult GetDatabaseStatus(
+    NCms::TCmsClient& cmsClient,
+    const std::string& path,
+    const NCms::TGetDatabaseStatusSettings& settings = {});
+
+TStatus CreateDatabase(
+    NCms::TCmsClient& cmsClient,
+    const std::string& path,
+    const NCms::TCreateDatabaseSettings& settings = {});
+
+} // NYdb::NDump

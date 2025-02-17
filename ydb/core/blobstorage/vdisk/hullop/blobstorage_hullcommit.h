@@ -242,6 +242,13 @@ namespace NKikimr {
             CommitRecord.DeleteChunks = std::move(Metadata.DeleteChunks);
             CommitRecord.DeleteToDecommitted = Metadata.DeleteToDecommitted;
 
+            // notify PDisk about dirty chunks (the ones from which huge slots are being freed right now)
+            THashSet<TChunkIdx> chunkIds;
+            for (const TDiskPart& p : Metadata.RemovedHugeBlobs) {
+                chunkIds.insert(p.ChunkIdx);
+            }
+            CommitRecord.DirtyChunks = {chunkIds.begin(), chunkIds.end()};
+
             // validate its contents
             VerifyCommitRecord(CommitRecord);
             VerifyRemovedHugeBlobs(Metadata.RemovedHugeBlobs);

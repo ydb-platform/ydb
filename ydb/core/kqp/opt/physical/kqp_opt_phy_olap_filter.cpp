@@ -181,6 +181,11 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         replacements.emplace(member.Get(), arguments.back());
     }
 
+    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
+    if (!columns.size()) {
+        return nullptr;
+    }
+
     return Build<TKqpOlapApply>(ctx, apply.Pos())
         .Type(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
         .Columns().Add(std::move(columns)).Build()
@@ -789,10 +794,15 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     YQL_ENSURE(remainingPredicates.IsValid(), "Remaining predicates is invalid");
 
     const auto pushedFilters = PredicatePushdown(TExprBase(predicatesToPush.ExprNode), lambdaArg, ctx, node.Pos());
-    YQL_ENSURE(pushedFilters.IsValid(), "Pushed predicate should be always valid!");
+    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
+    // YQL_ENSURE(pushedFilters.IsValid(), "Pushed predicate should be always valid!");
+
+    if (!pushedFilters.IsValid()) {
+        return node;
+    }
 
     TMaybeNode<TExprBase> olapFilter;
-    if (pushedFilters.FirstLevelOps.IsValid()) {
+    if (pushedFilters.FirstLevelOps.IsValid()) {    
         olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
             .Input(read.Process().Body())
             .Condition(pushedFilters.FirstLevelOps.Cast())

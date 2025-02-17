@@ -235,6 +235,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT(PDiskGroup, WriteHuge, WriteHuge);
     IO_REQ_INIT(PDiskGroup, WriteComp, WriteComp);
     IO_REQ_INIT(PDiskGroup, Trim, WriteTrim);
+    IO_REQ_INIT(PDiskGroup, ChunkShred, WriteShred);
 
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadSyncLog, ReadSyncLog);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadComp, ReadComp);

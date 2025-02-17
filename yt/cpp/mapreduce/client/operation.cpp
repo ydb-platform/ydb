@@ -11,6 +11,7 @@
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -21,9 +22,6 @@
 #include <yt/cpp/mapreduce/interface/protobuf_format.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-
-#include <yt/cpp/mapreduce/http/requests.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
 
 #include <yt/cpp/mapreduce/io/job_reader.h>
 #include <yt/cpp/mapreduce/io/job_writer.h>
@@ -880,6 +878,12 @@ void BuildCommonOperationPart(
     }
     if (baseSpec.MaxFailedJobCount_.Defined()) {
         (*specNode)["max_failed_job_count"] = *baseSpec.MaxFailedJobCount_;
+    }
+    if (baseSpec.Description_.Defined()) {
+        (*specNode)["description"] = *baseSpec.Description_;
+    }
+    if (baseSpec.Annotations_.Defined()) {
+        (*specNode)["annotations"] = *baseSpec.Annotations_;
     }
 }
 

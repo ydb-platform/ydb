@@ -12,4 +12,5 @@ RECURSE(
     udf_probe
     udf_resolver
     yql_facade_run
+    yql_linter
 )

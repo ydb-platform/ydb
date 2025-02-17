@@ -126,7 +126,7 @@ Y_UNIT_TEST_LLVM(TestWideToBlocks) {
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.WideToBlocks(wideFlow);
+    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
     const auto narrowBlocksFlow = pb.NarrowMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[1];
     });
@@ -191,7 +191,7 @@ void TestChunked(bool withBlockExpand) {
     node = pb.ExpandMap(node, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U)};
     });
-    node = pb.WideToBlocks(node);
+    node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
     if (withBlockExpand) {
         node = pb.BlockExpandChunked(node);
         // WideTakeBlocks won't work on chunked blocks
@@ -264,6 +264,24 @@ Y_UNIT_TEST(TestScalar) {
     UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(value).GetDatum().scalar_as<arrow::UInt64Scalar>().value, testValue);
 }
 
+template<auto Type, typename ArrowType>
+void TestContainerForStringType() {
+    TSetup<false> setup;
+    auto dataLiteral = setup.PgmBuilder->NewDataLiteral<Type>("\"Just a string\"");
+    const auto dataAfterBlocks = setup.PgmBuilder->AsScalar(dataLiteral);
+    const auto graph = setup.BuildGraph(dataAfterBlocks);
+    const auto value = graph->GetValue();
+
+    UNIT_ASSERT(typeid(*TArrowBlock::From(value).GetDatum().scalar()) == typeid(ArrowType));
+}
+
+Y_UNIT_TEST(TestStringTypesHasAppropriateContainer) {
+    TestContainerForStringType<NUdf::EDataSlot::Utf8, arrow::StringScalar>();
+    TestContainerForStringType<NUdf::EDataSlot::Json, arrow::StringScalar>();
+    TestContainerForStringType<NUdf::EDataSlot::Yson, arrow::BinaryScalar>();
+    TestContainerForStringType<NUdf::EDataSlot::String, arrow::BinaryScalar>();
+}
+
 Y_UNIT_TEST_LLVM(TestReplicateScalar) {
     const ui64 count = 1000;
     const ui32 value = 42;
@@ -318,7 +336,7 @@ Y_UNIT_TEST_LLVM(TestBlockFunc) {
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.WideToBlocks(wideFlow);
+    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
     const auto sumWideFlow = pb.WideMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
         return {pb.BlockFunc("Add", ui64BlockType, {items[0], items[1]})};
     });
@@ -375,7 +393,7 @@ Y_UNIT_TEST_LLVM(TestBlockFuncWithNullables) {
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.WideToBlocks(wideFlow);
+    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
     const auto sumWideFlow = pb.WideMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
         return {pb.BlockFunc("Add", ui64OptBlockType, {items[0], items[1]})};
     });
@@ -580,7 +598,7 @@ Y_UNIT_TEST_LLVM(TestWideToAndFromBlocks) {
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.WideToBlocks(wideFlow);
+    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
     const auto wideFlow2 = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(wideBlocksFlow)));
     const auto narrowFlow = pb.NarrowMap(wideFlow2, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[1];

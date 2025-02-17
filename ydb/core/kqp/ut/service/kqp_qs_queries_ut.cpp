@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
@@ -649,6 +650,216 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(ExecuteCollectMeta) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            TExecuteQuerySettings settings;
+            settings.StatsMode(EStatsMode::Full);
+
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_C(!stats.query_meta().empty(), "Query result meta is empty");
+
+            TStringStream in;
+            in << stats.query_meta();
+            NJson::TJsonValue value;
+            ReadJsonTree(&in, &value);
+
+            UNIT_ASSERT_C(value.IsMap(), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_text"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("version"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Meta");
+            UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Meta: table_metadata type should be an array");
+            UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Meta");
+        }
+
+        {
+            TExecuteQuerySettings settings;
+            settings.StatsMode(EStatsMode::Basic);
+
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_C(stats.query_meta().empty(), "Query result Meta should be empty, but it's not");
+        }
+
+        {
+            TExecuteQuerySettings settings;
+            settings.ExecMode(EExecMode::Explain);
+
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+
+            UNIT_ASSERT(result.GetStats().has_value());
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_C(!stats.query_ast().empty(), "Query result ast is empty");
+            UNIT_ASSERT_C(!stats.query_meta().empty(), "Query result meta is empty");
+
+            TStringStream in;
+            in << stats.query_meta();
+            NJson::TJsonValue value;
+            ReadJsonTree(&in, &value);
+
+            UNIT_ASSERT_C(value.IsMap(), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("version"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_text"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Meta");
+            UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Meta: table_metadata type should be an array");
+            UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Meta");
+        }
+    }
+
+    Y_UNIT_TEST(StreamExecuteCollectMeta) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            TExecuteQuerySettings settings;
+            settings.StatsMode(EStatsMode::Full);
+
+            auto it = db.StreamExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+            TString statsString;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                const auto& execStats = streamPart.GetStats();
+                if (execStats) {
+                    auto& stats = NYdb::TProtoAccessor::GetProto(*execStats);
+                    statsString = stats.query_meta();
+                }
+            }
+
+            UNIT_ASSERT_C(!statsString.empty(), "Query result meta is empty");
+
+            TStringStream in;
+            in << statsString;
+            NJson::TJsonValue value;
+            ReadJsonTree(&in, &value);
+
+            UNIT_ASSERT_C(value.IsMap(), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_text"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("version"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Meta");
+            UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Meta: table_metadata type should be an array");
+            UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Meta");
+        }
+
+        {
+            auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+
+            auto it = db.StreamExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+            TString statsString;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                const auto& execStats = streamPart.GetStats();
+                if (execStats) {
+                    auto& stats = NYdb::TProtoAccessor::GetProto(*execStats);
+                    statsString = stats.query_meta();
+                }
+            }
+
+            UNIT_ASSERT_C(!statsString.empty(), "Query result meta is empty");
+
+            TStringStream in;
+            in << statsString;
+            NJson::TJsonValue value;
+            ReadJsonTree(&in, &value);
+
+            UNIT_ASSERT_C(value.IsMap(), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("version"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_text"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Meta");
+            UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Meta: table_metadata type should be an array");
+            UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Meta");
+            UNIT_ASSERT_C(!value.Has("query_plan"), "Incorrect Meta");
+            UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Meta");
+        }
+
+        {
+            TExecuteQuerySettings settings;
+            settings.StatsMode(EStatsMode::Basic);
+
+            auto it = db.StreamExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+            TString statsString;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                const auto& execStats = streamPart.GetStats();
+                if (execStats) {
+                    auto& stats = NYdb::TProtoAccessor::GetProto(*execStats);
+                    statsString = stats.query_meta();
+                }
+            }
+
+            UNIT_ASSERT_C(statsString.empty(), "Query result meta should be empty, but it's not");
+        }
+    }
+
     void CheckQueryResult(TExecuteQueryResult result) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
@@ -690,6 +901,46 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             auto rollbackTxResult = transaction.Rollback().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(rollbackTxResult.GetStatus(), EStatus::NOT_FOUND, rollbackTxResult.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(Followers) {
+        NKikimrConfig::TAppConfig config;
+
+        auto kikimr = TKikimrRunner(TKikimrSettings().SetAppConfig(config).SetUseRealThreads(false));
+        auto db = kikimr.GetQueryClient();
+
+        TExecuteQuerySettings settings;
+
+        THashMap<TActorId, ui64> countResolveTablet;
+        countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] = 0;
+        countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] = 0;
+        auto counterObserver = [&countResolveTablet](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::TEvPipeCache::TEvGetTabletNode::EventType) {
+                countResolveTablet[ev->Recipient]++;
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        kikimr.GetTestServer().GetRuntime()->SetObserverFunc(counterObserver);
+
+        Y_DEFER {
+            kikimr.GetTestServer().GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        };
+
+        {
+            const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Key = 1u";
+            auto result = kikimr.RunCall([&] { return db.ExecuteQuery(query, NQuery::TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            CompareYson(R"([
+                [[1u];[-1]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] == 0);
+            // using followers resolver.
+            UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] > 0);
         }
     }
 
@@ -1653,7 +1904,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAuthToken("user0@builtin");
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());

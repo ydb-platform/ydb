@@ -189,6 +189,7 @@ void TConfigsManager::Bootstrap(const TActorContext &ctx)
     Become(&TThis::StateWork);
 
     ClusterName = AppData(ctx)->ClusterName;
+    DomainName = Self.GetDomainName();
 
     TxProcessor = Self.GetTxProcessor()->GetSubProcessor("configs",
                                                          ctx,

@@ -982,7 +982,7 @@ private:
 
     size_t WriteNewSizeFromSupportivePartitions = 0;
 
-    void TryAddDeleteHeadKeysToPersistRequest();
+    bool TryAddDeleteHeadKeysToPersistRequest();
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
 
     TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);

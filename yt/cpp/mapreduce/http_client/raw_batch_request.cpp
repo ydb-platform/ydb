@@ -5,6 +5,7 @@
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 

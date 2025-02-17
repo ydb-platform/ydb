@@ -534,9 +534,13 @@ class YqTenant(BaseTenant):
                                  "RowDispatcher_" + self.uuid)
 
         fq_config['quotas_manager'] = {'enabled': True}
+        fq_config['quotas_manager']['quota_descriptions'] = [{
+            'subject_type': 'cloud',
+            'metric_name': 'yq.cpuPercent.count',
+            'hard_limit': 10000,
+            'default_limit': 10000}]
 
         fq_config['rate_limiter'] = {'enabled': True}
-        fq_config['quotas_manager'] = {'enabled': True}
         self.fill_rate_limiter_config(fq_config['rate_limiter'], "RateLimiter_" + self.uuid)
 
 

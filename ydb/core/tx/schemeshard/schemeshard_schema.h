@@ -12,6 +12,8 @@
 
 namespace NKikimr::NSchemeShard {
 
+inline constexpr auto ClusterIdTypeId = NScheme::NTypeIds::Uint64;
+
 struct Schema : NIceDb::Schema {
     struct Paths : Table<1> {
         struct Id :                    Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
@@ -1898,7 +1900,7 @@ struct Schema : NIceDb::Schema {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct Level : Column<2, NScheme::NTypeIds::Uint32> {};
         struct State : Column<3, NScheme::NTypeIds::Uint32> {};
-        struct Parent : Column<4, NScheme::NTypeIds::ClusterId> {};
+        struct Parent : Column<4, ClusterIdTypeId> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<

@@ -180,7 +180,7 @@ public:
         // upload types
         if (Ydb::Type type; State <= EState::KMEANS) {
             TargetTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
-            type.set_type_id(NTableIndex::TypeClusterId);
+            type.set_type_id(NTableIndex::ClusterIdType);
             (*TargetTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
             (*TargetTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
             type.set_type_id(Ydb::Type::STRING);

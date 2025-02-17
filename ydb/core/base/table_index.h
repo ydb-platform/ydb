@@ -39,13 +39,8 @@ bool IsBuildImplTable(std::string_view tableName);
 
 using TClusterId = ui64;
 
-inline constexpr auto TypeClusterId = Ydb::Type::UINT64;
-inline constexpr const char* StrClusterId = "Uint64";
-
-}
-namespace NScheme::NTypeIds {
-
-inline constexpr auto ClusterId = Uint64;
+inline constexpr auto ClusterIdType = Ydb::Type::UINT64;
+inline constexpr const char* ClusterIdTypeName = "Uint64";
 
 }
 }

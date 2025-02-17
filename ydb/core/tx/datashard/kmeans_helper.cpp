@@ -96,7 +96,7 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
     uploadTypes->reserve(1 + 1 + std::min(table.KeyColumnTypes.size() + data.size(), types.size()));
 
     Ydb::Type type;
-    type.set_type_id(NTableIndex::TypeClusterId);
+    type.set_type_id(NTableIndex::ClusterIdType);
     uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type);
 
     auto addType = [&](const auto& column) {

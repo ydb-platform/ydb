@@ -159,7 +159,7 @@ public:
 
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
-        type.set_type_id(NTableIndex::TypeClusterId);
+        type.set_type_id(NTableIndex::ClusterIdType);
         (*Types)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
         (*Types)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
         type.set_type_id(Ydb::Type::STRING);
@@ -766,7 +766,7 @@ private:
             InitMultiKMeans(buildInfo);
             return false;
         }
-        std::array<NScheme::TTypeInfo, 1> typeInfos{NScheme::NTypeIds::ClusterId};
+        std::array<NScheme::TTypeInfo, 1> typeInfos{ClusterIdTypeId};
         auto range = ParentRange(buildInfo.KMeans.Parent);
         auto addRestricted = [&] (const auto& idx) {
             const auto& status = buildInfo.Shards.at(idx);

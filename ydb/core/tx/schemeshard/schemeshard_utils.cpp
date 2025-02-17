@@ -268,8 +268,8 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     {
         auto parentColumn = implTableDesc.AddColumns();
         parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
-        parentColumn->SetType(NTableIndex::StrClusterId);
-        parentColumn->SetTypeId(NScheme::NTypeIds::ClusterId);
+        parentColumn->SetType(NTableIndex::ClusterIdTypeName);
+        parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         parentColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
@@ -304,8 +304,8 @@ auto CalcVectorKmeansTreePrefixImplTableDescImpl(
     {
         auto idColumn = implTableDesc.AddColumns();
         idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
-        idColumn->SetType(NTableIndex::StrClusterId);
-        idColumn->SetTypeId(NScheme::NTypeIds::ClusterId);
+        idColumn->SetType(NTableIndex::ClusterIdTypeName);
+        idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         idColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::IdColumn);
@@ -346,15 +346,15 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     {
         auto parentColumn = implTableDesc.AddColumns();
         parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
-        parentColumn->SetType(NTableIndex::StrClusterId);
-        parentColumn->SetTypeId(NScheme::NTypeIds::ClusterId);
+        parentColumn->SetType(NTableIndex::ClusterIdTypeName);
+        parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         parentColumn->SetNotNull(true);
     }
     {
         auto idColumn = implTableDesc.AddColumns();
         idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
-        idColumn->SetType(NTableIndex::StrClusterId);
-        idColumn->SetTypeId(NScheme::NTypeIds::ClusterId);
+        idColumn->SetType(NTableIndex::ClusterIdTypeName);
+        idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         idColumn->SetNotNull(true);
     }
     {

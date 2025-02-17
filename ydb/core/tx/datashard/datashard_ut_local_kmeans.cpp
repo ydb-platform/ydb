@@ -186,8 +186,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, NTableIndex::StrClusterId, true, true},
-            {IdColumn, NTableIndex::StrClusterId, true, true},
+            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
+            {IdColumn, NTableIndex::ClusterIdTypeName, true, true},
             {CentroidColumn, "String", false, true},
         });
         CreateShardedTable(server, sender, "/Root", "table-level", options);
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, NTableIndex::StrClusterId, true, true},
+            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
         });
@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, NTableIndex::StrClusterId, true, true},
+            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},

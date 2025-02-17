@@ -12,7 +12,7 @@ public:
     {
     }
 
-    TAsyncStatus ReplaceConfig(const TString& config) {
+    TAsyncStatus ReplaceConfig(const TString& mainConfig) {
         auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
         request.set_replace(config);
 
@@ -21,7 +21,36 @@ public:
             &Ydb::Config::V1::BSConfigService::Stub::AsyncReplaceConfig);
     }
 
-    // FIXME add all other calls
+    TAsyncStatus ReplaceConfig(const TString& mainConfig, const TString& storageConfig) {
+        auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
+        auto& replace = *request.mutable_replace_with_dedicated_storage_section();
+        replace.set_main_config(mainConfig);
+        replace.set_storage_config(storageConfig);
+
+        return RunSimple<Ydb::Config::V1::BSConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
+            std::move(request),
+            &Ydb::Config::V1::BSConfigService::Stub::AsyncReplaceConfig);
+    }
+
+    TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(const TString& mainConfig) {
+        auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
+        request.set_replace_disable_dedicated_storage_section(config);
+
+        return RunSimple<Ydb::Config::V1::BSConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
+            std::move(request),
+            &Ydb::Config::V1::BSConfigService::Stub::AsyncReplaceConfig);
+    }
+
+    TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig) {
+        auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
+        auto& replace = *request.mutable_replace_enable_dedicated_storage_section();
+        replace.set_main_config(mainConfig);
+        replace.set_storage_config(storageConfig);
+
+        return RunSimple<Ydb::Config::V1::BSConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
+            std::move(request),
+            &Ydb::Config::V1::BSConfigService::Stub::AsyncReplaceConfig);
+    }
 
     TAsyncFetchConfigResult FetchConfig(const TConfigSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::Config::FetchConfigRequest>(settings);
@@ -68,16 +97,16 @@ TAsyncStatus TConfigClient::ReplaceConfig(const TString& mainConfig) {
     return Impl_->ReplaceConfig(mainConfig);
 }
 
+TAsyncStatus TConfigClient::ReplaceConfig(const TString& mainConfig, const TString& storageConfig) {
+    return Impl_->ReplaceConfig(mainConfig, storageConfig);
+}
+
 TAsyncStatus TConfigClient::ReplaceConfigDisableDedicatedStorageSection(const TString& mainConfig) {
     return Impl_->ReplaceConfigDisableDedicatedStorageSection(mainConfig);
 }
 
 TAsyncStatus TConfigClient::ReplaceConfigEnableDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig) {
     return Impl_->ReplaceConfigEnableDedicatedStorageSection(mainConfig, storageConfig);
-}
-
-TAsyncStatus TConfigClient::ReplaceConfigWithDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig) {
-    return Impl_->ReplaceConfigWithDedicatedStorageSection(mainConfig, storageConfig);
 }
 
 TAsyncFetchConfigResult TConfigClient::FetchConfig(const TConfigSettings& settings) {

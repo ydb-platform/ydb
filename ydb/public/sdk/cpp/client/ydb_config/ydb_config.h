@@ -63,13 +63,13 @@ public:
     TAsyncStatus ReplaceConfig(const TString& mainConfig);
 
     // Replace config
+    TAsyncStatus ReplaceConfig(const TString& mainConfig, const TString& storageConfig);
+
+    // Replace config
     TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(const TString& mainConfig);
 
     // Replace config
     TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig);
-
-    // Replace config
-    TAsyncStatus ReplaceConfigWithDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig);
 
     // Fetch current cluster storage config
     TAsyncFetchConfigResult FetchConfig(const TConfigSettings& settings = {});

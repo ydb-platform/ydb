@@ -196,11 +196,11 @@ namespace NYql {
 
                                 // check transport and logical errors
                                 if (drainerResult.Issues) {
-                                    for (auto&& issue : drainerResult.Issues) {
-                                        desc->Issues.AddIssue(TStringBuilder()
-                                                              << "Call ListSplits for table " << tableAddress.String()
-                                                              << ": " << issue);
+                                    TIssue dstIssue(TStringBuilder() << "Call ListSplits for table " << tableAddress.String());
+                                    for (const auto& srcIssue : drainerResult.Issues) {
+                                        dstIssue.AddSubIssue(MakeIntrusive<TIssue>(srcIssue));
                                     };
+                                    desc->Issues.AddIssue(std::move(dstIssue));
                                     promise.SetValue();
                                     return;
                                 }
@@ -224,6 +224,8 @@ namespace NYql {
             return AsyncFuture_;
         }
 
+        // TODO: for some reason engine calls this function more than once.
+        // It worth adding some checks to avoid multiple data copying.
         TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
             AsyncFuture_.GetValue();
 

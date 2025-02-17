@@ -125,7 +125,7 @@ hosts:
 
 ## domains_config — домен кластера {#domains-config}
 
-Данный раздел содержит конфигурацию кластера {{ ydb-short-name }}, включая [конфигурации Blob Storage](#domains-blob) (хранилища бинарных объектов), [State Storage](#domains-state) (хранилища состояний) и [настройки безопасности](security.md).
+Данный раздел содержит конфигурацию кластера {{ ydb-short-name }}, включая [конфигурации Blob Storage](#domains-blob) (хранилища бинарных объектов) и [State Storage](#domains-state) (хранилища состояний).
 
 ``` yaml
 domains_config:
@@ -133,10 +133,6 @@ domains_config:
   - name: <имя корня кластера>
     storage_pool_types: <конфигурация Blob Storage>
   state_storage: <конфигурация State Storage>
-  disable_builtin_security: false
-  default_groups: false
-  default_access: false
-  security_config: <конфигурация безопасности>
 ```
 
 {% note info %}
@@ -144,28 +140,6 @@ domains_config:
 Формально, поле `domain` может содержать много элементов, так как это список, но имеет значение только первый элемент; остальные будут проигнорированы (в кластере может быть только один «домен»).
 
 {% endnote %}
-
-Флаги `disable_builtin_security`, `default_groups`, `default_access` влияют на настройку кластера, осуществляемую только при первом старте кластера {{ ydb-short-name }}.
-
-#|
-|| Параметр | Описание ||
-|| `disable_builtin_security` | Не выполнять [встроенную настройку безопасности](../../security/builtin-security.md).
-Встроенная настройка включает автоматическое создание суперпользователя `root`, набора встроенных пользовательских групп и выдачу прав доступа этим группам на корне кластера.
-
-Эфемерный флаг, не попадает в конфигурацию, сохраняемую в кластере.
-
-Значение по умолчанию: `false`.
-    ||
-|| `default_groups` | Отказаться от создания [встроенных групп](../../security/builtin-security.md), даже если явные группы по умолчанию ([`security_config.default_groups`](security.md)) не заданы.
-
-Значение по умолчанию: `false`
-    ||
-|| `default_access` | Отказаться от добавления прав на корне кластера для [встроенных групп](../../security/builtin-security.md), даже если явные права по умолчанию ([`security_config.default_access`](security.md)) не заданы.
-
-Значение по умолчанию: `false`
-    ||
-|#
-
 
 ### Конфигурация Blob Storage {#domains-blob}
 
@@ -283,8 +257,8 @@ domains_config:
         node: [1, 2, 3, 4, 5, 6, 7, 8]
         nto_select: 5
       ssid: 1
-    security_config:
-      enforce_user_token_requirement: true
+  security_config:
+    enforce_user_token_requirement: true
 
 - `mirror-3-dc`
 

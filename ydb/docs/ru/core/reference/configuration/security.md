@@ -1,27 +1,25 @@
 # Конфигурация безопасности {#security}
 
-В разделе `domains_config.security_config` задаются режимы [аутентификации](../../security/authentication.md), первичная конфигурация локальных [пользователей](../../concepts/glossary.md#access-user) и [групп](../../concepts/glossary.md#access-group) и их [права](../../concepts/glossary.md#access-right).
+В разделе `security_config` задаются режимы [аутентификации](../../security/authentication.md), первичная конфигурация локальных [пользователей](../../concepts/glossary.md#access-user) и [групп](../../concepts/glossary.md#access-group) и их [права](../../concepts/glossary.md#access-right).
 
 ```yaml
-domains_config:
-  ...
-  security_config:
-    # настройка режима аутентификации
-    enforce_user_token_requirement: false
-    enforce_user_token_check_requirement: false
-    default_user_sids: <аутентификационный токен для анонимных запросов>
-    all_authenticated_users: <имя группы всех аутентифицированных пользователей>
-    all_users_group: <имя группы всех пользователей>
+security_config:
+  # настройка режима аутентификации
+  enforce_user_token_requirement: false
+  enforce_user_token_check_requirement: false
+  default_user_sids: <аутентификационный токен для анонимных запросов>
+  all_authenticated_users: <имя группы всех аутентифицированных пользователей>
+  all_users_group: <имя группы всех пользователей>
 
-    # первичные настройки безопасности
-    default_users: <список пользователей по умолчанию>
-    default_groups: <список групп по умолчанию>
-    default_access: <список прав по умолчанию на корне кластера>
+  # первичные настройки безопасности
+  default_users: <список пользователей по умолчанию>
+  default_groups: <список групп по умолчанию>
+  default_access: <список прав по умолчанию на корне кластера>
 
-    # настройки привилегий
-    viewer_allowed_sids: <список SID'ов с правами просмотра состояния кластера>
-    monitoring_allowed_sids: <список SID'ов с правами просмотра и изменения состояния кластера>
-    administration_allowed_sids: <список SID'ов с доступом администратора кластера>
+  # настройки привилегий
+  viewer_allowed_sids: <список SID'ов с правами просмотра состояния кластера>
+  monitoring_allowed_sids: <список SID'ов с правами просмотра и изменения состояния кластера>
+  administration_allowed_sids: <список SID'ов с доступом администратора кластера>
 ```
 
 [//]: # (TODO: wait for pull/9387, dynamic_node_registration to add info about "register_dynamic_node_allowed_sids: <список SID'ов с правами подключения динамических нод в кластер>")
@@ -81,12 +79,19 @@ domains_config:
 
 ## Первичные настройки безопасности {#security-bootstrap}
 
-Параметры `default_users`, `default_groups`, `default_access` влияют на настройку кластера, осуществляемую при первом старте {{ ydb-short-name }}. При последующих запусках первичная настройка не выполняется, эти параметры игнорируются.
+Параметры `disable_builtin_security`, `default_users`, `default_groups`, `default_access` влияют на настройку кластера, осуществляемую при первом старте {{ ydb-short-name }}. При последующих запусках первичная настройка не выполняется, эти параметры игнорируются.
 
-См. также раздел по [встроенной настройке безопасности](../../security/builtin-security.md) и влияющие на неё настройки [уровня `domains_config`](index.md#domains-config).
+См. также раздел по [встроенной настройке безопасности](../../security/builtin-security.md).
 
 #|
 || Параметр | Описание ||
+|| `disable_builtin_security` | Не выполнять [встроенную настройку безопасности](../../security/builtin-security.md).
+Встроенная настройка включает автоматическое создание суперпользователя `root`, набора встроенных пользовательских групп и выдачу прав доступа этим группам на корне кластера.
+
+Эфемерный флаг, не попадает в конфигурацию, сохраняемую в кластере.
+
+Значение по умолчанию: `false`.
+    ||
 || `default_users` | Какие [пользователи](../../concepts/glossary.md#access-user) должны быть созданы на кластере при первом запуске.
 
 Список пар логин-пароль. Первый пользователь становится суперпользователем.

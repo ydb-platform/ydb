@@ -4,7 +4,7 @@ RECURSE(
     src
 )
 
-IF (NOT OPENSOURCE)
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT != "ydb")
     RECURSE(
         client
     )

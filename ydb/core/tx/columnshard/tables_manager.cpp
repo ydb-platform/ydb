@@ -112,7 +112,6 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             return false;
         }
 
-        THashMap<ui64, NOlap::TSnapshot> lastVersion;
         while (!rowset.EndOfSet()) {
             const ui64 pathId = rowset.GetValue<Schema::TableVersionInfo::PathId>();
             Y_ABORT_UNLESS(Tables.contains(pathId));
@@ -126,22 +125,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             AFL_VERIFY(preset);
             AFL_VERIFY(preset->Id == versionInfo.GetSchemaPresetId())("preset", preset->Id)("table", versionInfo.GetSchemaPresetId());
 
-            if (!table.IsDropped() && versionInfo.HasTtlSettings()) {
-                auto& ttlSettings = versionInfo.GetTtlSettings();
-                auto vIt = lastVersion.find(pathId);
-                if (vIt == lastVersion.end()) {
-                    vIt = lastVersion.emplace(pathId, version).first;
-                }
-                if (vIt->second <= version) {
-                    if (ttlSettings.HasEnabled()) {
-                        NOlap::TTiering deserializedTtl;
-                        AFL_VERIFY(deserializedTtl.DeserializeFromProto(ttlSettings.GetEnabled()).IsSuccess());
-                        Ttl[pathId] = std::move(deserializedTtl);
-                    } else {
-                        Ttl.erase(pathId);
-                    }
-                    vIt->second = version;
-                }
+            if (versionInfo.HasTtlSettings()) {
+                Ttl.AddVersionFromProto(pathId, version, versionInfo.GetTtlSettings());
             }
             table.AddVersion(version);
             if (!rowset.Next()) {
@@ -230,7 +215,7 @@ const TTableInfo& TTablesManager::GetTable(const ui64 pathId) const {
 }
 
 ui64 TTablesManager::GetMemoryUsage() const {
-    ui64 memory = Tables.size() * sizeof(TTableInfo) + PathsToDrop.size() * sizeof(ui64) + Ttl.size() * sizeof(NOlap::TTiering);
+    ui64 memory = Tables.size() * sizeof(TTableInfo) + PathsToDrop.size() * sizeof(ui64) + Ttl.GetMemoryUsage();
     if (PrimaryIndex) {
         memory += PrimaryIndex->MemoryUsage();
     }
@@ -242,7 +227,6 @@ void TTablesManager::DropTable(const ui64 pathId, const NOlap::TSnapshot& versio
     auto& table = Tables[pathId];
     table.SetDropVersion(version);
     AFL_VERIFY(PathsToDrop[version].emplace(pathId).second);
-    Ttl.erase(pathId);
     Schema::SaveTableDropVersion(db, pathId, version.GetPlanStep(), version.GetTxId());
 }
 
@@ -299,7 +283,7 @@ void TTablesManager::AddSchemaVersion(
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }
-        PrimaryIndex->OnTieringModified(Ttl);
+        PrimaryIndex->OnTieringModified(GetTtl());
     } else {
         PrimaryIndex->RegisterSchemaVersion(version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
     }
@@ -319,14 +303,7 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
     bool isTtlModified = false;
     if (versionInfo.HasTtlSettings()) {
         isTtlModified = true;
-        const auto& ttlSettings = versionInfo.GetTtlSettings();
-        if (ttlSettings.HasEnabled()) {
-            NOlap::TTiering deserializedTtl;
-            AFL_VERIFY(deserializedTtl.DeserializeFromProto(ttlSettings.GetEnabled()).IsSuccess());
-            Ttl[pathId] = std::move(deserializedTtl);
-        } else {
-            Ttl.erase(pathId);
-        }
+        Ttl.AddVersionFromProto(pathId, version, versionInfo.GetTtlSettings());
     }
 
     if (versionInfo.HasSchemaPresetId()) {
@@ -344,7 +321,7 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
 
     if (isTtlModified) {
         if (PrimaryIndex) {
-            if (auto findTtl = Ttl.FindPtr(pathId)) {
+            if (auto findTtl = GetTableTtl(pathId)) {
                 PrimaryIndex->OnTieringModified(*findTtl, pathId);
             } else {
                 PrimaryIndex->OnTieringModified({}, pathId);

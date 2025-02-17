@@ -147,7 +147,7 @@ ITopicClient::TPtr TPqNativeGateway::GetTopicClient(const NYdb::TDriver& driver,
     return MakeIntrusive<TNativeTopicClient>(driver, settings);
 }
 
-NYdb::NTopic::TTopicClientSettings TPqNativeGateway::GetTopicClientSettings() {
+NYdb::NTopic::TTopicClientSettings TPqNativeGateway::GetTopicClientSettings() const {
     return CommonTopicClientSettings.GetOrElse(NYdb::NTopic::TTopicClientSettings());
 }
 

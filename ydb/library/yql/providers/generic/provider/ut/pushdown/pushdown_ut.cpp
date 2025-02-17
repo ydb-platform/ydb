@@ -73,6 +73,32 @@ struct TFakeDatabaseResolver: public IDatabaseAsyncResolver {
     }
 };
 
+
+class TListSplitsIteratorMock: public NConnector::IListSplitsStreamIterator {
+public:
+    TListSplitsIteratorMock() {}
+
+    NConnector::TAsyncResult<NConnector::NApi::TListSplitsResponse> ReadNext() override {
+        NConnector::TResult<NConnector::NApi::TListSplitsResponse> result;
+
+        if (!responded) {
+            result.Status = NYdbGrpc::TGrpcStatus(); // OK
+            result.Response = NConnector::NApi::TListSplitsResponse(); 
+            result.Response->add_splits();
+            responded = true;  
+        } else {
+            result.Status = NYdbGrpc::TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
+        }
+
+        auto promise = NThreading::NewPromise<NConnector::TResult<NConnector::NApi::TListSplitsResponse>>();
+        promise.SetValue(result);
+
+        return promise.GetFuture();
+    }
+private:
+    bool responded = false;
+};
+
 struct TFakeGenericClient: public NConnector::IClient {
     NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request, TDuration) override {
         UNIT_ASSERT_VALUES_EQUAL(request.table(), "test_table");
@@ -125,11 +151,16 @@ struct TFakeGenericClient: public NConnector::IClient {
 
     NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
-        try {
-            throw std::runtime_error("ListSplits unimplemented");
-        } catch (...) {
-            return NThreading::MakeErrorFuture<NConnector::TListSplitsStreamIteratorAsyncResult::value_type>(std::current_exception());
-        }
+
+        auto promise = NThreading::NewPromise<NConnector::TIteratorResult<NConnector::IListSplitsStreamIterator>>();
+
+        NConnector::TIteratorResult<NConnector::IListSplitsStreamIterator> iteratorResult{
+            NYdbGrpc::TGrpcStatus(),
+            std::make_shared<TListSplitsIteratorMock>(),
+        };
+
+        promise.SetValue(std::move(iteratorResult));
+        return promise.GetFuture();
     }
 
     NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request, TDuration) override {

@@ -21,7 +21,6 @@ using EMemType = NCommon::EMemType;
 using TFetchingScriptCursor = NCommon::TFetchingScriptCursor;
 using TStepAction = NCommon::TStepAction;
 
-class TSpecialReadContext;
 
 class IFetchingStep: public NCommon::IFetchingStep {
 private:

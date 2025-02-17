@@ -355,6 +355,22 @@ bool TErrorResponse::IsAccessDenied() const
     return Error_.ContainsErrorCode(NClusterErrorCodes::NSecurityClient::AuthorizationError);
 }
 
+bool TErrorResponse::IsUnauthorized() const
+{
+    const auto allCodes = Error_.GetAllErrorCodes();
+    for (auto code : {
+        NClusterErrorCodes::NRpc::AuthenticationError,
+        NClusterErrorCodes::NRpc::InvalidCsrfToken,
+        NClusterErrorCodes::NRpc::InvalidCredentials,
+        NClusterErrorCodes::NSecurityClient::AuthenticationError,
+    }) {
+        if (allCodes.contains(code)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool TErrorResponse::IsConcurrentTransactionLockConflict() const
 {
     return Error_.ContainsErrorCode(NClusterErrorCodes::NCypressClient::ConcurrentTransactionLockConflict);

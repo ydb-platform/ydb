@@ -14,7 +14,7 @@
 
 3. There are two ways to build `ydbops`:
 
-- Manual build. Invoke `go build` in the repository root folder:
+- **Manual build.** Invoke `go build` in the repository root folder:
 
     ```bash
     go build

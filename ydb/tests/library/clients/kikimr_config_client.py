@@ -56,17 +56,18 @@ class ConfigClient(object):
 
                 time.sleep(self.__retry_sleep_seconds)
 
-    def replace_storage_config(self, yaml_config, storage_yaml_config=None):
+    def replace_config(self, yaml_config, storage_yaml_config=None):
         request = config_api.ReplaceConfigRequest()
-        request.yaml_config = yaml_config
+        request.replace = yaml_config
         if storage_yaml_config is not None:
             request.storage_yaml_config = storage_yaml_config
         return self.invoke(request, 'ReplaceConfig')
 
-    def fetch_storage_config(self, dedicated_storage_section=False, dedicated_cluster_section=False):
+    def fetch_config(self, dedicated_storage_section=False, dedicated_cluster_section=False):
         request = config_api.FetchConfigRequest()
-        request.dedicated_storage_section = dedicated_storage_section
-        request.dedicated_cluster_section = dedicated_cluster_section
+        # FIXME
+        # request.dedicated_storage_section = dedicated_storage_section
+        # request.dedicated_cluster_section = dedicated_cluster_section
         return self.invoke(request, 'FetchConfig')
 
     def bootstrap_cluster(self, self_assembly_uuid):

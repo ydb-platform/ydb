@@ -9,12 +9,12 @@ import ydb.tests.library.common.cms as cms
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.clients.kikimr_config_client import BSConfigClient
+from ydb.tests.library.clients.kikimr_config_client import ConfigClient
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 
-import ydb.public.api.protos.ydb_bsconfig_pb2 as bsconfig
+import ydb.public.api.protos.ydb_config_pb2 as config
 
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class AbstractKiKiMRTest(object):
         host = cls.cluster.nodes[1].host
         grpc_port = cls.cluster.nodes[1].port
         cls.swagger_client = SwaggerClient(host, cls.cluster.nodes[1].mon_port)
-        cls.bsconfig_client = BSConfigClient(host, grpc_port)
+        cls.config_client = ConfigClient(host, grpc_port)
 
     @classmethod
     def teardown_class(cls):
@@ -141,7 +141,7 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
             use_in_memory_pdisks=False,
             use_config_store=True,
             separate_node_configs=True,
-            extra_grpc_services=['bsconfig'],
+            extra_grpc_services=['config'],
             metadata_section=cls.metadata_section,
             additional_log_configs={'BS_NODE': LogLevels.DEBUG},
         )
@@ -151,7 +151,7 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
         host = cls.cluster.nodes[1].host
         grpc_port = cls.cluster.nodes[1].port
         cls.swagger_client = SwaggerClient(host, cls.cluster.nodes[1].mon_port)
-        cls.bsconfig_client = BSConfigClient(host, grpc_port)
+        cls.config_client = ConfigClient(host, grpc_port)
 
     def test_cluster_works_with_auto_conf_dir(self):
         table_path = '/Root/mydb/mytable_auto_conf'
@@ -174,16 +174,18 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
         initial_config['metadata']['version'] = initial_version
 
         config_yaml = yaml.dump(initial_config)
-        replace_storage_config_response = self.bsconfig_client.replace_storage_config(config_yaml)
-        assert_that(replace_storage_config_response.operation.status == StatusIds.SUCCESS)
+        replace_config_response = self.config_client.replace_config(config_yaml)
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
 
-        fetch_storage_config_response = self.bsconfig_client.fetch_storage_config()
-        assert_that(fetch_storage_config_response.operation.status == StatusIds.SUCCESS)
+        fetch_config_response = self.config_client.fetch_config()
+        assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
 
-        result = bsconfig.FetchStorageConfigResult()
-        fetch_storage_config_response.operation.result.Unpack(result)
+        result = config.FetchConfigResult()
+        fetch_config_response.operation.result.Unpack(result)
 
-        fetched_config = result.yaml_config
+        assert_that(result.config is not None)
+        assert_that(len(result.config) == 1)
+        fetched_config = result.config[0].config
         parsed_fetched_config = yaml.safe_load(fetched_config)
         assert_that(parsed_fetched_config is not None)
         assert_that(parsed_fetched_config.get('metadata') is not None)

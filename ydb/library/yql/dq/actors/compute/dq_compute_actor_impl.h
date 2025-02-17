@@ -101,13 +101,13 @@ class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived>
 private:
     struct TEvPrivate {
         enum EEv : ui32 {
-            EvRuntimeError = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvAsyncOutputError = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvEnd
         };
 
         static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvAsyncOutputError : public NActors::TEventLocal<TEvAsyncOutputError, EvRuntimeError> {
+        struct TEvAsyncOutputError : public NActors::TEventLocal<TEvAsyncOutputError, EvAsyncOutputError> {
             TEvAsyncOutputError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
                 : StatusCode(statusCode)
                 , Issues(issues)

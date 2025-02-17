@@ -286,25 +286,31 @@ protected:
             const auto& record = ev->Get()->Record;
             if (record.HasClusterYaml()) {
                 auto conf = ev->Get()->Record.GetClusterYaml();
-                auto& config = *result.add_config();
-                auto& identity = *config.mutable_identity();
                 auto metadata = NYamlConfig::GetMainMetadata(conf);
-                // TODO: !imp
-                identity.set_version(*metadata.Version);
-                identity.set_cluster(AppData()->ClusterName);
-                identity.mutable_main();
-                config.set_config(conf);
+                if (metadata.Version && metadata.Cluster) {
+                    auto& config = *result.add_config();
+                    auto& identity = *config.mutable_identity();
+                    identity.set_version(*metadata.Version);
+                    identity.set_cluster(*metadata.Cluster);
+                    identity.mutable_main();
+                    config.set_config(conf);
+                } else {
+                    // impossible
+                }
             }
             if (record.HasStorageYaml()) {
                 auto conf = ev->Get()->Record.GetStorageYaml();
-                auto& config = *result.add_config();
-                auto& identity = *config.mutable_identity();
                 auto metadata = NYamlConfig::GetStorageMetadata(conf);
-                // TODO: !imp
-                identity.set_version(*metadata.Version);
-                identity.set_cluster(AppData()->ClusterName);
-                identity.mutable_storage();
-                config.set_config(conf);
+                if (metadata.Version && metadata.Cluster) {
+                    auto& config = *result.add_config();
+                    auto& identity = *config.mutable_identity();
+                    identity.set_version(*metadata.Version);
+                    identity.set_cluster(*metadata.Cluster);
+                    identity.mutable_storage();
+                    config.set_config(conf);
+                } else {
+                    // impossible
+                }
             }
             self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
         } else {

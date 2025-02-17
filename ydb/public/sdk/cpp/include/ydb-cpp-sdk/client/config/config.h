@@ -17,7 +17,15 @@ struct TReplaceConfigSettings : public NYdb::TOperationRequestSettings<TReplaceC
     FLUENT_SETTING_FLAG(BypassChecks);
 };
 
-struct TFetchConfigSettings : public NYdb::TOperationRequestSettings<TFetchConfigSettings> {};
+enum class EFetchAllConfigsTransform {
+    NONE,
+    DETACH_STORAGE_CONFIG_SECTION,
+    ATTACH_STORAGE_CONFIG_SECTION,
+};
+
+struct TFetchAllConfigsSettings : public NYdb::TOperationRequestSettings<TFetchAllConfigsSettings> {
+    FLUENT_SETTING(EFetchAllConfigsTransform, Transform);
+};
 
 struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {};
 
@@ -96,7 +104,7 @@ public:
         const TReplaceConfigSettings& settings = {});
 
     // Fetch current cluster storage config
-    TAsyncFetchConfigResult FetchConfig(const TFetchConfigSettings& settings = {});
+    TAsyncFetchConfigResult FetchAllConfigs(const TFetchAllConfigsSettings& settings = {});
 
     // Bootstrap cluster with automatic configuration
     TAsyncStatus BootstrapCluster(

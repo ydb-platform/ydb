@@ -60,7 +60,7 @@ public:
             &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
     }
 
-    TAsyncFetchConfigResult FetchConfig(const TFetchConfigSettings& settings = {}) {
+    TAsyncFetchConfigResult FetchAllConfigs(const TFetchAllConfigsSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::Config::FetchConfigRequest>(settings);
         auto promise = NThreading::NewPromise<TFetchConfigResult>();
 
@@ -168,8 +168,8 @@ TAsyncStatus TConfigClient::ReplaceConfigEnableDedicatedStorageSection(
     return Impl_->ReplaceConfigEnableDedicatedStorageSection(mainConfig, storageConfig, settings);
 }
 
-TAsyncFetchConfigResult TConfigClient::FetchConfig(const TFetchConfigSettings& settings) {
-    return Impl_->FetchConfig(settings);
+TAsyncFetchConfigResult TConfigClient::FetchAllConfigs(const TFetchAllConfigsSettings& settings) {
+    return Impl_->FetchAllConfigs(settings);
 }
 
 TAsyncStatus TConfigClient::BootstrapCluster(

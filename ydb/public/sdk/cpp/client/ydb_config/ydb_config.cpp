@@ -68,7 +68,7 @@ public:
                 std::vector<TConfig> configs;
                 if (Ydb::Config::FetchConfigResult result; any && any->UnpackTo(&result)) {
                     for (const auto& entry : result.config()) {
-                        TKnownIdentityTypes identity;
+                        TIdentityTypes identity;
 
                         switch (entry.identity().type_case()) {
                         case Ydb::Config::ConfigIdentity::TypeCase::kMain:

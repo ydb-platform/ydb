@@ -16,13 +16,13 @@ public:
 
     TAsyncStatus ReplaceConfig(const TString& mainConfig, const TReplaceConfigSettings& settings = {}) {
         auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
-        request.set_replace(config);
+        request.set_replace(mainConfig);
 
         ApplyReplaceSettings(request, settings);
 
-        return RunSimple<Ydb::Config::V1::BSConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
+        return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
             std::move(request),
-            &Ydb::Config::V1::BSConfigService::Stub::AsyncReplaceConfig);
+            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
     }
 
     TAsyncStatus ReplaceConfig(const TString& mainConfig, const TString& storageConfig, const TReplaceConfigSettings& settings = {}) {
@@ -33,20 +33,20 @@ public:
 
         ApplyReplaceSettings(request, settings);
 
-        return RunSimple<Ydb::Config::V1::BSConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
+        return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
             std::move(request),
-            &Ydb::Config::V1::BSConfigService::Stub::AsyncReplaceConfig);
+            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
     }
 
     TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(const TString& mainConfig, const TReplaceConfigSettings& settings = {}) {
         auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
-        request.set_replace_disable_dedicated_storage_section(config);
+        request.set_replace_disable_dedicated_storage_section(mainConfig);
 
         ApplyReplaceSettings(request, settings);
 
-        return RunSimple<Ydb::Config::V1::BSConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
+        return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
             std::move(request),
-            &Ydb::Config::V1::BSConfigService::Stub::AsyncReplaceConfig);
+            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
     }
 
     TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig, const TReplaceConfigSettings& settings = {}) {
@@ -57,9 +57,9 @@ public:
 
         ApplyReplaceSettings(request, settings);
 
-        return RunSimple<Ydb::Config::V1::BSConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
+        return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
             std::move(request),
-            &Ydb::Config::V1::BSConfigService::Stub::AsyncReplaceConfig);
+            &Ydb::Config::V1::ConfigService::Stub::AsyncReplaceConfig);
     }
 
     TAsyncFetchConfigResult FetchConfig(const TFetchConfigSettings& settings = {}) {
@@ -70,35 +70,35 @@ public:
                 std::vector<TConfig> configs;
                 if (Ydb::Config::FetchConfigResult result; any && any->UnpackTo(&result)) {
                     for (const auto& entry : result.config()) {
-                        TKnownIdentityTypes identity;
+                        TIdentityTypes identity;
 
                         switch (entry.identity().type_case()) {
                         case Ydb::Config::ConfigIdentity::TypeCase::kMain:
                             identity = TMainConfigIdentity {
-                                .Version = entry.identity().version();
-                                .Cluster = entry.identity().cluster();
+                                .Version = entry.identity().version(),
+                                .Cluster = entry.identity().cluster(),
                             };
                             break;
-                        case Ydb::Config::ConfigConfigIdentity::TypeCase::kStorage:
+                        case Ydb::Config::ConfigIdentity::TypeCase::kStorage:
                             identity = TStorageConfigIdentity {
-                                .Version = entry.identity().version();
-                                .Cluster = entry.identity().cluster();
+                                .Version = entry.identity().version(),
+                                .Cluster = entry.identity().cluster(),
                             };
                             break;
-                        case Ydb::Config::ConfigConfigIdentity::TypeCase::kDatabase:
+                        case Ydb::Config::ConfigIdentity::TypeCase::kDatabase:
                             identity = TDatabaseConfigIdentity {
-                                .Version = entry.identity().version();
-                                .Cluster = entry.identity().cluster();
-                                .Database = entry.identity().database().database();
+                                .Version = entry.identity().version(),
+                                .Cluster = entry.identity().cluster(),
+                                .Database = entry.identity().database().database(),
                             };
                             break;
-                        case Ydb::Config::ConfigIdentity::TypeCase::ACTION_NOT_SET:
+                        case Ydb::Config::ConfigIdentity::TypeCase::TYPE_NOT_SET:
                             break; // leave in monostate; uknown identity
                         }
 
                         configs.push_back(TConfig{
-                                .Identity = std::monostate,
-                                .Config = identity,
+                                .Identity = identity,
+                                .Config = entry.config(),
                             });
                     }
                 }
@@ -107,10 +107,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::Config::V1::BSConfigService, Ydb::Config::FetchConfigRequest, Ydb::Config::FetchConfigResponse>(
+        Connections_->RunDeferred<Ydb::Config::V1::ConfigService, Ydb::Config::FetchConfigRequest, Ydb::Config::FetchConfigResponse>(
             std::move(request),
             extractor,
-            &Ydb::Config::V1::BSConfigService::Stub::AsyncFetchConfig,
+            &Ydb::Config::V1::ConfigService::Stub::AsyncFetchConfig,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -122,12 +122,12 @@ public:
         auto request = MakeRequest<Ydb::Config::BootstrapClusterRequest>();
         request.set_self_assembly_uuid(selfAssemblyUUID);
 
-        return RunSimple<Ydb::Config::V1::BSConfigService, Ydb::Config::BootstrapClusterRequest,
+        return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::BootstrapClusterRequest,
             Ydb::Config::BootstrapClusterResponse>(std::move(request),
-            &Ydb::Config::V1::BSConfigService::Stub::AsyncBootstrapCluster);
+            &Ydb::Config::V1::ConfigService::Stub::AsyncBootstrapCluster);
     }
 private:
-    static void ApplyReplaceSettings(auto& request, const TReplaceConfigSettings& settings) const {
+    static void ApplyReplaceSettings(auto& request, const TReplaceConfigSettings& settings) {
         request.set_dry_run(settings.DryRun_);
         request.set_allow_unknown_fields(settings.AllowUnknownFields_);
         request.set_bypass_checks(settings.BypassChecks_);
@@ -167,7 +167,7 @@ TAsyncStatus TConfigClient::ReplaceConfigEnableDedicatedStorageSection(
     const TString& storageConfig,
     const TReplaceConfigSettings& settings)
 {
-    return Impl_->ReplaceConfigEnableDedicatedStorageSection(mainConfig, storageConfig);
+    return Impl_->ReplaceConfigEnableDedicatedStorageSection(mainConfig, storageConfig, settings);
 }
 
 TAsyncFetchConfigResult TConfigClient::FetchConfig(const TFetchConfigSettings& settings) {

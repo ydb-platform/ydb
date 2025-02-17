@@ -186,8 +186,7 @@ int TCommandConfigReplace::Run(TConfig& config) {
     NYdb::NConfig::TReplaceConfigSettings settings;
 
     if (Force) {
-        settings.AllowIncorrectVersion();
-        settings.AllowIncorrectCluster();
+        settings.BypassChecks();
     }
 
     if (DryRun) {

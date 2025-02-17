@@ -63,11 +63,13 @@ void TCommandStorageConfigFetch::Parse(TConfig& config) {
 int TCommandStorageConfigFetch::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NConfig::TConfigClient(*driver);
-    auto result = client.FetchConfig(DedicatedStorageSection, DedicatedClusterSection).GetValueSync();
+    // FIXME
+    // auto result = client.FetchConfig(DedicatedStorageSection, DedicatedClusterSection).GetValueSync();
+    auto result = client.FetchConfig().GetValueSync();
     NStatusHelpers::ThrowOnError(result);
 
-    const auto& clusterConfig = result.GetMainConfig();
-    const auto& storageConfig = result.GetStorageConfig();
+    TString clusterConfig; // = result.GetMainConfig();
+    TString storageConfig; // = result.GetStorageConfig();
 
     if (!clusterConfig.empty()) {
         if (!storageConfig.empty() || DedicatedStorageSection) {
@@ -140,19 +142,20 @@ void TCommandStorageConfigReplace::Parse(TConfig& config) {
 }
 
 int TCommandStorageConfigReplace::Run(TConfig& config) {
-    std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NConfig::TConfigClient(*driver);
-    NYdb::NConfig::TReplaceConfigSettings settings;
-    settings
-        .SwitchDedicatedStorageSection(SwitchDedicatedStorageSection)
-        .DedicatedConfigMode(DedicatedConfigMode);
+    Y_UNUSED(config); // FIXME
+    // std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
+    // auto client = NYdb::NConfig::TConfigClient(*driver);
+    // NYdb::NConfig::TReplaceConfigSettings settings;
+    // settings
+    //     .SwitchDedicatedStorageSection(SwitchDedicatedStorageSection)
+    //     .DedicatedConfigMode(DedicatedConfigMode);
 
-    auto status = client.ReplaceConfig(ClusterYaml, StorageYaml, settings).GetValueSync();
-    NStatusHelpers::ThrowOnError(status);
+    // auto status = client.ReplaceConfig(ClusterYaml, StorageYaml, settings).GetValueSync();
+    // NStatusHelpers::ThrowOnError(status);
 
-    if (!status.GetIssues()) {
-        Cout << status << Endl;
-    }
+    // if (!status.GetIssues()) {
+    //     Cout << status << Endl;
+    // }
 
     return EXIT_SUCCESS;
 }

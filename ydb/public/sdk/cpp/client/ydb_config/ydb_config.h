@@ -41,15 +41,15 @@ struct TDatabaseConfigIdentity {
     TString Database;
 };
 
-using TKnownIdentitiyTypes = std::variant<
+using TKnownIdentityTypes = std::variant<
       std::monostate
-    , TMainConfigMetadata
-    , TStorageConfigMetadata
-    , TDatabaseConfigMetadata
+    , TMainConfigIdentity
+    , TStorageConfigIdentity
+    , TDatabaseConfigIdentity
     >;
 
 struct TConfig {
-    TKnownIdentityTypes Identity;
+    TIdentityTypes Identity;
     TString Config;
 };
 
@@ -58,7 +58,7 @@ struct TFetchConfigResult : public TStatus {
             TStatus&& status,
             std::vector<TConfig>&& configs)
         : TStatus(std::move(status))
-        , Config_(std::move(config))
+        , Configs_(std::move(configs))
     {}
 
     const std::vector<TConfig>& GetConfigs() const {

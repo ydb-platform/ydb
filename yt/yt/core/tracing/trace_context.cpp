@@ -155,31 +155,7 @@ TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation l
     return oldContext;
 }
 
-void OnContextSwitchOut()
-{
-    if (auto* context = TryGetCurrentTraceContext()) {
-        auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
-        auto now = GetApproximateCpuInstant();
-        context->IncrementElapsedCpuTime(now - traceContextTimingCheckpoint);
-        SetCurrentTraceContext(nullptr);
-        traceContextTimingCheckpoint = 0;
-    }
-}
-
-void OnContextSwitchIn()
-{
-    if (auto* context = TryGetTraceContextFromPropagatingStorage(GetCurrentPropagatingStorage())) {
-        SetCurrentTraceContext(context);
-        TraceContextTimingCheckpoint() = GetApproximateCpuInstant();
-    } else {
-        SetCurrentTraceContext(nullptr);
-        TraceContextTimingCheckpoint() = 0;
-    }
-}
-
-void OnPropagatingStorageSwitch(
-    const TPropagatingStorage& oldStorage,
-    const TPropagatingStorage& newStorage)
+void OnPropagatingStorageBeforeSwitch(const TPropagatingStorage& oldStorage)
 {
     TCpuInstant now = 0;
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
@@ -190,6 +166,12 @@ void OnPropagatingStorageSwitch(
         now = GetApproximateCpuInstant();
         oldContext->IncrementElapsedCpuTime(now - traceContextTimingCheckpoint);
     }
+}
+
+void OnPropagatingStorageAfterSwitch(const TPropagatingStorage& newStorage)
+{
+    TCpuInstant now = 0;
+    auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
 
     if (auto* newContext = TryGetTraceContextFromPropagatingStorage(newStorage)) {
         SetCurrentTraceContext(newContext);
@@ -201,6 +183,24 @@ void OnPropagatingStorageSwitch(
         SetCurrentTraceContext(nullptr);
         traceContextTimingCheckpoint = 0;
     }
+}
+
+void OnPropagatingStorageSwitch(
+    const TPropagatingStorage& oldStorage,
+    const TPropagatingStorage& newStorage)
+{
+    OnPropagatingStorageBeforeSwitch(oldStorage);
+    OnPropagatingStorageAfterSwitch(newStorage);
+}
+
+void OnContextSwitchOut()
+{
+    OnPropagatingStorageBeforeSwitch(GetCurrentPropagatingStorage());
+}
+
+void OnContextSwitchIn()
+{
+    OnPropagatingStorageAfterSwitch(GetCurrentPropagatingStorage());
 }
 
 void InitializeTraceContexts()

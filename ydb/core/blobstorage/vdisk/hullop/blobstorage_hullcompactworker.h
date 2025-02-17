@@ -23,11 +23,6 @@ namespace NKikimr {
         using THandoffMap = NKikimr::THandoffMap<TKey, TMemRec>;
         using THandoffMapPtr = TIntrusivePtr<THandoffMap>;
 
-        // garbage collector map
-        using TGcMap = NKikimr::TGcMap<TKey, TMemRec>;
-        using TGcMapPtr = TIntrusivePtr<TGcMap>;
-        using TGcMapIterator = typename TGcMap::TIterator;
-
         // compaction record merger
         using TCompactRecordMerger = NKikimr::TCompactRecordMerger<TKey, TMemRec>;
 
@@ -129,7 +124,7 @@ namespace NKikimr {
         THandoffMapPtr Hmp;
 
         // garbage collector iterator
-        TGcMapIterator GcmpIt;
+        TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> Barriers;
 
         // LSN range
         const ui64 FirstLsn = 0;
@@ -288,6 +283,8 @@ namespace NKikimr {
         // is used for compaction policy implementation to limit number of intermediate chunks durint compaction.
         std::optional<TKey> PartitionKey;
 
+        const bool AllowGarbageCollection;
+
         std::deque<std::unique_ptr<NPDisk::TEvChunkWrite>> PendingWrites;
 
     public:
@@ -301,7 +298,8 @@ namespace NKikimr {
                               ui64 firstLsn,
                               ui64 lastLsn,
                               TDuration restoreDeadline,
-                              std::optional<TKey> partitionKey)
+                              std::optional<TKey> partitionKey,
+                              bool allowGarbageCollection)
             : HullCtx(std::move(hullCtx))
             , PDiskCtx(std::move(pdiskCtx))
             , HugeBlobCtx(std::move(hugeBlobCtx))
@@ -321,6 +319,7 @@ namespace NKikimr {
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)
+            , AllowGarbageCollection(allowGarbageCollection)
         {
             if (IsFresh) {
                 ChunksToUse = HullCtx->HullSstSizeInChunksFresh;
@@ -337,9 +336,10 @@ namespace NKikimr {
             }
         }
 
-        void Prepare(THandoffMapPtr hmp, TGcMapIterator gcmpIt, TLevelIndexSnapshot *levelSnap) {
+        void Prepare(THandoffMapPtr hmp, TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriers,
+                TLevelIndexSnapshot *levelSnap) {
             Hmp = std::move(hmp);
-            GcmpIt = gcmpIt;
+            Barriers = std::move(barriers);
             LevelSnap = levelSnap;
             State = EState::GetNextItem;
         }
@@ -360,7 +360,6 @@ namespace NKikimr {
 
                             // iterator is valid and we have one more item to process; instruct merger whether we want
                             // data or not and proceed to TryProcessItem state
-                            Y_ABORT_UNLESS(GcmpIt.Valid());
                             It.PutToMerger(&IndexMerger);
 
                             const bool haveToProcessItem = PreprocessItem();
@@ -573,10 +572,7 @@ namespace NKikimr {
         // start item processing; this function transforms item using handoff map and adds collected huge blobs, if any
         // it returns true if we should keep this item; otherwise it returns false
         bool PreprocessItem() {
-            const bool keepData = GcmpIt.KeepData();
-            bool keepItem = GcmpIt.KeepItem();
-            bool wasEmptyMerger;
-            TIngress ingressBefore;
+            NGc::TKeepStatus keep(true);
 
             if constexpr (LogoBlobs) {
                 if (!LevelSnapIt) {
@@ -593,47 +589,43 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(LevelSnapIt->Valid());
                 Y_ABORT_UNLESS(LevelSnapIt->GetCurKey() == Key);
 
-                wasEmptyMerger = IndexMerger.IsDataMergerEmpty(); // remember merger state before merging any external data
-                ingressBefore = IndexMerger.GetCurrentIngress().CopyWithoutLocal(GType);
+                const ui32 subsKeep = IndexMerger.GetNumKeepFlags();
+                const ui32 subsDoNotKeep = IndexMerger.GetNumDoNotKeepFlags();
 
                 IndexMerger.SetExternalDataStage();
-                Y_DEBUG_ABORT_UNLESS(LevelSnapIt->GetCurKey() == Key);
                 LevelSnapIt->PutToMerger(&IndexMerger);
 
-                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, Key.LogoBlobID(), MinHugeBlobInBytes));
+                const ui32 wholeKeep = IndexMerger.GetNumKeepFlags() - subsKeep; // they are counted too
+                const ui32 wholeDoNotKeep = IndexMerger.GetNumDoNotKeepFlags() - subsDoNotKeep; // so are they
+
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {subsKeep, subsDoNotKeep, wholeKeep,
+                    wholeDoNotKeep}, HullCtx->AllowKeepFlags, AllowGarbageCollection);
+
+                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, Key.LogoBlobID(), MinHugeBlobInBytes), keep.KeepData);
             } else {
-                IndexMerger.Finish(false);
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {}, HullCtx->AllowKeepFlags,
+                    AllowGarbageCollection);
+
+                IndexMerger.Finish(false, false);
             }
 
-            if (keepItem) {
-                ++(keepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData);
+            Y_ABORT_UNLESS(keep.KeepIndex || !keep.KeepData); // either we keep the item, or we drop it along with data
+
+            if (keep.KeepIndex) {
+                ++(keep.KeepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData);
             } else {
                 ++Statistics.DontKeepItems;
             }
 
-            if (keepItem) {
-                Hmp->Transform(Key, MemRec.emplace(IndexMerger.GetMemRec()), IndexMerger.GetDataMerger(), keepData);
+            if (keep.KeepIndex) {
+                Hmp->Transform(Key, MemRec.emplace(IndexMerger.GetMemRec()), IndexMerger.GetDataMerger());
             }
 
             if constexpr (LogoBlobs) {
-                TDataMerger& dataMerger = IndexMerger.GetDataMerger();
-
-                if (keepItem && !wasEmptyMerger && dataMerger.Empty()) {
-                    // FIXME: check if this would lead to data loss?
-                    // we can possibly drop this item (if it does not bring some more information in ingress)
-                    const TIngress ingressAfter = IndexMerger.GetCurrentIngress().CopyWithoutLocal(GType);
-                    if (ingressBefore.Raw() == ingressAfter.Raw()) {
-//                        keepItem = false;
-                    }
-                }
-
-                if (!keepItem) { // we are deleting this item too, so we drop saved huge blobs here
-                    CollectRemovedHugeBlobs(dataMerger.GetSavedHugeBlobs());
-                }
-                CollectRemovedHugeBlobs(dataMerger.GetDeletedHugeBlobs());
+                CollectRemovedHugeBlobs(IndexMerger.GetDataMerger().GetDeletedHugeBlobs());
             }
 
-            return keepItem;
+            return keep.KeepIndex;
         }
 
         ETryProcessItemStatus TryProcessItem() {
@@ -713,7 +705,6 @@ namespace NKikimr {
             // clear merger and on-disk record list and advance both iterators synchronously
             IndexMerger.Clear();
             It.Next();
-            GcmpIt.Next();
             MemRec.reset();
         }
 

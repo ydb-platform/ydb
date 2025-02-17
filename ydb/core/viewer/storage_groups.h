@@ -247,6 +247,7 @@ public:
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
         bool Donor = false;
         std::vector<TVSlotId> Donors;
+        bool Present = false;
 
         TString GetVDiskId() const {
             return TStringBuilder() << VDiskId.GroupID.GetRawId() << '-'
@@ -375,6 +376,9 @@ public:
                     if (*vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                         ++replicatingDisks;
                     }
+                }
+                if (!vdisk.Present) { // no data about disk
+                    ++MissingDisks;
                 }
                 allocated += vdisk.AllocatedSize;
                 limit += vdisk.AllocatedSize + vdisk.AvailableSize;
@@ -1271,6 +1275,7 @@ public:
         if (vDisk.Status && NKikimrBlobStorage::EVDiskStatus_Parse(vDisk.Status, &vDiskStatus)) {
             vDisk.VDiskStatus = vDiskStatus;
         }
+        vDisk.Present = true;
     }
 
     bool AreBSControllerRequestsDone() const {
@@ -1732,6 +1737,7 @@ public:
         for (auto& donor : info.GetDonors()) {
             vDisk.Donors.emplace_back(donor);
         }
+        vDisk.Present = true;
     }
 
     void ProcessWhiteboardDisks() {

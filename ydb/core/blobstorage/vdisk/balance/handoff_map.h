@@ -59,7 +59,7 @@ namespace NKikimr {
 
         // Transforms record according to the built handoff map. It returns item we need to write, pointer is
         // valid until next call. Nullptr indicates that item is to be removed completely.
-        void Transform(const TKey& /*key*/, TMemRec& /*memRec*/, TDataMerger& dataMerger, bool /*keepData*/) {
+        void Transform(const TKey& /*key*/, TMemRec& /*memRec*/, TDataMerger& dataMerger) {
             // do nothing by default, all work is done in template specialization for logo blobs
             Counter++;
             Y_DEBUG_ABORT_UNLESS(dataMerger.Empty());
@@ -78,15 +78,8 @@ namespace NKikimr {
 
     template<>
     inline void THandoffMap<TKeyLogoBlob, TMemRecLogoBlob>::Transform(const TKeyLogoBlob& key, TMemRecLogoBlob& memRec,
-            TDataMerger& dataMerger, bool keepData) {
+            TDataMerger& dataMerger) {
         Y_DEFER { Counter++; };
-
-        if (!keepData) {
-            memRec.SetNoBlob();
-            memRec.ClearLocalParts(Top->GType);
-            dataMerger.MakeEmpty(); // collect all huge blobs in the merger
-            return;
-        }
 
         if (!RunHandoff) {
             return;

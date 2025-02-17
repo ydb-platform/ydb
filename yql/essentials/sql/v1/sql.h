@@ -7,6 +7,7 @@
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/settings/translator.h>
 
 #include <google/protobuf/message.h>
 
@@ -27,4 +28,5 @@ namespace NSQLTranslationV1 {
     bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, NYql::TIssues& issues,
         const NSQLTranslation::TTranslationSettings& settings);
 
+    NSQLTranslation::TTranslatorPtr MakeTranslator();
 }  // namespace NSQLTranslationV1

@@ -27,6 +27,7 @@ struct TCommitRecord {
     ui64 FirstLsnToKeep = 0; // 0 == not set
     TVector<TChunkIdx> CommitChunks;
     TVector<TChunkIdx> DeleteChunks;
+    TVector<TChunkIdx> DirtyChunks;
     bool IsStartingPoint = false;
     bool DeleteToDecommitted = false; // 1 == set chunks to Decommitted state that requires a ChunkForget event or a restart
     // the value of DeleteToDecommitted is not stored as a part of the commit record.
@@ -74,6 +75,8 @@ struct TCommitRecord {
         PrintChunks(str, CommitChunks);
         str << " DeleteChunks# ";
         PrintChunks(str, DeleteChunks);
+        str << " DirtyChunks# ";
+        PrintChunks(str, DirtyChunks);
         str << "}";
         return str.Str();
     }

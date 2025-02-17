@@ -987,7 +987,8 @@ private:
 
     std::atomic<bool> EnableErrorCodeCounter_ = false;
 
-    const NConcurrency::TPeriodicExecutorPtr ServiceLivenessChecker_;
+    std::atomic<bool> ServiceLivenessCheckerStarted_ = false;
+    TAtomicIntrusivePtr<NConcurrency::TPeriodicExecutor> ServiceLivenessChecker_;
 
     using TDiscoverRequestSet = TConcurrentHashMap<TCtxDiscoverPtr, int>;
     THashMap<TString, TDiscoverRequestSet> DiscoverRequestsByPayload_;
@@ -1075,6 +1076,7 @@ private:
     void IncrementActiveRequestCount();
     void DecrementActiveRequestCount();
 
+    void StartServiceLivenessChecker();
     void RegisterDiscoverRequest(const TCtxDiscoverPtr& context);
     void ReplyDiscoverRequest(const TCtxDiscoverPtr& context, bool isUp);
 

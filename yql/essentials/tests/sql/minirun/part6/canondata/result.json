@@ -305,9 +305,9 @@
     ],
     "test.test[blocks-coalesce_scalar-default.txt-Peephole]": [
         {
-            "checksum": "de0d9ee659715c2a884666a8e2ad690c",
-            "size": 1923,
-            "uri": "https://{canondata_backend}/1920236/8a88b220fe1ff8b571b6813b812d7623629101fd/resource.tar.gz#test.test_blocks-coalesce_scalar-default.txt-Peephole_/opt.yql"
+            "checksum": "16037c7a59e90100426abd1f7461cfd3",
+            "size": 1963,
+            "uri": "https://{canondata_backend}/1917492/9722518a50ef2685c59301cc045eae38584b9f63/resource.tar.gz#test.test_blocks-coalesce_scalar-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-coalesce_scalar-default.txt-Results]": [
@@ -326,9 +326,9 @@
     ],
     "test.test[blocks-member-default.txt-Peephole]": [
         {
-            "checksum": "b40c6c197f750c6a604329621bd37300",
-            "size": 586,
-            "uri": "https://{canondata_backend}/1900335/81a360a61ba1555c418f20e4c99272eb22766040/resource.tar.gz#test.test_blocks-member-default.txt-Peephole_/opt.yql"
+            "checksum": "c7daf76e38a19686c4ecd83abd730695",
+            "size": 606,
+            "uri": "https://{canondata_backend}/1917492/9722518a50ef2685c59301cc045eae38584b9f63/resource.tar.gz#test.test_blocks-member-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-member-default.txt-Results]": [
@@ -347,9 +347,9 @@
     ],
     "test.test[blocks-projection_add_ints_filter-default.txt-Peephole]": [
         {
-            "checksum": "f5fb44eaf3fafb816e7d772449908cd6",
-            "size": 851,
-            "uri": "https://{canondata_backend}/1784826/964c3d771c51aa808279a968bec9d2485cb85678/resource.tar.gz#test.test_blocks-projection_add_ints_filter-default.txt-Peephole_/opt.yql"
+            "checksum": "b48a57d896cdabf3db3480cd86cc8e2a",
+            "size": 871,
+            "uri": "https://{canondata_backend}/1917492/9722518a50ef2685c59301cc045eae38584b9f63/resource.tar.gz#test.test_blocks-projection_add_ints_filter-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-projection_add_ints_filter-default.txt-Results]": [

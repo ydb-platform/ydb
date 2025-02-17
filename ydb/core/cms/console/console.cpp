@@ -195,6 +195,15 @@ bool TConsole::HasTenant(const TString& path) const
     return TenantsManager->HasTenant(path);
 }
 
+TString TConsole::GetDomainName() const
+{
+    if (!TenantsManager) {
+        return {};
+    }
+
+    return TenantsManager->GetDomainName();
+}
+
 IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info)
 {
     return new TConsole(tablet, info);

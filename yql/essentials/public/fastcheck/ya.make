@@ -25,6 +25,8 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper/interface
 )
 
+GENERATE_ENUM_SERIALIZATION(linter.h)
+
 END()
 
 RECURSE_FOR_TESTS(

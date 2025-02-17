@@ -461,6 +461,9 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.memory_controller_config is not None:
             normalized_config["memory_controller_config"] = self.__cluster_details.memory_controller_config
 
+        if self.__cluster_details.s3_proxy_resolver_config is not None:
+            normalized_config["s3_proxy_resolver_config"] = self.__cluster_details.s3_proxy_resolver_config
+
         if self.__cluster_details.blob_storage_config is not None:
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
         else:

@@ -1476,21 +1476,36 @@ TRuntimeNode TProgramBuilder::ToBlocks(TRuntimeNode flow) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode flow) {
-    TType* outputItemType;
-    {
-        const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
-        std::vector<TType*> outputItems;
-        outputItems.reserve(wideComponents.size());
-        for (size_t i = 0; i < wideComponents.size(); ++i) {
-            outputItems.push_back(NewBlockType(wideComponents[i], TBlockType::EShape::Many));
-        }
-        outputItems.push_back(NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
-        outputItemType = NewMultiType(outputItems);
+TType* TProgramBuilder::BuildWideBlockType(const TArrayRef<TType* const>& wideComponents) {
+    std::vector<TType*> blockItems;
+    blockItems.reserve(wideComponents.size());
+    for (size_t i = 0; i < wideComponents.size(); i++) {
+        blockItems.push_back(NewBlockType(wideComponents[i], TBlockType::EShape::Many));
     }
+    blockItems.push_back(NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
+    return NewMultiType(blockItems);
+}
 
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputItemType));
-    callableBuilder.Add(flow);
+TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode stream) {
+    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected WideStream as input type");
+    if constexpr (RuntimeVersion < 58U) {
+        // Preserve the old behaviour for ABI compatibility.
+        // Emit (FromFlow (WideToBlocks (ToFlow (<stream>)))) to
+        // process the flow in favor to the given stream following
+        // the older MKQL ABI.
+        // FIXME: Drop the branch below, when the time comes.
+        const auto inputFlow = ToFlow(stream);
+        const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, inputFlow.GetStaticType()));
+        TType* outputMultiType = BuildWideBlockType(wideComponents);
+        TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
+        callableBuilder.Add(inputFlow);
+        const auto outputFlow = TRuntimeNode(callableBuilder.Build(), false);
+        return FromFlow(outputFlow);
+    }
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, stream.GetStaticType()));
+    TType* outputMultiType = BuildWideBlockType(wideComponents);
+    TCallableBuilder callableBuilder(Env, __func__, NewStreamType(outputMultiType));
+    callableBuilder.Add(stream);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

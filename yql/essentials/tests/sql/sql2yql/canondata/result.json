@@ -4325,6 +4325,20 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_optimizers-total_order_/sql.yql"
         }
     ],
+    "test_sql2yql.test[optimizers-unordered_over_extract_members_topsort]": [
+        {
+            "checksum": "9cb1b2793d6d65a3bfcebcdc3f3aa420",
+            "size": 1742,
+            "uri": "https://{canondata_backend}/1925821/4a7a165d661ae378f2025a97c95475bb115e6d39/resource.tar.gz#test_sql2yql.test_optimizers-unordered_over_extract_members_topsort_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-unordered_over_sort_multiusage]": [
+        {
+            "checksum": "f1c95bf6035b258a482866f55a179e19",
+            "size": 2131,
+            "uri": "https://{canondata_backend}/1899731/164076531bc4516ecd4b3deb7194d9251f373494/resource.tar.gz#test_sql2yql.test_optimizers-unordered_over_sort_multiusage_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[optimizers-wide_if_present_over_double_just]": [
         {
             "checksum": "ed6c179f04ea4ee166d0aad0f781b5a3",
@@ -10341,6 +10355,16 @@
             "uri": "file://test_sql_format.test_optimizers-total_order_/formatted.sql"
         }
     ],
+    "test_sql_format.test[optimizers-unordered_over_extract_members_topsort]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-unordered_over_extract_members_topsort_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-unordered_over_sort_multiusage]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-unordered_over_sort_multiusage_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[optimizers-wide_if_present_over_double_just]": [
         {
             "uri": "file://test_sql_format.test_optimizers-wide_if_present_over_double_just_/formatted.sql"
@@ -11237,9 +11261,9 @@
     ],
     "test_sql_negative.test[lambda-lambda_no_dollar_assign-default.txt]": [
         {
-            "checksum": "68fdd4a5658a392623fcdad598463f01",
-            "size": 267,
-            "uri": "https://{canondata_backend}/1937429/434276f26b2857be3c5ad3fdbbf877d2bf775ac5/resource.tar.gz#test_sql_negative.test_lambda-lambda_no_dollar_assign-default.txt_/err_file.out"
+            "checksum": "a241c3dedcd3cb21630b944d02c7710b",
+            "size": 184,
+            "uri": "https://{canondata_backend}/1937150/1c11855c3fbd4d89c3dccdc8d48b0a48f4874e36/resource.tar.gz#test_sql_negative.test_lambda-lambda_no_dollar_assign-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[match_recognize-measures_aggr_factory-default.txt]": [

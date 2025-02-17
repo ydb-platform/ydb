@@ -2832,6 +2832,17 @@ BELONGS ya.make
     Files with this license:
         scsi/scsi_bsg_ufs.h [5:6]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 8999aed970320ca8558f44732e40779b
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2023 Advanced Micro Devices, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/psp-dbc.h [5:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 89d5fc8805673ffdbe4fc447403720b9
 BELONGS ya.make
     License text:

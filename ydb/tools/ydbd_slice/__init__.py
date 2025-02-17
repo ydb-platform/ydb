@@ -310,7 +310,7 @@ def deduce_components_from_args(args, cluster_details):
     return result
 
 
-def deduce_nodes_from_args(args, walle_provider, ssh_user):
+def deduce_nodes_from_args(args, walle_provider, ssh_user, ssh_key_path):
     cluster_hosts = safe_load_cluster_details(args.cluster, walle_provider).hosts_names
     result = cluster_hosts
 
@@ -326,7 +326,7 @@ def deduce_nodes_from_args(args, walle_provider, ssh_user):
         sys.exit("unable to deduce hosts")
 
     logger.info("use nodes '%s'", result)
-    return nodes.Nodes(result, args.dry_run, ssh_user=ssh_user, queue_size=args.cmd_queue_size)
+    return nodes.Nodes(result, args.dry_run, ssh_user=ssh_user, ssh_key_path=ssh_key_path, queue_size=args.cmd_queue_size)
 
 
 def ya_build(arcadia_root, artifact, opts, dry_run):
@@ -514,6 +514,12 @@ def ssh_args():
         help="user for ssh interaction with slice. Default value is $USER "
         "(which equals {user} now)".format(user=current_user),
     )
+    args.add_argument(
+        "--ssh-key-path",
+        metavar="SSH_KEY_PATH",
+        help="Path to ssh private key"
+        "(which equals {user} now)".format(user=current_user),
+    )
     return args
 
 
@@ -625,7 +631,7 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
     cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
     components = deduce_components_from_args(args, cluster_details)
 
-    nodes = deduce_nodes_from_args(args, walle_provider, args.ssh_user)
+    nodes = deduce_nodes_from_args(args, walle_provider, args.ssh_user, args.ssh_key_path)
 
     temp_dir = deduce_temp_dir_from_args(args)
     clear_tmp = not args.dry_run and args.temp_dir is None
@@ -857,26 +863,36 @@ def add_sample_config_mode(modes):
 
 #
 # docker and kube scenarios
-def build_and_push_docker_image(build_args, docker_package, build_ydbd, image, force_rebuild):
+def build_docker_image(build_args, docker_package, build_ydbd, image, force_rebuild):
     if docker_package is None:
         docker_package = docker.DOCKER_IMAGE_YDBD_PACKAGE_SPEC
 
     logger.debug(f'using docker package spec: {docker_package}')
 
     image_details = docker.docker_inspect(image)
+    output_path = docker.get_image_output_path(image)
 
     if image_details is None:
         logger.debug('ydb image %s is not present on host, building', image)
         root = arcadia_root()
         ya_package_docker(root, build_args, docker_package, image)
+        docker.docker_image_save(image, output_path, True)
     elif force_rebuild:
         logger.debug('ydb image %s is already present on host, rebuilding', image)
         root = arcadia_root()
         ya_package_docker(root, build_args, docker_package, image)
+        docker.docker_image_save(image, output_path, True)
     else:
         logger.debug('ydb image %s is already present on host, using existing image', image)
+        docker.docker_image_save(image, output_path, False)
 
-    docker.docker_push(image)
+
+def push_docker_image(image):
+    image_details = docker.docker_inspect(image)
+    if image_details is not None:
+        docker.docker_push(image)
+    else:
+        logger.error('ydb image %s is not present on host, skip', image)
 
 
 def add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False):
@@ -908,13 +924,24 @@ def add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False):
     )
 
 
+def add_arguments_docker_push_with_remainder(mode):
+    group = mode.add_argument_group('docker push options')
+    group.add_argument(
+        '-i', '--image',
+        help='Optional: docker image name and tag to push. Conflicts with "-t" argument.',
+    )
+    group.add_argument(
+        '-t', '--tag',
+        help='Optional: docker image tag to push. Conflicts with "-i" argument. Default is {user}-latest.',
+    )
+
+
 def add_docker_build_mode(modes):
     def _run(args):
         logger.debug("starting docker-build cmd with args '%s'", args)
         try:
             image = docker.get_image_from_args(args)
-            build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=True)
-
+            build_docker_image(args.build_args, args.docker_package, False, image, True)
             logger.info('docker-build finished')
         except RuntimeError as e:
             logger.error(e.args[0])
@@ -926,6 +953,26 @@ def add_docker_build_mode(modes):
         description="Build YDB docker image."
     )
     add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False)
+    mode.set_defaults(handler=_run)
+
+
+def add_docker_push_mode(modes):
+    def _run(args):
+        logger.debug("starting docker-push cmd with args '%s'", args)
+        try:
+            image = docker.get_image_from_args(args)
+            push_docker_image(image)
+            logger.info('docker-push finished')
+        except RuntimeError as e:
+            logger.error(e.args[0])
+            sys.exit(1)
+
+    mode = modes.add_parser(
+        "docker-push",
+        parents=[],
+        description="Push YDB docker image."
+    )
+    add_arguments_docker_push_with_remainder(mode)
     mode.set_defaults(handler=_run)
 
 
@@ -989,11 +1036,11 @@ def add_kube_install_mode(modes):
         try:
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
+                build_docker_image(args.build_args, args.docker_package, False, image, args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             kube_handlers.manifests_ydb_set_image(args.path, manifests, image)
-            kube_handlers.slice_install(args.path, manifests, args.wait_ready, args.dynamic_config_type)
+            kube_handlers.slice_install(args.path, manifests, args.wait_ready, args.dynamic_config_type, image, args.use_prebuilt_image)
 
             logger.info('kube-install finished')
         except RuntimeError as e:
@@ -1036,12 +1083,12 @@ def add_kube_update_mode(modes):
         try:
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
+                build_docker_image(args.build_args, args.docker_package, False, image, args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             manifests = kube_handlers.manifests_ydb_filter_components(args.path, manifests, args.components)
             kube_handlers.manifests_ydb_set_image(args.path, manifests, image)
-            kube_handlers.slice_update(args.path, manifests, args.wait_ready, args.dynamic_config_type)
+            kube_handlers.slice_update(args.path, manifests, args.wait_ready, args.dynamic_config_type, image, args.use_prebuilt_image)
 
             logger.info('kube-update finished')
         except RuntimeError as e:
@@ -1368,6 +1415,7 @@ def main(walle_provider=None):
         add_sample_config_mode(modes)
 
         add_docker_build_mode(modes)
+        add_docker_push_mode(modes)
         add_kube_generate_mode(modes)
         add_kube_install_mode(modes)
         add_kube_update_mode(modes)

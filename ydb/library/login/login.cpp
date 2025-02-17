@@ -141,6 +141,10 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
 
     if (request.CanLogin.has_value()) {
         user.IsEnabled = request.CanLogin.value();
+
+        if (user.IsEnabled && CheckLockoutByAttemptCount(user)) {
+            ResetFailedLoginAttemptCount(&user);
+        }
     }
 
     return response;
@@ -347,9 +351,12 @@ std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) 
     return groups;
 }
 
+bool TLoginProvider::CheckLockoutByAttemptCount(const TSidRecord& sid) const {
+    return AccountLockout.AttemptThreshold != 0 && sid.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold;
+}
+
 bool TLoginProvider::CheckLockout(const TSidRecord& sid) const {
-    return  !sid.IsEnabled
-            || AccountLockout.AttemptThreshold != 0 && sid.FailedLoginAttemptCount >= AccountLockout.AttemptThreshold;
+    return !sid.IsEnabled || CheckLockoutByAttemptCount(sid);
 }
 
 void TLoginProvider::ResetFailedLoginAttemptCount(TSidRecord* sid) {
@@ -364,9 +371,11 @@ bool TLoginProvider::ShouldResetFailedAttemptCount(const TSidRecord& sid) const 
     if (sid.FailedLoginAttemptCount == 0) {
         return false;
     }
+
     if (AccountLockout.AttemptResetDuration == std::chrono::system_clock::duration::zero()) {
         return false;
     }
+
     return sid.LastFailedLogin + AccountLockout.AttemptResetDuration < std::chrono::system_clock::now();
 }
 

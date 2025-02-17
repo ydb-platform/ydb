@@ -2622,7 +2622,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-copyleft.LICENSE
     Files with this license:
-        linux/bpf.h [6330:6330]
+        linux/bpf.h [6410:6410]
 
 KEEP     GPL-2.0-or-later WITH Linux-syscall-note 534ccb3153742b07bce86782a49733fc
 BELONGS ya.make
@@ -3494,7 +3494,7 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: linux/rxrpc.
 
 KEEP     GPL-2.0-only WITH Linux-syscall-note 8f065979effd897c5008afa60beda79d
 BELONGS ya.make
-FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: drm/ivpu_accel.h at line 1, linux/amt.h at line 1, linux/can/j1939.h at line 1, linux/can/netlink.h at line 1, linux/can/vxcan.h at line 1, linux/ccs.h at line 1, linux/dw100.h at line 1, linux/ethtool_netlink.h at line 1, linux/gpio.h at line 1, linux/input-event-codes.h at line 1, linux/netfilter/xt_IDLETIMER.h at line 1, linux/psp-sev.h at line 1, linux/remoteproc_cdev.h at line 1, linux/sev-guest.h at line 1, linux/wmi.h at line 1, linux/wwan.h at line 1
+FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: drm/ivpu_accel.h at line 1, linux/amt.h at line 1, linux/can/j1939.h at line 1, linux/can/netlink.h at line 1, linux/can/vxcan.h at line 1, linux/ccs.h at line 1, linux/dw100.h at line 1, linux/ethtool_netlink.h at line 1, linux/gpio.h at line 1, linux/input-event-codes.h at line 1, linux/netfilter/xt_IDLETIMER.h at line 1, linux/psp-dbc.h at line 1, linux/psp-sev.h at line 1, linux/remoteproc_cdev.h at line 1, linux/sev-guest.h at line 1, linux/wmi.h at line 1, linux/wwan.h at line 1
     License text:
         /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
     Scancode info:
@@ -3514,6 +3514,7 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: drm/ivpu_acc
         linux/gpio.h [1:1]
         linux/input-event-codes.h [1:1]
         linux/netfilter/xt_IDLETIMER.h [1:1]
+        linux/psp-dbc.h [1:1]
         linux/psp-sev.h [1:1]
         linux/remoteproc_cdev.h [1:1]
         linux/sev-guest.h [1:1]
@@ -3536,6 +3537,7 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: drm/ivpu_acc
         linux/gpio.h [1:1]
         linux/input-event-codes.h [1:1]
         linux/netfilter/xt_IDLETIMER.h [1:1]
+        linux/psp-dbc.h [1:1]
         linux/psp-sev.h [1:1]
         linux/remoteproc_cdev.h [1:1]
         linux/sev-guest.h [1:1]
@@ -4172,7 +4174,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        linux/fuse.h [336:336]
+        linux/fuse.h [374:374]
 
 KEEP     GPL-2.0-or-later WITH Linux-syscall-note c196f33d1f74889d4f98f65f6f70ea8f
 BELONGS ya.make

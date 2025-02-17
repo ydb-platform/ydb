@@ -59,8 +59,34 @@ public:
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::vector<TConfig> configs;
                 if (Ydb::Config::FetchConfigResult result; any && any->UnpackTo(&result)) {
-                    // FIXME
-                    Y_UNUSED(result);
+                    for (const auto& entry : result.config()) {
+                        TKnownIdentityTypes identity;
+
+                        switch (entry.identity().type_case()) {
+                        case Ydb::Config::ConfigIdentity::TypeCase::kMain:
+                            identity = TMainConfigIdentity {
+
+                            };
+                            break;
+                        case Ydb::Config::ConfigConfigIdentity::TypeCase::kStorage:
+                            identity = TStorageConfigIdentity {
+
+                            };
+                            break;
+                        case Ydb::Config::ConfigConfigIdentity::TypeCase::kDatabase:
+                            identity = TDatabaseConfigIdentity {
+
+                            };
+                            break;
+                        case Ydb::Config::ConfigIdentity::TypeCase::ACTION_NOT_SET:
+                            break; // leave in monostate; uknown identity
+                        }
+
+                        configs.push_back(TConfig{
+                                .Identity = std::monostate,
+                                .Config = identity,
+                            });
+                    }
                 }
 
                 TFetchConfigResult val(TStatus(std::move(status)), std::move(configs));

@@ -15,20 +15,27 @@
 
 namespace NYdb::NConfig {
 
-struct TMainConfigMetadata {
+struct TMainConfigIdentity {
 
 };
 
-struct TStorageConfigMetadata {
+struct TStorageConfigIdentity {
 
 };
 
-struct TDatabaseConfigMetadata {
+struct TDatabaseConfigIdentity {
 
 };
+
+using TKnownIdentitiyTypes = std::variant<
+      std::monostate
+    , TMainConfigMetadata
+    , TStorageConfigMetadata
+    , TDatabaseConfigMetadata
+    >;
 
 struct TConfig {
-    std::variant<std::monostate, TMainConfigMetadata, TStorageConfigMetadata, TDatabaseConfigMetadata> Metadata;
+    TKnownIdentityTypes Identity;
     TString Config;
 };
 

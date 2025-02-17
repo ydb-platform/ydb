@@ -181,7 +181,7 @@ private:
     TInputConverter Converter;
 
 public:
-    explicit TMessageConsumerImpl(
+    TMessageConsumerImpl(
         const TMessageInputSpec& /*inputSpec*/,
         TWorkerHolder<IPushStreamWorker> worker
     )

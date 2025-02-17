@@ -308,7 +308,7 @@ public:
     void TrySendGetNextBatch(TSession& sessionInfo);
     TString GetInternalState();
     template <class TEventPtr>
-    TSession* FindSession(const TEventPtr& ev);
+    TSession* FindAndUpdateSession(const TEventPtr& ev);
     void SendNoSession(const NActors::TActorId& recipient, ui64 cookie);
     void NotifyCA();
     void SendStartSession(TSession& sessionInfo);
@@ -565,7 +565,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& e
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_I("Received TEvStartSessionAck from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() <<  ", generation " << ev->Cookie);
     Counters.StartSessionAck++;
-    auto* session = FindSession(ev);
+    auto* session = FindAndUpdateSession(ev);
     if (!session) {
         return;
     }
@@ -578,7 +578,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
     SRC_LOG_I("Received TEvSessionError from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
     Counters.SessionError++;
 
-    auto* session = FindSession(ev);
+    auto* session = FindAndUpdateSession(ev);
     if (!session) {
         return;
     }
@@ -592,7 +592,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     SRC_LOG_T("Received TEvStatistics from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.Statistics++;
     CpuMicrosec += ev->Get()->Record.GetCpuMicrosec();
-    auto* session = FindSession(ev);
+    auto* session = FindAndUpdateSession(ev);
     if (!session) {
         return;
     }
@@ -630,7 +630,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
     SRC_LOG_T("Received TEvNewDataArrived from " << ev->Sender << ", partition " << ev->Get()->Record.GetPartitionId() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.NewDataArrived++;
  
-    auto* session = FindSession(ev);
+    auto* session = FindAndUpdateSession(ev);
     if (!session) {
         return;
     }
@@ -687,7 +687,7 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartb
 void TDqPqRdReadActor::Handle(const NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
     SRC_LOG_T("Received TEvHeartbeat from " << ev->Sender << ", generation " << ev->Cookie);
     Counters.Heartbeat++;
-    FindSession(ev);
+    FindAndUpdateSession(ev);
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
@@ -799,7 +799,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_T("Received TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.MessageBatch++;
-    auto* session = FindSession(ev);
+    auto* session = FindAndUpdateSession(ev);
     if (!session) {
         return;
     }
@@ -934,7 +934,7 @@ void TDqPqRdReadActor::TrySendGetNextBatch(TSession& sessionInfo) {
 }
 
 template <class TEventPtr>
-TDqPqRdReadActor::TSession* TDqPqRdReadActor::FindSession(const TEventPtr& ev) {
+TDqPqRdReadActor::TSession* TDqPqRdReadActor::FindAndUpdateSession(const TEventPtr& ev) {
     auto sessionIt = Sessions.find(ev->Sender);
     if (sessionIt == Sessions.end()) {
         SRC_LOG_W("Ignore " << typeid(TEventPtr).name() << " from " << ev->Sender);

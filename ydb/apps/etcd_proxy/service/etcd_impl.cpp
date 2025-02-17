@@ -732,12 +732,12 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        Range.Dump(std::cout) << std::endl;
         return Range.MakeQueryWithParams(sql, params);
     }
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         auto response = Range.MakeResponse(Revision, results);
+        Range.Dump(std::cout) << '=' << response.count() << std::endl;
         return this->Reply(response, ctx);
     }
 
@@ -756,7 +756,6 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        Put.Dump(std::cout) << std::endl;
         AddParam("Revision", params, Revision);
         return Put.MakeQueryWithParams(sql, params);
     }
@@ -768,6 +767,7 @@ private:
         };
 
         auto response = Put.MakeResponse(Revision, results, notifier);
+        Put.Dump(std::cout) << std::endl;
         return this->Reply(response, ctx);
     }
 
@@ -786,7 +786,6 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        DeleteRange.Dump(std::cout) << std::endl;
         AddParam("Revision", params, Revision);
         return DeleteRange.MakeQueryWithParams(sql, params);
     }
@@ -803,6 +802,7 @@ private:
             Stuff->Revision.compare_exchange_strong(expected, Revision);
         }
 
+        DeleteRange.Dump(std::cout) << '=' << response.deleted() << std::endl;
         return this->Reply(response, ctx);
     }
 
@@ -821,7 +821,6 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        Txn.Dump(std::cout) << std::endl;
         AddParam("Revision", params, Revision);
 
         TTxn::TKeysSet keys;
@@ -840,6 +839,7 @@ private:
         };
 
         auto response = Txn.MakeResponse(Revision, results, notifier);
+        Txn.Dump(std::cout) << '=' << (response.succeeded() ? "success" : "failure") << std::endl;
         return this->Reply(response, ctx);
     }
 
@@ -861,13 +861,13 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        std::cout << "Compact(" << KeyRevision << ')' << std::endl;
         sql << "delete from `verhaal` where `modified` < " << AddParam("Revision", params, KeyRevision) << ';' << std::endl;
     }
 
     void ReplyWith(const NYdb::TResultSets&, const TActorContext& ctx) final {
         etcdserverpb::CompactionResponse response;
         FillHeader(Revision, *response.mutable_header());
+        std::cout << "Compact(" << KeyRevision << ')' << std::endl;
         return this->Reply(response, ctx);
     }
 
@@ -890,7 +890,6 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        std::cout << "Grant(" << TTL << ")=" << Lease << std::endl;
         sql << "insert into `leases` (`id`,`ttl`,`created`,`updated`)" << std::endl;
         sql << '\t' << "values (" << AddParam("Lease", params, Lease) << ',' << AddParam("TimeToLive", params, TTL) << ",CurrentUtcDatetime(),CurrentUtcDatetime());" << std::endl;
     }
@@ -900,6 +899,7 @@ private:
         FillHeader(Revision, *response.mutable_header());
         response.set_id(Lease);
         response.set_ttl(TTL);
+        std::cout << "Grant(" << TTL << ")=" << response.id() << ',' << response.ttl() << std::endl;
         return this->Reply(response, ctx);
     }
 
@@ -921,8 +921,6 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        std::cout << "Revoke(" << Lease << ')' << std::endl;
-
         const auto& revisionParamName = AddParam("Revision", params, Revision);
         const auto& leaseParamName = AddParam("Lease", params, Lease);
 
@@ -961,6 +959,7 @@ private:
 
         etcdserverpb::LeaseRevokeResponse response;
         FillHeader(Revision, *response.mutable_header());
+        std::cout << "Revoke(" << Lease << ')' << std::endl;
         return this->Reply(response, ctx);
     }
 
@@ -983,8 +982,6 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        std::cout << "TimeToLive(" << Lease << ')' << std::endl;
-
         const auto& leaseParamName = AddParam("Lease", params, Lease);
 
         sql << "select `ttl`, `ttl` - unwrap(cast(CurrentUtcDatetime() - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leaseParamName << " = `id`;" << std::endl;
@@ -1009,6 +1006,7 @@ private:
             }
         }
 
+        std::cout << "TimeToLive(" << Lease << ")=" << response.ttl() << ',' << response.grantedttl() << std::endl;
         return this->Reply(response, ctx);
     }
 
@@ -1028,7 +1026,6 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder&) final {
-        std::cout << "Leases()" << std::endl;
         sql << "select `id` from `leases`;" << std::endl;
     }
 
@@ -1040,6 +1037,7 @@ private:
             response.add_leases()->set_id(NYdb::TValueParser(parser.GetValue(0)).GetInt64());
         }
 
+        std::cout << "Leases()=" << response.leases().size() << std::endl;
         return this->Reply(response, ctx);
     }
 };

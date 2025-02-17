@@ -3185,6 +3185,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 300, true);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, (TInstant::Now() + TDuration::Days(1000)).MicroSeconds(), 300, true);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, (TInstant::Now() - TDuration::Days(1)).MicroSeconds(), 10, false, TDuration::Days(2).MicroSeconds() / 10);
+        Sleep(TDuration::Seconds(5));
 
         {
             auto it = client
@@ -3197,13 +3200,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-            CompareYson("[[300u]]", result);
+            CompareYson("[[610u]]", result);
         }
 
         {
             auto result =
                 kikimr.GetQueryClient()
-                    .ExecuteQuery(R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("PT1S") ON timestamp)", NQuery::TTxControl::NoTx())
+                    .ExecuteQuery(R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("PT0S") ON timestamp)", NQuery::TTxControl::NoTx())
                     .GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         }
@@ -3218,7 +3221,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-            CompareYson("[[0u]]", result);
+            CompareYson("[[306u]]", result);
         }
 
         {
@@ -3238,7 +3241,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-            CompareYson("[[300u]]", result);
+            CompareYson("[[610u]]", result);
         }
     }
 }

@@ -112,33 +112,40 @@ TConclusion<bool> TTtlFilter::DoExecuteInplace(const std::shared_ptr<IDataSource
     const auto& columnName = source->GetContext()->GetReadMetadata()->GetColumnNameDef(bound.GetColumnId());
     AFL_VERIFY(columnName)("column_id", bound.GetColumnId());
     auto column = source->GetStageData().GetTable()->GetAccessorByNameVerified(*columnName);
-    if (source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPKFirstColumnId() == bound.GetColumnId()) {
-        if (NArrow::ScalarLess(bound.GetLargestExpiredScalar(), column->GetScalar(0))) {
+    AFL_VERIFY(column->GetRecordsCount());
+
+    AFL_VERIFY(source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPKFirstColumnId() == bound.GetColumnId())("first_pk", source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPKFirstColumnId())(
+            "ttl", bound.GetColumnId());
+
+    NArrow::NAccessor::IChunkedArray::TReader reader(column);
+    ui64 position = 0;
+    while (position < reader.GetRecordsCount()) {
+        std::shared_ptr<arrow::Array> chunk = reader.GetReadChunk(position).GetArray();
+        if (NArrow::ScalarLess(bound.GetLargestExpiredScalar(), *chunk->GetScalar(0))) {
+            if (position) {
+                source->MutableStageData().CutFilter(source->GetRecordsCount(), source->GetRecordsCount() - position, true);
+            }
             return true;
         }
-        if (!NArrow::ScalarLess(bound.GetLargestExpiredScalar(), column->GetScalar(source->GetRecordsCount() - 1))) {
-            source->MutableStageData().CutFilter(source->GetRecordsCount(), 0, false);
+
+        if (NArrow::ScalarLess(bound.GetLargestExpiredScalar(), *chunk->GetScalar(source->GetRecordsCount() - 1))) {
+            const auto range = std::ranges::iota_view((decltype(chunk->length()))0, chunk->length());
+            auto firstNonExpiredIdx = std::upper_bound(range.begin(), range.end(), bound.GetLargestExpiredScalar(),
+                [&chunk](const std::shared_ptr<arrow::Scalar>& bound, const ui64 index) {
+                    return NArrow::ScalarLess(bound, *chunk->GetScalar(index));
+                });
+            AFL_VERIFY(firstNonExpiredIdx != range.end());
+            AFL_VERIFY(firstNonExpiredIdx != range.begin());
+            const ui64 expiredCount = position + *firstNonExpiredIdx;
+            source->MutableStageData().CutFilter(source->GetRecordsCount(), source->GetRecordsCount() - expiredCount, true);
             return true;
         }
 
-        const auto range = std::ranges::iota_view((ui64)0u, column->GetRecordsCount());
-        auto findBound = std::upper_bound(range.begin(), range.end(), bound.GetLargestExpiredScalar(),
-            [&column](const std::shared_ptr<arrow::Scalar>& bound, const ui64 index) {
-                return NArrow::ScalarLess(bound, column->GetScalar(index));
-            });
-
-        ui64 expiredCount;
-        if (findBound == range.end()) {
-            expiredCount = range.size();
-        } else {
-            expiredCount = *findBound;
-        }
-
-        source->MutableStageData().CutFilter(source->GetRecordsCount(), source->GetRecordsCount() - expiredCount, true);
-    } else {
-        // Not implemented
-        AFL_VERIFY(false)("first_pk", source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPKFirstColumnId())("ttl", bound.GetColumnId());
+        position += chunk->length();
+        AFL_VERIFY(position <= reader.GetRecordsCount())("position", position)("size", reader.GetRecordsCount());
     }
+
+    source->MutableStageData().CutFilter(source->GetRecordsCount(), 0, false);
     return true;
 }
 

@@ -1725,7 +1725,7 @@ value {
 
     Y_UNIT_TEST(ExportImportDecimalKey) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"_(

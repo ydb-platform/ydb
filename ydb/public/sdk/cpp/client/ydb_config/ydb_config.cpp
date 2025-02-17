@@ -14,24 +14,27 @@ public:
 
     TAsyncStatus ReplaceConfig(const TString& config) {
         auto request = MakeRequest<Ydb::Config::ReplaceConfigRequest>();
-        request.set_yaml_config(config);
+        request.set_replace(config);
 
         return RunSimple<Ydb::Config::V1::BSConfigService, Ydb::Config::ReplaceConfigRequest, Ydb::Config::ReplaceConfigResponse>(
             std::move(request),
             &Ydb::Config::V1::BSConfigService::Stub::AsyncReplaceConfig);
     }
 
+    // FIXME add all other calls
+
     TAsyncFetchConfigResult FetchConfig(const TConfigSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::Config::FetchConfigRequest>(settings);
         auto promise = NThreading::NewPromise<TFetchConfigResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
-                TString config;
+                std::vector<TConfig> configs;
                 if (Ydb::Config::FetchConfigResult result; any && any->UnpackTo(&result)) {
-                    config = result.yaml_config();
+                    // FIXME
+                    Y_UNUSED(result);
                 }
 
-                TFetchConfigResult val(TStatus(std::move(status)), std::move(config));
+                TFetchConfigResult val(TStatus(std::move(status)), std::move(configs));
                 promise.SetValue(std::move(val));
             };
 
@@ -61,8 +64,20 @@ TConfigClient::TConfigClient(const TDriver& driver, const TCommonClientSettings&
 
 TConfigClient::~TConfigClient() = default;
 
-TAsyncStatus TConfigClient::ReplaceConfig(const TString& config) {
-    return Impl_->ReplaceConfig(config);
+TAsyncStatus TConfigClient::ReplaceConfig(const TString& mainConfig) {
+    return Impl_->ReplaceConfig(mainConfig);
+}
+
+TAsyncStatus TConfigClient::ReplaceConfigDisableDedicatedStorageSection(const TString& mainConfig) {
+    return Impl_->ReplaceConfigDisableDedicatedStorageSection(mainConfig);
+}
+
+TAsyncStatus TConfigClient::ReplaceConfigEnableDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig) {
+    return Impl_->ReplaceConfigEnableDedicatedStorageSection(mainConfig, storageConfig);
+}
+
+TAsyncStatus TConfigClient::ReplaceConfigWithDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig) {
+    return Impl_->ReplaceConfigWithDedicatedStorageSection(mainConfig, storageConfig);
 }
 
 TAsyncFetchConfigResult TConfigClient::FetchConfig(const TConfigSettings& settings) {

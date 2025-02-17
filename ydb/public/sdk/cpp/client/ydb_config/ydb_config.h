@@ -10,23 +10,42 @@
 #include <util/generic/string.h>
 
 #include <memory>
+#include <vector>
+#include <variant>
 
 namespace NYdb::NConfig {
+
+struct TMainConfigMetadata {
+
+};
+
+struct TStorageConfigMetadata {
+
+};
+
+struct TDatabaseConfigMetadata {
+
+};
+
+struct TConfig {
+    std::variant<std::monostate, TMainConfigMetadata, TStorageConfigMetadata, TDatabaseConfigMetadata> Metadata;
+    TString Config;
+};
 
 struct TFetchConfigResult : public TStatus {
     TFetchConfigResult(
             TStatus&& status,
-            TString&& config)
+            std::vector<TConfig>&& configs)
         : TStatus(std::move(status))
         , Config_(std::move(config))
     {}
 
-    const TString& GetConfig() const {
-        return Config_;
+    const std::vector<TConfig>& GetConfigs() const {
+        return Configs_;
     }
 
 private:
-    TString Config_;
+    std::vector<TConfig> Configs_;
 };
 
 using TAsyncFetchConfigResult = NThreading::TFuture<TFetchConfigResult>;
@@ -41,7 +60,16 @@ public:
     ~TConfigClient();
 
     // Replace config
-    TAsyncStatus ReplaceConfig(const TString& config);
+    TAsyncStatus ReplaceConfig(const TString& mainConfig);
+
+    // Replace config
+    TAsyncStatus ReplaceConfigDisableDedicatedStorageSection(const TString& mainConfig);
+
+    // Replace config
+    TAsyncStatus ReplaceConfigEnableDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig);
+
+    // Replace config
+    TAsyncStatus ReplaceConfigWithDedicatedStorageSection(const TString& mainConfig, const TString& storageConfig);
 
     // Fetch current cluster storage config
     TAsyncFetchConfigResult FetchConfig(const TConfigSettings& settings = {});

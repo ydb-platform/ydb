@@ -16,54 +16,40 @@ using namespace NYdb::NTopic;
 namespace {
 
 std::pair<ui64, Ydb::ResultSet> DoRead(TSession& s, const TString& table) {
-    auto resCount = s.ExecuteQuery(
-        Sprintf("SELECT COUNT(*) AS __count FROM `/local/%s`;", table.data()),
-            TTxControl::NoTx()).GetValueSync();
-    UNIT_ASSERT_C(resCount.IsSuccess(), resCount.GetIssues().ToString());
-    auto rsCount = NYdb::TResultSetParser(resCount.GetResultSet(0));
-    UNIT_ASSERT(rsCount.TryNextRow());
-    auto count = rsCount.ColumnParser("__count").GetUint64();
-
     auto res = s.ExecuteQuery(
-        Sprintf("SELECT * FROM `/local/%s`  ORDER BY Key", table.data()),
+        Sprintf("SELECT Key, Message FROM `/local/%s`  ORDER BY Key", table.data()),
             TTxControl::NoTx()).GetValueSync();
     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
     const auto proto = NYdb::TProtoAccessor::GetProto(res.GetResultSet(0));
-    return {count, proto};
+
+    return {proto.rowsSize(), proto};
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(Transfer)
 {
-    Y_UNIT_TEST(Main_ColumnTable)
+    void Main(const TString& transferName, const TString& tableName, const TString& tableDDL, const TString& topicName)
     {
         TString connectionString = GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE");
+        Cerr << ">>>>> connectionString = " << connectionString << Endl << Flush;
+
         auto config = TDriverConfig(connectionString);
         auto driver = TDriver(config);
         auto tableClient = TQueryClient(driver);
         auto session = tableClient.GetSession().GetValueSync().GetSession();
         auto topicClient = TTopicClient(driver);
-        auto writeSession = topicClient.CreateSimpleBlockingWriteSession(TWriteSessionSettings("/local/SourceTopic", "producer-1", "producer-1"));
 
         {
-            auto res = session.ExecuteQuery(R"(
-                CREATE TABLE `/local/TargetColumnTable` (
-                    Key Uint64 NOT NULL,
-                    Message Utf8 NOT NULL,
-                    PRIMARY KEY (Key)
-                )  WITH (
-                    STORE = COLUMN
-                );
-            )", TTxControl::NoTx()).GetValueSync();
+            auto res = session.ExecuteQuery(tableDDL, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
 
         {
-            auto res = session.ExecuteQuery(R"(
-                CREATE TOPIC `/local/SourceTopic`;
-            )", TTxControl::NoTx()).GetValueSync();
+            auto res = session.ExecuteQuery(Sprintf(R"(
+                CREATE TOPIC `%s`;
+            )", topicName.data()), TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
 
@@ -78,23 +64,29 @@ Y_UNIT_TEST_SUITE(Transfer)
                     ];
                 };
 
-                CREATE TRANSFER `ColumnTransfer`
-                FROM `SourceTopic` TO `TargetColumnTable` USING $l
+                CREATE TRANSFER `%s`
+                FROM `%s` TO `%s` USING $l
                 WITH (
-                    CONNECTION_STRING = 'grpc://%s',
-                    TOKEN = 'user@builtin'
+                    CONNECTION_STRING = 'grpc://%s'
+                    -- , TOKEN = 'user@builtin'
                 );
-            )", connectionString.data()), TTxControl::NoTx()).GetValueSync();
+            )", transferName.data(), topicName.data(), tableName.data(), connectionString.data()), TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
 
         {
-            writeSession->Write("message-1");
+            TWriteSessionSettings writeSettings;
+            writeSettings.Path(topicName);
+            writeSettings.DeduplicationEnabled(false);
+            auto writeSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
+
+            UNIT_ASSERT(writeSession->Write("message-1"));
+            writeSession->Close(TDuration::Seconds(1));
         }
 
         {
-            for (size_t attempt = 20; attempt-- ; ) {
-                auto res = DoRead(session, "TargetColumnTable");
+            for (size_t attempt = 20; attempt--; ) {
+                auto res = DoRead(session, tableName);
                 Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
                 if (res.first == 1) {
                     const Ydb::ResultSet& proto = res.second;
@@ -108,6 +100,32 @@ Y_UNIT_TEST_SUITE(Transfer)
                 Sleep(TDuration::Seconds(1));
             }
         }
+    }
+
+    Y_UNIT_TEST(Main_ColumnTable)
+    {
+        Main("ColumnTransfer1", "TargetColumnTable1", R"(
+            CREATE TABLE `/local/TargetColumnTable1` (
+                Key Uint64 NOT NULL,
+                Message Utf8 NOT NULL,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = COLUMN
+            );
+        )", "SourceTopic1");
+    }
+
+    Y_UNIT_TEST(Main_ColumnTable_KeyColumnOrder)
+    {
+        Main("ColumnTransfer2", "TargetColumnTable2", R"(
+            CREATE TABLE `/local/TargetColumnTable2` (
+                Message Utf8 NOT NULL,
+                Key Uint64 NOT NULL,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = COLUMN
+            );
+        )", "SourceTopic2");
     }
 }
 

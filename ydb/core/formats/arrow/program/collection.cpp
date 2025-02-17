@@ -19,18 +19,15 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorColle
     if (!Filter->IsTotalAllowFilter()) {
         AFL_VERIFY(!data.GetItWasScalar());
     }
-    if (UseFilter && withFilter) {
-        if (!Filter->IsTotalAllowFilter()) {
-            auto filtered = data->ApplyFilter(*Filter);
-            RecordsCountActual = filtered->GetRecordsCount();
-            AFL_VERIFY(Accessors.emplace(columnId, filtered).second);
-        } else {
-            RecordsCountActual = data->GetRecordsCount();
-            AFL_VERIFY(Accessors.emplace(columnId, data).second);
-        }
+    if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
+        auto filtered = data->ApplyFilter(*Filter);
+        RecordsCountActual = filtered->GetRecordsCount();
+        AFL_VERIFY(Accessors.emplace(columnId, filtered).second);
     } else {
         if (Filter->IsTotalAllowFilter()) {
-            RecordsCountActual = data->GetRecordsCount();
+            if (!data.GetItWasScalar()) {
+                RecordsCountActual = data->GetRecordsCount();
+            }
         } else {
             RecordsCountActual = Filter->GetFilteredCount();
         }

@@ -1704,6 +1704,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
             auto& runtime = *Server.GetRuntime();
             runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_DEBUG);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
             runtime.GetAppData().FeatureFlags.SetEnableViews(true);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
@@ -2014,6 +2016,21 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view", "a/b/c/table" })
         );
     }
+
+    Y_UNIT_TEST(RestoreViewDependentOnAnotherView) {
+        TS3TestEnv testEnv;
+        constexpr const char* baseView = "/Root/baseView";
+        constexpr const char* dependentView = "/Root/dependentView";
+
+        TestViewDependentOnAnotherViewIsRestored(
+            baseView,
+            dependentView,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "baseView", "dependentView" })
+        );
+    }
+
 
     // TO DO: test view restoration to a different database
 

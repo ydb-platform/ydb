@@ -297,6 +297,8 @@ class TReader {
     absl::flat_hash_set<ui64> VolatileReadDependencies;
     bool VolatileWaitForCommit = false;
 
+    const bool UseNewPrecharge;
+
     enum class EReadStatus {
         Done,
         NeedData,
@@ -318,6 +320,7 @@ public:
         , FirstUnprocessedQuery(State.FirstUnprocessedQuery)
         , LastProcessedKey(State.LastProcessedKey)
         , LastProcessedKeyErased(State.LastProcessedKeyErased)
+        , UseNewPrecharge(Self->GetUseNewPrecharge())
     {
         GetTimeFast(&StartTime);
         EndTime = StartTime;
@@ -470,6 +473,52 @@ public:
         TTransactionContext& txc,
         ui32 queryIndex)
     {
+        if (UseNewPrecharge) {
+            ui64 rowsLeft = GetRowsLeft();
+            ui64 prechargedRowsSize = 0;
+            ui64 prechargedCount = 0;
+
+            txc.Env.EnableReadMissingReferences();
+
+            bool ready = true;
+            while (rowsLeft > 0) {
+                if (!State.Reverse) {
+                    ++queryIndex;
+                } else {
+                    --queryIndex;
+                }
+                if (!(queryIndex < State.Request->Keys.size())) {
+                    break;
+                }
+                if (!PrechargeKey(txc, State.Request->Keys[queryIndex])) {
+                    ready = false;
+                } else {
+                    const auto key = ToRawTypeValue(State.Request->Keys[queryIndex].GetCells(), TableInfo, true);
+
+                    NTable::TRowState rowState;
+                    rowState.Init(State.Columns.size());
+                    NTable::TSelectStats stats;
+                    txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
+
+                    if (txc.Env.MissingReferencesSize()) {
+                        prechargedRowsSize += EstimateSize(*rowState);
+                    }
+                }
+
+                prechargedCount++;
+
+                if (ShouldStop(prechargedCount, prechargedRowsSize + txc.Env.MissingReferencesSize())) {
+                    break;
+                }
+
+                --rowsLeft;
+            }
+
+            txc.Env.DisableReadMissingReferences();
+
+            return ready;
+        }
+
         ui64 rowsLeft = GetRowsLeft();
 
         bool ready = true;

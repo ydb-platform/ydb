@@ -923,6 +923,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     (`timestamp` < CAST(1000100 AS Timestamp) AND `timestamp` > CAST(1000095 AS Timestamp)) OR
                     (`timestamp` <= CAST(1001000 AS Timestamp) AND `timestamp` >= CAST(1000999 AS Timestamp)) OR
                     (`timestamp` > CAST(1002000 AS Timestamp))
+                    AND (`uid` != 'uuu')
                 ORDER BY `timestamp`
                 LIMIT 1000;
         )");

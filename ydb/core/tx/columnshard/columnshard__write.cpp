@@ -570,16 +570,14 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    NKikimrDataEvents::TEvWriteResult::EStatus writeResult = NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
     const bool outOfSpace = SubDomainOutOfSpace && (*mType != NEvWrite::EModificationType::Delete);
     if (outOfSpace) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded")("source", "dataevent");
-        writeResult = NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED;
     }
     auto overloadStatus = outOfSpace ? EOverloadStatus::Disk : CheckOverloadedImmediate(pathId);
     if (overloadStatus != EOverloadStatus::None) {
         std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-            TabletID(), 0, writeResult, "overload data error");
+            TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
         OverloadWriteFail(overloadStatus,
             NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
                 Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()),

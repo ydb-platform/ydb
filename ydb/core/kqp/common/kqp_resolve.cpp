@@ -20,31 +20,28 @@ NUdf::TUnboxedValue MakeDefaultValueByType(const NKikimr::NMiniKQL::TType* type)
         case NUdf::TDataType<bool>::Id:
             return NUdf::TUnboxedValuePod(false);
         case NUdf::TDataType<ui8>::Id:
-            return NUdf::TUnboxedValuePod(ui8(0));
         case NUdf::TDataType<i8>::Id:
-            return NUdf::TUnboxedValuePod(i8(0));
         case NUdf::TDataType<ui16>::Id:
-            return NUdf::TUnboxedValuePod(ui16(0));
         case NUdf::TDataType<i16>::Id:
-            return NUdf::TUnboxedValuePod(i16(0));
         case NUdf::TDataType<i32>::Id:
         case NUdf::TDataType<NUdf::TDate32>::Id:
-            return NUdf::TUnboxedValuePod(0);
         case NUdf::TDataType<ui32>::Id:
-            return NUdf::TUnboxedValuePod(0);
         case NUdf::TDataType<i64>::Id:
         case NUdf::TDataType<NUdf::TDatetime64>::Id:
         case NUdf::TDataType<NUdf::TTimestamp64>::Id:
         case NUdf::TDataType<NUdf::TInterval64>::Id:
-            return NUdf::TUnboxedValuePod(0);
         case NUdf::TDataType<ui64>::Id:
-            return NUdf::TUnboxedValuePod(0);
         case NUdf::TDataType<float>::Id:
-            return NUdf::TUnboxedValuePod(0);
         case NUdf::TDataType<double>::Id:
+        case NUdf::TDataType<NUdf::TDate>::Id:
+        case NUdf::TDataType<NUdf::TDatetime>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp>::Id:
+        case NUdf::TDataType<NUdf::TInterval>::Id:
             return NUdf::TUnboxedValuePod(0);
         case NUdf::TDataType<NUdf::TJson>::Id:
         case NUdf::TDataType<NUdf::TUtf8>::Id:
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id:
+        case NUdf::TDataType<NUdf::TDyNumber>::Id:
             return NKikimr::NMiniKQL::MakeString("");
         case NUdf::TDataType<NUdf::TTzDate>::Id:
         case NUdf::TDataType<NUdf::TTzDatetime>::Id:
@@ -54,20 +51,8 @@ NUdf::TUnboxedValue MakeDefaultValueByType(const NKikimr::NMiniKQL::TType* type)
         case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
             return NUdf::TUnboxedValuePod(ValueFromString(NUdf::GetDataSlot(dataType->GetSchemeType()), ""));
         }
-        case NUdf::TDataType<NUdf::TDate>::Id:
-            return NUdf::TUnboxedValuePod(ui16(0));
-        case NUdf::TDataType<NUdf::TDatetime>::Id:
-            return NUdf::TUnboxedValuePod(0);
-        case NUdf::TDataType<NUdf::TTimestamp>::Id:
-            return NUdf::TUnboxedValuePod(0);
-        case NUdf::TDataType<NUdf::TInterval>::Id:
-            return NUdf::TUnboxedValuePod(0);
-        case NUdf::TDataType<NUdf::TJsonDocument>::Id:
-            return NKikimr::NMiniKQL::MakeString("");
         case NUdf::TDataType<NUdf::TDecimal>::Id:
             return NUdf::TUnboxedValuePod(NYql::NDecimal::FromHalfs(0, 0));
-        case NUdf::TDataType<NUdf::TDyNumber>::Id:
-            return NKikimr::NMiniKQL::MakeString("");
         case NUdf::TDataType<NUdf::TUuid>::Id: {
             union {
                 ui64 half[2];

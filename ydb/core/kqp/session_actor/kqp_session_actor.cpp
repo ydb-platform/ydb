@@ -13,6 +13,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
+#include <ydb/core/kqp/common/batch/params.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
@@ -1264,7 +1265,7 @@ public:
             }
 
             for (const auto& paramDesc : QueryState->PreparedQuery->GetParameters()) {
-                if (!paramDesc.GetName().StartsWith("_kqp_batch")) {
+                if (!paramDesc.GetName().StartsWith(NBatchParams::Header)) {
                     continue;
                 }
 
@@ -1272,6 +1273,10 @@ public:
                 NKikimr::NMiniKQL::TType* paramType = ImportTypeFromProto(protoType, txCtx.TxAlloc->TypeEnv);
 
                 NUdf::TUnboxedValue value = MakeDefaultValueByType(paramType);
+                if (paramDesc.GetName() == NBatchParams::IsFirstQuery || paramDesc.GetName() == NBatchParams::IsLastQuery) {
+                    value = NUdf::TUnboxedValuePod(true);
+                }
+
                 QueryState->QueryData->AddUVParam(paramDesc.GetName(), paramType, value);
             }
 

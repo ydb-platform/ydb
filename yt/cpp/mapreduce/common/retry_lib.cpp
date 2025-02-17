@@ -210,9 +210,8 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
 
     auto allCodes = errorResponse.GetError().GetAllErrorCodes();
     using namespace NClusterErrorCodes;
-    if (httpCode == 429
-        || allCodes.count(NSecurityClient::RequestQueueSizeLimitExceeded)
-        || allCodes.count(NRpc::RequestQueueSizeLimitExceeded))
+    if (allCodes.count(NSecurityClient::RequestQueueSizeLimitExceeded) ||
+        allCodes.count(NRpc::RequestQueueSizeLimitExceeded))
     {
         // request rate limit exceeded
         return config->RateLimitExceededRetryInterval;

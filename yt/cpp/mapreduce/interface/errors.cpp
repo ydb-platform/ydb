@@ -332,7 +332,7 @@ bool TErrorResponse::IsFromTrailers() const
 
 bool TErrorResponse::IsTransportError() const
 {
-    return HttpCode_ == 503;
+    return Error_.ContainsErrorCode(NClusterErrorCodes::NBus::TransportError);
 }
 
 TString TErrorResponse::GetRequestId() const

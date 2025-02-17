@@ -31,6 +31,8 @@ message TStorageConfig { // contents of storage metadata
     optional bytes ConfigComposite = 12; // compressed stored storage config YAML (if stored)
     NKikimrConfig.TSelfManagementConfig SelfManagementConfig = 13;
     TStorageConfig PrevConfig = 100; // previous version of StorageConfig (if any)
+    optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
+    optional uint64 ExpectedStorageYamlVersion = 15;
 }
 
 message TPDiskMetadataRecord {
@@ -194,7 +196,10 @@ message TEvNodeConfigInvokeOnRoot {
     }
 
     message TReplaceStorageConfig {
-        string YAML = 1;
+        optional string YAML = 1;
+        optional string StorageYAML = 3;
+        optional bool SwitchDedicatedStorageSection = 4;
+        bool DedicatedStorageSectionConfigMode = 5;
         bool SkipConsoleValidation = 2;
     }
 

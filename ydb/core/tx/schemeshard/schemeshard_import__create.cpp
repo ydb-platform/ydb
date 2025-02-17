@@ -28,16 +28,35 @@ using namespace NTabletFlatExecutor;
 
 namespace {
 
-bool IsWaiting(const TImportInfo::TItem& item) {
-    return item.State == TImportInfo::EState::Waiting;
+using TItem = TImportInfo::TItem;
+using EState = TImportInfo::EState;
+
+bool IsWaiting(const TItem& item) {
+    return item.State == EState::Waiting;
 }
 
-bool IsDoneOrWaiting(const TImportInfo::TItem& item) {
-    return TImportInfo::TItem::IsDone(item) || IsWaiting(item);
+THashSet<EState> CollectItemStates(const TVector<TItem>& items) {
+    THashSet<EState> itemStates;
+    for (const auto& item : items) {
+        itemStates.emplace(item.State);
+    }
+    return itemStates;
+}
+
+bool AllDone(const THashSet<EState>& itemStates) {
+    return AllOf(itemStates, [](EState state) { return state == EState::Done; });
+}
+
+bool AllWaiting(const THashSet<EState>& itemStates) {
+    return AllOf(itemStates, [](EState state) { return state == EState::Waiting; });
+}
+
+bool AllDoneOrWaiting(const THashSet<EState>& itemStates) {
+    return AllOf(itemStates, [](EState state) { return state == EState::Done || state == EState::Waiting; });
 }
 
 // the item is to be created by query, i.e. it is not a table
-bool IsCreatedByQuery(const TImportInfo::TItem& item) {
+bool IsCreatedByQuery(const TItem& item) {
     return !item.CreationQuery.empty();
 }
 
@@ -904,13 +923,13 @@ private:
             // Scheme error happens when the view depends on a table (or a view) that is not yet imported.
             // Instead of tracking view dependencies, we simply retry the creation of the view later.
             item.State = EState::Waiting;
+            Self->PersistImportItemState(db, importInfo, message.ItemIdx);
 
-            if (AllOf(importInfo->Items, IsWaiting)) {
-                // All items are waiting? Cancel the import, or we will end up waiting indefinitely.
+            const auto itemStates = CollectItemStates(importInfo->Items);
+            if (AllWaiting(itemStates)) {
+                // Cancel the import, or we will end up waiting indefinitely.
                 return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
             }
-
-            Self->PersistImportItemState(db, importInfo, message.ItemIdx);
             return;
         }
 
@@ -1218,10 +1237,11 @@ private:
             return SendNotificationsIfFinished(importInfo);
         }
 
-        if (AllOf(importInfo->Items, &TImportInfo::TItem::IsDone)) {
+        const auto itemStates = CollectItemStates(importInfo->Items);
+        if (AllDone(itemStates)) {
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
-        } else if (AllOf(importInfo->Items, IsDoneOrWaiting)) {
+        } else if (AllDoneOrWaiting(itemStates)) {
             RetryViewsCreation(importInfo, db, ctx);
         }
 

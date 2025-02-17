@@ -10,6 +10,8 @@
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 
+#include <contrib/libs/grpc/src/core/lib/event_engine/thread_pool.h>
+
 #include <contrib/libs/grpc/src/core/lib/iomgr/executor.h>
 
 #include <atomic>
@@ -172,6 +174,7 @@ private:
         YT_VERIFY(!IsInitialized());
 
         grpc_core::Executor::SetThreadsLimit(Config_->GrpcThreadCount);
+        grpc_event_engine::experimental::ThreadPool::SetThreadsLimit(Config_->GrpcEventEngineThreadCount);
 
         // Initialize grpc only after configuration is done.
         auto grpcLock = New<TGrpcLibraryLock>();

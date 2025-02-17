@@ -242,6 +242,12 @@ TError::TErrorOr(TError&& other) noexcept
     : Impl_(std::move(other.Impl_))
 { }
 
+TError::TErrorOr(const TErrorException& errorEx) noexcept
+{
+    *this = errorEx.Error();
+    // NB: TErrorException verifies that error not IsOK at throwing end.
+}
+
 TError::TErrorOr(const std::exception& ex)
 {
     if (auto simpleException = dynamic_cast<const TSimpleException*>(&ex)) {

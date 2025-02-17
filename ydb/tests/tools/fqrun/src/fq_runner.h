@@ -16,6 +16,10 @@ public:
 
     void PrintQueryResults() const;
 
+    bool CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections) const;
+
+    bool CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings) const;
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl;

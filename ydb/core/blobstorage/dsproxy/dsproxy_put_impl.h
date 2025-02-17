@@ -327,7 +327,7 @@ protected:
             case NKikimrProto::ERROR:
             case NKikimrProto::VDISK_ERROR_STATE:
             case NKikimrProto::OUT_OF_SPACE:
-                Blackboard.AddErrorResponse(blobId, orderNumber);
+                Blackboard.AddErrorResponse(blobId, orderNumber, record.GetErrorReason());
                 AtLeastOneResponseWasNotOk = true;
                 break;
             case NKikimrProto::OK:

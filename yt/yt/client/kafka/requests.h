@@ -624,6 +624,71 @@ struct TRspProduce
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TReqListOffsetsTopicPartition
+{
+    i32 PartitionIndex = 0;
+    i64 Timestamp = 0;
+    i32 MaxNumOffsets = 0;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TReqListOffsetsTopic
+{
+    TString Name;
+    std::vector<TReqListOffsetsTopicPartition> Partitions;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TReqListOffsets
+{
+    static constexpr ERequestType RequestType = ERequestType::ListOffsets;
+
+    i32 ReplicaId = 0;
+    std::vector<TReqListOffsetsTopic> Topics;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TRspListOffsetsTopicPartition
+{
+    i32 PartitionIndex = 0;
+    NKafka::EErrorCode ErrorCode = EErrorCode::None;
+    i64 Offset = 0;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+struct TRspListOffsetsTopic
+{
+    TString Name;
+    std::vector<TRspListOffsetsTopicPartition> Partitions;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+struct TRspListOffsets
+{
+    std::vector<TRspListOffsetsTopic> Topics;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NKafka
 
 #define REQUESTS_INL_H_

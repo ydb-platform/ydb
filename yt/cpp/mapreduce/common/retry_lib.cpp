@@ -230,6 +230,7 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
         NRpc::Unavailable,
         NApi::RetriableArchiveError,
         NSequoiaClient::SequoiaRetriableError,
+        NRpc::TransientFailure,
         Canceled,
     }) {
         if (allCodes.contains(code)) {

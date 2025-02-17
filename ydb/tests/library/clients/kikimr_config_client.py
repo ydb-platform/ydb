@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import time
 import os
+from enum import Enum
 
 
 import grpc
@@ -25,6 +26,11 @@ def channels_list():
 
 
 class ConfigClient(object):
+    class FetchTransform(Enum):
+        NONE = 1
+        DETACH_STORAGE_CONFIG_SECTION = 2
+        ATTACH_STORAGE_CONFIG_SECTION = 3
+
     def __init__(self, server, port, cluster=None, retry_count=1):
         self.server = server
         self.port = port
@@ -56,18 +62,22 @@ class ConfigClient(object):
 
                 time.sleep(self.__retry_sleep_seconds)
 
-    def replace_config(self, yaml_config, storage_yaml_config=None):
+    def replace_config(self, main_config):
         request = config_api.ReplaceConfigRequest()
-        request.replace = yaml_config
-        if storage_yaml_config is not None:
-            request.storage_yaml_config = storage_yaml_config
+        request.replace = main_config
         return self.invoke(request, 'ReplaceConfig')
 
-    def fetch_config(self, dedicated_storage_section=False, dedicated_cluster_section=False):
+    def fetch_all_configs(self, transform=None):
         request = config_api.FetchConfigRequest()
-        # FIXME
-        # request.dedicated_storage_section = dedicated_storage_section
-        # request.dedicated_cluster_section = dedicated_cluster_section
+        settings = config_api.FetchConfigRequest.FetchModeAll()
+
+        if transform == ConfigClient.FetchTransform.DETACH_STORAGE_CONFIG_SECTION:
+            settings.set_detach_storage_config_section()
+        elif transform == ConfigClient.FetchTransform.ATTACH_STORAGE_CONFIG_SECTION:
+            settings.set_attach_storage_config_section()
+
+        request.all.CopyFrom(settings)
+
         return self.invoke(request, 'FetchConfig')
 
     def bootstrap_cluster(self, self_assembly_uuid):

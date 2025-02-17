@@ -177,7 +177,7 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
         replace_config_response = self.config_client.replace_config(config_yaml)
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
 
-        fetch_config_response = self.config_client.fetch_config()
+        fetch_config_response = self.config_client.fetch_all_configs()
         assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
 
         result = config.FetchConfigResult()

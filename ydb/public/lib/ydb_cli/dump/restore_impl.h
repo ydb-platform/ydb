@@ -126,10 +126,16 @@ public:
 };
 
 struct TDelayedRestoreCall {
+    using TSimplePath = TString;
+
+    struct TTwoComponentPath {
+        TString RestoreRoot;
+        TString RelativeToRestoreRoot;
+    };
+
     NScheme::ESchemeEntryType Type;
     TFsPath FsPath;
-    TString DbRestoreRoot;
-    TString DbPathRelativeToRestoreRoot;
+    std::variant<TSimplePath, TTwoComponentPath> DbPath;
     TRestoreSettings Settings;
     bool IsAlreadyExisting;
 

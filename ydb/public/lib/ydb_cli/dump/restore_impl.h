@@ -128,7 +128,6 @@ public:
 struct TDelayedRestoreCall {
     NScheme::ESchemeEntryType Type;
     TFsPath FsPath;
-    TString DbPath;
     TString DbRestoreRoot;
     TString DbPathRelativeToRestoreRoot;
     TRestoreSettings Settings;
@@ -150,32 +149,25 @@ struct TDelayedRestoreCall {
         TRestoreSettings settings,
         bool isAlreadyExisting
     );
-};
 
-TRestoreResult Restore(TRestoreClient& client, const TDelayedRestoreCall& call);
-TRestoreResult RestoreWithRetries(TRestoreClient& client, TVector<TDelayedRestoreCall>& calls);
+    static int GetOrder(const TDelayedRestoreCall& call);
+};
 
 class TDelayedRestoreManager {
     TVector<TDelayedRestoreCall> Calls;
-    TVector<TDelayedRestoreCall> CallsToRetry;
     TRestoreClient* Client = nullptr;
 
-public:
+    TRestoreResult Restore(const TDelayedRestoreCall& call);
+    static bool ShouldRetry(const TRestoreResult& result, NScheme::ESchemeEntryType type);
+    TRestoreResult RestoreWithRetries(TVector<TDelayedRestoreCall>&& calls);
 
+public:
     void SetClient(TRestoreClient& client);
     TRestoreResult RestoreDelayed();
-    static int GetOrder(const TDelayedRestoreCall& call);
 
     template <typename... Args>
     void Add(NScheme::ESchemeEntryType type, Args&&... args) {
-        switch (type) {
-            case NScheme::ESchemeEntryType::View:
-                CallsToRetry.emplace_back(type, std::forward<Args>(args)...);
-                return;
-            default:
-                Calls.emplace_back(type, std::forward<Args>(args)...);
-                return;
-        }
+        Calls.emplace_back(type, std::forward<Args>(args)...);
     }
 };
 
@@ -244,7 +236,7 @@ private:
     TString ClusterRootPath;
     NPrivate::TDelayedRestoreManager DelayedRestoreManager;
 
-    friend TRestoreResult NPrivate::Restore(TRestoreClient& client, const NPrivate::TDelayedRestoreCall& call);
+    friend class NPrivate::TDelayedRestoreManager;
 }; // TRestoreClient
 
 } // NYdb::NDump

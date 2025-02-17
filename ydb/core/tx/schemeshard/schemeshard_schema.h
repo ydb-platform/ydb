@@ -1892,7 +1892,9 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Description>;
     };
 
-    struct KMeansTreeState : Table<112> {
+    // struct KMeansTreeState : Table<112> -- already was in trunk some time ago,
+    // it was replaced with KMeansTreeProgress, before anyone really used it
+    struct KMeansTreeProgress : Table<114> {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct Level : Column<2, NScheme::NTypeIds::Uint32> {};
         struct State : Column<3, NScheme::NTypeIds::Uint32> {};
@@ -2033,7 +2035,7 @@ struct Schema : NIceDb::Schema {
         BackgroundSessions,
         ResourcePool,
         BackupCollection,
-        KMeansTreeState,
+        KMeansTreeProgress,
         KMeansTreeSample
     >;
 

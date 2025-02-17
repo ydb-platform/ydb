@@ -858,10 +858,10 @@ private:
 
     void PersistKMeansState(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         NIceDb::TNiceDb db{txc.DB};
-        db.Table<Schema::KMeansTreeState>().Key(buildInfo.Id).Update(
-            NIceDb::TUpdate<Schema::KMeansTreeState::Level>(buildInfo.KMeans.Level),
-            NIceDb::TUpdate<Schema::KMeansTreeState::State>(buildInfo.KMeans.State),
-            NIceDb::TUpdate<Schema::KMeansTreeState::Parent>(buildInfo.KMeans.Parent)
+        db.Table<Schema::KMeansTreeProgress>().Key(buildInfo.Id).Update(
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::Level>(buildInfo.KMeans.Level),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::State>(buildInfo.KMeans.State),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::Parent>(buildInfo.KMeans.Parent)
         );
     }
 

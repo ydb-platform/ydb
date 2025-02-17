@@ -21,6 +21,7 @@ jobs:
         id: validate
         uses: ./.github/actions/validate_pr_description
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           pr_body: "${{ github.event.pull_request.body }}"
 
       - name: Test output

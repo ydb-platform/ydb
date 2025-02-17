@@ -72,7 +72,7 @@ private:
             return TStatus::Error;
         }
 
-        const TTypeAnnotationNode* targetType;
+        const TTypeAnnotationNode* targetType = nullptr;
         if (const TS3Target target(targetNode); const auto settings = target.Settings()) {
             if (const auto userschema = GetSetting(settings.Cast().Ref(), "userschema")) {
                 targetType = userschema->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -83,8 +83,8 @@ private:
         if (const auto maybeTuple = TMaybeNode<TExprList>(source)) {
             const auto tuple = maybeTuple.Cast();
 
-            TVector<TExprBase> tupleValues;
-            tupleValues.reserve(tuple.Size());
+            TVector<TExprBase> convertedValues;
+            convertedValues.reserve(tuple.Size());
             for (const auto& value : tuple) {
                 if (!EnsureStructType(input->Pos(), *value.Ref().GetTypeAnn(), ctx)) {
                     return TStatus::Error;
@@ -96,11 +96,11 @@ private:
                     return TStatus::Error;
                 }
 
-                tupleValues.emplace_back(std::move(node));
+                convertedValues.emplace_back(std::move(node));
             }
 
             const auto list = Build<TCoAsList>(ctx, input->Pos())
-                .Add(std::move(tupleValues))
+                .Add(std::move(convertedValues))
                 .Done();
 
             input->ChildRef(TS3WriteObject::idx_Input) = list.Ptr();

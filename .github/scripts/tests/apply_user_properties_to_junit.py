@@ -5,6 +5,7 @@ import argparse
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
+
 def add_properties_to_testcases(root, all_properties):
     # Iterate over every testsuite tag
     for testsuite in root.findall('testsuite'):

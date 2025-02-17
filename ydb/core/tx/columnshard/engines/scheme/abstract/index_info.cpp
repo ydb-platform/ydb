@@ -36,7 +36,7 @@ void IIndexInfo::NormalizeDeletionColumn(NArrow::TGeneralContainer& batch) {
     AddDeleteFlagsColumn(batch, false);
 }
 
-std::optional<ui32> IIndexInfo::GetColumnIdOptional(const std::string& name) const {
+std::optional<ui32> IIndexInfo::GetColumnIdOptional(const std::string& name) {
     if (name == SPEC_COL_PLAN_STEP) {
         return ui32(ESpecialColumn::PLAN_STEP);
     } else if (name == SPEC_COL_TX_ID) {

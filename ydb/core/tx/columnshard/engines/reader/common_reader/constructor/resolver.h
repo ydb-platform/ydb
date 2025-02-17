@@ -1,10 +1,10 @@
 #pragma once
-#include <ydb/core/tx/program/program.h>
+#include <ydb/core/formats/arrow/program/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
-namespace NKikimr::NOlap::NReader::NPlain {
+namespace NKikimr::NOlap::NReader::NCommon {
 
-class TIndexColumnResolver: public IColumnResolver {
+class TIndexColumnResolver: public NArrow::NSSA::IColumnResolver {
     const NOlap::TIndexInfo& IndexInfo;
 
 public:
@@ -20,9 +20,9 @@ public:
         return IndexInfo.GetColumnName(id, required);
     }
 
-    NSsa::TColumnInfo GetDefaultColumn() const override {
-        return NSsa::TColumnInfo::Original((ui32)NOlap::TIndexInfo::ESpecialColumn::PLAN_STEP, NOlap::TIndexInfo::SPEC_COL_PLAN_STEP);
+    NArrow::NSSA::TColumnInfo GetDefaultColumn() const override {
+        return NArrow::NSSA::TColumnInfo::Original((ui32)NOlap::TIndexInfo::ESpecialColumn::PLAN_STEP, NOlap::TIndexInfo::SPEC_COL_PLAN_STEP);
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NPlain

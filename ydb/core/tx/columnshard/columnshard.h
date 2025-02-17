@@ -102,20 +102,16 @@ namespace TEvColumnShard {
         YDB_ACCESSOR(bool, Reverse, false);
         YDB_ACCESSOR(ui32, ItemsLimit, 0);
         YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
-        YDB_READONLY_DEF(std::vector<TString>, ColumnNames);
         std::set<ui32> ColumnIdsSet;
-        std::set<TString> ColumnNamesSet;
     public:
         std::optional<NOlap::TSnapshot> ReadFromSnapshot;
         std::optional<NOlap::TSnapshot> ReadToSnapshot;
         TString TaskIdentifier;
         std::shared_ptr<NOlap::TPKRangesFilter> RangesFilter;
     public:
-        void AddColumn(const ui32 id, const TString& columnName) {
+        void AddColumn(const ui32 id) {
             AFL_VERIFY(ColumnIdsSet.emplace(id).second);
             ColumnIds.emplace_back(id);
-            AFL_VERIFY(ColumnNamesSet.emplace(columnName).second);
-            ColumnNames.emplace_back(columnName);
         }
 
         TEvInternalScan(const ui64 pathId, const std::optional<ui64> lockId)

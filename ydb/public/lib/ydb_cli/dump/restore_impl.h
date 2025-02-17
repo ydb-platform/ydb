@@ -150,7 +150,7 @@ struct TDelayedRestoreCall {
         bool isAlreadyExisting
     );
 
-    static int GetOrder(const TDelayedRestoreCall& call);
+    int GetOrder() const;
 };
 
 class TDelayedRestoreManager {

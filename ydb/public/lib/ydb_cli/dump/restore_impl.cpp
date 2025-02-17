@@ -331,8 +331,8 @@ TDelayedRestoreCall::TDelayedRestoreCall(
     , IsAlreadyExisting(isAlreadyExisting)
 {}
 
-int TDelayedRestoreCall::GetOrder(const TDelayedRestoreCall& call) {
-    switch (call.Type) {
+int TDelayedRestoreCall::GetOrder() const {
+    switch (Type) {
         case ESchemeEntryType::View:
             return std::numeric_limits<int>::max();
         default:
@@ -341,7 +341,7 @@ int TDelayedRestoreCall::GetOrder(const TDelayedRestoreCall& call) {
 }
 
 auto operator<=>(const TDelayedRestoreCall& lhs, const TDelayedRestoreCall& rhs) {
-    return TDelayedRestoreCall::GetOrder(lhs) <=> TDelayedRestoreCall::GetOrder(rhs);
+    return lhs.GetOrder() <=> rhs.GetOrder();
 }
 
 TRestoreResult TDelayedRestoreManager::Restore(const TDelayedRestoreCall& call) {

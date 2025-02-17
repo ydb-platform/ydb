@@ -7,6 +7,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -26,8 +27,14 @@ TExprNode::TPtr CompileViewQuery(
     translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
     NSQLTranslation::Deserialize(viewData.CapturedContext, translationSettings);
 
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        NSQLTranslationV1::MakeTranslator(),
+        nullptr
+    );
+
     TAstParseResult queryAst;
-    queryAst = NSQLTranslation::SqlToYql(viewData.QueryText, translationSettings);
+    queryAst = NSQLTranslation::SqlToYql(translators, viewData.QueryText, translationSettings);
 
     ctx.IssueManager.AddIssues(queryAst.Issues);
     if (!queryAst.IsOk()) {

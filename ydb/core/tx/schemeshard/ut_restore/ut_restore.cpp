@@ -4616,6 +4616,45 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
+    Y_UNIT_TEST(ShouldSucceedOnDependentView) {
+        ShouldSucceed(
+            {
+                {
+                    "/DependentView",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `DependentView` WITH security_invoker = TRUE AS SELECT * FROM `BaseView`;
+                        )"
+                    }
+                }, {
+                    "/BaseView",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `BaseView` WITH security_invoker = TRUE AS SELECT 1;
+                        )"
+                    }
+                }
+            }, R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "DependentView"
+                        destination_path: "/MyRoot/DependentView"
+                    }
+                    items {
+                        source_prefix: "BaseView"
+                        destination_path: "/MyRoot/BaseView"
+                    }
+                }
+            )"
+        );
+    }
+
     void CancelShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -4759,6 +4798,45 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     items {
                         source_prefix: "table"
                         destination_path: "/MyRoot/Table"
+                    }
+                }
+            )"
+        );
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnDependentView) {
+        CancelShouldSucceed(
+            {
+                {
+                    "/DependentView",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `DependentView` WITH security_invoker = TRUE AS SELECT * FROM `BaseView`;
+                        )"
+                    }
+                }, {
+                    "/BaseView",
+                    {
+                        EPathTypeView,
+                        R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `BaseView` WITH security_invoker = TRUE AS SELECT 1;
+                        )"
+                    }
+                }
+            }, R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "DependentView"
+                        destination_path: "/MyRoot/DependentView"
+                    }
+                    items {
+                        source_prefix: "BaseView"
+                        destination_path: "/MyRoot/BaseView"
                     }
                 }
             )"

@@ -1,0 +1,34 @@
+name: PR-description
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+
+    branches:
+      - main
+      - "stable-*"
+
+jobs:
+  validate-pr-description:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Use custom PR validation action
+        id: validate
+        uses: ./.github/actions/validate_pr_description
+        with:
+          pr_body: "${{ github.event.pull_request.body }}"
+
+      - name: Test output
+        if: always()
+        run: echo "Result of validation is  ${{ steps.validate.outputs.status }}"
+        
+
+      - name: Set status
+        if: failure()
+        run: echo "Validation failed."

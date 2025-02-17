@@ -885,7 +885,7 @@ private:
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
-                MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
+                MKQL_ENSURE(BufferForUsedInputItems.empty(), "MISHA new ensure");
 
                 BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
 

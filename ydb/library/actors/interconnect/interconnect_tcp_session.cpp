@@ -699,7 +699,7 @@ namespace NActors {
             size_t maxBytes) {
         LWPROBE_IF_TOO_LONG(SlowICWriteData, Proxy->PeerNodeId, ms) {
             constexpr ui32 iovLimit = 256;
-            constexpr ui32 zcThreshold = 8192;
+            constexpr ui32 zcThreshold = 16384;
 
             ui32 maxElementsInIOV;
             if (Params.Encryption) {

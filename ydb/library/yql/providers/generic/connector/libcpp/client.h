@@ -95,7 +95,7 @@ namespace NYql::NConnector {
             return promise.GetFuture();
         }
 
-        virtual ~IStreamIteratorDrainer(){};
+        virtual ~IStreamIteratorDrainer() {}
 
     private:
         IStreamIterator<TResponse>::TPtr Iterator_;

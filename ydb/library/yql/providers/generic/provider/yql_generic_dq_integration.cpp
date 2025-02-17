@@ -39,7 +39,7 @@ namespace NYql {
                 case NYql::EGenericDataSourceKind::LOGGING:
                     return "LoggingGeneric";
                 default:
-                    ythrow yexception() << "Data source kind is unknown or not specified";
+                    throw yexception() << "Data source kind is unknown or not specified";
             }
         }
 
@@ -120,10 +120,11 @@ namespace NYql {
                 auto srcSettings = maybeDqSource.Cast().Settings();
                 auto maybeGenSourceSettings = TMaybeNode<TGenSourceSettings>(srcSettings.Raw());
                 Y_ENSURE(maybeGenSourceSettings); 
+                auto genSourceSettings = maybeGenSourceSettings.Cast();
 
                 const TGenericState::TTableAddress tableAddress{
-                    maybeGenSourceSettings.Cast().Cluster().StringValue(),
-                    maybeGenSourceSettings.Cast().Table().StringValue()
+                    genSourceSettings.Cluster().StringValue(),
+                    genSourceSettings.Table().StringValue()
                 };
 
                 // Extract table metadata from provider state>.
@@ -136,37 +137,32 @@ namespace NYql {
                     return 0;
                 }
 
-                const std::size_t totalSplits = tableMeta->Splits.size();
+                const size_t totalSplits = tableMeta->Splits.size();
 
                 partitions.clear();
 
                 if (totalSplits <= partitionSettings.MaxPartitions) {
                     // If there are not too many splits, simply make a single-split partitions.
-                    for (std::size_t i = 0; i < totalSplits; i++) {
+                    for (size_t i = 0; i < totalSplits; i++) {
                         NGeneric::TPartition partition;
-                        partition.add_splits()->CopyFrom(tableMeta->Splits[i]);
-                        partitions.emplace_back();
-                        TStringOutput out(partitions.back());
-                        partition.Save(&out);
+                        *partition.add_splits() = tableMeta->Splits[i];
+                        TString partitionStr;
+                        YQL_ENSURE(partition.SerializeToString(&partitionStr), "Failed to serialize partition");
+                        partitions.emplace_back(std::move(partitionStr));
                     }
                 } else {
                     // If the number of splits is greater than the partitions limit,
                     // we have to make split batches in each partition.
-                    std::size_t splitsPerPartition;
-                    if (totalSplits % partitionSettings.MaxPartitions == 0) {
-                        splitsPerPartition = totalSplits / partitionSettings.MaxPartitions;
-                    } else {
-                        splitsPerPartition = (totalSplits / partitionSettings.MaxPartitions) + 1;
-                    }
+                    size_t splitsPerPartition = (totalSplits / partitionSettings.MaxPartitions - 1) + 1;
 
-                    for (std::size_t i = 0; i < totalSplits; i += splitsPerPartition) {
+                    for (size_t i = 0; i < totalSplits; i += splitsPerPartition) {
                         NGeneric::TPartition partition;
-                        for (std::size_t j = i; j < i + splitsPerPartition && j < totalSplits; j++) {
-                            partition.add_splits()->CopyFrom(tableMeta->Splits[j]);
+                        for (size_t j = i; j < i + splitsPerPartition && j < totalSplits; j++) {
+                            *partition.add_splits() = tableMeta->Splits[j];
                         }
-                        partitions.emplace_back();
-                        TStringOutput out(partitions.back());
-                        partition.Save(&out);
+                        TString partitionStr;
+                        YQL_ENSURE(partition.SerializeToString(&partitionStr), "Failed to serialize partition");
+                        partitions.emplace_back(std::move(partitionStr));
                     }
                 }
 
@@ -196,13 +192,13 @@ namespace NYql {
 
                     auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
                     if (issues) {
-                        ythrow yexception() << "Get table metadata: " << issues.ToOneLineString();
+                        throw yexception() << "Get table metadata: " << issues.ToOneLineString();
                     }
 
                     // prepare select
                     auto select = source.mutable_select();
                     select->mutable_from()->set_table(TString(tableName));
-                    select->mutable_data_source_instance()->CopyFrom(tableMeta->DataSourceInstance);
+                    *select->mutable_data_source_instance() = tableMeta->DataSourceInstance;
 
                     auto items = select->mutable_what()->mutable_items();
                     for (size_t i = 0; i < columns.Size(); i++) {
@@ -213,13 +209,13 @@ namespace NYql {
 
                         // assign column type
                         auto type = NConnector::GetColumnTypeByName(tableMeta->Schema, columnName);
-                        column->mutable_type()->CopyFrom(type);
+                        *column->mutable_type() = type;
                     }
 
                     if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
                         TStringBuilder err;
                         if (!SerializeFilterPredicate(predicate, select->mutable_where()->mutable_filter_typed(), err)) {
-                            ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
+                            throw yexception() << "Failed to serialize filter predicate for source: " << err;
                         }
                     }
 
@@ -340,7 +336,7 @@ namespace NYql {
 
                 auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
                 if (issues) {
-                    ythrow yexception() << "Get table metadata: " << issues.ToOneLineString();
+                    throw yexception() << "Get table metadata: " << issues.ToOneLineString();
                 }
 
                 NGeneric::TLookupSource source;

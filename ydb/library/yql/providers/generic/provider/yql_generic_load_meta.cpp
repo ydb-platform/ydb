@@ -139,7 +139,7 @@ namespace NYql {
                     // Check transport error
                     if (!result.Status.Ok()) {
                         desc->Issues.AddIssue(TStringBuilder()
-                                              << "Call DescribeTable for table " << tableAddress.String() << ": "
+                                              << "Call DescribeTable for table " << tableAddress.ToString() << ": "
                                               << result.Status.ToDebugString());
                         promise.SetValue();
                         return;
@@ -149,7 +149,7 @@ namespace NYql {
                     if (!NConnector::IsSuccess(*result.Response)) {
                         desc->Issues.AddIssues(NConnector::ErrorToIssues(
                             result.Response->error(),
-                            TStringBuilder() << "Call DescribeTable for table " << tableAddress.String() << ": "));
+                            TStringBuilder() << "Call DescribeTable for table " << tableAddress.ToString() << ": "));
                         promise.SetValue();
                         return;
                     }
@@ -160,7 +160,7 @@ namespace NYql {
                     // Call ListSplits
                     NConnector::NApi::TListSplitsRequest request;
                     auto select = request.add_selects();
-                    select->mutable_data_source_instance()->CopyFrom(desc->DataSourceInstance);
+                    *select->mutable_data_source_instance() = desc->DataSourceInstance;
                     select->mutable_from()->set_table(tableAddress.TableName);
 
                     client->ListSplits(request).Subscribe(
@@ -172,7 +172,7 @@ namespace NYql {
                             // Check transport error
                             if (!streamIterResult.Status.Ok()) {
                                 desc->Issues.AddIssue(TStringBuilder()
-                                                      << "Call ListSplits for table " << tableAddress.String() << ": "
+                                                      << "Call ListSplits for table " << tableAddress.ToString() << ": "
                                                       << streamIterResult.Status.ToDebugString());
                                 promise.SetValue();
                                 return;
@@ -196,7 +196,7 @@ namespace NYql {
 
                                 // check transport and logical errors
                                 if (drainerResult.Issues) {
-                                    TIssue dstIssue(TStringBuilder() << "Call ListSplits for table " << tableAddress.String());
+                                    TIssue dstIssue(TStringBuilder() << "Call ListSplits for table " << tableAddress.ToString());
                                     for (const auto& srcIssue : drainerResult.Issues) {
                                         dstIssue.AddSubIssue(MakeIntrusive<TIssue>(srcIssue));
                                     };
@@ -251,7 +251,7 @@ namespace NYql {
                 if (iter == TableDescriptions_.end()) {
                     ctx.AddError(TIssue(ctx.GetPosition(genRead.Pos()), TStringBuilder()
                                                                             << "Connector response not found for table "
-                                                                            << tableAddress.String()));
+                                                                            << tableAddress.ToString()));
 
                     return TStatus::Error;
                 }
@@ -309,7 +309,7 @@ namespace NYql {
             const auto& columns = tableMeta.Schema.columns();
             if (columns.empty()) {
                 TIssues issues;
-                issues.AddIssue(TIssue(pos, TStringBuilder() << "Table " << tableAddress.String() << " doesn't exist."));
+                issues.AddIssue(TIssue(pos, TStringBuilder() << "Table " << tableAddress.ToString() << " doesn't exist."));
                 return issues;
             }
 
@@ -485,7 +485,7 @@ namespace NYql {
                     SetLoggingFolderId(*options, clusterConfig);
                 } break;
                 default:
-                    ythrow yexception() << "Unexpected data source kind: '"
+                    throw yexception() << "Unexpected data source kind: '"
                                         << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";
             }
         }
@@ -498,7 +498,7 @@ namespace NYql {
             } else if (dateTimeFormat == "YQL") {
                 request.mutable_type_mapping_settings()->set_date_time_format(NConnector::NApi::YQL_FORMAT);
             } else {
-                ythrow yexception() << "Unexpected date/time format: '" << dateTimeFormat << "'";
+                throw yexception() << "Unexpected date/time format: '" << dateTimeFormat << "'";
             }
         }
 

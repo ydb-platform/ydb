@@ -19,7 +19,7 @@ namespace NYql {
             TString ClusterName;
             TString TableName;
 
-            TString String() const { 
+            TString ToString() const { 
                 return TStringBuilder() << "`" << ClusterName << "`.`" << TableName << "`";
             }
 

@@ -12,7 +12,7 @@ namespace NYql {
         }
 
         TIssues issues;
-        issues.AddIssue(TIssue(TStringBuilder() << "no metadata for table " << tableAddress.String()));
+        issues.AddIssue(TIssue(TStringBuilder() << "no metadata for table " << tableAddress.ToString()));
 
         return std::make_pair<TTableMeta*, TIssues>(nullptr, std::move(issues));
     }

@@ -108,7 +108,7 @@ namespace NYql::NDq {
                     auto dstSplit = request.add_splits();
 
                     // Take actual SQL request from the source, because it contains predicates
-                    dstSplit->mutable_select()->CopyFrom(Source_.select());
+                    *dstSplit->mutable_select() = Source_.select();
 
                     // Take split description from task params
                     dstSplit->set_description(srcSplit.description());
@@ -391,29 +391,28 @@ namespace NYql::NDq {
         NGeneric::TSource Source_;
     };
 
-    void ExtractSplitsFromPartitions(
+    void ExtractPartitionsFromParams(
         TVector<NGeneric::TPartition>& partitions, 
-        const THashMap<TString, TString>& taskParams,  // ranges are here in v1
-        const TVector<TString>& srcReadRanges          // ranges are here in v2
+        const THashMap<TString, TString>& taskParams,  // partitions are here in v1
+        const TVector<TString>& readRanges             // partitions are here in v2
     ) {
-        if (srcReadRanges.size() > 0) {
-            for (const auto& readRange : srcReadRanges) {
+        if (!readRanges.empty()) {
+            for (const auto& readRange : readRanges) {
                 NGeneric::TPartition partition;
-                TStringInput input(readRange);
-                partition.Load(&input);
+                YQL_ENSURE(partition.ParseFromString(readRange), "Failed to parse partition from read ranges");
                 partitions.emplace_back(std::move(partition));
             }
         } else {
-            const auto& readRange = taskParams.find(GenericProviderName);
-            if (readRange != taskParams.end()) {
+            const auto& iter = taskParams.find(GenericProviderName);
+            if (iter != taskParams.end()) {
                 NGeneric::TPartition partition;
-                TStringInput input(readRange->first);
-                partition.Load(&input);
+                TStringInput input(iter->first);
+                YQL_ENSURE(partition.ParseFromString(iter->second), "Failed to parse partition from task params");
                 partitions.emplace_back(std::move(partition));
             }
         }
 
-        Y_ENSURE(partitions.size() > 0, "partitions must not be empty");
+        Y_ENSURE(!partitions.empty(), "partitions must not be empty");
     }
 
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>
@@ -430,7 +429,7 @@ namespace NYql::NDq {
                            const NKikimr::NMiniKQL::THolderFactory& holderFactory)
     {
         TVector<NGeneric::TPartition> partitions;
-        ExtractSplitsFromPartitions(partitions, taskParams, readRanges);
+        ExtractPartitionsFromParams(partitions, taskParams, readRanges);
 
         const auto dsi = source.select().data_source_instance();
         YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"

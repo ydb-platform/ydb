@@ -14,8 +14,8 @@ namespace NYql::NDq {
                                     NGeneric::TSource&& settings,
                                     IDqAsyncIoFactory::TSourceArguments&& args) {
             return CreateGenericReadActor(
-                genericClient, 
-                std::move(settings), 
+                genericClient,
+                std::move(settings),
                 args.InputIndex,
                 args.StatsLevel,
                 args.SecureParams,
@@ -23,9 +23,8 @@ namespace NYql::NDq {
                 args.TaskParams,
                 args.ReadRanges,
                 args.ComputeActorId,
-                credentialsFactory, 
-                args.HolderFactory
-            );
+                credentialsFactory,
+                args.HolderFactory);
         };
 
         auto lookupActorFactory = [credentialsFactory, genericClient](NYql::NGeneric::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
@@ -45,15 +44,14 @@ namespace NYql::NDq {
         };
 
         for (auto& name : {
-            "ClickHouseGeneric", 
-            "PostgreSqlGeneric", 
-            "YdbGeneric", 
-            "MySqlGeneric", 
-            "GreenplumGeneric", 
-            "MsSQLServerGeneric", 
-            "OracleGeneric",
-            "LoggingGeneric"}
-            ) {
+                 "ClickHouseGeneric",
+                 "PostgreSqlGeneric",
+                 "YdbGeneric",
+                 "MySqlGeneric",
+                 "GreenplumGeneric",
+                 "MsSQLServerGeneric",
+                 "OracleGeneric",
+                 "LoggingGeneric"}) {
             factory.RegisterSource<NGeneric::TSource>(name, readActorFactory);
             factory.RegisterLookupSource<NGeneric::TLookupSource>(name, lookupActorFactory);
         }

@@ -108,24 +108,22 @@ namespace NYql {
             ui64 Partition(
                 const TExprNode& node,
                 TVector<TString>& partitions,
-                TString*, 
+                TString*,
                 TExprContext& ctx,
-                const TPartitionSettings& partitionSettings
-            ) override {
-                auto maybeDqSource = TMaybeNode<TDqSource>(&node); 
+                const TPartitionSettings& partitionSettings) override {
+                auto maybeDqSource = TMaybeNode<TDqSource>(&node);
                 if (!maybeDqSource) {
                     return 0;
                 }
 
                 auto srcSettings = maybeDqSource.Cast().Settings();
                 auto maybeGenSourceSettings = TMaybeNode<TGenSourceSettings>(srcSettings.Raw());
-                Y_ENSURE(maybeGenSourceSettings); 
+                Y_ENSURE(maybeGenSourceSettings);
                 auto genSourceSettings = maybeGenSourceSettings.Cast();
 
                 const TGenericState::TTableAddress tableAddress{
                     genSourceSettings.Cluster().StringValue(),
-                    genSourceSettings.Table().StringValue()
-                };
+                    genSourceSettings.Table().StringValue()};
 
                 // Extract table metadata from provider state>.
                 auto [tableMeta, issues] = State_->GetTable(tableAddress);

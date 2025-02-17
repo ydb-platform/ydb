@@ -380,7 +380,7 @@ namespace NYql::NDq {
         NConnector::IClient::TPtr Client_;
         TGenericTokenProvider::TPtr TokenProvider_;
 
-        TVector<NGeneric::TPartition> Partitions_; 
+        TVector<NGeneric::TPartition> Partitions_;
 
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator_;
         std::optional<NConnector::NApi::TReadSplitsResponse> LastReadSplitsResponse_;
@@ -392,9 +392,9 @@ namespace NYql::NDq {
     };
 
     void ExtractPartitionsFromParams(
-        TVector<NGeneric::TPartition>& partitions, 
-        const THashMap<TString, TString>& taskParams,  // partitions are here in v1
-        const TVector<TString>& readRanges             // partitions are here in v2
+        TVector<NGeneric::TPartition>& partitions,
+        const THashMap<TString, TString>& taskParams, // partitions are here in v1
+        const TVector<TString>& readRanges            // partitions are here in v2
     ) {
         if (!readRanges.empty()) {
             for (const auto& readRange : readRanges) {
@@ -422,8 +422,8 @@ namespace NYql::NDq {
                            TCollectStatsLevel statsLevel,
                            const THashMap<TString, TString>& /*secureParams*/,
                            const ui64 taskId,
-                           const THashMap<TString, TString>& taskParams, 
-                           const TVector<TString>& readRanges,           
+                           const THashMap<TString, TString>& taskParams,
+                           const TVector<TString>& readRanges,
                            const NActors::TActorId& computeActorId,
                            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                            const NKikimr::NMiniKQL::THolderFactory& holderFactory)
@@ -454,7 +454,7 @@ namespace NYql::NDq {
 
         auto tokenProvider = CreateGenericTokenProvider(
             source.GetToken(),
-            source.GetServiceAccountId(), 
+            source.GetServiceAccountId(),
             source.GetServiceAccountIdSignature(),
             credentialsFactory);
 

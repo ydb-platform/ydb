@@ -183,12 +183,11 @@ namespace NYql {
                             auto drainer =
                                 NConnector::MakeListSplitsStreamIteratorDrainer(std::move(streamIterResult.Iterator));
 
-                            drainer->Run().Subscribe([
-                                desc, 
-                                promise, 
-                                tableAddress,
-                                drainer // pass drainer to the callback because we want him to
-                                        // stay alive until the callback is called
+                            drainer->Run().Subscribe([desc,
+                                                      promise,
+                                                      tableAddress,
+                                                      drainer // pass drainer to the callback because we want him to
+                                                              // stay alive until the callback is called
                             ](const NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer>&
                                                          f5) mutable {
                                 NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer> f6(f5);
@@ -486,7 +485,7 @@ namespace NYql {
                 } break;
                 default:
                     throw yexception() << "Unexpected data source kind: '"
-                                        << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";
+                                       << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";
             }
         }
 

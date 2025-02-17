@@ -30,7 +30,8 @@ namespace NYql::NConnector {
 
         TStreamer(TStreamProcessorPtr streamProcessor)
             : StreamProcessor_(streamProcessor)
-            , Finished_(false){};
+            , Finished_(false)
+        {}
 
         TAsyncResult<TResponse> ReadNext(std::shared_ptr<TSelf> self) {
             auto promise = NThreading::NewPromise<TResult<TResponse>>();
@@ -69,7 +70,7 @@ namespace NYql::NConnector {
 
         virtual TAsyncResult<TResponse> ReadNext() = 0;
 
-        virtual ~IStreamIterator(){};
+        virtual ~IStreamIterator() {}
     };
 
     using IListSplitsStreamIterator = IStreamIterator<NApi::TListSplitsResponse>;
@@ -86,7 +87,8 @@ namespace NYql::NConnector {
         };
 
         IStreamIteratorDrainer(IStreamIterator<TResponse>::TPtr&& iterator)
-            : Iterator_(std::move(iterator)) {
+            : Iterator_(std::move(iterator))
+        {
         }
 
         NThreading::TFuture<TBuffer> Run() {
@@ -95,7 +97,8 @@ namespace NYql::NConnector {
             return promise.GetFuture();
         }
 
-        virtual ~IStreamIteratorDrainer() {}
+        virtual ~IStreamIteratorDrainer() {
+        }
 
     private:
         IStreamIterator<TResponse>::TPtr Iterator_;

@@ -388,6 +388,14 @@ class ReaderStream:
         partition_session_id, batch = self._message_batches.popitem(last=False)
         return partition_session_id, batch
 
+    def _return_batch_to_queue(self, part_sess_id: int, batch: datatypes.PublicBatch):
+        self._message_batches[part_sess_id] = batch
+
+        # In case of auto-split we should return all parent messages ASAP
+        # without queue rotation to prevent child's messages before parent's.
+        if part_sess_id in self._partition_sessions and self._partition_sessions[part_sess_id].ended:
+            self._message_batches.move_to_end(part_sess_id, last=False)
+
     def receive_batch_nowait(self, max_messages: Optional[int] = None):
         if self._get_first_error():
             raise self._get_first_error()
@@ -403,7 +411,8 @@ class ReaderStream:
 
         cutted_batch = batch._pop_batch(message_count=max_messages)
 
-        self._message_batches[part_sess_id] = batch
+        self._return_batch_to_queue(part_sess_id, batch)
+
         self._buffer_release_bytes(cutted_batch._bytes_size)
 
         return cutted_batch
@@ -423,7 +432,7 @@ class ReaderStream:
             self._buffer_release_bytes(batch._bytes_size)
         else:
             # TODO: we should somehow release bytes from single message as well
-            self._message_batches[part_sess_id] = batch
+            self._return_batch_to_queue(part_sess_id, batch)
 
         return message
 
@@ -497,6 +506,12 @@ class ReaderStream:
                         StreamReadMessage.StopPartitionSessionRequest,
                     ):
                         self._on_partition_session_stop(message.server_message)
+
+                    elif isinstance(
+                        message.server_message,
+                        StreamReadMessage.EndPartitionSession,
+                    ):
+                        self._on_end_partition_session(message.server_message)
 
                     elif isinstance(message.server_message, UpdateTokenResponse):
                         self._update_token_event.set()
@@ -574,6 +589,16 @@ class ReaderStream:
                     )
                 )
             )
+
+    def _on_end_partition_session(self, message: StreamReadMessage.EndPartitionSession):
+        logger.debug(
+            f"End partition session with id: {message.partition_session_id}, "
+            f"child partitions: {message.child_partition_ids}"
+        )
+
+        if message.partition_session_id in self._partition_sessions:
+            # Mark partition session as ended not to shuffle messages.
+            self._partition_sessions[message.partition_session_id].end()
 
     def _on_read_response(self, message: StreamReadMessage.ReadResponse):
         self._buffer_consume_bytes(message.bytes_size)

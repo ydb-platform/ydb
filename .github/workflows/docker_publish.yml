@@ -91,7 +91,7 @@ jobs:
       - name: Test docker image
         continue-on-error: false
         run: |
-          docker run -d --rm --name local-ydb-test ghcr.io/${{ github.repository_owner }}/local-ydb:nightly
+          docker run -d --rm --name local-ydb-test ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag || 'trunk' }}
           sleep 61  # Wait for the health check to run (--start-period=60s --interval=1s)
           if [ "$(docker inspect --format='{{json .State.Health.Status}}' local-ydb-test)" != "\"healthy\"" ]; then
             echo "Container is not healthy"

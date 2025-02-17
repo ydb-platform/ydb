@@ -18,6 +18,7 @@ from ...scheme import SchemeEntry
 class CreateTopicRequestParams:
     path: str
     min_active_partitions: Optional[int]
+    max_active_partitions: Optional[int]
     partition_count_limit: Optional[int]
     retention_period: Optional[datetime.timedelta]
     retention_storage_mb: Optional[int]
@@ -27,12 +28,14 @@ class CreateTopicRequestParams:
     attributes: Optional[Dict[str, str]]
     consumers: Optional[List[Union["PublicConsumer", str]]]
     metering_mode: Optional["PublicMeteringMode"]
+    auto_partitioning_settings: Optional["PublicAutoPartitioningSettings"]
 
 
 @dataclass
 class AlterTopicRequestParams:
     path: str
     set_min_active_partitions: Optional[int]
+    set_max_active_partitions: Optional[int]
     set_partition_count_limit: Optional[int]
     add_consumers: Optional[List[Union["PublicConsumer", str]]]
     alter_consumers: Optional[List[Union["PublicAlterConsumer", str]]]
@@ -44,6 +47,7 @@ class AlterTopicRequestParams:
     set_retention_period: Optional[datetime.timedelta]
     set_retention_storage_mb: Optional[int]
     set_supported_codecs: Optional[List[Union["PublicCodec", int]]]
+    alter_auto_partitioning_settings: Optional["PublicAlterAutoPartitioningSettings"]
 
 
 class PublicCodec(int):
@@ -65,6 +69,30 @@ class PublicMeteringMode(IntEnum):
     UNSPECIFIED = 0
     RESERVED_CAPACITY = 1
     REQUEST_UNITS = 2
+
+
+class PublicAutoPartitioningStrategy(IntEnum):
+    UNSPECIFIED = 0
+    DISABLED = 1
+    SCALE_UP = 2
+    SCALE_UP_AND_DOWN = 3
+    PAUSED = 4
+
+
+@dataclass
+class PublicAutoPartitioningSettings:
+    strategy: Optional["PublicAutoPartitioningStrategy"] = None
+    stabilization_window: Optional[datetime.timedelta] = None
+    down_utilization_percent: Optional[int] = None
+    up_utilization_percent: Optional[int] = None
+
+
+@dataclass
+class PublicAlterAutoPartitioningSettings:
+    set_strategy: Optional["PublicAutoPartitioningStrategy"] = None
+    set_stabilization_window: Optional[datetime.timedelta] = None
+    set_down_utilization_percent: Optional[int] = None
+    set_up_utilization_percent: Optional[int] = None
 
 
 @dataclass
@@ -137,6 +165,9 @@ class PublicDescribeTopicResult:
     min_active_partitions: int
     "Minimum partition count auto merge would stop working at"
 
+    max_active_partitions: int
+    "Minimum partition count auto split would stop working at"
+
     partition_count_limit: int
     "Limit for total partition count, including active (open for write) and read-only partitions"
 
@@ -169,6 +200,8 @@ class PublicDescribeTopicResult:
 
     topic_stats: "PublicDescribeTopicResult.TopicStats"
     "Statistics of topic"
+
+    auto_partitioning_settings: "PublicAutoPartitioningSettings"
 
     @dataclass
     class PartitionInfo:

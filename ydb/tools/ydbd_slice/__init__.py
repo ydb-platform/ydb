@@ -310,7 +310,7 @@ def deduce_components_from_args(args, cluster_details):
     return result
 
 
-def deduce_nodes_from_args(args, walle_provider, ssh_user):
+def deduce_nodes_from_args(args, walle_provider, ssh_user, ssh_key_path):
     cluster_hosts = safe_load_cluster_details(args.cluster, walle_provider).hosts_names
     result = cluster_hosts
 
@@ -326,7 +326,7 @@ def deduce_nodes_from_args(args, walle_provider, ssh_user):
         sys.exit("unable to deduce hosts")
 
     logger.info("use nodes '%s'", result)
-    return nodes.Nodes(result, args.dry_run, ssh_user=ssh_user, queue_size=args.cmd_queue_size)
+    return nodes.Nodes(result, args.dry_run, ssh_user=ssh_user, ssh_key_path=ssh_key_path, queue_size=args.cmd_queue_size)
 
 
 def ya_build(arcadia_root, artifact, opts, dry_run):
@@ -514,6 +514,12 @@ def ssh_args():
         help="user for ssh interaction with slice. Default value is $USER "
         "(which equals {user} now)".format(user=current_user),
     )
+    args.add_argument(
+        "--ssh-key-path",
+        metavar="SSH_KEY_PATH",
+        help="Path to ssh private key"
+        "(which equals {user} now)".format(user=current_user),
+    )
     return args
 
 
@@ -625,7 +631,7 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
     cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
     components = deduce_components_from_args(args, cluster_details)
 
-    nodes = deduce_nodes_from_args(args, walle_provider, args.ssh_user)
+    nodes = deduce_nodes_from_args(args, walle_provider, args.ssh_user, args.ssh_key_path)
 
     temp_dir = deduce_temp_dir_from_args(args)
     clear_tmp = not args.dry_run and args.temp_dir is None

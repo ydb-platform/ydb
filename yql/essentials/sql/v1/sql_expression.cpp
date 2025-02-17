@@ -976,6 +976,10 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
                 EColumnRefState::MatchRecognizeDefine == Ctx.GetColumnReferenceState() ||
                 EColumnRefState::MatchRecognizeDefineAggregate == Ctx.GetColumnReferenceState()
             )) {
+                if (suffix.GetBlock1().size() != 1) {
+                    Ctx.Error() << "Expected Var.Column, but got chain of " << suffix.GetBlock1().size() << " column accesses";
+                    return nullptr;
+                }
                 return RowPatternVarAccess(std::move(name), b.GetAlt3().GetBlock2());
             }
             break;

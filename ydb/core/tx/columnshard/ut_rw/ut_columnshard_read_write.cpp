@@ -2253,7 +2253,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     break;
                 }
                 UNIT_ASSERT(scan->ArrowBatch);
-                auto batchStats = NArrow::ToBatch(scan->ArrowBatch, true);
+                auto batchStats = NArrow::ToBatch(scan->ArrowBatch);
                 for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
                     auto paths = batchStats->GetColumnByName("PathId");
                     auto kinds = batchStats->GetColumnByName("Kind");

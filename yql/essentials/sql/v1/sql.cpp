@@ -275,4 +275,37 @@ bool SplitQueryToStatements(const TString& query, TVector<TString>& statements, 
     return true;
 }
 
+class TTranslator : public NSQLTranslation::ITranslator {
+public:
+    NSQLTranslation::ILexer::TPtr MakeLexer(const NSQLTranslation::TTranslationSettings& settings) final {
+        return NSQLTranslationV1::MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
+    }
+
+    NYql::TAstParseResult TextToAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
+        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo) final {
+        Y_UNUSED(stmtParseInfo);
+        return SqlToYql(query, settings, warningRules);
+    }
+
+    google::protobuf::Message* TextToMessage(const TString& query, const TString& queryName,
+        NYql::TIssues& issues, size_t maxErrors, const NSQLTranslation::TTranslationSettings& settings) final {
+        return SqlAST(query, queryName, issues, maxErrors, settings.AnsiLexer, settings.Antlr4Parser,
+            settings.TestAntlr4, settings.Arena);
+    }
+
+    NYql::TAstParseResult TextAndMessageToAst(const TString& query, const google::protobuf::Message& protoAst,
+        const NSQLTranslation::TSQLHints& hints, const NSQLTranslation::TTranslationSettings& settings) final {
+        return SqlASTToYql(query, protoAst, hints, settings);
+    }
+
+    TVector<NYql::TAstParseResult> TextToManyAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
+        NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo) final {
+        return SqlToAstStatements(query, settings, warningRules, stmtParseInfo);
+    }
+};
+
+NSQLTranslation::TTranslatorPtr MakeTranslator() {
+    return MakeIntrusive<TTranslator>();
+}
+
 } // namespace NSQLTranslationV1

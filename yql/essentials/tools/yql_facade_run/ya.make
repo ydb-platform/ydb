@@ -37,6 +37,8 @@ PEERDIR(
     yql/essentials/protos
     yql/essentials/sql/settings
     yql/essentials/sql/v1/format
+    yql/essentials/sql/v1
+    yql/essentials/sql
 
     library/cpp/resource
     library/cpp/getopt

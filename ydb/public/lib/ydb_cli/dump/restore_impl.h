@@ -2,6 +2,7 @@
 
 #include "dump.h"
 
+#include <ydb-cpp-sdk/client/cms/cms.h>
 #include <ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb-cpp-sdk/client/import/import.h>
 #include <ydb-cpp-sdk/client/operation/operation.h>
@@ -134,6 +135,8 @@ class TRestoreClient {
     TRestoreResult RestoreCoordinationNode(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreDependentResources(const TFsPath& fsPath, const TString& dbPath);
     TRestoreResult RestoreRateLimiter(const TFsPath& fsPath, const TString& coordinationNodePath, const TString& resourcePath);
+    TRestoreResult RestoreExternalDataSource(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
+    TRestoreResult RestoreExternalTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
 
     TRestoreResult CheckSchema(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc, ui32 partitionCount);
@@ -141,6 +144,22 @@ class TRestoreClient {
     TRestoreResult RestoreChangefeeds(const TFsPath& path, const TString& dbPath);
     TRestoreResult RestorePermissions(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreConsumers(const TString& topicPath, const std::vector<NTopic::TConsumer>& consumers);
+
+    TRestoreResult FindClusterRootPath();
+    TRestoreResult ReplaceClusterRoot(TString& outPath);
+    TRestoreResult WaitForAvailableNodes(const TString& database, TDuration waitDuration);
+    TRestoreResult RetryViewRestoration();
+    TRestoreResult RestoreExternalTables();
+
+    TRestoreResult RestoreClusterRoot(const TFsPath& fsPath);
+    TRestoreResult RestoreDatabases(const TFsPath& fsPath, const TRestoreClusterSettings& settings);
+    TRestoreResult RestoreUsers(NTable::TTableClient& client, const TFsPath& fsPath, const TString& dbPath);
+    TRestoreResult RestoreGroups(NTable::TTableClient& client, const TFsPath& fsPath, const TString& dbPath);
+    TRestoreResult RestoreGroupMembers(NTable::TTableClient& client, const TFsPath& fsPath, const TString& dbPath);
+
+    TRestoreResult RestoreClusterImpl(const TString& fsPath, const TRestoreClusterSettings& settings);
+    TRestoreResult RestoreDatabaseImpl(const TString& fsPath, const TRestoreDatabaseSettings& settings);
+    TRestoreResult RestorePermissionsImpl(NScheme::TSchemeClient& client, const TFsPath& fsPath, const TString& dbPath);
 
     THolder<NPrivate::IDataWriter> CreateDataWriter(const TString& dbPath, const TRestoreSettings& settings,
         const NTable::TTableDescription& desc, ui32 partitionCount, const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators);
@@ -152,6 +171,8 @@ public:
     explicit TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log);
 
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings = {});
+    TRestoreResult RestoreCluster(const TString& fsPath, const TRestoreClusterSettings& settings = {});
+    TRestoreResult RestoreDatabase(const TString& fsPath, const TRestoreDatabaseSettings& settings = {});
 
 private:
     NImport::TImportClient ImportClient;
@@ -162,7 +183,10 @@ private:
     NCoordination::TClient CoordinationNodeClient;
     NRateLimiter::TRateLimiterClient RateLimiterClient;
     NQuery::TQueryClient QueryClient;
+    NCms::TCmsClient CmsClient;
     std::shared_ptr<TLog> Log;
+    // Used to creating child drivers with different database settings.
+    TDriverConfig DriverConfig;
 
     struct TRestoreViewCall {
         TFsPath FsPath;
@@ -176,6 +200,16 @@ private:
     // We retry failed view creation attempts until either all views are created, or the errors are persistent.
     TVector<TRestoreViewCall> ViewRestorationCalls;
 
+    struct TRestoreExternalTableCall {
+        TFsPath FsPath;
+        TString DbPath;
+        TRestoreSettings Settings;
+        bool IsAlreadyExisting;
+    };
+    // External Tables depend on External Data Sources and need to be restored after them.
+    TVector<TRestoreExternalTableCall> ExternalTableRestorationCalls;
+
+    TString ClusterRootPath;
 }; // TRestoreClient
 
 } // NYdb::NDump

@@ -300,11 +300,11 @@ struct TVDiskMock {
     void MarkCommitedChunksDirty() {
         auto& commited = Chunks[EChunkState::COMMITTED];
         TStackVec<TChunkIdx, 1> chunksToMark;
+        NPDisk::TCommitRecord rec;
         for (auto it = commited.begin(); it != commited.end(); ++it) {
-            chunksToMark.push_back(*it);
+            rec.DirtyChunks.push_back(*it);
         }
-        auto evMark = MakeHolder<NPDisk::TEvMarkDirty>(PDiskParams->Owner, PDiskParams->OwnerRound, chunksToMark);
-        TestCtx->Send(evMark.Release());
+        SendEvLogImpl(1, rec);
     }
 
     void DeleteCommitedChunks() {
@@ -364,6 +364,14 @@ struct TVDiskMock {
             NKikimrProto::OK);
     }
 
+    void RespondToCutLog() {
+        Cerr << __FILE__ << ":" << __LINE__ << Endl;
+        THolder<NPDisk::TEvCutLog> evReq = TestCtx->Recv<NPDisk::TEvCutLog>();
+        if (evReq) {
+            CutLogAllButOne();
+        }
+    }
+    
     void RespondToPreShredCompact(ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString& errorReason) {
         THolder<NPDisk::TEvPreShredCompactVDisk> evReq = TestCtx->Recv<NPDisk::TEvPreShredCompactVDisk>();
         if (evReq) {
@@ -375,17 +383,19 @@ struct TVDiskMock {
     void RespondToShred(ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString& errorReason) {
         THolder<NPDisk::TEvShredVDisk> evReq = TestCtx->Recv<NPDisk::TEvShredVDisk>();
         if (evReq) {
-            auto& commited = Chunks[EChunkState::COMMITTED];
-            NPDisk::TCommitRecord rec;
-            rec.DeleteChunks = TVector<TChunkIdx>();
-            for (const TChunkIdx &idx : evReq->ChunksToShred) {
-                if (commited.contains(idx)) {
-                    rec.DeleteChunks.push_back(idx);
-                    Chunks[EChunkState::DELETED].insert(idx);
-                    commited.erase(idx); 
+            if (status == NKikimrProto::OK) {
+                auto& commited = Chunks[EChunkState::COMMITTED];
+                NPDisk::TCommitRecord rec;
+                rec.DeleteChunks = TVector<TChunkIdx>();
+                for (const TChunkIdx &idx : evReq->ChunksToShred) {
+                    if (commited.contains(idx)) {
+                        rec.DeleteChunks.push_back(idx);
+                        Chunks[EChunkState::DELETED].insert(idx);
+                        commited.erase(idx); 
+                    }
                 }
+                SendEvLogImpl(1, rec);
             }
-            SendEvLogImpl(1, rec);
             TestCtx->Send(new NPDisk::TEvShredVDiskResult(PDiskParams->Owner, PDiskParams->OwnerRound,
                 shredGeneration, status, errorReason));
         }

@@ -78,6 +78,13 @@ public:
         YT_LOG_INFO("Bus server started");
     }
 
+    void OnDynamicConfigChanged(const NBus::TBusServerDynamicConfigPtr& config)
+    {
+        YT_VERIFY(config);
+
+        DynamicConfig_.Store(config);
+    }
+
     TFuture<void> Stop()
     {
         YT_LOG_INFO("Stopping Bus server");
@@ -122,6 +129,7 @@ public:
 
 protected:
     const TBusServerConfigPtr Config_;
+    TAtomicIntrusivePtr<TBusServerDynamicConfig> DynamicConfig_{New<TBusServerDynamicConfig>()};
     const IPollerPtr Poller_;
     const IMessageHandlerPtr Handler_;
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
@@ -254,7 +262,6 @@ protected:
                 .EndMap());
 
             auto poller = TTcpDispatcher::TImpl::Get()->GetXferPoller();
-
             auto connection = New<TTcpConnection>(
                 Config_,
                 EConnectionType::Server,
@@ -269,7 +276,8 @@ protected:
                 Handler_,
                 std::move(poller),
                 PacketTranscoderFactory_,
-                MemoryUsageTracker_);
+                MemoryUsageTracker_,
+                DynamicConfig_.Acquire()->NeedRejectConnectionDueMemoryOvercommit);
 
             {
                 auto guard = WriterGuard(ConnectionsSpinLock_);
@@ -435,6 +443,18 @@ public:
 
         Server_.Store(server);
         server->Start();
+        server->OnDynamicConfigChanged(DynamicConfig_.Acquire());
+    }
+
+    void OnDynamicConfigChanged(const NBus::TBusServerDynamicConfigPtr& config) final
+    {
+        YT_VERIFY(config);
+
+        DynamicConfig_.Store(config);
+
+        if (auto server = Server_.Acquire()) {
+            server->OnDynamicConfigChanged(config);
+        }
     }
 
     TFuture<void> Stop() final
@@ -448,6 +468,7 @@ public:
 
 private:
     const TBusServerConfigPtr Config_;
+    TAtomicIntrusivePtr<TBusServerDynamicConfig> DynamicConfig_{New<TBusServerDynamicConfig>()};
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
@@ -518,6 +539,15 @@ public:
         if (Config_->EnableLocalBypass && Config_->Port) {
             LocalHandler_ = New<TLocalMessageHandler>(std::move(handler));
             TTcpDispatcher::TImpl::Get()->RegisterLocalMessageHandler(*Config_->Port, LocalHandler_);
+        }
+    }
+
+    void OnDynamicConfigChanged(const NBus::TBusServerDynamicConfigPtr& config) final
+    {
+        YT_VERIFY(config);
+
+        for (const auto& server : Servers_) {
+            server->OnDynamicConfigChanged(config);
         }
     }
 

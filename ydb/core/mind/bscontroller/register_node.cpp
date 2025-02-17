@@ -354,6 +354,26 @@ public:
             }
         }
 
+        // Check config version
+        if (Self->YamlConfig && !Self->StorageYamlConfig) {
+            const auto& configVersion = GetVersion(*Self->YamlConfig);
+            const auto& nodeId = record.GetNodeID();
+            if (record.GetConfigVersion() != configVersion) {
+                if (record.GetConfigVersion() > configVersion) {
+                    STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "Version on node greater than BSC", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
+                }
+                STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN10, "Send update config", (NodeId, nodeId), (NewVersion, record.GetConfigVersion()), (OldVersion, configVersion));
+                auto *yamlConfig = Response->Record.MutableYamlConfig();
+                yamlConfig->SetYAML(CompressSingleConfig(*Self->YamlConfig));
+                yamlConfig->SetConfigVersion(record.GetConfigVersion());
+            }
+            else if (record.GetConfigHash() != GetSingleConfigHash(*Self->YamlConfig)) {
+                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN11, "Config hash on node mismatch", (NodeId, nodeId));
+            }
+        } else {
+            // TODO(mregrock): Implement for double config mode
+        } 
+
         return true;
     }
 
@@ -643,3 +663,4 @@ void TBlobStorageController::SendInReply(const IEventHandle& query, std::unique_
 }
 
 } // NKikimr::NBsController
+

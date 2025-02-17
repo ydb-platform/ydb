@@ -451,10 +451,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         if (StrictAclCheck) {
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
-            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "SID user1 not found"}});
+            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "SID user1 not found in database `/MyRoot`"}});
 
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
-            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Owner SID user1 not found"}});
+            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Owner SID user1 not found in database `/MyRoot`"}});
         }
 
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");

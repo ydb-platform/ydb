@@ -7,7 +7,7 @@ from collections import defaultdict
 from kubernetes.client import Configuration
 
 from ydb.tools.ydbd_slice import nodes
-from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms, dynconfig, docker
+from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms, dynconfig, docker, utils
 
 
 logger = logging.getLogger(__name__)
@@ -86,6 +86,36 @@ def get_all_manifests(directory):
     return result
 
 
+def get_job_manifests(directory):
+    result = []
+    for file in os.listdir(directory):
+        path = os.path.abspath(os.path.join(directory, file))
+        if not file.endswith(('.yaml', '.yml')):
+            logger.info('skipping file: %s, not yaml file extension', path)
+            continue
+        try:
+            with open(path) as file:
+                data = yaml.load(file)
+        except Exception as e:
+            logger.error('failed to open and parse file: %s, error: %s', path, str(e))
+            continue
+
+        if not utils.is_kubernetes_manifest(data):
+            logger.info('skipping file: %s, not kubernetes manifest', path)
+            continue
+
+        api_version = data['apiVersion']
+        kind = data['kind'].lower()
+        namespace = data['metadata'].get('namespace')
+        name = data['metadata']['name']
+        result.append((path, api_version, kind, namespace, name, data))
+
+    if not result:
+        raise RuntimeError(f'failed to find any manifests in {os.path.abspath(directory)}')
+
+    return result
+
+
 def validate_components_selector(value):
     if not re.match(r'^[a-zA-Z][a-zA-Z0-9\-]*$', value):
         raise ValueError('invalid value: %s' % value)
@@ -155,6 +185,45 @@ def get_domain(api_client, project_path, manifests):
         if kind != 'storage':
             continue
         return data['spec']['domain']
+
+
+def get_namespace_nodeclaim_image(manifests):
+    """
+    Extracts the namespace, name, and image name from the first suitable nodeclaim manifest.
+
+    Args:
+        manifests (list): A list of tuples, where each tuple contains:
+            - path (str): The file path of the manifest.
+            - api_version (str): The API version of the manifest.
+            - kind (str): The kind of the manifest.
+            - namespace (str): The namespace of the manifest.
+            - name (str): The name of the manifest.
+            - data (dict): The data of the manifest.
+
+    Returns:
+        tuple: A tuple containing:
+            - namespace (str): The namespace of the nodeclaim.
+            - name (str): The name of the nodeclaim.
+            - image_name (str): The image name specified in the nodeclaim.
+
+    Raises:
+        RuntimeError: If no suitable nodeclaim manifest is found.
+    """
+    nodeclaim_namespace, nodeclaim_name, image_name = "", "", ""
+    for path, _, kind, namespace, name, data in utils.filter_manifests(manifests, 'ydb.tech/v1alpha1', ['nodeclaim', 'storage']):
+        if kind == 'nodeclaim' and not nodeclaim_name:
+            nodeclaim_namespace = namespace
+            nodeclaim_name = name
+        elif kind == 'storage' and not image_name:
+            try:
+                image_name = data['spec']['image']['name']
+            except KeyError:
+                pass
+        if namespace and nodeclaim_name and image_name:
+            return nodeclaim_namespace, nodeclaim_name, image_name
+
+    if not namespace or not nodeclaim_name or not image_name:
+        raise RuntimeError(f"No suitable nodeclaim or storage manifest found. Namespace: {namespace}, NodeClaim: {nodeclaim_name}, Image: {image_name}")
 
 
 def manifests_ydb_set_image(project_path, manifests, image):
@@ -254,21 +323,78 @@ def slice_nodeclaim_nodes(api_client, project_path, manifests):
 
 
 def slice_nodeclaim_format(api_client, project_path, manifests):
+    """
+    Formats and processes node claims by creating, waiting for completion, and deleting Kubernetes jobs.
+
+    This function performs the following steps:
+    1. Creates a directory for job manifests if it doesn't exist.
+    2. Retrieves the namespace, node claim, and YDB image from the provided manifests.
+    3. Retrieves the list of nodes.
+    4. Generates obliterate jobs and saves them to the jobs directory.
+    5. Creates and waits for the completion of each job.
+    6. Deletes the jobs and their associated pods.
+
+    Args:
+        api_client (object): The Kubernetes API client.
+        project_path (str): The path to the project directory.
+        manifests (dict): The manifests containing the namespace, node claim, and YDB image information.
+
+    Raises:
+        SystemExit: If no namespace or node claim is found, or if no nodes are found.
+        TimeoutError: If some jobs do not complete within the expected time.
+        Exception: If an error occurs during job processing or cleanup.
+
+    Note:
+        This function logs errors and exits the program if critical issues are encountered.
+    """
+    jobs_path = os.path.join(project_path, 'jobs')
+    if not os.path.exists(jobs_path):
+        os.makedirs(jobs_path)
+
+    namespace, nodeclaim, ydb_image = get_namespace_nodeclaim_image(manifests)
+    if not namespace or not nodeclaim:
+        logger.error("No namespace or nodclaim found, nothing to format.")
+        sys.exit(2)
+
     node_list = get_nodes(api_client, project_path, manifests)
     if len(node_list) == 0:
-        logger.info('no nodes found, nothing to format.')
-        return
-    node_list = nodes.Nodes(node_list)
-    cmd = r"sudo find /dev/disk/ -path '*/by-partlabel/kikimr_*' " \
-          r"-exec dd if=/dev/zero of={} bs=1M count=1 status=none \;"
-    node_list.execute_async(cmd)
+        logger.error("No nodes found, nothing to format.")
+        sys.exit(2)
+
+    # save obliterate jobs to project_path/jobs for debug porposes and to be able to rerun them manually
+    generate.generate_obliterate(jobs_path, namespace, nodeclaim, ydb_image, node_list)
+    jobs = get_job_manifests(jobs_path)
+
+    try:
+        for (_, _, _, namespace, name, data) in utils.filter_manifests(jobs, 'batch/v1', ['job']):
+            api.create_job(api_client, namespace, data)
+
+        # wait for job completion and job pods completion
+        api.wait_jobs_completed(api_client, namespace)
+
+        # cleanup jobs and pods
+        for (_, _, _, namespace, name, data) in utils.filter_manifests(jobs, 'batch/v1', ['job']):
+            api.wait_job_pods_completed(api_client, namespace, name)
+            api.delete_job(api_client, namespace, name)
+            api.delete_job_pods(api_client, namespace, name)
+
+    except TimeoutError as e:
+        logger.error(f"Some jobs did not complete within the expected time. Please check the job manifests in {jobs_path} for manual rerun.")
+        sys.exit(e.args[0])
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
+        sys.exit(f"""
+    An error occurred while processing the jobs. This might indicate an issue with the job's execution or cleanup process.
+    To investigate further, you can check the status of the jobs and pods by running:
+    kubectl get jobs -n {namespace}
+    kubectl get pods -n {namespace} -l job-name={name}
+    You may need to manually delete these jobs or pods if they are stuck or not terminating properly.
+""")
 
 
 def slice_nodeclaim_delete(api_client, project_path, manifests):
     nodeclaims = []
-    for (path, api_version, kind, namespace, name, data) in manifests:
-        if not (kind in ['nodeclaim'] and api_version in ['ydb.tech/v1alpha1']):
-            continue
+    for (path, api_version, kind, namespace, name, data) in utils.filter_manifests(manifests, 'ydb.tech/v1alpha1', ['nodeclaim']):
         namespace = data['metadata']['namespace']
         name = data['metadata']['name']
         api.delete_nodeclaim(api_client, namespace, name)

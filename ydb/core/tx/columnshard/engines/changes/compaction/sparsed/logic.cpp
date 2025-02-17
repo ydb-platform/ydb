@@ -159,10 +159,12 @@ void TSparsedMerger::TCursor::InitArrays(const ui32 position) {
         auto sparsedArray = static_pointer_cast<NArrow::NAccessor::TSparsedArray>(CurrentOwnedArray->GetArray());
         SparsedCursor = std::make_shared<TSparsedChunkCursor>(sparsedArray, &*CurrentOwnedArray);
         PlainCursor = nullptr;
-    } else {
+    } else if (CurrentOwnedArray->GetArray()->GetType() == NArrow::NAccessor::IChunkedArray::EType::Array) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("event", "plain_merger");
         PlainCursor = make_shared<TPlainChunkCursor>(CurrentOwnedArray->GetArray(), &*CurrentOwnedArray);
         SparsedCursor = nullptr;
+    } else {
+        AFL_VERIFY(false);
     }
     AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() <= position);
     FinishGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + CurrentOwnedArray->GetArray()->GetRecordsCount();

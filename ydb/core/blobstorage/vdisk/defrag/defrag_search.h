@@ -18,12 +18,14 @@ namespace NKikimr {
         TDefragChunks Chunks;
         ui32 FoundChunksToDefrag = 0;
         ui64 EstimatedSlotsCount = 0;
+        bool IsShred = false;
         THashSet<TChunkIdx> ChunksToShred;
 
-        static TChunksToDefrag Shred(const auto& chunks) {
-            TChunksToDefrag res;
-            res.ChunksToShred = {chunks.begin(), chunks.end()};
-            return res;
+        static TChunksToDefrag Shred(THashSet<TChunkIdx> chunksToShred) {
+            return {
+                .IsShred = true,
+                .ChunksToShred = std::move(chunksToShred),
+            };
         }
 
         void Output(IOutputStream &str) const {
@@ -39,10 +41,6 @@ namespace NKikimr {
 
         explicit operator bool() const {
             return !Chunks.empty();
-        }
-
-        bool IsShred() const {
-            return !ChunksToShred.empty();
         }
     };
 
@@ -371,7 +369,7 @@ namespace NKikimr {
 
     public:
         TDefragQuantumFindRecords(TChunksToDefrag&& chunksToDefrag, const TDefragChunks& locked) {
-            if (chunksToDefrag.IsShred()) {
+            if (chunksToDefrag.IsShred) {
                 LockedChunks = Chunks = std::move(chunksToDefrag.ChunksToShred);
             } else {
                 for (const auto& chunk : chunksToDefrag.Chunks) {
@@ -394,6 +392,10 @@ namespace NKikimr {
             NextId.reset();
             TablesToCompact.clear();
             NeedsFreshCompaction = false;
+        }
+
+        void SetLockedChunks(THashSet<ui32> lockedChunks) {
+            LockedChunks = std::move(lockedChunks);
         }
 
         std::vector<TDefragRecord> GetRecordsToRewrite() { return std::move(RecsToRewrite); }

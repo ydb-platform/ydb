@@ -28,6 +28,7 @@ PEERDIR(
     yql/essentials/providers/config
     yql/essentials/providers/result/provider
     yql/essentials/sql
+    yql/essentials/sql/v1
     yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/sql/pg

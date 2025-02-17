@@ -27,12 +27,12 @@ private:
     NYson::TYsonString Payload_;
     std::vector<std::byte> Signature_;
 
-    friend class TSignatureGeneratorBase;
+    friend class ISignatureGenerator;
     friend class TSignatureGenerator;
     friend class TDummySignatureGenerator;
     friend class TAlwaysThrowingSignatureGenerator;
 
-    friend class TSignatureValidatorBase;
+    friend class ISignatureValidator;
     friend class TSignatureValidator;
     friend class TDummySignatureValidator;
     friend class TAlwaysThrowingSignatureValidator;

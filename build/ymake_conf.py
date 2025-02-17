@@ -1067,6 +1067,7 @@ class GnuToolchainOptions(ToolchainOptions):
         self.objcopy = self.params.get('objcopy')
         self.objdump = self.params.get('objdump')
         self.isystem = self.params.get('isystem')
+        self.nm = self.params.get('nm')
 
         self.dwarf_tool = self.target.find_in_dict(self.params.get('dwarf_tool'))
 
@@ -1665,6 +1666,7 @@ class LD(Linker):
         self.strip = self.tc.strip
         self.objcopy = self.tc.objcopy
         self.objdump = self.tc.objdump
+        self.nm = self.tc.nm
 
         self.musl = Setting('MUSL', convert=to_bool)
 
@@ -1728,6 +1730,7 @@ class LD(Linker):
         emit('STRIP_TOOL_VENDOR', self.strip)
         emit('OBJCOPY_TOOL_VENDOR', self.objcopy)
         emit('OBJDUMP_TOOL_VENDOR', self.objdump)
+        emit('NM_TOOL_VENDOR', self.nm)
 
         emit('_LD_FLAGS', self.ld_flags)
         emit('LD_SDK_VERSION', self.ld_sdk)
@@ -2013,10 +2016,6 @@ class MSVCCompiler(MSVC, Compiler):
                 # for msvc compatibility
                 # https://clang.llvm.org/docs/UsersManual.html#microsoft-extensions
                 # '-fdelayed-template-parsing',
-                '-Wno-deprecated-this-capture',
-                '-Wno-c++11-narrowing-const-reference',
-                '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
-                '-Wno-invalid-offsetof',
             ]
             if target.is_x86:
                 flags.append('-m32')
@@ -2037,12 +2036,16 @@ class MSVCCompiler(MSVC, Compiler):
                 # Issue a warning if certain overload is hidden due to inheritance
                 '-Woverloaded-virtual',
                 '-Wno-ambiguous-reversed-operator',
+                '-Wno-c++11-narrowing-const-reference',
                 '-Wno-defaulted-function-deleted',
                 '-Wno-deprecated-anon-enum-enum-conversion',
                 '-Wno-deprecated-enum-enum-conversion',
                 '-Wno-deprecated-enum-float-conversion',
+                '-Wno-deprecated-this-capture',
                 '-Wno-deprecated-volatile',
+                '-Wno-invalid-offsetof',
                 '-Wno-undefined-var-template',
+                '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
             ]
 
         defines.append('/D_WIN32_WINNT={0}'.format(WINDOWS_VERSION_MIN))

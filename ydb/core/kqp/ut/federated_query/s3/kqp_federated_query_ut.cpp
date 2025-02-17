@@ -943,6 +943,82 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_EQUAL(GetObjectKeys(writeBucket).size(), 3);
     }
 
+    Y_UNIT_TEST(InsertIntoBucketValuesCast) {
+        const TString writeDataSourceName = "/Root/write_data_source";
+        const TString writeTableName = "/Root/write_binding";
+        const TString writeBucket = "test_bucket_values_cast";
+        const TString writeObject = "test_object_write/";
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucket(writeBucket, s3Client);
+        }
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{write_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{write_location}",
+                    AUTH_METHOD="NONE"
+                );
+                CREATE EXTERNAL TABLE `{write_table}` (
+                    key Uint64 NOT NULL,
+                    value String NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{write_source}",
+                    LOCATION="{write_object}",
+                    FORMAT="tsv_with_names"
+                );
+                )",
+                "write_source"_a = writeDataSourceName,
+                "write_table"_a = writeTableName,
+                "write_location"_a = GetBucketLocation(writeBucket),
+                "write_object"_a = writeObject);
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO `{write_table}`
+                    (key, value)
+                VALUES
+                    (1, "#######"),
+                    (4294967295u, "#######");
+
+                INSERT INTO `{write_source}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
+                    (key, value)
+                VALUES
+                    (1, "#######"),
+                    (4294967295u, "#######");
+
+                INSERT INTO `{write_table}` SELECT * FROM AS_TABLE([
+                    <|key: 1, value: "#####"|>,
+                    <|key: 4294967295u, value: "#####"|>
+                ]);
+
+                INSERT INTO `{write_source}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
+                SELECT * FROM AS_TABLE([
+                    <|key: 1, value: "#####"|>,
+                    <|key: 4294967295u, value: "#####"|>
+                ]);
+                )",
+                "write_source"_a = writeDataSourceName,
+                "write_table"_a = writeTableName,
+                "write_object"_a = writeObject);
+
+            const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        UNIT_ASSERT_EQUAL(GetObjectKeys(writeBucket).size(), 4);
+    }
+
     Y_UNIT_TEST(UpdateExternalTable) {
         const TString readDataSourceName = "/Root/read_data_source";
         const TString readTableName = "/Root/read_binding";

@@ -7,6 +7,7 @@ on:
       - edited
 
     branches:
+      - "fake-*"
 
 jobs:
   validate-pr-description:

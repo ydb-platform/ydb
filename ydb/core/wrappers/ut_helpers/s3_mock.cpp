@@ -182,7 +182,7 @@ TString BuildListObjectsXML(const TVector<TString>& paths, const TStringBuf buck
 }
 
 bool TS3Mock::TRequest::HttpServeList(const TReplyParams& params, TStringBuf bucketName, const TString& prefix) {
-    Cerr << "S3_MOCK::ServeList: " << prefix << Endl;
+    Cerr << "S3_MOCK::HttpServeList: " << prefix << Endl;
     params.Output << "HTTP/1.1 200 Ok\r\n";
     TVector<TString> paths;
     THttpHeaders headers;

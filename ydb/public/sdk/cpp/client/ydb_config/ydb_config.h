@@ -16,15 +16,19 @@
 namespace NYdb::NConfig {
 
 struct TMainConfigIdentity {
-
+    ui64 Version;
+    TString Cluster;
 };
 
 struct TStorageConfigIdentity {
-
+    ui64 Version;
+    TString Cluster;
 };
 
 struct TDatabaseConfigIdentity {
-
+    ui64 Version;
+    TString Cluster;
+    TString Database;
 };
 
 using TKnownIdentitiyTypes = std::variant<

@@ -65,17 +65,21 @@ public:
                         switch (entry.identity().type_case()) {
                         case Ydb::Config::ConfigIdentity::TypeCase::kMain:
                             identity = TMainConfigIdentity {
-
+                                .Version = entry.identity().version();
+                                .Cluster = entry.identity().cluster();
                             };
                             break;
                         case Ydb::Config::ConfigConfigIdentity::TypeCase::kStorage:
                             identity = TStorageConfigIdentity {
-
+                                .Version = entry.identity().version();
+                                .Cluster = entry.identity().cluster();
                             };
                             break;
                         case Ydb::Config::ConfigConfigIdentity::TypeCase::kDatabase:
                             identity = TDatabaseConfigIdentity {
-
+                                .Version = entry.identity().version();
+                                .Cluster = entry.identity().cluster();
+                                .Database = entry.identity().database().database();
                             };
                             break;
                         case Ydb::Config::ConfigIdentity::TypeCase::ACTION_NOT_SET:

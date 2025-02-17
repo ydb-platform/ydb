@@ -61,6 +61,7 @@ private:
 
 using TAsyncFetchConfigResult = NThreading::TFuture<TFetchConfigResult>;
 
+// FIXME add settings for fetch and replace
 struct TConfigSettings : public NYdb::TOperationRequestSettings<TConfigSettings> {};
 
 class TConfigClient {

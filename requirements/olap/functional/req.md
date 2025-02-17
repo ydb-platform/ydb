@@ -25,30 +25,13 @@ This document outlines the detailed functional and non-functional requirements f
 
 ### INSERT INTO, UPSERT, and REPLACE Operations
 
-- **REQ-INS-001**: Support INSERT INTO, UPSERT, and REPLACE for data modifications with expected behaviors.
-  - **Description**: Ensure data can be inserted or updated with proper handling of duplicates and expected transactional behaviors.
-  - **Cases**:
-    - Case 2.1: [Data Type Support in All Columns](path/to/test/12) - Verify data types, including PK fields, are supported in all columns.
-    - Case 2.2: [Handling Existing Data with INSERT INTO](path/to/test/13) - Confirm errors are appropriately thrown when inserting existing data.
-    - Case 2.3: [UPSERT and REPLACE Operations](path/to/test/14) - Validate that UPSERT updates and REPLACE correctly overwrites existing data.
-    - Case 2.4: [Handling New Data with INSERT INTO](path/to/test/15) - Validate new data insertion behavior.
-    - Case 2.5: [Large Dataset Insertion](path/to/test/16) - Test the system's capability to handle inserting 1 million rows in a single operation.
-    - Case 2.6: [Transaction Rollback Effects](path/to/test/17) - Validate data visibility and integrity after transaction rollbacks.
-    - Case 2.7: [Concurrent Transactions](path/to/test/18) - Ensure that inserts in concurrent transactions to the same key are properly managed, with one completing while another rolls back.
-    - Case 2.8: [Parallel Insertion in Multiple Threads](path/to/test/19) - Verify that parallel data insertion operations across threads execute without conflicts or errors.
-    - Case 2.9: [Data Integrity Violation for INSERT INTO](path/to/test/20) - Ensure that inserting data with violation does not succeed, similar to bulk upsert.
-    - Case 2.10: [Cluster Failure During INSERT INTO](path/to/test/21) - Confirm error messages and retry logic during cluster interruptions are handled consistently.
-    - Case 2.11: [Data Representation in GUI](path/to/test/22) - Ensure data volumes are reflected accurately in reports and dashboards.
+- #14668
 
 ### Data Reading Operations
 
-- **REQ-READ-001**: Provide robust and efficient data reading capabilities.
-  - **Description**: Execute and validate operations concerning reading data, including aggregation and supported data types.
-  - **Cases**:
-    - Case 3.1: [LogBench Operations](path/to/test/23) - Validate reading, aggregating, and processing JSON types through LogBench tests, focused on smaller datasets.
-    - Case 3.2: [TPC-H S1 Execution](path/to/test/24) - Confirm successful execution and performance of TPC-H S1 queries.
-
+- #14680
 - #13527
+- #14639
 
 ### INSERT INTO, UPSERT, and REPLACE Operations
 

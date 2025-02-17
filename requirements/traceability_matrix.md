@@ -21,31 +21,29 @@ Description: The system should support data insertion using `bulk_upsert` across
 | REQ-BULK-001-1.11 | Metric Visibility in UI | Validate that operational metrics are visible and accurate in the user interface. |  | Pending |
 
 ### INSERT INTO, UPSERT, and REPLACE Operations
-#### REQ-INS-001
-Description: Support INSERT INTO, UPSERT, and REPLACE for data modifications with expected behaviors.
+#### ISSUE-14668
+Description: Test suite: CS/(INSERT INTO/UPSERT/REPLACE) support
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
-| REQ-INS-001-2.1 | Data Type Support in All Columns | Verify data types, including PK fields, are supported in all columns. |  | Pending |
-| REQ-INS-001-2.2 | Handling Existing Data with INSERT INTO | Confirm errors are appropriately thrown when inserting existing data. |  | Pending |
-| REQ-INS-001-2.3 | UPSERT and REPLACE Operations | Validate that UPSERT updates and REPLACE correctly overwrites existing data. |  | Pending |
-| REQ-INS-001-2.4 | Handling New Data with INSERT INTO | Validate new data insertion behavior. |  | Pending |
-| REQ-INS-001-2.5 | Large Dataset Insertion | Test the system's capability to handle inserting 1 million rows in a single operation. |  | Pending |
-| REQ-INS-001-2.6 | Transaction Rollback Effects | Validate data visibility and integrity after transaction rollbacks. |  | Pending |
-| REQ-INS-001-2.7 | Concurrent Transactions | Ensure that inserts in concurrent transactions to the same key are properly managed, with one completing while another rolls back. |  | Pending |
-| REQ-INS-001-2.8 | Parallel Insertion in Multiple Threads | Verify that parallel data insertion operations across threads execute without conflicts or errors. |  | Pending |
-| REQ-INS-001-2.9 | Data Integrity Violation for INSERT INTO | Ensure that inserting data with violation does not succeed, similar to bulk upsert. |  | Pending |
-| REQ-INS-001-2.10 | Cluster Failure During INSERT INTO | Confirm error messages and retry logic during cluster interruptions are handled consistently. |  | Pending |
-| REQ-INS-001-2.11 | Data Representation in GUI | Ensure data volumes are reflected accurately in reports and dashboards. |  | Pending |
+| #14669 | It is possible to record data types in all columns, including PK and data | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14669)](https://github.com/ydb-platform/ydb/issues/14669) | Pending |
+| #14670 | If the data already exists in the table, INSERT INTO returns an error, REPLACE/UPSERT overwrites it | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14670)](https://github.com/ydb-platform/ydb/issues/14670) | Pending |
+| #14671 | If there is no data in the table, INSERT INTO inserts the data, REPLACE does nothing, UPSERT inserts the data | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14671)](https://github.com/ydb-platform/ydb/issues/14671) | Pending |
+| #14672 | It is possible to write 1 million (? batch size) strings in a single call | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14672)](https://github.com/ydb-platform/ydb/issues/14672) | Pending |
+| #14673 | When working in a transaction, if a rollback occurs, the data before the modification is visible (data is not modified) | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14673)](https://github.com/ydb-platform/ydb/issues/14673) | Pending |
+| #14674 | If the work comes from multiple transactions, writing to the same key, one transaction is rolled back and the second transaction is successfully completed | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14674)](https://github.com/ydb-platform/ydb/issues/14674) | Pending |
+| #14675 | You can insert data into one table in parallel in N threads | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14675)](https://github.com/ydb-platform/ydb/issues/14675) | Pending |
+| #14676 | Try to write data using INSERT INTO with data integrity violation. For example, 100 rows, write -1 to one of them in the UINT field, no data from INSERT INTO is applied | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14676)](https://github.com/ydb-platform/ydb/issues/14676) | Pending |
+| #14678 | If the cluster is stopped during INSERT INTO execution, an error is returned to the user. Alternatively, INSERT is expected to be retried until the server is restarted | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14678)](https://github.com/ydb-platform/ydb/issues/14678) | Pending |
 
 ### Data Reading Operations
-#### REQ-READ-001
-Description: Provide robust and efficient data reading capabilities.
+#### ISSUE-14680
+Description: Test Suite: Reading data
 
 | Case ID | Name | Description | Issues | Test Case Status |
 |---------|------|-------------|--------|------------------|
-| REQ-READ-001-3.1 | LogBench Operations | Validate reading, aggregating, and processing JSON types through LogBench tests, focused on smaller datasets. |  | Pending |
-| REQ-READ-001-3.2 | TPC-H S1 Execution | Confirm successful execution and performance of TPC-H S1 queries. |  | Pending |
+| #14679 | LogBench - working with reads, aggregation, JSON types. The test is successful on a small amount of data | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14679)](https://github.com/ydb-platform/ydb/issues/14679) | Pending |
+| #14681 | TPCH S100 is successful | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14681)](https://github.com/ydb-platform/ydb/issues/14681) | Pending |
 
 #### ISSUE-13527
 Description: Test Suite: cs/read-write
@@ -60,6 +58,20 @@ Description: Test Suite: cs/read-write
 | #13652 | Test cs writes. Written duplicates doesn't provoke disk exhaustion | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13652)](https://github.com/ydb-platform/ydb/issues/13652) | Pending |
 | #13653 | Data deletion doesn't lead to disk exhaustion | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13653)](https://github.com/ydb-platform/ydb/issues/13653) | Pending |
 | #13848 | Test CS RW load. Write, modify, read TBs | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13848)](https://github.com/ydb-platform/ydb/issues/13848) | Pending |
+
+#### ISSUE-14639
+Description: Test suite: cs/write data
+
+| Case ID | Name | Description | Issues | Test Case Status |
+|---------|------|-------------|--------|------------------|
+| #14640 | You can write all kinds of data via bulk_upsert with all kinds of transport: arrow, BoxedValue | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14640)](https://github.com/ydb-platform/ydb/issues/14640) | Pending |
+| #14642 | After a successful bulk_upsert write, the latest data values are visible | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14642)](https://github.com/ydb-platform/ydb/issues/14642) | Pending |
+| #14643 | If there are multiple identical keys within a single bulk_upsert data bundle, the last one is written | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14643)](https://github.com/ydb-platform/ydb/issues/14643) | Pending |
+| #14644 | Writing data to bulk_upsert with data integrity violation works correctly | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14644)](https://github.com/ydb-platform/ydb/issues/14644) | Pending |
+| #14645 | When bulk_upsert is executed in parallel, the data is written to one table without errors | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14645)](https://github.com/ydb-platform/ydb/issues/14645) | Pending |
+| #14646 | Writing milliards of rows via bulk_upsert is faster than a similar number of rows using INSERT INTO | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14646)](https://github.com/ydb-platform/ydb/issues/14646) | Pending |
+| #14647 | If the cluster is stopped during bulk_upsert execution, an error is returned to the user | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14647)](https://github.com/ydb-platform/ydb/issues/14647) | Pending |
+| #14648 | When inserting a large amount of data ALTER TABLE ADD COLUMN, bulk_upsert should complete successfully | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14648)](https://github.com/ydb-platform/ydb/issues/14648) | Pending |
 
 ### INSERT INTO, UPSERT, and REPLACE Operations
 #### REQ-INS-001
@@ -98,7 +110,25 @@ Description: Allow and manage federated query execution.
 | REQ-FEDQ-001-10.1 | Cross-Source Federated Queries | Test execution of queries spanning multiple federated data sources. |  | Pending |
 | REQ-FEDQ-001-10.2 | Federated Source Data Insertions | Validate data insertions deriving from federated sources. |  | Pending |
 
-## Non-functional Requirements
+## 
+
+### Compression
+#### ISSUE-13626
+Description: Test Suite: cs/compression
+
+| Case ID | Name | Description | Issues | Test Case Status |
+|---------|------|-------------|--------|------------------|
+| #13627 | Test cs column family. Create multiple/maximum column family for one table | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13627)](https://github.com/ydb-platform/ydb/issues/13627) | Pending |
+| #13640 | Test cs column family. Check all supported compression | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13640)](https://github.com/ydb-platform/ydb/issues/13640) | Pending |
+| #13642 | Test cs column family. Check all supported compression with S3 | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13642)](https://github.com/ydb-platform/ydb/issues/13642) | Pending |
+| #13643 | Test cs column family. Check availability of all data after alter family | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13643)](https://github.com/ydb-platform/ydb/issues/13643) | Pending |
+| #13644 | Test cs column family. Check availability of all data after alter compression in Column family | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13644)](https://github.com/ydb-platform/ydb/issues/13644) | Pending |
+| #13645 | Test cs column family. Check supported data type for column family | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13645)](https://github.com/ydb-platform/ydb/issues/13645) | Pending |
+| #13646 | Test cs column family. Check create table with PK column from columns in different column families | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13646)](https://github.com/ydb-platform/ydb/issues/13646) | Pending |
+| #13647 | Test cs column family. Test column with NULL in column family | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13647)](https://github.com/ydb-platform/ydb/issues/13647) | Pending |
+| #13648 | Test cs column family. Column family with data types: text, string, json, jsondocument | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13648)](https://github.com/ydb-platform/ydb/issues/13648) | Pending |
+| #13650 | Test cs column family. Zip-bomba | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13650)](https://github.com/ydb-platform/ydb/issues/13650) | Pending |
+| #13651 | Test cs column family. Write highly randomized data | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13651)](https://github.com/ydb-platform/ydb/issues/13651) | Pending |
 
 ### TTL
 #### ISSUE-13526
@@ -118,6 +148,8 @@ Description: Test Suite: cs/tiering+ttl
 | #13619 | Test tiering. Add column works for offloaded data | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13619)](https://github.com/ydb-platform/ydb/issues/13619) | Pending |
 | #13620 | Test teiring. Drop Column works well for offloaded data | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13620)](https://github.com/ydb-platform/ydb/issues/13620) | Pending |
 | #13621 | Test tiering. Alter column works well for offloaded data | Sub-Issue | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13621)](https://github.com/ydb-platform/ydb/issues/13621) | Pending |
+
+## Non-functional Requirements
 
 ### Performance
 #### REQ-PERF-001

@@ -1,7 +1,5 @@
 # Traceability Matrix
 
-## Non-functional Requirements
-
 ### TTL
 #### ISSUE-13526
 Description: Test Suite: cs/tiering+ttl

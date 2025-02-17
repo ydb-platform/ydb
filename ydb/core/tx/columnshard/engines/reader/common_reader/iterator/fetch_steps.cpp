@@ -8,6 +8,8 @@
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
+#include <ranges>
+
 namespace NKikimr::NOlap::NReader::NCommon {
 
 TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
@@ -101,6 +103,42 @@ ui64 TAllocateMemoryStep::GetProcessingDataSize(const std::shared_ptr<IDataSourc
 NKikimr::TConclusion<bool> TBuildStageResultStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     source->BuildStageResult(source);
+    return true;
+}
+
+TConclusion<bool> TTtlFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    AFL_VERIFY(source->GetContext()->GetReadMetadata()->GetTtlBound());
+    const auto& bound = *source->GetContext()->GetReadMetadata()->GetTtlBound();
+    const auto& columnName = source->GetContext()->GetReadMetadata()->GetColumnNameDef(bound.GetColumnId());
+    AFL_VERIFY(columnName)("column_id", bound.GetColumnId());
+    auto column = source->GetStageData().GetTable()->GetAccessorByNameVerified(*columnName);
+    if (source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPKFirstColumnId() == bound.GetColumnId()) {
+        if (NArrow::ScalarLess(bound.GetLargestExpiredScalar(), column->GetScalar(0))) {
+            return true;
+        }
+        if (!NArrow::ScalarLess(bound.GetLargestExpiredScalar(), column->GetScalar(source->GetRecordsCount() - 1))) {
+            source->MutableStageData().CutFilter(source->GetRecordsCount(), 0, false);
+            return true;
+        }
+
+        const auto range = std::ranges::iota_view((ui64)0u, column->GetRecordsCount());
+        auto findBound = std::upper_bound(range.begin(), range.end(), bound.GetLargestExpiredScalar(),
+            [&column](const std::shared_ptr<arrow::Scalar>& bound, const ui64 index) {
+                return NArrow::ScalarLess(bound, column->GetScalar(index));
+            });
+
+        ui64 expiredCount;
+        if (findBound == range.end()) {
+            expiredCount = range.size();
+        } else {
+            expiredCount = *findBound;
+        }
+
+        source->MutableStageData().CutFilter(source->GetRecordsCount(), source->GetRecordsCount() - expiredCount, true);
+    } else {
+        // Not implemented
+        AFL_VERIFY(false)("first_pk", source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPKFirstColumnId())("ttl", bound.GetColumnId());
+    }
     return true;
 }
 

@@ -26,6 +26,7 @@ public:
     // operations with potentially different columns. We have to remove columns to support -Inf (Null) and +Inf.
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
+    bool ReadExpiredRows = false;
 
     // List of columns
     std::vector<ui32> ColumnIds;

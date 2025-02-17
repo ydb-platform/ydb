@@ -6,6 +6,10 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/program/program.h>
 
+namespace NKikimr::NColumnShard {
+class TTablesManager;
+}
+
 namespace NKikimr::NOlap::NReader {
 
 class TScannerConstructorContext {
@@ -31,6 +35,7 @@ protected:
     const bool IsReverse;
     TConclusionStatus ParseProgram(const TVersionedIndex* vIndex, const NKikimrSchemeOp::EOlapProgramType programType,
         const TString& serializedProgram, TReadDescription& read, const IColumnResolver& columnResolver) const;
+    std::optional<TReadMetadataBase::TTtlBound> GetTtlBound(const ui64 pathId, const NColumnShard::TTablesManager& tablesManager) const;
 private:
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const = 0;
     virtual std::shared_ptr<IScanCursor> DoBuildCursor() const = 0;

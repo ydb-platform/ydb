@@ -5,6 +5,8 @@ items:
   href: build-ya.md
 - name: Релизы
   href: manage-releases.md
+- name: SDK
+  href: sdk/overview.md
 - name: Ядро
   items:
   - name: Общая схема

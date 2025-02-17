@@ -128,7 +128,7 @@ TConclusion<bool> TTtlFilter::DoExecuteInplace(const std::shared_ptr<IDataSource
             return true;
         }
 
-        if (NArrow::ScalarLess(bound.GetLargestExpiredScalar(), *chunk->GetScalar(source->GetRecordsCount() - 1))) {
+        if (NArrow::ScalarLess(bound.GetLargestExpiredScalar(), *chunk->GetScalar(chunk->length() - 1))) {
             const auto range = std::ranges::iota_view((decltype(chunk->length()))0, chunk->length());
             auto firstNonExpiredIdx = std::upper_bound(range.begin(), range.end(), bound.GetLargestExpiredScalar(),
                 [&chunk](const std::shared_ptr<arrow::Scalar>& bound, const ui64 index) {

@@ -220,12 +220,12 @@ public:
     THashMap<ui64, NOlap::TTiering> GetTtl(const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
         THashMap<ui64, NOlap::TTiering> ttl;
         for (const auto& [pathId, info] : Tables) {
-        if (info.IsDropped(snapshot)) {
-            continue;
-        }
-        if (const auto& tableTtl = Ttl.GetTableTtl(pathId, snapshot)) {
-            ttl.emplace(pathId, *tableTtl);
-        }
+            if (info.IsDropped(snapshot)) {
+                continue;
+            }
+            if (const auto& tableTtl = Ttl.GetTableTtl(pathId, snapshot)) {
+                ttl.emplace(pathId, *tableTtl);
+            }
         }
         return ttl;
     }

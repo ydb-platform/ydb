@@ -42,8 +42,6 @@
 namespace NYql {
 namespace NDq {
 
-namespace {
-
 struct TEvPrivate {
     enum EEv : ui32 {
         EvRuntimeError = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -62,8 +60,6 @@ struct TEvPrivate {
         NYql::TIssues Issues;
     };
 };
-
-} // anonymous namespace
 
 struct TSinkCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
     void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override final {
